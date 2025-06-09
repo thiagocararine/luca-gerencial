@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configurações - Luca Gerencial</title>
+    <link href="https://unpkg.com/tabulator-tables@5.5.0/dist/css/tabulator_bootstrap5.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+</head>
+<body>
+    <div class="top-bar">
+        <div class="top-bar-left">
+            <h1>Luca Gerencial</h1>
+            <nav>
+                <a href="index.html">Início</a>
+                <a href="despesas.html">Lançamentos</a>
+                <a href="settings.html" class="active">Configurações</a>
+            </nav>
+        </div>
+        <div class="user-info">
+            Olá, <span id="user-name">Utilizador</span>!
+            <button id="logout-button">Sair</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Configurações do Sistema</h2>
+        
+        <div class="tabs">
+            <button class="tab-button active" data-tab="parametros">Parâmetros</button>
+            <button class="tab-button" data-tab="logo">Logo/Imagens</button>
+            <button class="tab-button" data-tab="usuarios" id="user-tab-btn" style="display: none;">Utilizadores</button>
+        </div>
+
+        <div class="tab-content-container">
+            <div id="parametros-content" class="tab-content active">
+                <section class="settings-section">
+                    <h3>Gerir Parâmetros</h3>
+                    <div class="filter-group">
+                        <label for="select-param-code">Selecione o Tipo de Parâmetro para visualizar:</label>
+                        <select id="select-param-code"></select>
+                    </div>
+                    
+                    <div id="parametros-table" style="margin-top: 20px;"></div>
+                    
+                    <h4 id="form-title" style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">Adicionar Novo Parâmetro</h4>
+                    <form id="param-form" style="display:none;">
+                        <input type="hidden" id="param-id">
+                        <div class="form-group">
+                            <label for="param-cod">Tipo de Parâmetro:</label>
+                            <input type="text" id="param-cod" required placeholder="Digite um tipo existente ou um novo">
+                        </div>
+                        <div class="form-group">
+                            <label for="param-nome">Nome do Parâmetro:</label>
+                            <input type="text" id="param-nome" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="param-key">Key (Opcional):</label>
+                            <input type="number" id="param-key">
+                        </div>
+                        <div class="form-group" id="vinculacao-group" style="display: none;">
+                            <label for="param-vinculacao">Vincular ao Grupo (Apenas para "Tipo Despesa"):</label>
+                            <select id="param-vinculacao"></select>
+                        </div>
+                        <div class="form-buttons" style="margin-top: 15px;">
+                            <button type="submit" class="btn-primary">Salvar</button>
+                            <button type="button" id="cancel-edit-param-btn" class="btn-secondary" style="display: none;">Cancelar Edição</button>
+                        </div>
+                    </form>
+                </section>
+            </div>
+
+            <div id="logo-content" class="tab-content">
+                <section class="settings-section">
+                    <h3>Logo da Empresa</h3>
+                    <p>Esta logo será utilizada nos cabeçalhos dos relatórios em PDF.</p>
+                    <div class="form-group">
+                        <label for="logo-upload">Carregar nova logo (formato PNG):</label>
+                        <input type="file" id="logo-upload" accept="image/png">
+                    </div>
+                    <p style="margin-top: 20px;">Pré-visualização da Logo Atual:</p>
+                    <img id="logo-preview" src="" alt="Pré-visualização da logo">
+                    <button id="save-logo-btn" class="btn-primary" style="margin-top: 15px;">Salvar Nova Logo</button>
+                </section>
+            </div>
+            
+            <div id="usuarios-content" class="tab-content">
+                <section class="settings-section">
+                    <h3>Gestão de Utilizadores</h3>
+                    <p>Ative, desative ou coloque utilizadores em estado pendente. Clique numa célula de Status para a editar.</p>
+                    <div id="users-table"></div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-action-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header"><h3 id="confirm-action-title">Confirmar Ação</h3></div>
+            <div class="confirm-modal-body"><p id="confirm-action-text"></p></div>
+            <div class="confirm-modal-footer">
+                <button id="reject-action-btn" class="btn-secondary">Cancelar</button>
+                <button id="confirm-action-btn" class="btn-primary">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
+    <script src="settings.js"></script>
+</body>
+</html>

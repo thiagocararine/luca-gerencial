@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Luca Gerencial</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 90vh; background-color: #f4f4f4; margin: 0; }
+        .login-container { background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 0 15px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        h1 { text-align: center; color: #333; margin-bottom: 20px; }
+        label { display: block; margin-bottom: 5px; color: #555; font-weight: bold; }
+        input[type="text"], input[type="password"] { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 16px; margin-top: 10px; }
+        button:hover { background-color: #0056b3; }
+        .error-message { color: red; text-align: center; margin-top: 10px; font-size: 0.9em;}
+        .signup-link { text-align: center; margin-top: 20px; font-size: 0.9em; }
+        .signup-link a { color: #007bff; text-decoration: none; font-weight: bold; }
+        .signup-link a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>Luca Gerencial</h1>
+        <form id="login-form">
+            <div>
+                <label for="identifier">Email ou CPF:</label>
+                <input type="text" id="identifier" name="identifier" required>
+            </div>
+            <div>
+                <label for="senha">Senha:</label>
+                <input type="password" id="senha" name="senha" required>
+            </div>
+            <button type="submit">Entrar</button>
+        </form>
+        <p id="error-message" class="error-message" style="display:none;"></p>
+        <div class="signup-link">
+            Não tem conta? <a href="signup.html">Cadastrar-se</a>
+        </div>
+    </div>
+    <script src="login.js"></script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Despesas - Luca Gerencial</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css"/>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="top-bar">
+        <div class="top-bar-left">
+            <h1>Luca Gerencial</h1>
+            <nav>
+                <a href="index.html">Início</a>
+                <a href="despesas.html" class="active">Lançamentos</a>
+                <a href="settings.html">Configurações</a>
+            </nav>
+        </div>
+        <div class="user-info">
+            Olá, <span id="user-name">Utilizador</span>!
+            <button id="logout-button">Sair</button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="actions-bar">
+            <h2>Despesas Lançadas</h2>
+            <div>
+                <button id="open-export-modal-btn" class="btn-secondary" style="background-color: #5bc0de; margin-right: 10px;">Exportar Relatório</button>
+                <button id="add-despesa-button" class="btn-primary" style="background-color: #28a745;">+ Adicionar Nova Despesa</button>
+            </div>
+        </div>
+        <div class="filters-container">
+            <div class="filter-group"><label for="filter-date-range">Período:</label><input type="text" id="filter-date-range" placeholder="Selecione um intervalo"></div>
+            <div class="filter-group"><label for="filter-status">Status:</label><select id="filter-status"><option value="">Todos</option><option value="1">Efetuado</option><option value="2">Cancelado</option></select></div>
+            <div class="filter-group"><label for="filter-tipo">Tipo Despesa:</label><select id="filter-tipo"></select></div>
+            <div class="filter-group"><label for="filter-grupo">Grupo Despesa:</label><select id="filter-grupo"></select></div>
+            <div class="filter-group" id="filial-filter-group" style="display: none;"><label for="filter-filial">Filial:</label><select id="filter-filial"></select></div>
+            <div class="filter-buttons"><button id="filter-button" class="btn-primary">Filtrar</button><button id="clear-filter-button" class="btn-secondary">Limpar Filtros</button></div>
+        </div>
+        <div class="table-responsive">
+            <table id="tabela-despesas">
+                <thead>
+                    <tr>
+                        <th>Ações</th><th>Status</th><th>Data Despesa</th><th>Descrição</th><th>Valor (R$)</th><th>Tipo</th><th>Grupo</th><th>Filial</th><th>Data Lanç.</th><th>Utilizador Lanç.</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <p id="no-data-message" style="text-align:center; padding: 20px; display:none;">Nenhuma despesa encontrada.</p>
+        <div class="pagination-controls">
+            <div class="pagination-info"><label for="items-per-page">Itens por página:</label><select id="items-per-page"><option value="20" selected>20</option><option value="40">40</option><option value="60">60</option><option value="80">80</option><option value="100">100</option></select></div>
+            <div class="pagination-nav"><button id="prev-page-btn" disabled>&laquo; Anterior</button><span id="page-info-span">Página 1 de 1</span><button id="next-page-btn" disabled>Próxima &raquo;</button></div>
+        </div>
+    </div>
+
+    <div id="add-despesa-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header"><h2>Adicionar Nova Despesa</h2><span class="close-button" id="close-modal-button">&times;</span></div>
+            <form id="form-despesa-modal">
+                <div class="form-group" id="modal-filial-group" style="display: none;"><label for="modal-filial">Lançar para a Filial:</label><select id="modal-filial" required></select></div>
+                <div class="form-group"><label for="modal-data_despesa">Data da Despesa:</label><input type="date" id="modal-data_despesa" required></div>
+                <div class="form-group"><label for="modal-descricao">Descrição:</label><input type="text" id="modal-descricao" placeholder="Descrição da Despesa" required></div>
+                <div class="form-group"><label for="modal-valor">Valor (R$):</label><input type="number" id="modal-valor" placeholder="Ex: 150.50" step="0.01" required></div>
+                <div class="form-group"><label for="modal-tipo-despesa">Tipo da Despesa:</label><select id="modal-tipo-despesa" required></select></div>
+                <div class="form-group"><label for="modal-grupo-despesa">Grupo da Despesa:</label><select id="modal-grupo-despesa" required disabled></select></div>
+                <button type="submit" class="btn-primary">Salvar Despesa</button>
+            </form>
+        </div>
+    </div>
+    
+    <div id="confirm-cancel-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header"><h3>Confirmar Cancelamento</h3><span class="close-button" id="close-confirm-modal-btn">&times;</span></div>
+            <div class="confirm-modal-body"><p>Tem a certeza de que deseja cancelar o seguinte lançamento? Esta ação não pode ser desfeita.</p><p id="cancel-details"></p></div>
+            <div class="confirm-modal-footer"><button id="reject-cancel-btn" class="btn-secondary">Voltar</button><button id="confirm-cancel-btn">Confirmar Cancelamento</button></div>
+        </div>
+    </div>
+    
+    <div id="export-pdf-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Opções do Relatório PDF</h3>
+                <span class="close-button" id="close-export-modal-btn">&times;</span>
+            </div>
+            <div class="export-modal-body">
+                <div class="form-group"><label for="export-date-range">Período do Relatório:</label><input type="text" id="export-date-range"></div>
+                <div class="form-group" id="export-filial-group" style="display: none;"><label for="export-filial-select">Filial:</label><select id="export-filial-select"></select></div>
+                <div class="form-group">
+                    <label>Status das Despesas:</label>
+                    <div style="display: flex; gap: 20px; margin-top: 5px;">
+                        <label for="export-status-efetuado" style="display: flex; align-items: center; gap: 5px; font-weight: normal;"><input type="radio" id="export-status-efetuado" name="export-status" value="1" checked>Efetuadas</label>
+                        <label for="export-status-cancelado" style="display: flex; align-items: center; gap: 5px; font-weight: normal;"><input type="radio" id="export-status-cancelado" name="export-status" value="2">Canceladas</label>
+                    </div>
+                </div>
+            </div>
+            <div class="confirm-modal-footer">
+                <button id="generate-pdf-btn" class="btn-primary">Gerar PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>Luca Materiais para Construção LTDA - Dep. TI<br>
+        Todos os Direitos Reservados.</p>
+    </footer>
+
+    <!-- Scripts Externos -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
+    <script src="despesas.js"></script>
+</body>
+</html>

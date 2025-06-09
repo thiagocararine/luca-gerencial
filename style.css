@@ -1,0 +1,211 @@
+/* style.css */
+
+/* --- Estilos Gerais e Topo --- */
+body { 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+    margin: 0; 
+    background-color: #f0f2f5; 
+    color: #333; 
+    font-size: 14px; 
+}
+
+.top-bar { 
+    background-color: #007bff; 
+    color: white; 
+    padding: 12px 25px; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    box-shadow: 0 2px 5px rgba(0,0,0,0.15); 
+}
+.top-bar-left {
+    display: flex;
+    align-items: center;
+}
+.top-bar h1 { margin: 0; font-size: 1.6em; }
+.top-bar nav { margin-left: 30px; }
+.top-bar nav a {
+    color: white;
+    text-decoration: none;
+    margin: 0 15px;
+    font-weight: 500;
+    padding: 5px 0;
+    border-bottom: 2px solid transparent;
+    transition: border-color 0.3s;
+}
+.top-bar nav a:hover, .top-bar nav a.active {
+    border-color: white;
+}
+
+.user-info { 
+    display: flex; 
+    align-items: center; 
+}
+.user-info span { margin-right: 15px; font-size: 0.95em; }
+#logout-button { 
+    background-color: #dc3545; 
+    color: white; 
+    padding: 8px 12px; 
+    border: none; 
+    border-radius: 4px; 
+    cursor: pointer; 
+    font-size: 0.9em; 
+    transition: background-color 0.2s; 
+}
+#logout-button:hover { background-color: #c82333; }
+
+.container { 
+    padding: 25px; 
+    max-width: 1400px; 
+    margin: 25px auto; 
+    background-color: #fff; 
+    border-radius: 8px; 
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12); 
+}
+
+.actions-bar { 
+    margin-bottom: 20px; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    padding-bottom:15px; 
+    border-bottom: 1px solid #e9ecef;
+}
+.actions-bar h2 { margin:0; font-size: 1.5em; color: #343a40;}
+#add-despesa-button { 
+    background-color: #28a745; 
+    color: white; 
+    padding: 10px 15px; 
+    border: none; 
+    border-radius: 4px; 
+    cursor: pointer; 
+    font-size: 1em; 
+    transition: background-color 0.2s; 
+}
+#add-despesa-button:hover { background-color: #218838; }
+
+/* --- Filtros e Formulários --- */
+.filters-container { 
+    display: grid; 
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); 
+    gap: 15px; 
+    padding: 20px; 
+    background-color: #f8f9fa; 
+    border-radius: 6px; 
+    margin-bottom: 25px; 
+    border: 1px solid #dee2e6; 
+}
+.filter-group, .form-group { 
+    display: flex; 
+    flex-direction: column; 
+    margin-bottom: 15px;
+}
+.filter-group label, .form-group label { 
+    margin-bottom: 5px; 
+    font-weight: 500; 
+    font-size: 0.85em; 
+    color: #495057; 
+}
+.filter-group input, 
+.filter-group select, 
+.form-group select, 
+.form-group input { 
+    padding: 9px 10px; 
+    border: 1px solid #ced4da; 
+    border-radius: 4px; 
+    font-size: 0.9em; 
+    box-sizing: border-box; 
+}
+
+.filter-buttons { 
+    grid-column: 1 / -1; 
+    display: flex; 
+    gap: 10px; 
+    margin-top:10px;
+}
+.btn, #filter-button, #clear-filter-button, .btn-primary, .btn-secondary { 
+    padding: 10px 15px; 
+    border: none; 
+    border-radius: 4px; 
+    cursor: pointer; 
+    font-size: 0.95em; 
+    transition: background-color 0.2s;
+}
+.btn-primary { background-color: #007bff; color: white; }
+.btn-primary:hover { background-color: #0056b3; }
+.btn-secondary { background-color: #6c757d; color: white; }
+.btn-secondary:hover { background-color: #5a6268; }
+
+/* --- Tabela --- */
+.table-responsive { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+th, td { border: 1px solid #e9ecef; padding: 12px 15px; text-align: left; font-size: 0.9em; white-space: nowrap;}
+th { background-color: #f8f9fa; font-weight: 600; color: #495057; }
+tbody tr:hover { background-color: #f1f1f1; }
+
+.status-efetuado { color: #28a745; font-weight: bold; }
+.status-cancelado { color: #dc3545; font-weight: bold; }
+
+/* --- Modais --- */
+.modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); animation: fadeIn 0.3s; }
+.modal-content { background-color: #fefefe; margin: 8% auto; padding: 25px; border: 1px solid #888; width: 80%; max-width: 500px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); position: relative; animation: slideIn 0.3s; }
+.modal-header { padding-bottom: 10px; border-bottom: 1px solid #eee; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+.modal-header h2, .modal-header h3 { margin: 0; }
+.close-button { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; }
+.close-button:hover, .close-button:focus { color: black; text-decoration: none; }
+
+.modal-content form .form-group input, .modal-content form .form-group select { 
+    width: 100%; 
+    padding: 10px; 
+    border: 1px solid #ccc; 
+    border-radius: 4px; 
+    box-sizing: border-box; 
+}
+.modal-content form select:disabled { background-color: #e9ecef; cursor: not-allowed; }
+.modal-content form button[type="submit"] { margin-top: 10px; width: 100%; }
+
+/* --- Botões de Ação na Tabela --- */
+.cancel-btn-visible { background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.85em; }
+.cancel-btn-visible:hover { background-color: #c82333; }
+
+/* --- Modal de Confirmação --- */
+.confirm-modal-body p { line-height: 1.6; }
+.confirm-modal-body strong { color: #343a40; }
+.confirm-modal-footer { margin-top: 25px; display: flex; justify-content: flex-end; gap: 10px; }
+.confirm-modal-footer button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+#confirm-cancel-btn { background-color: #dc3545; color: white; }
+
+/* --- Paginação --- */
+.pagination-controls { display: flex; justify-content: space-between; align-items: center; padding: 15px 5px; margin-top: 20px; border-top: 1px solid #e9ecef; }
+.pagination-nav button { background-color: #007bff; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
+.pagination-nav button:disabled { background-color: #6c757d; cursor: not-allowed; }
+#page-info-span { margin: 0 15px; font-weight: 500; }
+.pagination-info select { padding: 8px; border-radius: 4px; border: 1px solid #ced4da; }
+
+/* --- Página Principal (Hub) --- */
+.hub-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 25px; margin-top: 20px; }
+.hub-card { border: 1px solid #ddd; border-radius: 8px; padding: 20px; text-align: center; text-decoration: none; color: #333; transition: transform 0.2s, box-shadow 0.2s; }
+.hub-card:hover { transform: translateY(-5px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.hub-card h3 { margin-top: 0; color: #007bff; }
+.hub-card p { font-size: 0.9em; color: #6c757d; }
+
+/* --- Página de Configurações com Guias --- */
+.tabs { display: flex; border-bottom: 2px solid #dee2e6; margin-bottom: 25px; }
+.tab-button { padding: 10px 20px; cursor: pointer; border: none; background-color: transparent; font-size: 1em; font-weight: 500; color: #6c757d; border-bottom: 3px solid transparent; transition: color 0.3s, border-color 0.3s; }
+.tab-button:hover { color: #0056b3; }
+.tab-button.active { color: #007bff; border-bottom-color: #007bff; }
+.tab-content { display: none; }
+.tab-content.active { display: block; animation: fadeIn 0.5s; }
+.settings-section { margin-bottom: 40px; }
+.settings-section h3 { margin-top: 0; padding-bottom: 15px; border-bottom: 1px solid #eee; color: #343a40; }
+#logo-preview { max-width: 150px; max-height: 150px; border: 1px solid #ddd; padding: 5px; margin-top: 10px; }
+#param-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; align-items: flex-end; margin-top: 20px;}
+#param-form .form-buttons { grid-column: 1 / -1; }
+
+/* --- Animações --- */
+@keyframes fadeIn { from {opacity: 0;} to {opacity: 1;} }
+@keyframes slideIn { from {transform: translateY(-20px);} to {transform: translateY(0);} }
+
+/* --- Rodapé --- */
+footer { text-align: center; padding: 20px; margin-top: 30px; border-top: 1px solid #eee; font-size: 0.8em; color: #6c757d; }
+footer p { margin: 0; line-height: 1.5; }
