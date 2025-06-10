@@ -1,4 +1,4 @@
-// despesas.js (Frontend com Relatório PDF Aprimorado e Subtotais Estilizados)
+// despesas.js (Frontend com Todas as Funcionalidades para a Página de Despesas)
 
 document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('tabela-despesas')) {
@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- Constantes e Variáveis de Estado Globais ---
-const apiUrlBase = 'http://localhost:3000';
+const apiUrlBase = 'http://localhost:3000/api';
 const despesasApiUrl = `${apiUrlBase}/despesas`;
 const parametrosApiUrl = `${apiUrlBase}/parametros`;
 const privilegedRoles = ["Analista de Sistema", "Supervisor (a)", "Financeiro", "Diretor"];
@@ -18,9 +18,11 @@ let itemsPerPage = 20;
 let despesaIdParaCancelar = null;
 let datepicker = null;
 let exportDatepicker = null;
+let LOGO_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='; // Placeholder
 
-const LOGO_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-
+/**
+ * Função principal que inicializa a página.
+ */
 async function initPage() {
     const token = getToken();
     if (!token) { window.location.href = 'login.html'; return; }
@@ -28,11 +30,15 @@ async function initPage() {
     setupDatepickers();
     setupEventListeners();
     try {
+        await loadCurrentLogo();
         await setupInicial();
         await carregarDespesas();
     } catch (error) { console.error("[initPage] Erro durante a configuração inicial:", error); }
 }
 
+/**
+ * Configura os seletores de data.
+ */
 function setupDatepickers() {
     const commonOptions = {
         elementEnd: null, singleMode: false, lang: 'pt-BR', format: 'DD/MM/YYYY',
@@ -46,6 +52,9 @@ function setupDatepickers() {
     exportDatepicker = new Litepicker({ element: document.getElementById('export-date-range'), ...commonOptions });
 }
 
+/**
+ * Configura todos os event listeners da página.
+ */
 function setupEventListeners() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('add-despesa-button')?.addEventListener('click', () => { document.getElementById('add-despesa-modal').style.display = 'block'; });
@@ -77,6 +86,9 @@ function setupEventListeners() {
     });
 }
 
+/**
+ * Abre o modal de exportação.
+ */
 function openExportModal() {
     const startDate = datepicker.getStartDate();
     const endDate = datepicker.getEndDate();
@@ -98,6 +110,9 @@ function openExportModal() {
     document.getElementById('export-pdf-modal').style.display = 'block';
 }
 
+/**
+ * Gera e descarrega o relatório em PDF.
+ */
 async function exportarPDF() {
     const btn = document.getElementById('generate-pdf-btn');
     btn.textContent = 'A gerar...';
@@ -146,12 +161,9 @@ async function exportarPDF() {
         const periodo = dataInicio ? `Período: ${startDate.format('DD/MM/YYYY')} a ${endDate.format('DD/MM/YYYY')}` : 'Período: Completo';
         doc.text(periodo, doc.internal.pageSize.getWidth() / 2, 34, { align: 'center' });
 
-        // Agrupa despesas por dia e calcula totais diários
         const despesasPorDia = despesas.reduce((acc, despesa) => {
             const data = despesa.dsp_datadesp.split('T')[0];
-            if (!acc[data]) {
-                acc[data] = { items: [], total: 0 };
-            }
+            if (!acc[data]) acc[data] = { items: [], total: 0 };
             acc[data].items.push(despesa);
             acc[data].total += parseFloat(despesa.dsp_valordsp);
             return acc;
@@ -160,20 +172,16 @@ async function exportarPDF() {
         const body = [];
         for (const data of Object.keys(despesasPorDia).sort()) {
             const diaInfo = despesasPorDia[data];
-            diaInfo.items.forEach(d => {
-                body.push([
-                    new Date(d.dsp_datadesp).toLocaleDateString('pt-BR', { timeZone: 'UTC' }),
-                    d.dsp_descricao,
-                    d.dsp_grupo,
-                    d.dsp_tipo,
-                    parseFloat(d.dsp_valordsp).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                ]);
+            diaInfo.items.forEach((d, index) => {
+                let descricaoCell = d.dsp_descricao;
+                if (index === diaInfo.items.length - 1) {
+                    descricaoCell = [
+                        { content: d.dsp_descricao },
+                        { content: `\nTotal do Dia: ${diaInfo.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, styles: { textColor: [220, 53, 69], fontStyle: 'bold', fontSize: 7 } }
+                    ];
+                }
+                body.push([ new Date(d.dsp_datadesp).toLocaleDateString('pt-BR', { timeZone: 'UTC' }), descricaoCell, d.dsp_grupo, d.dsp_tipo, parseFloat(d.dsp_valordsp).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) ]);
             });
-            // Adiciona a linha de subtotal para o dia
-            body.push([
-                { content: `Total do Dia:`, colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } },
-                { content: diaInfo.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), styles: { halign: 'right', fontStyle: 'bold' } }
-            ]);
         }
         
         doc.autoTable({
@@ -182,24 +190,8 @@ async function exportarPDF() {
             startY: 45,
             theme: 'grid',
             headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-            styles: { fontSize: 8 },
-            columnStyles: {
-                0: { cellWidth: 22 },
-                1: { cellWidth: 'auto' },
-                2: { cellWidth: 30 },
-                3: { cellWidth: 30 },
-                4: { cellWidth: 25, halign: 'right' }
-            },
-            // **ATUALIZADO AQUI:** Estiliza as linhas de subtotal
-            didParseCell: (data) => {
-                if (data.row.raw[0]?.colSpan) {
-                    data.cell.styles.fillColor = '#f8f9fa'; // Um cinzento claro de fundo
-                    data.cell.styles.textColor = [220, 53, 69]; // Vermelho
-                    data.cell.styles.fontStyle = 'bold';
-                    data.cell.styles.cellPadding = 1.5; // Padding menor para a célula ser mais baixa
-                    data.cell.styles.fontSize = 7;
-                }
-            },
+            styles: { fontSize: 8, cellPadding: 2 },
+            columnStyles: { 0: { cellWidth: 22 }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 30 }, 3: { cellWidth: 30 }, 4: { cellWidth: 25, halign: 'right' } },
         });
         
         const finalY = doc.autoTable.previous.finalY;
@@ -218,7 +210,6 @@ async function exportarPDF() {
         doc.save(`Relatorio_Despesas_${dataStr}.pdf`);
 
     } catch (error) {
-        console.error("Erro ao gerar PDF:", error);
         alert("Ocorreu um erro ao gerar o relatório em PDF.");
     } finally {
         btn.textContent = 'Gerar PDF';
@@ -527,6 +518,19 @@ async function setupInicial() {
     await popularSelect(tipoDespesaModalSelect, 'Tipo Despesa', token, '-- Selecione um Tipo --');
     await popularSelect(tipoDespesaFilterSelect, 'Tipo Despesa', token, 'Todos os Tipos');
     todosOsGrupos = await popularSelect(grupoDespesaFilterSelect, 'Grupo Despesa', token, 'Todos os Grupos');
+}
+
+async function loadCurrentLogo() {
+    try {
+        const response = await fetch(`${apiUrlBase}/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (response.status >= 400) return handleApiError(response);
+        const data = await response.json();
+        if (data.logoBase64) {
+            LOGO_BASE64 = data.logoBase64;
+        }
+    } catch (error) {
+        console.error("Não foi possível carregar a logo atual:", error);
+    }
 }
 
 function handleApiError(response, isExport = false) {

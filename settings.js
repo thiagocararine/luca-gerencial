@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initSettingsPage();
 });
 
-const apiUrlBase = 'http://localhost:3000';
+const apiUrlBase = 'http://localhost:3000/api'; // **ATUALIZADO**
 let parametrosTable = null;
 let usersTable = null;
 let currentParamCode = null;
@@ -12,14 +12,18 @@ let todosOsGruposDeDespesa = [];
 let actionToConfirm = null;
 const privilegedRoles = ["Analista de Sistema", "Supervisor (a)", "Financeiro", "Diretor"];
 
+/**
+ * Inicializa a página de configurações.
+ */
 async function initSettingsPage() {
     const token = getToken();
-    if (!token) { window.location.href = 'login.html'; return; }
-    
+    if (!token) {
+        window.location.href = 'login.html';
+        return;
+    }
     document.getElementById('user-name').textContent = getUserName();
-    
     setupEventListenersSettings();
-    
+
     if (privilegedRoles.includes(getUserRole())) {
         document.getElementById('user-tab-btn').style.display = 'inline-block';
         setupUsersTable();
@@ -31,6 +35,9 @@ async function initSettingsPage() {
     loadCurrentLogo();
 }
 
+/**
+ * Configura todos os event listeners da página.
+ */
 function setupEventListenersSettings() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.querySelector('.tabs').addEventListener('click', (e) => {
@@ -67,6 +74,9 @@ function setupEventListenersSettings() {
     });
 }
 
+/**
+ * Busca e popula o seletor com os tipos de parâmetros existentes.
+ */
 async function popularSeletorDeCodigos() {
     const token = getToken();
     if (!token) return logout();
@@ -87,6 +97,9 @@ async function popularSeletorDeCodigos() {
     }
 }
 
+/**
+ * Busca e armazena a lista de "Grupo Despesa".
+ */
 async function preCarregarGruposDeDespesa() {
     try {
         const response = await fetch(`${apiUrlBase}/parametros?cod=Grupo Despesa`);
@@ -103,6 +116,9 @@ async function preCarregarGruposDeDespesa() {
     } catch (error) { console.error(error); }
 }
 
+/**
+ * Configura a tabela Tabulator para gerir utilizadores.
+ */
 function setupUsersTable() {
     const statusEditorParams = {
         values: { "Ativo": "Ativo", "Inativo": "Inativo", "Pendente": "Pendente" },
@@ -134,6 +150,9 @@ function setupUsersTable() {
     });
 }
 
+/**
+ * Lida com a atualização do status de um utilizador.
+ */
 async function handleUpdateUserStatus(id, status, cell) {
     try {
         const response = await fetch(`${apiUrlBase}/users/${id}/status`, {
@@ -152,6 +171,9 @@ async function handleUpdateUserStatus(id, status, cell) {
     }
 }
 
+/**
+ * Configura a tabela Tabulator para gerir parâmetros.
+ */
 function setupParametrosTable() {
     parametrosTable = new Tabulator("#parametros-table", {
         layout: "fitColumns",
@@ -187,6 +209,9 @@ function setupParametrosTable() {
     });
 }
 
+/**
+ * Preenche o formulário para edição.
+ */
 function preencherFormularioParaEdicao(data) {
     document.getElementById('form-title').textContent = `A Editar Parâmetro ID: ${data.ID}`;
     document.getElementById('param-id').value = data.ID;
@@ -200,6 +225,9 @@ function preencherFormularioParaEdicao(data) {
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
 }
 
+/**
+ * Limpa e reseta o formulário.
+ */
 function resetParamForm() {
     document.getElementById('form-title').textContent = 'Adicionar Novo Parâmetro';
     document.getElementById('param-form').reset();
@@ -210,6 +238,9 @@ function resetParamForm() {
     document.querySelector('#param-form button[type="submit"]').textContent = "Salvar";
 }
 
+/**
+ * Lida com a submissão do formulário (cria ou atualiza).
+ */
 function handleParamFormSubmit(e) {
     e.preventDefault();
     const id = document.getElementById('param-id').value;
@@ -227,6 +258,9 @@ function handleParamFormSubmit(e) {
     openConfirmModal('salvar', () => executeSave(id, body), confirmationMessage);
 }
 
+/**
+ * Executa a criação ou atualização após a confirmação.
+ */
 async function executeSave(id, body) {
     const url = id ? `${apiUrlBase}/parametros/${id}` : `${apiUrlBase}/parametros`;
     const method = id ? 'PUT' : 'POST';
@@ -245,6 +279,9 @@ async function executeSave(id, body) {
     }
 }
 
+/**
+ * Apaga um parâmetro.
+ */
 async function handleDeleteParam(id) {
      try {
         const response = await fetch(`${apiUrlBase}/parametros/${id}`, {
@@ -259,6 +296,9 @@ async function handleDeleteParam(id) {
     }
 }
 
+/**
+ * Abre o modal de confirmação genérico.
+ */
 function openConfirmModal(action, callback, text) {
     document.getElementById('confirm-action-title').textContent = `Confirmar ${action.charAt(0).toUpperCase() + action.slice(1)}`;
     document.getElementById('confirm-action-text').textContent = text;
@@ -266,6 +306,9 @@ function openConfirmModal(action, callback, text) {
     actionToConfirm = callback;
 }
 
+/**
+ * Mostra uma pré-visualização da logo selecionada.
+ */
 function previewLogo(event) {
     const file = event.target.files[0];
     if (file && file.type === "image/png") {
@@ -277,6 +320,9 @@ function previewLogo(event) {
     }
 }
 
+/**
+ * Salva a nova logo no servidor.
+ */
 async function saveLogo() {
     const preview = document.getElementById('logo-preview');
     if (!preview.src || !preview.src.startsWith('data:image')) {
@@ -296,6 +342,9 @@ async function saveLogo() {
     }
 }
 
+/**
+ * Carrega a logo atual do servidor.
+ */
 async function loadCurrentLogo() {
     try {
         const response = await fetch(`${apiUrlBase}/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
@@ -309,6 +358,7 @@ async function loadCurrentLogo() {
     }
 }
 
+// --- Funções Auxiliares de Autenticação ---
 function getToken() { return localStorage.getItem('lucaUserToken'); }
 function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
 function getUserName() { return getUserData()?.nome || 'Utilizador'; }

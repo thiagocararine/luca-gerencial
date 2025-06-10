@@ -165,15 +165,18 @@ tbody tr:hover { background-color: #f1f1f1; }
 .modal-content form button[type="submit"] { margin-top: 10px; width: 100%; }
 
 /* --- Botões de Ação na Tabela --- */
+.edit-btn { background-color: #17a2b8; margin-right: 5px; }
+.delete-btn { background-color: #dc3545; }
 .cancel-btn-visible { background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.85em; }
-.cancel-btn-visible:hover { background-color: #c82333; }
+.edit-btn-visible { background-color: #17a2b8; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.85em; margin-right: 5px; }
 
 /* --- Modal de Confirmação --- */
 .confirm-modal-body p { line-height: 1.6; }
 .confirm-modal-body strong { color: #343a40; }
 .confirm-modal-footer { margin-top: 25px; display: flex; justify-content: flex-end; gap: 10px; }
 .confirm-modal-footer button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
-#confirm-cancel-btn { background-color: #dc3545; color: white; }
+#confirm-cancel-btn, #confirm-action-btn { background-color: #dc3545; color: white; }
+#reject-action-btn { background-color: #6c757d; color: white; }
 
 /* --- Paginação --- */
 .pagination-controls { display: flex; justify-content: space-between; align-items: center; padding: 15px 5px; margin-top: 20px; border-top: 1px solid #e9ecef; }

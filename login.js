@@ -1,24 +1,44 @@
 // login.js
 
-const loginForm = document.getElementById('login-form');
-const errorMessageElement = document.getElementById('error-message');
-const apiUrl = 'http://localhost:3000'; // Base URL da sua API
+document.addEventListener('DOMContentLoaded', () => {
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        loginForm.addEventListener('submit', handleLoginSubmit);
+    }
+});
 
-loginForm.addEventListener('submit', async (event) => {
+// **CORREÇÃO AQUI:** Usando o endereço completo do backend para garantir a comunicação
+const apiUrl = 'http://localhost:3000/api';
+
+/**
+ * Lida com a submissão do formulário de login.
+ * @param {Event} event O evento de submissão do formulário.
+ */
+async function handleLoginSubmit(event) {
     event.preventDefault(); // Impede o recarregamento padrão da página
-    errorMessageElement.textContent = ''; // Limpa mensagens de erro anteriores
+    const errorMessageElement = document.getElementById('error-message');
+    const submitButton = event.target.querySelector('button[type="submit"]');
+    
+    // Limpa o estado de erro e desabilita o botão
+    errorMessageElement.textContent = '';
     errorMessageElement.style.display = 'none';
+    submitButton.disabled = true;
+    submitButton.textContent = 'A entrar...';
 
     const identifier = document.getElementById('identifier').value;
     const senha = document.getElementById('senha').value;
 
+    // Validação simples no frontend
     if (!identifier || !senha) {
         errorMessageElement.textContent = 'Por favor, preencha o email/CPF e a senha.';
         errorMessageElement.style.display = 'block';
+        submitButton.disabled = false;
+        submitButton.textContent = 'Entrar';
         return;
     }
 
     try {
+        // Envia os dados para a API de login
         const response = await fetch(`${apiUrl}/login`, {
             method: 'POST',
             headers: {
@@ -27,32 +47,40 @@ loginForm.addEventListener('submit', async (event) => {
             body: JSON.stringify({ identifier, senha }),
         });
 
-        const data = await response.json();
-
-        if (!response.ok) {
-            // Se a API retornar um erro (ex: 400, 401), o 'data.error' deve conter a mensagem
-            errorMessageElement.textContent = data.error || `Erro: ${response.status}`;
-            errorMessageElement.style.display = 'block';
-            console.error('Falha no login:', data);
-            return;
+        // Lê a resposta como texto para verificar se está vazia
+        const responseText = await response.text();
+        if (!responseText) {
+            throw new Error('O servidor enviou uma resposta vazia. Verifique se o backend está a funcionar corretamente.');
         }
 
-        // Login bem-sucedido
+        // Tenta analisar o texto como JSON
+        const data = JSON.parse(responseText);
+
+        // Se a resposta não for 'ok' (ex: status 401, 403, 500), lança um erro
+        if (!response.ok) {
+            throw new Error(data.error || `Erro desconhecido do servidor: ${response.status}`);
+        }
+
+        // Se o login for bem-sucedido e receber um token
         if (data.accessToken) {
-            localStorage.setItem('lucaUserToken', data.accessToken); // Armazena o token
-            if (data.user && data.user.nome) {
-                localStorage.setItem('lucaUserName', data.user.nome); // Armazena o nome do usuário
-            }
-            // Redireciona para a página principal de despesas (index.html)
-            window.location.href = 'index.html'; 
+            localStorage.setItem('lucaUserToken', data.accessToken);
+            window.location.href = 'index.html'; // Redireciona para a página principal
         } else {
-            errorMessageElement.textContent = 'Token não recebido. Tente novamente.';
-            errorMessageElement.style.display = 'block';
+            throw new Error('Token de acesso não recebido do servidor.');
         }
 
     } catch (error) {
         console.error('Erro ao tentar fazer login:', error);
-        errorMessageElement.textContent = 'Erro de conexão ou o servidor não respondeu. Tente mais tarde.';
+        // Exibe a mensagem de erro específica vinda do backend ou uma mensagem genérica
+        if (error instanceof SyntaxError) {
+             errorMessageElement.textContent = 'Ocorreu um erro ao processar a resposta do servidor.';
+        } else {
+             errorMessageElement.textContent = error.message || 'Não foi possível ligar ao servidor.';
+        }
         errorMessageElement.style.display = 'block';
+    } finally {
+        // Garante que o botão seja sempre reativado no final
+        submitButton.disabled = false;
+        submitButton.textContent = 'Entrar';
     }
-});
+}

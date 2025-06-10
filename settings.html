@@ -6,7 +6,7 @@
     <title>Configurações - Luca Gerencial</title>
     <link href="https://unpkg.com/tabulator-tables@5.5.0/dist/css/tabulator_bootstrap5.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚙️</text></svg>">
 </head>
 <body>
     <div class="top-bar">
@@ -45,7 +45,7 @@
                     <div id="parametros-table" style="margin-top: 20px;"></div>
                     
                     <h4 id="form-title" style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">Adicionar Novo Parâmetro</h4>
-                    <form id="param-form" style="display:none;">
+                    <form id="param-form">
                         <input type="hidden" id="param-id">
                         <div class="form-group">
                             <label for="param-cod">Tipo de Parâmetro:</label>
@@ -95,6 +95,7 @@
         </div>
     </div>
 
+    <!-- Modal de Confirmação para Salvar/Apagar -->
     <div id="confirm-action-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header"><h3 id="confirm-action-title">Confirmar Ação</h3></div>

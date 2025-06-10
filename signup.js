@@ -4,24 +4,43 @@ document.addEventListener('DOMContentLoaded', () => {
     initSignupPage();
 });
 
-const apiUrlBase = 'http://localhost:3000';
+// **CORREÇÃO AQUI:** Usando o endereço completo do backend para garantir a comunicação
+const apiUrlBase = 'http://localhost:3000/api'; 
 
+/**
+ * Inicializa a página de registo.
+ */
 async function initSignupPage() {
+    // Popula os selects dinamicamente ao carregar a página
     await popularSelects();
     document.getElementById('signup-form').addEventListener('submit', handleSignupSubmit);
 }
 
+/**
+ * Busca e popula os selects com dados da API.
+ */
 async function popularSelects() {
     await popularSelect(document.getElementById('unidade_user'), 'Unidades', 'Selecione uma Unidade');
     await popularSelect(document.getElementById('depart_user'), 'Departamento', 'Selecione um Departamento');
     await popularSelect(document.getElementById('cargo_user'), 'Cargos', 'Selecione um Cargo');
 }
 
+/**
+ * Popula um elemento <select> com dados da API.
+ * @param {HTMLSelectElement} selectElement O elemento select a ser populado.
+ * @param {string} codParametro O código do parâmetro a ser buscado.
+ * @param {string} placeholderText O texto a ser exibido na primeira opção.
+ */
 async function popularSelect(selectElement, codParametro, placeholderText) {
     try {
+        // Esta chamada é pública e não precisa de token de autorização
         const response = await fetch(`${apiUrlBase}/parametros?cod=${codParametro}`);
-        if (!response.ok) throw new Error(`Falha ao buscar ${codParametro}`);
+        
+        if (!response.ok) {
+            throw new Error(`Falha ao buscar ${codParametro}. Status: ${response.status}`);
+        }
         const data = await response.json();
+        
         selectElement.innerHTML = `<option value="">${placeholderText}</option>`;
         data.forEach(param => {
             const option = document.createElement('option');
@@ -35,6 +54,10 @@ async function popularSelect(selectElement, codParametro, placeholderText) {
     }
 }
 
+/**
+ * Lida com a submissão do formulário de registo.
+ * @param {Event} event O evento de submissão do formulário.
+ */
 async function handleSignupSubmit(event) {
     event.preventDefault();
     const errorMessageElement = document.getElementById('error-message');
@@ -51,6 +74,7 @@ async function handleSignupSubmit(event) {
         cargo_user: document.getElementById('cargo_user').value
     };
 
+    // Validação simples no frontend
     if (Object.values(data).some(value => !value)) {
         errorMessageElement.textContent = 'Todos os campos são obrigatórios.';
         errorMessageElement.style.display = 'block';
@@ -70,11 +94,11 @@ async function handleSignupSubmit(event) {
             throw new Error(result.error || `Erro: ${response.status}`);
         }
 
-        // **MENSAGEM ATUALIZADA**
-        alert('Registo realizado com sucesso! A sua conta está pendente de aprovação pelo Dep. de TI.');
+        alert(result.message); // Exibe a mensagem de sucesso vinda do backend
         window.location.href = 'login.html';
 
     } catch (error) {
+        console.error('Erro ao registar:', error);
         errorMessageElement.textContent = error.message;
         errorMessageElement.style.display = 'block';
     }
