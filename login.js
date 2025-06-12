@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // **CORREÇÃO AQUI:** Usando o endereço completo do backend para garantir a comunicação
-const apiUrl = 'http://localhost:3000/api';
+const apiUrl = 'http://10.113.0.15:3000/api';
 
 /**
  * Lida com a submissão do formulário de login.

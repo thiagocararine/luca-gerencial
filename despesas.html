@@ -6,6 +6,7 @@
     <title>Despesas - Luca Gerencial</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css"/>
     <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
 </head>
 <body>
     <div class="top-bar">
@@ -32,7 +33,7 @@
             </div>
         </div>
         <div class="filters-container">
-            <div class="filter-group"><label for="filter-date-range">Período:</label><input type="text" id="filter-date-range" placeholder="Selecione as Datas"></div>
+            <div class="filter-group"><label for="filter-date-range">Período:</label><input type="text" id="filter-date-range" placeholder="Selecione um intervalo"></div>
             <div class="filter-group"><label for="filter-status">Status:</label><select id="filter-status"><option value="">Todos</option><option value="1">Efetuado</option><option value="2">Cancelado</option></select></div>
             <div class="filter-group"><label for="filter-tipo">Tipo Despesa:</label><select id="filter-tipo"></select></div>
             <div class="filter-group"><label for="filter-grupo">Grupo Despesa:</label><select id="filter-grupo"></select></div>
@@ -60,7 +61,8 @@
         <div class="modal-content">
             <div class="modal-header"><h2>Adicionar Nova Despesa</h2><span class="close-button" id="close-modal-button">&times;</span></div>
             <form id="form-despesa-modal">
-                <div class="form-group" id="modal-filial-group" style="display: none;"><label for="modal-filial">Lançar para a Filial:</label><select id="modal-filial" required></select></div>
+                <!-- **ATUALIZADO:** O 'required' foi removido daqui e será tratado no JavaScript -->
+                <div class="form-group" id="modal-filial-group" style="display: none;"><label for="modal-filial">Lançar para a Filial:</label><select id="modal-filial"></select></div>
                 <div class="form-group"><label for="modal-data_despesa">Data da Despesa:</label><input type="date" id="modal-data_despesa" required></div>
                 <div class="form-group"><label for="modal-descricao">Descrição:</label><input type="text" id="modal-descricao" placeholder="Descrição da Despesa" required></div>
                 <div class="form-group"><label for="modal-valor">Valor (R$):</label><input type="number" id="modal-valor" placeholder="Ex: 150.50" step="0.01" required></div>
@@ -111,6 +113,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
-    <script src="despesas.js"></script>
+    <script src="despesas.js?v=1.0.0"></script>
 </body>
 </html>

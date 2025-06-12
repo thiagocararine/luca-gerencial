@@ -1,13 +1,14 @@
 // despesas.js (Frontend com Todas as Funcionalidades para a Página de Despesas)
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Garante que o script só seja executado após o carregamento completo do HTML.
     if (document.getElementById('tabela-despesas')) {
         initPage();
     }
 });
 
 // --- Constantes e Variáveis de Estado Globais ---
-const apiUrlBase = 'http://localhost:3000/api';
+const apiUrlBase = 'http://10.113.0.15:3000/api'; // Aponta para o endereço completo do backend
 const despesasApiUrl = `${apiUrlBase}/despesas`;
 const parametrosApiUrl = `${apiUrlBase}/parametros`;
 const privilegedRoles = ["Analista de Sistema", "Supervisor (a)", "Financeiro", "Diretor"];
@@ -18,14 +19,17 @@ let itemsPerPage = 20;
 let despesaIdParaCancelar = null;
 let datepicker = null;
 let exportDatepicker = null;
-let LOGO_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='; // Placeholder
+let LOGO_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='; // Placeholder seguro
 
 /**
  * Função principal que inicializa a página.
  */
 async function initPage() {
     const token = getToken();
-    if (!token) { window.location.href = 'login.html'; return; }
+    if (!token) {
+        window.location.href = 'login.html';
+        return;
+    }
     document.getElementById('user-name').textContent = getUserName();
     setupDatepickers();
     setupEventListeners();
@@ -33,7 +37,9 @@ async function initPage() {
         await loadCurrentLogo();
         await setupInicial();
         await carregarDespesas();
-    } catch (error) { console.error("[initPage] Erro durante a configuração inicial:", error); }
+    } catch (error) {
+        console.error("[initPage] Erro durante a configuração inicial:", error);
+    }
 }
 
 /**
@@ -41,8 +47,14 @@ async function initPage() {
  */
 function setupDatepickers() {
     const commonOptions = {
-        elementEnd: null, singleMode: false, lang: 'pt-BR', format: 'DD/MM/YYYY',
-        tooltipText: { one: 'dia', other: 'dias' },
+        elementEnd: null,
+        singleMode: false,
+        lang: 'pt-BR',
+        format: 'DD/MM/YYYY',
+        tooltipText: {
+            one: 'dia',
+            other: 'dias'
+        },
         buttonText: {
             previousMonth: `<svg width="11" height="20" xmlns="http://www.w3.org/2000/svg"><path d="M11 1.25L9.75 0 0 9.75l9.75 9.75L11 18.25 2.5 9.75z" fill-rule="evenodd"/></svg>`,
             nextMonth: `<svg width="11" height="20" xmlns="http://www.w3.org/2000/svg"><path d="M0 1.25L1.25 0 11 9.75 1.25 19.5 0 18.25l7.5-8.5z" fill-rule="evenodd"/></svg>`,
@@ -89,7 +101,7 @@ function setupEventListeners() {
 /**
  * Abre o modal de exportação.
  */
-function openExportModal() {
+async function openExportModal() {
     const startDate = datepicker.getStartDate();
     const endDate = datepicker.getEndDate();
     if (startDate && endDate) {
@@ -101,9 +113,8 @@ function openExportModal() {
     const exportFilialSelect = document.getElementById('export-filial-select');
     if (privilegedRoles.includes(getUserRole())) {
         exportFilialGroup.style.display = 'block';
-        popularSelect(exportFilialSelect, 'Unidades', getToken(), 'Todas as Filiais').then(() => {
-            exportFilialSelect.value = document.getElementById('filter-filial').value;
-        });
+        await popularSelect(exportFilialSelect, 'Unidades', getToken(), 'Todas as Filiais');
+        exportFilialSelect.value = document.getElementById('filter-filial').value;
     } else {
         exportFilialGroup.style.display = 'none';
     }
@@ -117,42 +128,41 @@ async function exportarPDF() {
     const btn = document.getElementById('generate-pdf-btn');
     btn.textContent = 'A gerar...';
     btn.disabled = true;
-
     try {
         const token = getToken();
         if (!token) return logout();
-        
         const params = new URLSearchParams();
         const startDate = exportDatepicker.getStartDate();
         const endDate = exportDatepicker.getEndDate();
         const dataInicio = startDate ? formatDate(startDate.toJSDate()) : '';
         const dataFim = endDate ? formatDate(endDate.toJSDate()) : '';
-
         if (dataInicio) params.append('dataInicio', dataInicio);
         if (dataFim) params.append('dataFim', dataFim);
-        
         const filialSelecionada = document.getElementById('export-filial-select').value;
         if (privilegedRoles.includes(getUserRole()) && filialSelecionada) {
             params.append('filial', filialSelecionada);
         }
-        
         const statusSelecionado = document.querySelector('input[name="export-status"]:checked').value;
         params.append('status', statusSelecionado);
         params.append('export', 'true');
-
         const response = await fetch(`${despesasApiUrl}?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token}` } });
         if (response.status >= 400) return handleApiError(response, true);
         const despesas = await response.json();
-
         if (despesas.length === 0) {
             alert('Nenhuma despesa encontrada com os filtros atuais para gerar o relatório.');
             return;
         }
-
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
         
-        doc.addImage(LOGO_BASE64, 'PNG', 14, 15, 20, 20);
+        try {
+            if (LOGO_BASE64 && LOGO_BASE64.startsWith('data:image/png;base64,')) {
+                doc.addImage(LOGO_BASE64, 'PNG', 14, 15, 20, 20);
+            }
+        } catch (e) {
+            console.error("A logo carregada é inválida e não será adicionada ao PDF.", e);
+        }
+
         doc.setFontSize(18);
         doc.text('Relatório de Despesas', doc.internal.pageSize.getWidth() / 2, 22, { align: 'center' });
         doc.setFontSize(11);
@@ -160,10 +170,10 @@ async function exportarPDF() {
         doc.text(`Filial: ${filial}`, doc.internal.pageSize.getWidth() / 2, 28, { align: 'center' });
         const periodo = dataInicio ? `Período: ${startDate.format('DD/MM/YYYY')} a ${endDate.format('DD/MM/YYYY')}` : 'Período: Completo';
         doc.text(periodo, doc.internal.pageSize.getWidth() / 2, 34, { align: 'center' });
-
+        
         const despesasPorDia = despesas.reduce((acc, despesa) => {
             const data = despesa.dsp_datadesp.split('T')[0];
-            if (!acc[data]) acc[data] = { items: [], total: 0 };
+            if (!acc[data]) { acc[data] = { items: [], total: 0 }; }
             acc[data].items.push(despesa);
             acc[data].total += parseFloat(despesa.dsp_valordsp);
             return acc;
@@ -172,16 +182,19 @@ async function exportarPDF() {
         const body = [];
         for (const data of Object.keys(despesasPorDia).sort()) {
             const diaInfo = despesasPorDia[data];
-            diaInfo.items.forEach((d, index) => {
-                let descricaoCell = d.dsp_descricao;
-                if (index === diaInfo.items.length - 1) {
-                    descricaoCell = [
-                        { content: d.dsp_descricao },
-                        { content: `\nTotal do Dia: ${diaInfo.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, styles: { textColor: [220, 53, 69], fontStyle: 'bold', fontSize: 7 } }
-                    ];
-                }
-                body.push([ new Date(d.dsp_datadesp).toLocaleDateString('pt-BR', { timeZone: 'UTC' }), descricaoCell, d.dsp_grupo, d.dsp_tipo, parseFloat(d.dsp_valordsp).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) ]);
+            diaInfo.items.forEach(d => {
+                body.push([
+                    new Date(d.dsp_datadesp).toLocaleDateString('pt-BR', { timeZone: 'UTC' }),
+                    d.dsp_descricao,
+                    d.dsp_grupo,
+                    d.dsp_tipo,
+                    parseFloat(d.dsp_valordsp).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                ]);
             });
+            body.push([
+                { content: `Total do Dia:`, colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } },
+                { content: diaInfo.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), styles: { halign: 'right', fontStyle: 'bold' } }
+            ]);
         }
         
         doc.autoTable({
@@ -191,7 +204,22 @@ async function exportarPDF() {
             theme: 'grid',
             headStyles: { fillColor: [41, 128, 185], textColor: 255 },
             styles: { fontSize: 8, cellPadding: 2 },
-            columnStyles: { 0: { cellWidth: 22 }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 30 }, 3: { cellWidth: 30 }, 4: { cellWidth: 25, halign: 'right' } },
+            columnStyles: {
+                0: { cellWidth: 22 },
+                1: { cellWidth: 'auto' },
+                2: { cellWidth: 30 },
+                3: { cellWidth: 30 },
+                4: { cellWidth: 25, halign: 'right' }
+            },
+            didParseCell: (data) => {
+                if (data.row.raw[0]?.colSpan) {
+                    data.cell.styles.fillColor = '#f8f9fa';
+                    data.cell.styles.textColor = [220, 53, 69];
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.cellPadding = 1.5;
+                    data.cell.styles.fontSize = 7;
+                }
+            },
         });
         
         const finalY = doc.autoTable.previous.finalY;
@@ -208,7 +236,6 @@ async function exportarPDF() {
         
         const dataStr = new Date().toISOString().slice(0, 10);
         doc.save(`Relatorio_Despesas_${dataStr}.pdf`);
-
     } catch (error) {
         alert("Ocorreu um erro ao gerar o relatório em PDF.");
     } finally {
@@ -437,8 +464,12 @@ async function handleFormSubmit(event) {
     if (privilegedRoles.includes(userRole)) {
         novaDespesa.dsp_filial = document.getElementById('modal-filial').value;
     }
-    if (!novaDespesa.dsp_datadesp || !novaDespesa.dsp_descricao || isNaN(novaDespesa.dsp_valordsp) || !novaDespesa.dsp_tipo || !novaDespesa.dsp_grupo || (privilegedRoles.includes(userRole) && !novaDespesa.dsp_filial)) {
+    if (!novaDespesa.dsp_datadesp || !novaDespesa.dsp_descricao || isNaN(novaDespesa.dsp_valordsp) || !novaDespesa.dsp_tipo || !novaDespesa.dsp_grupo) {
         alert('Todos os campos são obrigatórios.');
+        return;
+    }
+    if (privilegedRoles.includes(userRole) && !novaDespesa.dsp_filial) {
+        alert('Como utilizador privilegiado, por favor, selecione a filial para este lançamento.');
         return;
     }
     try {

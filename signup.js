@@ -1,23 +1,26 @@
 // signup.js
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Garante que o script só seja executado após o carregamento completo do HTML.
     initSignupPage();
 });
 
-// **CORREÇÃO AQUI:** Usando o endereço completo do backend para garantir a comunicação
-const apiUrlBase = 'http://localhost:3000/api'; 
+// IMPORTANTE: Para o seu ambiente de desenvolvimento, este endereço deve ser o completo.
+// Quando for para o servidor de produção, mudaremos isto para um caminho relativo ('/api').
+const apiUrlBase = 'http://10.113.0.15:3000/api'; 
 
 /**
- * Inicializa a página de registo.
+ * Função principal que inicializa a página de registo.
  */
 async function initSignupPage() {
     // Popula os selects dinamicamente ao carregar a página
     await popularSelects();
+    // Adiciona o listener para a submissão do formulário
     document.getElementById('signup-form').addEventListener('submit', handleSignupSubmit);
 }
 
 /**
- * Busca e popula os selects com dados da API.
+ * Orquestra o preenchimento de todos os selects da página.
  */
 async function popularSelects() {
     await popularSelect(document.getElementById('unidade_user'), 'Unidades', 'Selecione uma Unidade');
@@ -54,6 +57,7 @@ async function popularSelect(selectElement, codParametro, placeholderText) {
     }
 }
 
+
 /**
  * Lida com a submissão do formulário de registo.
  * @param {Event} event O evento de submissão do formulário.
@@ -89,7 +93,6 @@ async function handleSignupSubmit(event) {
         });
 
         const result = await response.json();
-
         if (!response.ok) {
             throw new Error(result.error || `Erro: ${response.status}`);
         }
