@@ -8,7 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- Constantes e Variáveis de Estado Globais ---
-const apiUrlBase = 'http://10.113.0.15:3000/api'; // Aponta para o endereço completo do backend
+//const apiUrlBase = 'http://10.113.0.15:3000/api'; // Aponta para o endereço completo do backend
+const apiUrlBase = 'http://10.113.0.17:3000/api';
 const despesasApiUrl = `${apiUrlBase}/despesas`;
 const parametrosApiUrl = `${apiUrlBase}/parametros`;
 const privilegedRoles = ["Analista de Sistema", "Supervisor (a)", "Financeiro", "Diretor"];

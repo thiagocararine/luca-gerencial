@@ -1,5 +1,6 @@
 // login.js
 
+// Garante que o script só seja executado após o carregamento completo do HTML.
 document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
@@ -7,8 +8,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// **CORREÇÃO AQUI:** Usando o endereço completo do backend para garantir a comunicação
-const apiUrl = 'http://10.113.0.15:3000/api';
+// **CORREÇÃO AQUI:** Definição da constante com o endereço completo do backend.
+// Substitua '10.113.0.15' pelo endereço IP real da sua máquina servidora, se for diferente.
+const apiUrl = 'http://10.113.0.17:3000/api'; 
 
 /**
  * Lida com a submissão do formulário de login.
@@ -47,7 +49,7 @@ async function handleLoginSubmit(event) {
             body: JSON.stringify({ identifier, senha }),
         });
 
-        // Lê a resposta como texto para verificar se está vazia
+        // Tenta ler a resposta como texto para verificar se está vazia
         const responseText = await response.text();
         if (!responseText) {
             throw new Error('O servidor enviou uma resposta vazia. Verifique se o backend está a funcionar corretamente.');
