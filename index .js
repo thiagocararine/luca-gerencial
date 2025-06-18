@@ -367,60 +367,6 @@ apiRouter.delete('/parametros/:id', authenticateToken, authorizeAdmin, async (re
     }
 });
 
-// **NOVA ROTA** para os dados do Dashboard
-apiRouter.get('/dashboard-summary', authenticateToken, async (req, res) => {
-    const { cargo, unidade: unidadeUsuario } = req.user;
-    const canViewAllFiliais = privilegedRoles.includes(cargo);
-    
-    let baseConditions = [];
-    let queryParams = [];
-
-    // Aplica filtro de filial para utilizadores não privilegiados
-    if (!canViewAllFiliais) {
-        baseConditions.push('dsp_filial = ?');
-        queryParams.push(unidadeUsuario);
-    }
-
-    // Condições para o mês atual
-    const mesAtualConditions = [...baseConditions, 'MONTH(dsp_datadesp) = MONTH(CURDATE())', 'YEAR(dsp_datadesp) = YEAR(CURDATE())'];
-    const mesAtualWhere = mesAtualConditions.length > 0 ? `WHERE ${mesAtualConditions.join(' AND ')}` : '';
-    
-    // Condições para hoje
-    const hojeConditions = [...baseConditions, 'dsp_datalanc >= CURDATE()'];
-    const hojeWhere = hojeConditions.length > 0 ? `WHERE ${hojeConditions.join(' AND ')}` : '';
-
-    const queries = {
-        totalDespesasMes: `SELECT SUM(dsp_valordsp) as total FROM despesa_caixa ${mesAtualWhere} AND dsp_status = 1`,
-        lancamentosHoje: `SELECT COUNT(*) as count FROM despesa_caixa ${hojeWhere}`,
-        despesasCanceladasMes: `SELECT COUNT(*) as count FROM despesa_caixa ${mesAtualWhere} AND dsp_status = 2`,
-        despesasPorGrupo: `SELECT dsp_grupo, SUM(dsp_valordsp) as total FROM despesa_caixa ${mesAtualWhere} AND dsp_status = 1 GROUP BY dsp_grupo ORDER BY total DESC LIMIT 7`,
-        utilizadoresPendentes: canViewAllFiliais ? `SELECT COUNT(*) as count FROM cad_user WHERE status_user = 'Pendente'` : `SELECT 0 as count`
-    };
-
-    let connection;
-    try {
-        connection = await mysql.createConnection(dbConfig);
-        const [totalDespesasMesResult] = await connection.execute(queries.totalDespesasMes, queryParams);
-        const [lancamentosHojeResult] = await connection.execute(queries.lancamentosHoje, queryParams);
-        const [despesasCanceladasMesResult] = await connection.execute(queries.despesasCanceladasMes, queryParams);
-        const [despesasPorGrupoResult] = await connection.execute(queries.despesasPorGrupo, queryParams);
-        const [utilizadoresPendentesResult] = await connection.execute(queries.utilizadoresPendentes);
-
-        res.json({
-            totalDespesasMes: totalDespesasMesResult[0].total || 0,
-            lancamentosHoje: lancamentosHojeResult[0].count || 0,
-            despesasCanceladasMes: despesasCanceladasMesResult[0].count || 0,
-            utilizadoresPendentes: utilizadoresPendentesResult[0].count || 0,
-            despesasPorGrupo: despesasPorGrupoResult
-        });
-    } catch (error) {
-        console.error("Erro ao buscar dados do dashboard:", error);
-        res.status(500).json({ error: "Erro ao buscar dados para o dashboard." });
-    } finally {
-        if (connection) await connection.end();
-    }
-});
-
 // --- ROTAS PARA CONFIGURAÇÃO DA LOGO ---
 const logoConfigPath = path.join(__dirname, 'config_logo.json');
 apiRouter.post('/config/logo', authenticateToken, authorizeAdmin, async (req, res) => {

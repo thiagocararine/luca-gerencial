@@ -4,7 +4,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initSettingsPage();
 });
 
-const apiUrlBase = 'http://localhost:3000/api'; // **ATUALIZADO**
+//const apiUrlBase = 'http://10.113.0.15:3000/api'; // **ATUALIZADO**
+const apiUrlBase = 'http://localhost:3000/api';
 let parametrosTable = null;
 let usersTable = null;
 let currentParamCode = null;
@@ -194,8 +195,15 @@ function setupParametrosTable() {
                 return grupo ? grupo.NOME_PARAMETRO : `<span style="color:red;">Inválido</span>`;
             }},
             {
+                //title: "Ações", 
                 title: "Ações", hozAlign: "center", width: 180,
-                formatter: () => `<button class="btn-primary edit-btn">Editar</button><button class="btn-secondary delete-btn">Apagar</button>`,
+                formatter: function(cell, formatterParams, onRendered){
+                    // Retorna o HTML para os botões com as novas classes
+                    const editBtn = `<button class="edit-btn">Editar</button>`;
+                    const deleteBtn = `<button class="delete-btn">Excluir</button>`;
+                    return `${editBtn} ${deleteBtn}`;
+                },
+                //formatter: () => `<button class="btn-primary edit-btn">Editar</button><button class="btn-secondary delete-btn">Apagar</button>`,
                 cellClick: (e, cell) => {
                     const data = cell.getRow().getData();
                     if (e.target.classList.contains('edit-btn')) {
