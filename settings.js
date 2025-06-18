@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 //const apiUrlBase = 'http://10.113.0.15:3000/api'; // **ATUALIZADO**
-const apiUrlBase = 'http://10.113.0.17:3000/api';
+const apiUrlBase = 'http://localhost:3000/api';
 let parametrosTable = null;
 let usersTable = null;
 let currentParamCode = null;

@@ -4,115 +4,262 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Despesas - Luca Gerencial</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css"/>
-    <link rel="stylesheet" href="style.css">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
-</head>
-<body>
-    <div class="top-bar">
-        <div class="top-bar-left">
-            <h1>Luca Gerencial</h1>
-            <nav>
-                <a href="index.html">Início</a>
-                <a href="despesas.html" class="active">Lançamentos</a>
-                <a href="settings.html">Configurações</a>
-            </nav>
-        </div>
-        <div class="user-info">
-            Olá, <span id="user-name">Utilizador</span>!
-            <button id="logout-button">Sair</button>
-        </div>
-    </div>
     
-    <div class="container">
-        <div class="actions-bar">
-            <h2>Despesas Lançadas</h2>
-            <div>
-                <button id="open-export-modal-btn" class="btn-secondary" style="background-color: #5bc0de; margin-right: 10px;">Exportar Relatório</button>
-                <button id="add-despesa-button" class="btn-primary" style="background-color: #28a745;">+ Adicionar Nova Despesa</button>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Litepicker (Calendário) CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css"/>
+    
+    <!-- Ícone da Página -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Estilos customizados mínimos */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Remove setas de input[type=number] no Chrome, Safari, Edge, Opera */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        /* Remove setas de input[type=number] no Firefox */
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+        /* Garante que o modal escondido não seja acessível */
+        .modal.hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <!-- Barra de Navegação Superior -->
+    <header class="bg-white shadow-md sticky top-0 z-40">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex h-16 items-center justify-between">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <h1 class="text-xl font-bold text-indigo-600">Luca Gerencial</h1>
+                    </div>
+                    <nav class="hidden md:block ml-10">
+                        <div class="flex items-baseline space-x-4">
+                            <a href="index.html" class="text-gray-500 hover:bg-gray-100 hover:text-gray-900 rounded-md px-3 py-2 text-sm font-medium">Início</a>
+                            <a href="despesas.html" class="bg-indigo-50 text-indigo-700 rounded-md px-3 py-2 text-sm font-medium" aria-current="page">Lançamentos</a>
+                            <a href="settings.html" class="text-gray-500 hover:bg-gray-100 hover:text-gray-900 rounded-md px-3 py-2 text-sm font-medium">Configurações</a>
+                        </div>
+                    </nav>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-4 flex items-center md:ml-6 gap-4">
+                        <span class="text-gray-800">Olá, <span id="user-name" class="font-medium">Utilizador</span>!</span>
+                        <button id="logout-button" class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600">Sair</button>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="filters-container">
-            <div class="filter-group"><label for="filter-date-range">Período:</label><input type="text" id="filter-date-range" placeholder="Selecione um intervalo"></div>
-            <div class="filter-group"><label for="filter-status">Status:</label><select id="filter-status"><option value="">Todos</option><option value="1">Efetuado</option><option value="2">Cancelado</option></select></div>
-            <div class="filter-group"><label for="filter-tipo">Tipo Despesa:</label><select id="filter-tipo"></select></div>
-            <div class="filter-group"><label for="filter-grupo">Grupo Despesa:</label><select id="filter-grupo"></select></div>
-            <div class="filter-group" id="filial-filter-group" style="display: none;"><label for="filter-filial">Filial:</label><select id="filter-filial"></select></div>
-            <div class="filter-buttons"><button id="filter-button" class="btn-primary">Filtrar</button><button id="clear-filter-button" class="btn-secondary">Limpar Filtros</button></div>
+    </header>
+
+    <main class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <!-- Cabeçalho e Ações -->
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
+            <h2 class="text-2xl font-bold text-gray-900">Despesas Lançadas</h2>
+            <div class="flex items-center gap-2">
+                <button id="open-export-modal-btn" class="rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600">Exportar Relatório</button>
+                <button id="add-despesa-button" class="rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-700 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" /></svg>
+                    Adicionar Despesa
+                </button>
+            </div>
         </div>
-        <div class="table-responsive">
-            <table id="tabela-despesas">
-                <thead>
+
+        <!-- Filtros -->
+        <div class="bg-white p-4 rounded-lg shadow mb-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 items-end">
+                <div class="xl:col-span-2">
+                    <label for="filter-date-range" class="block text-sm font-medium text-gray-700">Período</label>
+                    <input type="text" id="filter-date-range" placeholder="Selecione um intervalo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="filter-status" class="block text-sm font-medium text-gray-700">Status</label>
+                    <select id="filter-status" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"><option value="">Todos</option><option value="1">Efetuado</option><option value="2">Cancelado</option></select>
+                </div>
+                <div>
+                    <label for="filter-tipo" class="block text-sm font-medium text-gray-700">Tipo Despesa</label>
+                    <select id="filter-tipo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select>
+                </div>
+                <div>
+                    <label for="filter-grupo" class="block text-sm font-medium text-gray-700">Grupo Despesa</label>
+                    <select id="filter-grupo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select>
+                </div>
+                <div id="filial-filter-group" class="hidden">
+                    <label for="filter-filial" class="block text-sm font-medium text-gray-700">Filial</label>
+                    <select id="filter-filial" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select>
+                </div>
+                <div class="flex gap-2">
+                    <button id="filter-button" class="w-full justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">Filtrar</button>
+                    <button id="clear-filter-button" class="w-full justify-center rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Limpar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabela de Despesas -->
+        <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <table id="tabela-despesas" class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
                     <tr>
-                        <th>Ações</th><th>Status</th><th>Data Despesa</th><th>Descrição</th><th>Valor (R$)</th><th>Tipo</th><th>Grupo</th><th>Filial</th><th>Data Lanç.</th><th>Utilizador Lanç.</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Despesa</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor (R$)</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grupo</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Filial</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Lanç.</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Utilizador</th>
                     </tr>
                 </thead>
-                <tbody></tbody>
+                <tbody class="bg-white divide-y divide-gray-200"></tbody>
             </table>
+            <p id="no-data-message" class="text-center p-8 text-gray-500 hidden">Nenhuma despesa encontrada.</p>
         </div>
-        <p id="no-data-message" style="text-align:center; padding: 20px; display:none;">Nenhuma despesa encontrada.</p>
-        <div class="pagination-controls">
-            <div class="pagination-info"><label for="items-per-page">Itens por página:</label><select id="items-per-page"><option value="20" selected>20</option><option value="40">40</option><option value="60">60</option><option value="80">80</option><option value="100">100</option></select></div>
-            <div class="pagination-nav"><button id="prev-page-btn" disabled>&laquo; Anterior</button><span id="page-info-span">Página 1 de 1</span><button id="next-page-btn" disabled>Próxima &raquo;</button></div>
+        
+        <!-- Paginação -->
+        <div class="flex items-center justify-between mt-6">
+            <div class="flex items-center gap-2 text-sm">
+                <label for="items-per-page">Itens por página:</label>
+                <select id="items-per-page" class="rounded-md border-gray-300 text-sm">
+                    <option value="20" selected>20</option><option value="40">40</option><option value="60">60</option><option value="80">80</option><option value="100">100</option>
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="prev-page-btn" disabled class="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">&laquo; Anterior</button>
+                <span id="page-info-span" class="text-sm text-gray-700">Página 1 de 1</span>
+                <button id="next-page-btn" disabled class="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Próxima &raquo;</button>
+            </div>
         </div>
-    </div>
+    </main>
 
-    <div id="add-despesa-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header"><h2>Adicionar Nova Despesa</h2><span class="close-button" id="close-modal-button">&times;</span></div>
-            <form id="form-despesa-modal">
-                <!-- **ATUALIZADO:** O 'required' foi removido daqui e será tratado no JavaScript -->
-                <div class="form-group" id="modal-filial-group" style="display: none;"><label for="modal-filial">Lançar para a Filial:</label><select id="modal-filial"></select></div>
-                <div class="form-group"><label for="modal-data_despesa">Data da Despesa:</label><input type="date" id="modal-data_despesa" required></div>
-                <div class="form-group"><label for="modal-descricao">Descrição:</label><input type="text" id="modal-descricao" placeholder="Descrição da Despesa" required></div>
-                <div class="form-group"><label for="modal-valor">Valor (R$):</label><input type="number" id="modal-valor" placeholder="Ex: 150.50" step="0.01" required></div>
-                <div class="form-group"><label for="modal-tipo-despesa">Tipo da Despesa:</label><select id="modal-tipo-despesa" required></select></div>
-                <div class="form-group"><label for="modal-grupo-despesa">Grupo da Despesa:</label><select id="modal-grupo-despesa" required disabled></select></div>
-                <button type="submit" class="btn-primary">Salvar Despesa</button>
+    <!-- Modal: Adicionar Nova Despesa -->
+    <div id="add-despesa-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+        <div class="relative mx-auto p-6 border w-full max-w-lg shadow-lg rounded-md bg-white">
+            <div class="flex items-start justify-between pb-4 border-b rounded-t">
+                <h3 class="text-xl font-semibold text-gray-900">Adicionar Nova Despesa</h3>
+                <button id="close-modal-button" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                </button>
+            </div>
+            <form id="form-despesa-modal" class="mt-6 space-y-4">
+                <div id="modal-filial-group" class="hidden">
+                    <label for="modal-filial" class="block mb-2 text-sm font-medium text-gray-900">Lançar para a Filial</label>
+                    <select id="modal-filial" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"></select>
+                </div>
+                <div>
+                    <label for="modal-data_despesa" class="block mb-2 text-sm font-medium text-gray-900">Data da Despesa</label>
+                    <input type="date" id="modal-data_despesa" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                </div>
+                <div>
+                    <label for="modal-descricao" class="block mb-2 text-sm font-medium text-gray-900">Descrição</label>
+                    <input type="text" id="modal-descricao" placeholder="Ex: Compra de material de escritório" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                </div>
+                <div>
+                    <label for="modal-valor" class="block mb-2 text-sm font-medium text-gray-900">Valor (R$)</label>
+                    <input type="number" id="modal-valor" placeholder="Ex: 150.50" step="0.01" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                </div>
+                <div>
+                    <label for="modal-tipo-despesa" class="block mb-2 text-sm font-medium text-gray-900">Tipo da Despesa</label>
+                    <select id="modal-tipo-despesa" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"></select>
+                </div>
+                <div>
+                    <label for="modal-grupo-despesa" class="block mb-2 text-sm font-medium text-gray-900">Grupo da Despesa</label>
+                    <select id="modal-grupo-despesa" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" disabled></select>
+                </div>
+                <button type="submit" class="w-full text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-4 focus:outline-none focus:ring-indigo-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center">Salvar Despesa</button>
             </form>
         </div>
     </div>
     
-    <div id="confirm-cancel-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header"><h3>Confirmar Cancelamento</h3><span class="close-button" id="close-confirm-modal-btn">&times;</span></div>
-            <div class="confirm-modal-body"><p>Tem a certeza de que deseja cancelar o seguinte lançamento? Esta ação não pode ser desfeita.</p><p id="cancel-details"></p></div>
-            <div class="confirm-modal-footer"><button id="reject-cancel-btn" class="btn-secondary">Voltar</button><button id="confirm-cancel-btn">Confirmar Cancelamento</button></div>
+    <!-- Modal: Confirmar Cancelamento -->
+    <div id="confirm-cancel-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+        <div class="relative mx-auto p-6 border w-full max-w-md shadow-lg rounded-md bg-white">
+            <div class="flex items-start justify-between pb-4 border-b">
+                <h3 class="text-xl font-semibold text-gray-900">Confirmar Cancelamento</h3>
+                <button id="close-confirm-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center">
+                     <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                </button>
+            </div>
+            <div class="py-6 text-center">
+                 <svg aria-hidden="true" class="mx-auto mb-4 w-14 h-14 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <p class="mb-4 text-gray-500">Tem certeza que deseja cancelar o lançamento? Esta ação não pode ser desfeita.</p>
+                <p id="cancel-details" class="text-sm font-medium bg-gray-100 p-2 rounded"></p>
+            </div>
+            <div class="flex justify-center items-center pt-4 border-t gap-4">
+                <button id="reject-cancel-btn" class="rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Voltar</button>
+                <button id="confirm-cancel-btn" class="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700">Confirmar Cancelamento</button>
+            </div>
         </div>
     </div>
     
-    <div id="export-pdf-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Opções do Relatório PDF</h3>
-                <span class="close-button" id="close-export-modal-btn">&times;</span>
+    <!-- Modal: Exportar Relatório PDF -->
+    <div id="export-pdf-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+        <div class="relative mx-auto p-6 border w-full max-w-lg shadow-lg rounded-md bg-white">
+            <div class="flex items-start justify-between pb-4 border-b">
+                <h3 class="text-xl font-semibold text-gray-900">Opções do Relatório PDF</h3>
+                 <button id="close-export-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center">
+                     <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                </button>
             </div>
-            <div class="export-modal-body">
-                <div class="form-group"><label for="export-date-range">Período do Relatório:</label><input type="text" id="export-date-range"></div>
-                <div class="form-group" id="export-filial-group" style="display: none;"><label for="export-filial-select">Filial:</label><select id="export-filial-select"></select></div>
-                <div class="form-group">
-                    <label>Status das Despesas:</label>
-                    <div style="display: flex; gap: 20px; margin-top: 5px;">
-                        <label for="export-status-efetuado" style="display: flex; align-items: center; gap: 5px; font-weight: normal;"><input type="radio" id="export-status-efetuado" name="export-status" value="1" checked>Efetuadas</label>
-                        <label for="export-status-cancelado" style="display: flex; align-items: center; gap: 5px; font-weight: normal;"><input type="radio" id="export-status-cancelado" name="export-status" value="2">Canceladas</label>
+            <div class="mt-6 space-y-6">
+                <div>
+                    <label for="export-date-range" class="block text-sm font-medium text-gray-700">Período do Relatório</label>
+                    <input type="text" id="export-date-range" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                </div>
+                <div id="export-filial-group" class="hidden">
+                    <label for="export-filial-select" class="block text-sm font-medium text-gray-700">Filial</label>
+                    <select id="export-filial-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Status das Despesas</label>
+                    <div class="flex gap-x-6 mt-2">
+                        <div class="flex items-center gap-x-2">
+                            <input type="radio" id="export-status-efetuado" name="export-status" value="1" checked class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600">
+                            <label for="export-status-efetuado" class="text-sm text-gray-600">Efetuadas</label>
+                        </div>
+                        <div class="flex items-center gap-x-2">
+                            <input type="radio" id="export-status-cancelado" name="export-status" value="2" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600">
+                            <label for="export-status-cancelado" class="text-sm text-gray-600">Canceladas</label>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="confirm-modal-footer">
-                <button id="generate-pdf-btn" class="btn-primary">Gerar PDF</button>
+             <div class="flex justify-end items-center pt-6 border-t mt-6">
+                <button id="generate-pdf-btn" class="w-full sm:w-auto justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">Gerar PDF</button>
             </div>
         </div>
     </div>
-
-    <footer>
-        <p>Luca Materiais para Construção LTDA - Dep. TI<br>
-        Todos os Direitos Reservados.</p>
+    
+    <footer class="text-center py-8 mt-8 border-t">
+        <p class="text-sm text-gray-500">
+            Luca Materiais para Construção LTDA - Dep. TI<br>
+            Todos os Direitos Reservados.
+        </p>
     </footer>
 
     <!-- Scripts Externos -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
-    <script src="despesas.js?v=1.0.0"></script>
+    
+    <!-- Script principal da página (deve vir por último) -->
+    <script src="despesas.js?v=1.0.1"></script>
 </body>
 </html>

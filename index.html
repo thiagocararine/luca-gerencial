@@ -1,71 +1,128 @@
-<!DOCTYPE html>
-<html lang="pt-br">
+<!doctype html>
+<html lang="pt-br" class="h-full bg-gray-100">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Luca Gerencial</title>
-    <link rel="stylesheet" href="style.css?v=1.0.0">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Ícone da Página -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* Estilos base para a fonte e layout */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Ajuste para Feather Icons */
+        [data-feather] {
+            width: 1rem;
+            height: 1rem;
+        }
+    </style>
 </head>
-<body>
-    <div class="top-bar">
-        <div class="top-bar-left">
-            <h1>Luca Gerencial</h1>
-            <nav>
-                <a href="index.html" class="active">Início</a>
-                <a href="despesas.html">Lançamentos</a>
-                <a href="settings.html">Configurações</a>
-            </nav>
+<body class="h-full">
+
+<div class="flex h-full">
+    <!-- Sidebar (Menu Lateral) -->
+    <nav class="w-64 flex-shrink-0 bg-white shadow-lg hidden md:block">
+        <div class="flex flex-col h-full">
+            <!-- Logo/Marca -->
+            <div class="h-16 flex items-center justify-center border-b">
+                <h1 class="text-xl font-bold text-indigo-600">Luca Gerencial</h1>
+            </div>
+            <!-- Itens de Navegação -->
+            <div class="flex-grow p-4">
+                <ul class="space-y-2">
+                    <li>
+                        <a href="index.html" class="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium bg-indigo-50 text-indigo-700" aria-current="page">
+                            <span data-feather="home"></span>
+                            Início / Dashboard
+                        </a>
+                    </li>
+                    <li>
+                        <a href="despesas.html" class="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">
+                            <span data-feather="dollar-sign"></span>
+                            Lançamentos
+                        </a>
+                    </li>
+                    <li>
+                        <a href="settings.html" class="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">
+                            <span data-feather="settings"></span>
+                            Configurações
+                        </a>
+                    </li>
+                </ul>
+            </div>
         </div>
-        <div class="user-info">
-            Olá, <span id="user-name">Utilizador</span>!
-            <button id="logout-button">Sair</button>
-        </div>
+    </nav>
+
+    <!-- Área de Conteúdo Principal -->
+    <div class="flex-1 flex flex-col">
+        <!-- Header Superior -->
+        <header class="bg-white shadow-sm border-b h-16 flex items-center justify-end px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center gap-4">
+                <span class="text-sm text-gray-700">Olá, <strong id="user-name" class="font-medium">Utilizador</strong>!</span>
+                <button id="logout-button" class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600">
+                    Sair
+                </button>
+            </div>
+        </header>
+
+        <!-- Conteúdo da Página (Dashboard) -->
+        <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+            <div class="border-b pb-2 mb-6">
+                <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+            </div>
+
+            <!-- KPIs (Cards) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-6">
+                <!-- Card Total Despesas -->
+                <div class="bg-white rounded-lg shadow p-5 border-l-4 border-blue-500">
+                    <h4 class="text-sm font-medium text-gray-500 truncate">Total Despesas (Mês)</h4>
+                    <p class="mt-1 text-3xl font-semibold text-gray-900" id="kpi-total-despesas">R$ 0,00</p>
+                </div>
+                <!-- Card Lançamentos Hoje -->
+                <div class="bg-white rounded-lg shadow p-5 border-l-4 border-green-500">
+                    <h4 class="text-sm font-medium text-gray-500 truncate">Lançamentos Hoje</h4>
+                    <p class="mt-1 text-3xl font-semibold text-gray-900" id="kpi-lancamentos-hoje">0</p>
+                </div>
+                <!-- Card Despesas Canceladas -->
+                <div class="bg-white rounded-lg shadow p-5 border-l-4 border-yellow-400">
+                    <h4 class="text-sm font-medium text-gray-500 truncate">Despesas Canceladas (Mês)</h4>
+                    <p class="mt-1 text-3xl font-semibold text-gray-900" id="kpi-despesas-canceladas">0</p>
+                </div>
+                <!-- Card Utilizadores Pendentes -->
+                <div id="kpi-utilizadores-pendentes-card" class="bg-white rounded-lg shadow p-5 border-l-4 border-red-500 hidden">
+                    <h4 class="text-sm font-medium text-gray-500 truncate">Utilizadores Pendentes</h4>
+                    <p class="mt-1 text-3xl font-semibold text-gray-900" id="kpi-utilizadores-pendentes">0</p>
+                </div>
+            </div>
+
+            <!-- Gráfico -->
+            <div class="bg-white rounded-lg shadow p-5">
+                <h4 class="text-lg font-medium text-gray-800">Top 7 Grupos de Despesa (Mês Atual)</h4>
+                <div class="mt-4">
+                    <canvas id="despesas-por-grupo-chart"></canvas>
+                </div>
+            </div>
+        </main>
     </div>
+</div>
 
-    <div class="container">
-        <h2>Painel Principal</h2>
-        <p>Bem-vindo ao seu sistema de gestão. Selecione um módulo abaixo para começar.</p>
-        
-        <div class="hub-grid">
-            <a href="despesas.html" class="hub-card">
-                <h3>Módulo de Despesas</h3>
-                <p>Visualize, adicione e gira os lançamentos de despesas diárias.</p>
-            </a>
-            <a href="settings.html" class="hub-card">
-                <h3>Configurações</h3>
-                <p>Gira os parâmetros do sistema, como unidades, tipos, grupos e a logo da empresa.</p>
-            </a>
-            <!-- Futuros módulos podem ser adicionados aqui -->
-        </div>
-    </div>
-
-    <footer>
-        <p>Luca Materiais para Construção LTDA - Dep. TI<br>
-        Todos os Direitos Reservados.</p>
-    </footer>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const token = localStorage.getItem('lucaUserToken');
-            if (!token) {
-                window.location.href = 'login.html';
-                return;
-            }
-            try {
-                const payload = JSON.parse(atob(token.split('.')[1]));
-                document.getElementById('user-name').textContent = payload.nome || 'Utilizador';
-            } catch (e) {
-                console.error("Erro ao ler token:", e);
-                localStorage.removeItem('lucaUserToken');
-                window.location.href = 'login.html';
-            }
-
-            document.getElementById('logout-button').addEventListener('click', () => {
-                localStorage.removeItem('lucaUserToken');
-                window.location.href = 'login.html';
-            });
-        });
-    </script>
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  feather.replace() // Ativa os ícones da sidebar
+</script>
+<script src="dashboard.js?v=2.0.2"></script>
 </body>
 </html>
