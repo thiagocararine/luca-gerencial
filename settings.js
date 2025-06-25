@@ -7,7 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 //const apiUrlBase = 'http://localhost:3000/api';
-const apiUrlBase = 'http://10.113.0.17:3000/api';
+//const apiUrlBase = 'http://10.113.0.17:3000/api';
+const apiUrlBase = '/api';
 let parametrosTable, usersTable, perfisTable;
 let currentParamCode = null;
 let todosOsGruposDeDespesa = [];
