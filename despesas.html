@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-br" class="h-full bg-gray-100">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,8 +11,8 @@
     <!-- Litepicker (Calendário) CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css"/>
     
-    <!-- Ícone da Página -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+    <!-- Ícone da Página (Substitua pelo seu .ico) -->
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
     
     <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -20,136 +20,188 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
-        /* Estilos customizados mínimos */
         body {
             font-family: 'Inter', sans-serif;
         }
-        /* Remove setas de input[type=number] no Chrome, Safari, Edge, Opera */
+        [data-feather] {
+            width: 1.25rem;
+            height: 1.25rem;
+        }
         input::-webkit-outer-spin-button,
         input::-webkit-inner-spin-button {
             -webkit-appearance: none;
             margin: 0;
         }
-        /* Remove setas de input[type=number] no Firefox */
         input[type=number] {
             -moz-appearance: textfield;
         }
-        /* Garante que o modal escondido não seja acessível */
         .modal.hidden {
             display: none;
         }
+        .cancel-btn {
+            padding: 0.25rem 0.75rem;
+            border-radius: 0.375rem;
+            color: white;
+            font-size: 0.75rem;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            background-color: #ef4444; /* Vermelho */
+        }
+        .cancel-btn:hover {
+            background-color: #dc2626;
+        }
+        #sidebar.collapsed .sidebar-link {
+            justify-content: center;
+        }
+        /* Ajuste para logo na sidebar */
+        #company-logo {
+            max-height: 40px; /* Ajuste a altura máxima conforme necessário */
+            max-width: 40px;  /* Ajuste a largura máxima conforme necessário */
+            transition: opacity 0.3s ease-in-out;
+        }
+        #sidebar.collapsed #company-logo {
+            opacity: 0; /* Esconde a logo suavemente quando recolhido */
+        }
     </style>
 </head>
-<body class="bg-gray-100">
+<body class="h-full">
 
-    <!-- Barra de Navegação Superior -->
-    <header class="bg-white shadow-md sticky top-0 z-40">
-        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex h-16 items-center justify-between">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <h1 class="text-xl font-bold text-indigo-600">Luca Gerencial</h1>
-                    </div>
-                    <nav class="hidden md:block ml-10">
-                        <div class="flex items-baseline space-x-4">
-                            <a href="index.html" class="text-gray-500 hover:bg-gray-100 hover:text-gray-900 rounded-md px-3 py-2 text-sm font-medium">Início</a>
-                            <a href="despesas.html" class="bg-indigo-50 text-indigo-700 rounded-md px-3 py-2 text-sm font-medium" aria-current="page">Lançamentos</a>
-                            <a href="settings.html" class="text-gray-500 hover:bg-gray-100 hover:text-gray-900 rounded-md px-3 py-2 text-sm font-medium">Configurações</a>
-                        </div>
-                    </nav>
-                </div>
-                <div class="hidden md:block">
-                    <div class="ml-4 flex items-center md:ml-6 gap-4">
-                        <span class="text-gray-800">Olá, <span id="user-name" class="font-medium">Utilizador</span>!</span>
-                        <button id="logout-button" class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600">Sair</button>
-                    </div>
-                </div>
+<div class="flex h-full">
+    <!-- Sidebar -->
+    <nav id="sidebar" class="w-64 bg-white shadow-lg hidden md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
+        <div class="flex flex-col h-full">
+            <div class="h-16 flex items-center justify-center border-b px-4 gap-2">
+                <img id="company-logo" src="" alt="Logo da Empresa" style="display: none;">
+                <h1 class="text-xl font-bold text-indigo-600 overflow-hidden"><span class="sidebar-text">Luca Gerencial</span></h1>
             </div>
-        </div>
-    </header>
-
-    <main class="container mx-auto p-4 sm:p-6 lg:p-8">
-        <!-- Cabeçalho e Ações -->
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
-            <h2 class="text-2xl font-bold text-gray-900">Despesas Lançadas</h2>
-            <div class="flex items-center gap-2">
-                <button id="open-export-modal-btn" class="rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600">Exportar Relatório</button>
-                <button id="add-despesa-button" class="rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-700 flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" /></svg>
-                    Adicionar Despesa
+            <div class="flex-grow p-4">
+                <ul class="space-y-2">
+                    <li>
+                        <a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">
+                            <span data-feather="home"></span>
+                            <span class="sidebar-text">Início / Dashboard</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium bg-indigo-50 text-indigo-700" aria-current="page">
+                            <span data-feather="dollar-sign"></span>
+                            <span class="sidebar-text">Lançamentos</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">
+                            <span data-feather="settings"></span>
+                            <span class="sidebar-text">Configurações</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="p-2 border-t">
+                <button id="sidebar-toggle" class="w-full flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none">
+                    <svg id="toggle-icon-collapse" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" /></svg>
+                    <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
                 </button>
             </div>
         </div>
+    </nav>
+    
+    <!-- Área de Conteúdo Principal -->
+    <div class="flex-1 flex flex-col">
+        <header class="bg-white shadow-sm border-b h-16 flex items-center justify-end px-4 sm:px-6 lg:px-8 flex-shrink-0">
+            <div class="flex items-center gap-4">
+                <span class="text-sm text-gray-700">Olá, <strong id="user-name" class="font-medium">Utilizador</strong>!</span>
+                <button id="logout-button" class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500">Sair</button>
+            </div>
+        </header>
 
-        <!-- Filtros -->
-        <div class="bg-white p-4 rounded-lg shadow mb-6">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 items-end">
-                <div class="xl:col-span-2">
-                    <label for="filter-date-range" class="block text-sm font-medium text-gray-700">Período</label>
-                    <input type="text" id="filter-date-range" placeholder="Selecione um intervalo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                </div>
-                <div>
-                    <label for="filter-status" class="block text-sm font-medium text-gray-700">Status</label>
-                    <select id="filter-status" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"><option value="">Todos</option><option value="1">Efetuado</option><option value="2">Cancelado</option></select>
-                </div>
-                <div>
-                    <label for="filter-tipo" class="block text-sm font-medium text-gray-700">Tipo Despesa</label>
-                    <select id="filter-tipo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select>
-                </div>
-                <div>
-                    <label for="filter-grupo" class="block text-sm font-medium text-gray-700">Grupo Despesa</label>
-                    <select id="filter-grupo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select>
-                </div>
-                <div id="filial-filter-group" class="hidden">
-                    <label for="filter-filial" class="block text-sm font-medium text-gray-700">Filial</label>
-                    <select id="filter-filial" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select>
-                </div>
-                <div class="flex gap-2">
-                    <button id="filter-button" class="w-full justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">Filtrar</button>
-                    <button id="clear-filter-button" class="w-full justify-center rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Limpar</button>
+        <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
+                <h2 class="text-2xl font-bold text-gray-900">Despesas Lançadas</h2>
+                <div class="flex items-center gap-2">
+                    <button id="open-export-modal-btn" class="rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600">Exportar Relatório</button>
+                    <button id="add-despesa-button" class="rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-700 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" /></svg>
+                        Adicionar Despesa
+                    </button>
                 </div>
             </div>
-        </div>
 
-        <!-- Tabela de Despesas -->
-        <div class="bg-white rounded-lg shadow overflow-x-auto">
-            <table id="tabela-despesas" class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Despesa</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor (R$)</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grupo</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Filial</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Lanç.</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Utilizador</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200"></tbody>
-            </table>
-            <p id="no-data-message" class="text-center p-8 text-gray-500 hidden">Nenhuma despesa encontrada.</p>
-        </div>
-        
-        <!-- Paginação -->
-        <div class="flex items-center justify-between mt-6">
-            <div class="flex items-center gap-2 text-sm">
-                <label for="items-per-page">Itens por página:</label>
-                <select id="items-per-page" class="rounded-md border-gray-300 text-sm">
-                    <option value="20" selected>20</option><option value="40">40</option><option value="60">60</option><option value="80">80</option><option value="100">100</option>
-                </select>
+            <!-- Filtros -->
+            <div class="bg-white p-4 rounded-lg shadow mb-6">
+                <!-- ATUALIZAÇÃO: Removida classe de alinhamento do grid. O alinhamento será feito em cada item. -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
+                    <div class="xl:col-span-2">
+                        <label for="filter-date-range" class="block text-sm font-medium text-gray-700">Período</label>
+                        <input type="text" id="filter-date-range" placeholder="Selecione um intervalo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="filter-status" class="block text-sm font-medium text-gray-700">Status</label>
+                        <select id="filter-status" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"><option value="">Todos</option><option value="1">Efetuado</option><option value="2">Cancelado</option></select>
+                    </div>
+                    <div>
+                        <label for="filter-tipo" class="block text-sm font-medium text-gray-700">Tipo Despesa</label>
+                        <select id="filter-tipo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select>
+                    </div>
+                    <div>
+                        <label for="filter-grupo" class="block text-sm font-medium text-gray-700">Grupo Despesa</label>
+                        <select id="filter-grupo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select>
+                    </div>
+                    <div id="filial-filter-group" class="hidden">
+                        <label for="filter-filial" class="block text-sm font-medium text-gray-700">Filial</label>
+                        <select id="filter-filial" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select>
+                    </div>
+                    <!-- ATUALIZAÇÃO: Wrapper para os botões que usa flexbox para empurrá-los para baixo. -->
+                    <div class="flex flex-col justify-end">
+                        <div class="flex gap-2">
+                            <button id="filter-button" class="w-full justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">Filtrar</button>
+                            <button id="clear-filter-button" class="w-full justify-center rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Limpar</button>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="flex items-center gap-2">
-                <button id="prev-page-btn" disabled class="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">&laquo; Anterior</button>
-                <span id="page-info-span" class="text-sm text-gray-700">Página 1 de 1</span>
-                <button id="next-page-btn" disabled class="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Próxima &raquo;</button>
-            </div>
-        </div>
-    </main>
 
-    <!-- Modal: Adicionar Nova Despesa -->
+            <!-- Tabela de Despesas -->
+            <div class="bg-white rounded-lg shadow overflow-x-auto">
+                <table id="tabela-despesas" class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Despesa</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor (R$)</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grupo</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Filial</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Lanç.</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Utilizador</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200 text-sm"></tbody>
+                </table>
+                <p id="no-data-message" class="text-center p-8 text-gray-500 hidden">Nenhuma despesa encontrada.</p>
+            </div>
+            
+            <!-- Paginação -->
+            <div class="flex items-center justify-between mt-6">
+                <div class="flex items-center gap-2 text-sm">
+                    <label for="items-per-page">Itens por página:</label>
+                    <select id="items-per-page" class="rounded-md border-gray-300 text-sm">
+                        <option value="20" selected>20</option><option value="40">40</option><option value="60">60</option><option value="80">80</option><option value="100">100</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="prev-page-btn" disabled class="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">&laquo; Anterior</button>
+                    <span id="page-info-span" class="text-sm text-gray-700">Página 1 de 1</span>
+                    <button id="next-page-btn" disabled class="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Próxima &raquo;</button>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+    <!-- Modais -->
     <div id="add-despesa-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
         <div class="relative mx-auto p-6 border w-full max-w-lg shadow-lg rounded-md bg-white">
             <div class="flex items-start justify-between pb-4 border-b rounded-t">
@@ -165,30 +217,29 @@
                 </div>
                 <div>
                     <label for="modal-data_despesa" class="block mb-2 text-sm font-medium text-gray-900">Data da Despesa</label>
-                    <input type="date" id="modal-data_despesa" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <input type="date" id="modal-data_despesa" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                 </div>
                 <div>
                     <label for="modal-descricao" class="block mb-2 text-sm font-medium text-gray-900">Descrição</label>
-                    <input type="text" id="modal-descricao" placeholder="Ex: Compra de material de escritório" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <input type="text" id="modal-descricao" placeholder="Ex: Compra de material de escritório" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                 </div>
                 <div>
                     <label for="modal-valor" class="block mb-2 text-sm font-medium text-gray-900">Valor (R$)</label>
-                    <input type="number" id="modal-valor" placeholder="Ex: 150.50" step="0.01" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <input type="number" id="modal-valor" placeholder="Ex: 150.50" step="0.01" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                 </div>
                 <div>
                     <label for="modal-tipo-despesa" class="block mb-2 text-sm font-medium text-gray-900">Tipo da Despesa</label>
-                    <select id="modal-tipo-despesa" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"></select>
+                    <select id="modal-tipo-despesa" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"></select>
                 </div>
                 <div>
                     <label for="modal-grupo-despesa" class="block mb-2 text-sm font-medium text-gray-900">Grupo da Despesa</label>
-                    <select id="modal-grupo-despesa" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" disabled></select>
+                    <select id="modal-grupo-despesa" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" disabled></select>
                 </div>
                 <button type="submit" class="w-full text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-4 focus:outline-none focus:ring-indigo-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center">Salvar Despesa</button>
             </form>
         </div>
     </div>
     
-    <!-- Modal: Confirmar Cancelamento -->
     <div id="confirm-cancel-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
         <div class="relative mx-auto p-6 border w-full max-w-md shadow-lg rounded-md bg-white">
             <div class="flex items-start justify-between pb-4 border-b">
@@ -209,7 +260,6 @@
         </div>
     </div>
     
-    <!-- Modal: Exportar Relatório PDF -->
     <div id="export-pdf-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
         <div class="relative mx-auto p-6 border w-full max-w-lg shadow-lg rounded-md bg-white">
             <div class="flex items-start justify-between pb-4 border-b">
@@ -221,7 +271,7 @@
             <div class="mt-6 space-y-6">
                 <div>
                     <label for="export-date-range" class="block text-sm font-medium text-gray-700">Período do Relatório</label>
-                    <input type="text" id="export-date-range" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    <input type="text" id="export-date-range" placeholder="Selecione um intervalo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                 </div>
                 <div id="export-filial-group" class="hidden">
                     <label for="export-filial-select" class="block text-sm font-medium text-gray-700">Filial</label>
@@ -247,19 +297,57 @@
         </div>
     </div>
     
-    <footer class="text-center py-8 mt-8 border-t">
-        <p class="text-sm text-gray-500">
-            Luca Materiais para Construção LTDA - Dep. TI<br>
-            Todos os Direitos Reservados.
-        </p>
-    </footer>
-
     <!-- Scripts Externos -->
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
     
-    <!-- Script principal da página (deve vir por último) -->
-    <script src="despesas.js?v=1.0.1"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            feather.replace(); 
+
+            const sidebar = document.getElementById('sidebar');
+            const toggleButton = document.getElementById('sidebar-toggle');
+            const sidebarTexts = document.querySelectorAll('.sidebar-text');
+            const iconCollapse = document.getElementById('toggle-icon-collapse');
+            const iconExpand = document.getElementById('toggle-icon-expand');
+            const companyLogo = document.getElementById('company-logo');
+
+            const loadCompanyLogo = () => {
+                const logoBase64 = localStorage.getItem('company_logo');
+                if (logoBase64) {
+                    companyLogo.src = logoBase64;
+                    companyLogo.style.display = 'block';
+                }
+            };
+            
+            loadCompanyLogo();
+
+            const setSidebarState = (collapsed) => {
+                sidebar.classList.toggle('w-64', !collapsed);
+                sidebar.classList.toggle('w-20', collapsed);
+                sidebar.classList.toggle('collapsed', collapsed);
+                
+                sidebarTexts.forEach(text => {
+                    text.classList.toggle('hidden', collapsed);
+                });
+                
+                iconCollapse.classList.toggle('hidden', collapsed);
+                iconExpand.classList.toggle('hidden', !collapsed);
+
+                localStorage.setItem('sidebar_collapsed', collapsed);
+            };
+
+            const isCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+            setSidebarState(isCollapsed);
+
+            toggleButton.addEventListener('click', () => {
+                const currentlyCollapsed = sidebar.classList.contains('collapsed');
+                setSidebarState(!currentlyCollapsed);
+            });
+        });
+    </script>
+    <script src="despesas.js?v=1.0.1" defer></script>
 </body>
 </html>

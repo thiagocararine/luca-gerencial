@@ -1,21 +1,20 @@
-// settings.js
+// settings.js (Completo com Perfis de Acesso e Correções)
 
 document.addEventListener('DOMContentLoaded', () => {
-    initSettingsPage();
+    if (document.querySelector('.tabs')) {
+        initSettingsPage();
+    }
 });
 
-//const apiUrlBase = 'http://10.113.0.15:3000/api'; // **ATUALIZADO**
-const apiUrlBase = 'http://localhost:3000/api';
-let parametrosTable = null;
-let usersTable = null;
+//const apiUrlBase = 'http://localhost:3000/api';
+const apiUrlBase = 'http://10.113.0.17:3000/api';
+let parametrosTable, usersTable, perfisTable;
 let currentParamCode = null;
 let todosOsGruposDeDespesa = [];
+let todosOsPerfis = [];
 let actionToConfirm = null;
-const privilegedRoles = ["Analista de Sistema", "Supervisor (a)", "Financeiro", "Diretor"];
+const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 
-/**
- * Inicializa a página de configurações.
- */
 async function initSettingsPage() {
     const token = getToken();
     if (!token) {
@@ -23,51 +22,59 @@ async function initSettingsPage() {
         return;
     }
     document.getElementById('user-name').textContent = getUserName();
+    
     setupEventListenersSettings();
-
-    if (privilegedRoles.includes(getUserRole())) {
+    setupParametrosTable(); 
+    
+    if (privilegedAccessProfiles.includes(getUserProfile())) {
         document.getElementById('user-tab-btn').style.display = 'inline-block';
+        document.querySelector('button[data-tab="perfis"]').style.display = 'inline-block';
+        
+        await preCarregarPerfisDeAcesso();
         setupUsersTable();
+        setupPerfisTable();
     }
     
     await popularSeletorDeCodigos();
     await preCarregarGruposDeDespesa();
-    setupParametrosTable();
     loadCurrentLogo();
+    setupSidebar();
 }
 
-/**
- * Configura todos os event listeners da página.
- */
 function setupEventListenersSettings() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
+    
     document.querySelector('.tabs').addEventListener('click', (e) => {
         if (e.target.tagName === 'BUTTON') {
             const tab = e.target.dataset.tab;
             document.querySelectorAll('.tab-button').forEach(button => button.classList.remove('active'));
             e.target.classList.add('active');
-            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            document.getElementById(`${tab}-content`).classList.add('active');
+            document.querySelectorAll('.tab-content').forEach(content => {
+                if (!content.classList.contains('hidden')) content.classList.add('hidden');
+            });
+            const activeContent = document.getElementById(`${tab}-content`);
+            if (activeContent) activeContent.classList.remove('hidden');
+
+            if (tab === 'usuarios' && usersTable) usersTable.setData();
+            if (tab === 'perfis' && perfisTable) perfisTable.setData();
         }
     });
-    document.getElementById('select-param-code')?.addEventListener('change', (e) => {
-        currentParamCode = e.target.value;
-        const paramForm = document.getElementById('param-form');
-        const vinculacaoGroup = document.getElementById('vinculacao-group');
-        resetParamForm();
-        if (currentParamCode) {
-            paramForm.style.display = 'grid';
-            parametrosTable.setData(`${apiUrlBase}/parametros?cod=${currentParamCode}`);
-            vinculacaoGroup.style.display = currentParamCode === 'Tipo Despesa' ? 'block' : 'none';
-        } else {
-            paramForm.style.display = 'none';
-            parametrosTable.clearData();
-        }
-    });
+    
+    const userModal = document.getElementById('user-settings-modal');
+    document.getElementById('close-user-modal-btn')?.addEventListener('click', () => userModal.classList.add('hidden'));
+    document.getElementById('cancel-user-settings-btn')?.addEventListener('click', () => userModal.classList.add('hidden'));
+    document.getElementById('save-user-settings-btn')?.addEventListener('click', handleSaveUserSettings);
+
+    document.getElementById('select-param-code')?.addEventListener('change', handleParamCodeChange);
     document.getElementById('param-form')?.addEventListener('submit', handleParamFormSubmit);
     document.getElementById('cancel-edit-param-btn')?.addEventListener('click', resetParamForm);
+
+    document.getElementById('perfil-form')?.addEventListener('submit', handlePerfilFormSubmit);
+    document.getElementById('cancel-edit-perfil-btn')?.addEventListener('click', resetPerfilForm);
+
     document.getElementById('logo-upload')?.addEventListener('change', previewLogo);
     document.getElementById('save-logo-btn')?.addEventListener('click', saveLogo);
+    
     document.getElementById('reject-action-btn')?.addEventListener('click', () => { document.getElementById('confirm-action-modal').style.display = 'none'; });
     document.getElementById('confirm-action-btn')?.addEventListener('click', () => {
         if (typeof actionToConfirm === 'function') actionToConfirm();
@@ -75,9 +82,189 @@ function setupEventListenersSettings() {
     });
 }
 
-/**
- * Busca e popula o seletor com os tipos de parâmetros existentes.
- */
+// --- GESTÃO DE UTILIZADORES ---
+function setupUsersTable() {
+    usersTable = new Tabulator("#users-table", {
+        layout: "fitColumns",
+        placeholder: "A carregar utilizadores...",
+        ajaxURL: `${apiUrlBase}/users`,
+        ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
+        columns: [
+            { title: "ID", field: "ID", width: 60 },
+            { title: "Nome", field: "nome_user", minWidth: 200, tooltip: true },
+            { title: "Perfil", field: "perfil_acesso", width: 120 },
+            { title: "Unidade", field: "unidade_user" },
+            { title: "Status", field: "status_user", width: 100, hozAlign: "center" },
+            { 
+                title: "Ações", hozAlign: "center", width: 100,
+                formatter: () => `<button class="action-btn">Gerir</button>`,
+                cellClick: (e, cell) => {
+                    if (e.target.classList.contains('action-btn')) {
+                        openUserSettingsModal(cell.getRow().getData());
+                    }
+                }
+            },
+        ],
+    });
+}
+
+function openUserSettingsModal(userData) {
+    const modal = document.getElementById('user-settings-modal');
+    document.getElementById('user-modal-name').textContent = userData.nome_user;
+    document.getElementById('user-modal-id').value = userData.ID;
+    document.getElementById('user-modal-password').value = ''; 
+    document.getElementById('user-modal-status').value = userData.status_user;
+    
+    const perfilSelect = document.getElementById('user-modal-perfil');
+    perfilSelect.innerHTML = ''; 
+    todosOsPerfis.forEach(perfil => {
+        const option = document.createElement('option');
+        option.value = perfil.id;
+        option.textContent = perfil.nome_perfil;
+        if(perfil.id === userData.id_perfil) {
+            option.selected = true;
+        }
+        perfilSelect.appendChild(option);
+    });
+    
+    modal.classList.remove('hidden');
+}
+
+async function handleSaveUserSettings() {
+    const userId = document.getElementById('user-modal-id').value;
+    const newPassword = document.getElementById('user-modal-password').value;
+    const newStatus = document.getElementById('user-modal-status').value;
+    const newProfileId = document.getElementById('user-modal-perfil').value;
+
+    const payload = {
+        status: newStatus,
+        id_perfil: newProfileId,
+    };
+
+    if (newPassword.trim() !== '') {
+        payload.senha = newPassword.trim();
+    }
+    
+    try {
+        const response = await fetch(`${apiUrlBase}/users/${userId}/manage`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify(payload)
+        });
+
+        if (response.status >= 400) return handleApiError(response);
+
+        alert('Dados do utilizador atualizados com sucesso!');
+        document.getElementById('user-settings-modal').classList.add('hidden');
+        usersTable.replaceData(); 
+    } catch (error) {
+        alert(`Falha ao atualizar o utilizador: ${error.message}`);
+    }
+}
+
+
+// --- GESTÃO DE PERFIS DE ACESSO ---
+async function preCarregarPerfisDeAcesso() {
+    try {
+        const response = await fetch(`${apiUrlBase}/perfis-acesso`, { headers: { 'Authorization': `Bearer ${getToken()}` }});
+        if (response.status >= 400) return handleApiError(response);
+        todosOsPerfis = await response.json();
+    } catch (error) { 
+        console.error("Erro ao pré-carregar perfis de acesso:", error);
+        todosOsPerfis = [];
+    }
+}
+
+function setupPerfisTable() {
+    perfisTable = new Tabulator("#perfis-table", {
+        layout: "fitColumns",
+        placeholder: "A carregar perfis...",
+        ajaxURL: `${apiUrlBase}/perfis-acesso`,
+        ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
+        columns: [
+            { title: "ID", field: "id", width: 60 },
+            { title: "Nome do Perfil", field: "nome_perfil" },
+            { title: "Acesso ao Dashboard", field: "dashboard_type" },
+            {
+                title: "Ações", hozAlign: "center", width: 180,
+                formatter: () => `<button class="edit-btn">Editar</button><button class="delete-btn ml-2">Apagar</button>`,
+                cellClick: (e, cell) => {
+                    const data = cell.getRow().getData();
+                    if (e.target.classList.contains('edit-btn')) {
+                        preencherFormularioParaEdicaoPerfil(data);
+                    } else if (e.target.classList.contains('delete-btn')) {
+                        openConfirmModal('apagar', () => handleDeletePerfil(data.id), `Tem a certeza que deseja apagar o perfil "${data.nome_perfil}"? Esta ação não pode ser desfeita.`);
+                    }
+                }
+            }
+        ],
+    });
+}
+
+function preencherFormularioParaEdicaoPerfil(data) {
+    document.getElementById('perfil-form-title').textContent = `A Editar Perfil ID: ${data.id}`;
+    document.getElementById('perfil-id').value = data.id;
+    document.getElementById('perfil-nome').value = data.nome_perfil;
+    document.getElementById('perfil-dashboard-type').value = data.dashboard_type;
+    document.getElementById('cancel-edit-perfil-btn').style.display = 'inline-block';
+    document.querySelector('#perfil-form button[type="submit"]').textContent = "Salvar Alterações";
+}
+
+function resetPerfilForm() {
+    document.getElementById('perfil-form-title').textContent = 'Adicionar Novo Perfil';
+    document.getElementById('perfil-form').reset();
+    document.getElementById('perfil-id').value = '';
+    document.getElementById('cancel-edit-perfil-btn').style.display = 'none';
+    document.querySelector('#perfil-form button[type="submit"]').textContent = "Salvar Perfil";
+}
+
+async function handlePerfilFormSubmit(e) {
+    e.preventDefault();
+    const id = document.getElementById('perfil-id').value;
+    const body = {
+        nome_perfil: document.getElementById('perfil-nome').value,
+        dashboard_type: document.getElementById('perfil-dashboard-type').value,
+    };
+    if (!body.nome_perfil) {
+        alert('O nome do perfil é obrigatório.');
+        return;
+    }
+    
+    const url = id ? `${apiUrlBase}/perfis-acesso/${id}` : `${apiUrlBase}/perfis-acesso`;
+    const method = id ? 'PUT' : 'POST';
+    
+    try {
+        const response = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify(body)
+        });
+        if (response.status >= 400) return handleApiError(response);
+        alert(`Perfil ${id ? 'atualizado' : 'criado'} com sucesso!`);
+        resetPerfilForm();
+        perfisTable.replaceData();
+        await preCarregarPerfisDeAcesso();
+    } catch (error) {
+        alert(`Falha ao salvar o perfil: ${error.message}`);
+    }
+}
+
+async function handleDeletePerfil(id) {
+    try {
+       const response = await fetch(`${apiUrlBase}/perfis-acesso/${id}`, {
+           method: 'DELETE',
+           headers: { 'Authorization': `Bearer ${getToken()}` }
+       });
+       if (response.status >= 400) return handleApiError(response);
+       alert(`Perfil ID ${id} apagado com sucesso!`);
+       perfisTable.replaceData();
+       await preCarregarPerfisDeAcesso();
+   } catch (error) {
+       alert('Falha ao apagar o perfil.');
+   }
+}
+
+// --- GESTÃO DE PARÂMETROS ---
 async function popularSeletorDeCodigos() {
     const token = getToken();
     if (!token) return logout();
@@ -98,92 +285,26 @@ async function popularSeletorDeCodigos() {
     }
 }
 
-/**
- * Busca e armazena a lista de "Grupo Despesa".
- */
 async function preCarregarGruposDeDespesa() {
     try {
-        const response = await fetch(`${apiUrlBase}/parametros?cod=Grupo Despesa`);
+        const response = await fetch(`${apiUrlBase}/parametros?cod=Grupo Despesa`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (response.status >= 400) return handleApiError(response);
         todosOsGruposDeDespesa = await response.json();
         const selectVinculacao = document.getElementById('param-vinculacao');
         selectVinculacao.innerHTML = '<option value="">-- Nenhum --</option>';
         todosOsGruposDeDespesa.forEach(grupo => {
             const option = document.createElement('option');
-            option.value = grupo.KEY_VINCULACAO;
+            option.value = grupo.KEY_PARAMETRO || grupo.ID;
             option.textContent = grupo.NOME_PARAMETRO;
             selectVinculacao.appendChild(option);
         });
     } catch (error) { console.error(error); }
 }
 
-/**
- * Configura a tabela Tabulator para gerir utilizadores.
- */
-function setupUsersTable() {
-    const statusEditorParams = {
-        values: { "Ativo": "Ativo", "Inativo": "Inativo", "Pendente": "Pendente" },
-        defaultValue: "Pendente"
-    };
-    usersTable = new Tabulator("#users-table", {
-        layout: "fitColumns",
-        placeholder: "Nenhum utilizador encontrado.",
-        ajaxURL: `${apiUrlBase}/users`,
-        ajaxConfig: {
-            method: "GET",
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        },
-        columns: [
-            { title: "ID", field: "ID", width: 60 },
-            { title: "Nome", field: "nome_user", minWidth: 200 },
-            { title: "Email", field: "email_user", minWidth: 200 },
-            { title: "Cargo", field: "cargo_user" },
-            { title: "Unidade", field: "unidade_user" },
-            { 
-                title: "Status", field: "status_user", width: 120, hozAlign: "center", editor: "select", editorParams: statusEditorParams,
-                cellEdited: (cell) => {
-                    const id = cell.getRow().getData().ID;
-                    const newStatus = cell.getValue();
-                    openConfirmModal('atualizar status', () => handleUpdateUserStatus(id, newStatus, cell), `Tem a certeza que deseja alterar o status do utilizador ID ${id} para "${newStatus}"?`);
-                }
-            },
-        ],
-    });
-}
-
-/**
- * Lida com a atualização do status de um utilizador.
- */
-async function handleUpdateUserStatus(id, status, cell) {
-    try {
-        const response = await fetch(`${apiUrlBase}/users/${id}/status`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-            body: JSON.stringify({ status })
-        });
-        if (response.status >= 400) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Falha ao atualizar o status.');
-        }
-        alert('Status do utilizador atualizado com sucesso!');
-    } catch (error) {
-        alert(`Erro: ${error.message}`);
-        cell.restoreOldValue();
-    }
-}
-
-/**
- * Configura a tabela Tabulator para gerir parâmetros.
- */
 function setupParametrosTable() {
     parametrosTable = new Tabulator("#parametros-table", {
         layout: "fitColumns",
         placeholder: "Selecione um tipo de parâmetro para ver os dados.",
-        ajaxURL: `${apiUrlBase}/parametros`,
-        ajaxConfig: {
-            method: "GET",
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        },
         columns: [
             { title: "ID", field: "ID", width: 60 },
             { title: "Nome", field: "NOME_PARAMETRO", minWidth: 200 },
@@ -191,16 +312,16 @@ function setupParametrosTable() {
             { title: "Vínculo", field: "KEY_VINCULACAO", hozAlign: "left", formatter: (cell) => {
                 const key = cell.getValue();
                 if (!key) return "";
-                const grupo = todosOsGruposDeDespesa.find(g => g.KEY_VINCULACAO == key);
+                const grupo = todosOsGruposDeDespesa.find(g => g.KEY_PARAMETRO == key || g.ID == key);
                 return grupo ? grupo.NOME_PARAMETRO : `<span style="color:red;">Inválido</span>`;
             }},
             {
                 title: "Ações", hozAlign: "center", width: 180,
-                formatter: () => `<button class="btn-primary edit-btn">Editar</button><button class="btn-secondary delete-btn">Apagar</button>`,
+                formatter: () => `<button class="edit-btn">Editar</button><button class="delete-btn ml-2">Apagar</button>`,
                 cellClick: (e, cell) => {
                     const data = cell.getRow().getData();
                     if (e.target.classList.contains('edit-btn')) {
-                        preencherFormularioParaEdicao(data);
+                        preencherFormularioParaEdicaoParam(data);
                     } else if (e.target.classList.contains('delete-btn')) {
                         openConfirmModal('apagar', () => handleDeleteParam(data.ID), `Tem a certeza que deseja apagar o parâmetro "${data.NOME_PARAMETRO}"?`);
                     }
@@ -210,10 +331,23 @@ function setupParametrosTable() {
     });
 }
 
-/**
- * Preenche o formulário para edição.
- */
-function preencherFormularioParaEdicao(data) {
+function handleParamCodeChange(e) {
+    currentParamCode = e.target.value;
+    const paramForm = document.getElementById('param-form');
+    const vinculacaoGroup = document.getElementById('vinculacao-group');
+    resetParamForm();
+    if (currentParamCode) {
+        paramForm.style.display = 'grid';
+        const url = `${apiUrlBase}/parametros?cod=${encodeURIComponent(currentParamCode)}`;
+        parametrosTable.setData(url, {}, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        vinculacaoGroup.style.display = currentParamCode === 'Tipo Despesa' ? 'block' : 'none';
+    } else {
+        paramForm.style.display = 'none';
+        parametrosTable.clearData();
+    }
+}
+
+function preencherFormularioParaEdicaoParam(data) {
     document.getElementById('form-title').textContent = `A Editar Parâmetro ID: ${data.ID}`;
     document.getElementById('param-id').value = data.ID;
     document.getElementById('param-cod').value = currentParamCode;
@@ -226,9 +360,6 @@ function preencherFormularioParaEdicao(data) {
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
 }
 
-/**
- * Limpa e reseta o formulário.
- */
 function resetParamForm() {
     document.getElementById('form-title').textContent = 'Adicionar Novo Parâmetro';
     document.getElementById('param-form').reset();
@@ -239,9 +370,6 @@ function resetParamForm() {
     document.querySelector('#param-form button[type="submit"]').textContent = "Salvar";
 }
 
-/**
- * Lida com a submissão do formulário (cria ou atualiza).
- */
 function handleParamFormSubmit(e) {
     e.preventDefault();
     const id = document.getElementById('param-id').value;
@@ -256,13 +384,10 @@ function handleParamFormSubmit(e) {
         return;
     }
     const confirmationMessage = id ? `Tem a certeza que deseja atualizar o parâmetro ID ${id}?` : "Tem a certeza que deseja criar este novo parâmetro?";
-    openConfirmModal('salvar', () => executeSave(id, body), confirmationMessage);
+    openConfirmModal('salvar', () => executeSaveParam(id, body), confirmationMessage);
 }
 
-/**
- * Executa a criação ou atualização após a confirmação.
- */
-async function executeSave(id, body) {
+async function executeSaveParam(id, body) {
     const url = id ? `${apiUrlBase}/parametros/${id}` : `${apiUrlBase}/parametros`;
     const method = id ? 'PUT' : 'POST';
     try {
@@ -280,9 +405,6 @@ async function executeSave(id, body) {
     }
 }
 
-/**
- * Apaga um parâmetro.
- */
 async function handleDeleteParam(id) {
      try {
         const response = await fetch(`${apiUrlBase}/parametros/${id}`, {
@@ -297,19 +419,8 @@ async function handleDeleteParam(id) {
     }
 }
 
-/**
- * Abre o modal de confirmação genérico.
- */
-function openConfirmModal(action, callback, text) {
-    document.getElementById('confirm-action-title').textContent = `Confirmar ${action.charAt(0).toUpperCase() + action.slice(1)}`;
-    document.getElementById('confirm-action-text').textContent = text;
-    document.getElementById('confirm-action-modal').style.display = 'block';
-    actionToConfirm = callback;
-}
 
-/**
- * Mostra uma pré-visualização da logo selecionada.
- */
+// --- GESTÃO DA LOGO ---
 function previewLogo(event) {
     const file = event.target.files[0];
     if (file && file.type === "image/png") {
@@ -321,9 +432,6 @@ function previewLogo(event) {
     }
 }
 
-/**
- * Salva a nova logo no servidor.
- */
 async function saveLogo() {
     const preview = document.getElementById('logo-preview');
     if (!preview.src || !preview.src.startsWith('data:image')) {
@@ -343,9 +451,6 @@ async function saveLogo() {
     }
 }
 
-/**
- * Carrega a logo atual do servidor.
- */
 async function loadCurrentLogo() {
     try {
         const response = await fetch(`${apiUrlBase}/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
@@ -359,11 +464,18 @@ async function loadCurrentLogo() {
     }
 }
 
-// --- Funções Auxiliares de Autenticação ---
+// --- Funções Auxiliares ---
+function openConfirmModal(action, callback, text) {
+    const modal = document.getElementById('confirm-action-modal');
+    modal.querySelector('#confirm-action-title').textContent = `Confirmar ${action.charAt(0).toUpperCase() + action.slice(1)}`;
+    modal.querySelector('#confirm-action-text').textContent = text;
+    modal.style.display = 'block';
+    actionToConfirm = callback;
+}
 function getToken() { return localStorage.getItem('lucaUserToken'); }
 function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
 function getUserName() { return getUserData()?.nome || 'Utilizador'; }
-function getUserRole() { return getUserData()?.cargo || null; }
+function getUserProfile() { return getUserData()?.perfil || null; }
 function logout() {
     localStorage.removeItem('lucaUserToken');
     window.location.href = 'login.html';
@@ -378,4 +490,42 @@ function handleApiError(response) {
             alert('Ocorreu um erro inesperado e não foi possível ler a resposta do servidor.');
         });
     }
+}
+function setupSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const toggleButton = document.getElementById('sidebar-toggle');
+    if (!sidebar || !toggleButton) return;
+
+    const sidebarTexts = document.querySelectorAll('.sidebar-text');
+    const iconCollapse = document.getElementById('toggle-icon-collapse');
+    const iconExpand = document.getElementById('toggle-icon-expand');
+    const companyLogo = document.getElementById('company-logo');
+
+    const loadCompanyLogo = () => {
+        const logoBase64 = localStorage.getItem('company_logo');
+        if (logoBase64) {
+            companyLogo.src = logoBase64;
+            companyLogo.style.display = 'block';
+        }
+    };
+    loadCompanyLogo();
+
+    const setSidebarState = (collapsed) => {
+        if (!sidebar) return;
+        sidebar.classList.toggle('w-64', !collapsed);
+        sidebar.classList.toggle('w-20', collapsed);
+        sidebar.classList.toggle('collapsed', collapsed);
+        sidebarTexts.forEach(text => text.classList.toggle('hidden', collapsed));
+        iconCollapse.classList.toggle('hidden', collapsed);
+        iconExpand.classList.toggle('hidden', !collapsed);
+        localStorage.setItem('sidebar_collapsed', collapsed);
+    };
+
+    const isCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+    setSidebarState(isCollapsed);
+
+    toggleButton.addEventListener('click', () => {
+        const currentlyCollapsed = sidebar.classList.contains('collapsed');
+        setSidebarState(!currentlyCollapsed);
+    });
 }

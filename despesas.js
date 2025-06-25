@@ -8,8 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- Constantes e Variáveis de Estado Globais ---
-//const apiUrlBase = 'http://10.113.0.15:3000/api'; // Aponta para o endereço completo do backend
-const apiUrlBase = 'http://localhost:3000/api';
+const apiUrlBase = 'http://10.113.0.17:3000/api'; // Aponta para o endereço completo do backend
+//const apiUrlBase = 'http://localhost:3000/api';
 const despesasApiUrl = `${apiUrlBase}/despesas`;
 const parametrosApiUrl = `${apiUrlBase}/parametros`;
 const privilegedRoles = ["Analista de Sistema", "Supervisor (a)", "Financeiro", "Diretor"];
@@ -322,7 +322,7 @@ function renderTable(despesas) {
             const tr = tabelaDespesasBody.insertRow();
             const acoesCell = tr.insertCell();
             if (despesa.dsp_status === 1) {
-                acoesCell.innerHTML = `<button class="cancel-btn-visible" data-id="${despesa.ID}" title="Cancelar esta despesa">Cancelar</button>`;
+                acoesCell.innerHTML = `<button class="cancel-btn-visible cancel-btn" data-id="${despesa.ID}" title="Cancelar esta despesa">Cancelar</button>`;
             }
             const statusCell = tr.insertCell();
             let statusTexto = 'N/A', statusClasse = '';
