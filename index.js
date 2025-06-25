@@ -12,7 +12,7 @@ require('dotenv').config();
 
 // 2. Configurações da Aplicação
 const app = express();
-const port = 3000;
+const port = 9090;
 const apiRouter = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET;
