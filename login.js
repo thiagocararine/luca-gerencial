@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // **CORREÇÃO AQUI:** Definição da constante com o endereço completo do backend.
 // Substitua '10.113.0.15' pelo endereço IP real da sua máquina servidora, se for diferente.
-const apiUrl = 'http://localhost:3000/api';
+const apiUrl = 'http://localhost:9090/api';
 //const apiUrlBase = 'http://10.113.0.17:9090/api';
 //const apiUrlBase = '/api';
 
