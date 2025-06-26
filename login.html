@@ -10,7 +10,11 @@
     
     <!-- Ícone da Página -->
     <link rel="icon" href="assets/favicon.ico" type="image/x-icon">
-    
+
+    <!-- A sua folha de estilos. NOTA: Corrigi o caminho e a sintaxe. -->
+    <!-- Certifique-se de que o ficheiro style.css está dentro de uma pasta chamada "assets" -->
+    <link rel="stylesheet" href="assets/style.css">
+
     <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,12 +24,52 @@
         body {
             font-family: 'Inter', sans-serif;
         }
+
+        /* Modificação principal:
+           O fundo abstrato agora está fixo, no fundo de tudo. */
+        .page-background {
+            position: fixed; /* Fica fixo na tela */
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1; /* Fica atrás de todo o conteúdo */
+        }
+        
+        /* Ajustamos a classe original para preencher todo o espaço */
+        .abstract-background {
+            width: 100%;
+            height: 100%;
+            border-radius: 0; /* Removemos o border-radius para preencher a tela toda */
+            aspect-ratio: auto; /* A proporção agora é automática */
+        }
     </style>
 </head>
 <body class="bg-gray-100 flex items-center justify-center h-full">
+
+    <!--
+      ESTRUTURA CORRIGIDA:
+      1. Criamos um div .page-background que ocupará toda a tela.
+      2. O .abstract-background que você criou vai DENTRO dele.
+    -->
+    <div class="page-background">
+        <div class="abstract-background">
+            <div class="tube tube-1"></div>
+            <div class="tube tube-2"></div>
+            <div class="tube tube-3"></div>
+            <div class="tube tube-4"></div>
+            <div class="tube tube-5"></div>
+            <div class="tube tube-6"></div>
+            <div class="tube tube-7"></div>
+            <div class="tube tube-8"></div>
+        </div>
+    </div>
+    
+    <!-- O seu formulário de login continua igual, mas agora aparecerá
+         por cima do fundo abstrato. -->
     <div class="w-full max-w-sm mx-auto p-4">
-        <div class="bg-white shadow-xl rounded-2xl p-8">
-            <h1 class="text-2xl font-bold text-center text-indigo-600 mb-6">Luca Gerencial</h1>
+        <div class="bg-white/80 backdrop-blur-sm shadow-xl rounded-2xl p-8"> <!-- Adicionado efeito de transparência e desfoque -->
+            <h1 class="text-2xl font-black text-center text-indigo-600 mb-6">Luca Gerencial</h1>
             <form id="login-form" class="space-y-6">
                 <div>
                     <label for="identifier" class="block text-sm font-medium leading-6 text-gray-900">Email ou CPF</label>
@@ -50,8 +94,16 @@
                 Não tem conta?
                 <a href="signup.html" class="font-semibold leading-6 text-indigo-600 hover:text-indigo-500">Cadastre-se</a>
             </div>
+            <div class="mt-2 text-center text-[14px] text-gray-400">
+                Departamento de TI - Luca Materiais LTDA
+            </div>
+            <div class="mt-0 text-center text-[10px] text-gray-400">
+                Todos os Direitos Reservados.
+            </div>
         </div>
     </div>
+    
+    <!-- O seu ficheiro JS não precisa de alterações -->
     <script src="login.js?v=1.0.5"></script>
 </body>
 </html>

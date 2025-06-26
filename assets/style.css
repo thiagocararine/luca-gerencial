@@ -1,0 +1,99 @@
+/* O contêiner principal para o nosso fundo abstrato */
+.abstract-background {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9; /* Mantém a proporção */
+    background-color: #eef8ff; /* Cor de fundo */
+    overflow: hidden; /* Garante que os tubos não "vazem" */
+    border-radius: 1rem;
+}
+
+/* Estilo base para todos os tubos */
+.tube {
+    position: absolute;
+    border-radius: 9999px; /* Transforma a div em uma pílula */
+    background: linear-gradient(45deg, #81d4fa, #039be5); /* Cor padrão */
+    box-shadow: 0px 15px 35px -10px rgba(41, 128, 185, 0.5); /* Sombra */
+}
+
+/* Definição individual de cada tubo */
+.tube-1 {
+    width: 64%;
+    height: 20%;
+    bottom: -5%;
+    left: -20%;
+    transform: rotate(35deg);
+    z-index: 1;
+    opacity: 0.8;
+}
+
+.tube-2 {
+    width: 56%;
+    height: 16%;
+    bottom: 5%;
+    left: -15%;
+    transform: rotate(35deg);
+    z-index: 2;
+    background: linear-gradient(45deg, #4fc3f7, #0288d1);
+}
+
+.tube-3 {
+    width: 60%;
+    height: 18%;
+    bottom: 25%;
+    left: -10%;
+    transform: rotate(35deg);
+    z-index: 3;
+}
+
+.tube-4 {
+    width: 48%;
+    height: 14%;
+    bottom: 10%;
+    right: -20%;
+    transform: rotate(35deg);
+    z-index: 1;
+    background: linear-gradient(45deg, #b3e5fc, #4fc3f7);
+    opacity: 0.7;
+}
+
+.tube-5 {
+    width: 32%;
+    height: 12%;
+    bottom: 45%;
+    left: 30%;
+    transform: rotate(35deg);
+    z-index: 4;
+    background: linear-gradient(45deg, #039be5, #01579b);
+}
+
+.tube-6 {
+    width: 68%;
+    height: 22%;
+    bottom: 55%;
+    right: -15%;
+    transform: rotate(35deg);
+    z-index: 0;
+    opacity: 0.6;
+    background: linear-gradient(45deg, #b3e5fc, #81d4fa);
+}
+
+.tube-7 {
+    width: 55%;
+    height: 15%;
+    bottom: 40%;
+    left: 25%;
+    transform: rotate(35deg);
+    z-index: 5;
+    background: linear-gradient(45deg, #4fc3f7, #01579b);
+}
+
+.tube-8 {
+    width: 40%;
+    height: 13%;
+    bottom: 60%;
+    left: 10%;
+    transform: rotate(35deg);
+    z-index: 6;
+    background: linear-gradient(45deg, #e0f7fa, #80deea);
+}
