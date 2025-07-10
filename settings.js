@@ -1,4 +1,4 @@
-// settings.js (Completo com Perfis de Acesso e Correções)
+// settings.js (Completo com Perfis de Acesso e Permissões)
 
 document.addEventListener('DOMContentLoaded', () => {
     if (document.querySelector('.tabs')) {
@@ -6,9 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-//const apiUrlBase = 'http://localhost:3000/api';
+// --- Constantes e Variáveis de Estado Globais ---
 const apiUrlBase = 'http://10.113.0.17:3000/api';
-//const apiUrlBase = '/api';
 let parametrosTable, usersTable, perfisTable;
 let currentParamCode = null;
 let todosOsGruposDeDespesa = [];
@@ -16,6 +15,9 @@ let todosOsPerfis = [];
 let actionToConfirm = null;
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 
+/**
+ * Função principal que inicializa a página de configurações.
+ */
 async function initSettingsPage() {
     const token = getToken();
     if (!token) {
@@ -25,8 +27,11 @@ async function initSettingsPage() {
     document.getElementById('user-name').textContent = getUserName();
     
     setupEventListenersSettings();
+    
+    // Inicializa as tabelas vazias
     setupParametrosTable(); 
     
+    // Verifica se o utilizador tem permissão para ver as abas de admin
     if (privilegedAccessProfiles.includes(getUserProfile())) {
         document.getElementById('user-tab-btn').style.display = 'inline-block';
         document.querySelector('button[data-tab="perfis"]').style.display = 'inline-block';
@@ -42,6 +47,9 @@ async function initSettingsPage() {
     setupSidebar();
 }
 
+/**
+ * Configura todos os event listeners da página.
+ */
 function setupEventListenersSettings() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
     
@@ -56,8 +64,9 @@ function setupEventListenersSettings() {
             const activeContent = document.getElementById(`${tab}-content`);
             if (activeContent) activeContent.classList.remove('hidden');
 
-            if (tab === 'usuarios' && usersTable) usersTable.setData();
-            if (tab === 'perfis' && perfisTable) perfisTable.setData();
+            // Carrega os dados das tabelas quando a aba é clicada
+            if(tab === 'usuarios' && usersTable) usersTable.setData();
+            if(tab === 'perfis' && perfisTable) perfisTable.setData();
         }
     });
     
@@ -109,7 +118,7 @@ function setupUsersTable() {
     });
 }
 
-function openUserSettingsModal(userData) {
+async function openUserSettingsModal(userData) {
     const modal = document.getElementById('user-settings-modal');
     document.getElementById('user-modal-name').textContent = userData.nome_user;
     document.getElementById('user-modal-id').value = userData.ID;
@@ -127,6 +136,35 @@ function openUserSettingsModal(userData) {
         }
         perfilSelect.appendChild(option);
     });
+    
+    // Lógica para as checkboxes de permissões dos módulos
+    const permissionsContainer = document.getElementById('user-modal-permissions');
+    permissionsContainer.innerHTML = 'A carregar permissões...';
+    
+    try {
+        const response = await fetch(`${apiUrlBase}/perfis/${userData.id_perfil}/permissoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao buscar permissões');
+        const userPermissions = await response.json();
+        
+        const allModules = ['Lançamentos', 'Logística', 'Configurações']; // Módulos do sistema
+        permissionsContainer.innerHTML = ''; // Limpa o contentor
+        
+        allModules.forEach(moduleName => {
+            const permission = userPermissions.find(p => p.nome_modulo === moduleName);
+            const isAllowed = permission ? permission.permitido : false;
+            
+            const checkboxWrapper = document.createElement('div');
+            checkboxWrapper.className = 'flex items-center';
+            checkboxWrapper.innerHTML = `
+                <input id="perm-${moduleName}" name="${moduleName}" type="checkbox" ${isAllowed ? 'checked' : ''} class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                <label for="perm-${moduleName}" class="ml-3 block text-sm text-gray-900">${moduleName}</label>
+            `;
+            permissionsContainer.appendChild(checkboxWrapper);
+        });
+    } catch (error) {
+        console.error("Erro ao carregar permissões:", error);
+        permissionsContainer.innerHTML = '<p class="text-red-500 text-xs">Erro ao carregar permissões.</p>';
+    }
     
     modal.classList.remove('hidden');
 }
@@ -147,15 +185,34 @@ async function handleSaveUserSettings() {
     }
     
     try {
-        const response = await fetch(`${apiUrlBase}/users/${userId}/manage`, {
+        // Atualiza os dados principais do utilizador
+        const userResponse = await fetch(`${apiUrlBase}/users/${userId}/manage`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify(payload)
         });
 
-        if (response.status >= 400) return handleApiError(response);
+        if (!userResponse.ok) return handleApiError(userResponse);
 
-        alert('Dados do utilizador atualizados com sucesso!');
+        // Atualiza as permissões do perfil
+        const permissionsPayload = [];
+        const permissionsContainer = document.getElementById('user-modal-permissions');
+        permissionsContainer.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            permissionsPayload.push({
+                nome_modulo: checkbox.name,
+                permitido: checkbox.checked
+            });
+        });
+
+        const permissionsResponse = await fetch(`${apiUrlBase}/perfis/${newProfileId}/permissoes`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify(permissionsPayload)
+        });
+
+        if (!permissionsResponse.ok) return handleApiError(permissionsResponse);
+
+        alert('Dados do utilizador e permissões atualizados com sucesso!');
         document.getElementById('user-settings-modal').classList.add('hidden');
         usersTable.replaceData(); 
     } catch (error) {
@@ -185,7 +242,7 @@ function setupPerfisTable() {
         columns: [
             { title: "ID", field: "id", width: 60 },
             { title: "Nome do Perfil", field: "nome_perfil" },
-            { title: "Acesso ao Dashboard", field: "dashboard_type" },
+            { title: "Dashboard Padrão", field: "dashboard_type" },
             {
                 title: "Ações", hozAlign: "center", width: 180,
                 formatter: () => `<button class="edit-btn">Editar</button><button class="delete-btn ml-2">Apagar</button>`,
@@ -497,28 +554,9 @@ function setupSidebar() {
     const toggleButton = document.getElementById('sidebar-toggle');
     if (!sidebar || !toggleButton) return;
 
-    const sidebarTexts = document.querySelectorAll('.sidebar-text');
-    const iconCollapse = document.getElementById('toggle-icon-collapse');
-    const iconExpand = document.getElementById('toggle-icon-expand');
-    const companyLogo = document.getElementById('company-logo');
-
-    const loadCompanyLogo = () => {
-        const logoBase64 = localStorage.getItem('company_logo');
-        if (logoBase64) {
-            companyLogo.src = logoBase64;
-            companyLogo.style.display = 'block';
-        }
-    };
-    loadCompanyLogo();
-
     const setSidebarState = (collapsed) => {
         if (!sidebar) return;
-        sidebar.classList.toggle('w-64', !collapsed);
-        sidebar.classList.toggle('w-20', collapsed);
         sidebar.classList.toggle('collapsed', collapsed);
-        sidebarTexts.forEach(text => text.classList.toggle('hidden', collapsed));
-        iconCollapse.classList.toggle('hidden', collapsed);
-        iconExpand.classList.toggle('hidden', !collapsed);
         localStorage.setItem('sidebar_collapsed', collapsed);
     };
 

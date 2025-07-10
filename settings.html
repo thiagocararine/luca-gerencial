@@ -6,40 +6,48 @@
     <title>Configurações - Luca Gerencial</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://unpkg.com/tabulator-tables@5.5.0/dist/css/tabulator.min.css" rel="stylesheet">
-    <!-- Ícone da Página -->
     <link rel="icon" href="assets/favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        body { font-family: 'Inter', sans-serif; overflow-x: hidden; }
         [data-feather] { width: 1.25rem; height: 1.25rem; }
         .tabulator { border: 1px solid #e5e7eb; border-radius: 0.5rem; background-color: #fff; font-size: 0.875rem; }
         .tabulator .tabulator-header { background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; font-weight: 600; }
-        .tabulator .tabulator-row { border-bottom: 1px solid #e5e7eb; }
-        .tabulator .tabulator-row:hover { background-color: #f3f4f6; }
+        .tabulator .tabulator-row { border-bottom: 1px solid #e5e7eb; transition: background-color 0.2s ease-in-out; }
+        .tabulator .tabulator-row:hover { background-color: #fafcff; }
         .tab-button.active { border-color: #4f46e5; color: #4f46e5; }
         .modal.hidden { display: none; }
-        .action-btn, .edit-btn, .delete-btn { padding: 0.25rem 0.75rem; border-radius: 0.375rem; color: white; font-size: 0.75rem; font-weight: 600; border: none; cursor: pointer; }
+        .action-btn, .edit-btn, .delete-btn { padding: 0.25rem 0.75rem; border-radius: 0.375rem; color: white; font-size: 0.75rem; font-weight: 600; border: none; cursor: pointer; transition: background-color 0.2s; }
         .edit-btn { background-color: #3b82f6; }
         .edit-btn:hover { background-color: #2563eb; }
         .delete-btn { background-color: #ef4444; }
         .delete-btn:hover { background-color: #dc2626; }
         .action-btn { background-color: #10b981; }
         .action-btn:hover { background-color: #059669; }
+        
+        /* Lógica de CSS para a Sidebar */
+        #sidebar { width: 16rem; }
+        #sidebar .sidebar-text, #sidebar #toggle-icon-collapse { display: inline; }
+        #sidebar #toggle-icon-expand { display: none; }
+        #sidebar.collapsed { width: 5rem; }
         #sidebar.collapsed .sidebar-link { justify-content: center; }
-        #company-logo { max-height: 40px; max-width: 40px; transition: opacity 0.3s ease-in-out; }
-        #sidebar.collapsed #company-logo { opacity: 0; }
+        #sidebar.collapsed .sidebar-text, #sidebar.collapsed #company-logo, #sidebar.collapsed #toggle-icon-collapse { display: none; }
+        #sidebar.collapsed #toggle-icon-expand { display: block; }
     </style>
 </head>
 <body class="h-full">
 
 <div class="flex h-full">
-    <!-- Sidebar -->
-    <nav id="sidebar" class="w-64 bg-white shadow-lg hidden md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
+    <!-- Overlay para o menu mobile -->
+    <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
+    
+    <!-- Sidebar com a nova estrutura responsiva -->
+    <nav id="sidebar" class="fixed inset-y-0 left-0 bg-white shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
         <div class="flex flex-col h-full">
             <div class="h-16 flex items-center justify-center border-b px-4 gap-2">
-                <img id="company-logo" src="" alt="Logo da Empresa" style="display: none;">
+                <img id="company-logo" src="" alt="Logo da Empresa" style="display: none; max-height: 40px; max-width: 40px;">
                 <h1 class="text-xl font-bold text-indigo-600 overflow-hidden"><span class="sidebar-text">Luca Gerencial</span></h1>
             </div>
             <div class="flex-grow p-4">
@@ -57,6 +65,12 @@
                         </a>
                     </li>
                     <li>
+                        <a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">
+                            <span data-feather="truck"></span>
+                            <span class="sidebar-text">Logística</span>
+                        </a>
+                    </li>
+                    <li>
                         <a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium bg-indigo-50 text-indigo-700" aria-current="page">
                             <span data-feather="settings"></span>
                             <span class="sidebar-text">Configurações</span>
@@ -65,9 +79,9 @@
                 </ul>
             </div>
             <div class="p-2 border-t">
-                <button id="sidebar-toggle" class="w-full flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none">
+                <button id="sidebar-toggle" class="w-full hidden md:flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none">
                     <svg id="toggle-icon-collapse" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" /></svg>
-                    <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
+                    <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
                 </button>
             </div>
         </div>
@@ -75,14 +89,18 @@
 
     <!-- Área de Conteúdo Principal -->
     <div class="flex-1 flex flex-col">
-        <header class="bg-white shadow-sm border-b h-16 flex items-center justify-end px-4 sm:px-6 lg:px-8 flex-shrink-0">
-            <div class="flex items-center gap-4">
+        <header class="bg-white shadow-sm border-b h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
+            <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900">
+                <span data-feather="menu"></span>
+            </button>
+            <div class="hidden md:block"></div>
+            <div class="flex items-center gap-4 ml-auto">
                 <span class="text-sm text-gray-700">Olá, <strong id="user-name" class="font-medium">Utilizador</strong>!</span>
                 <button id="logout-button" class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500">Sair</button>
             </div>
         </header>
 
-        <main class="container mx-auto flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
             <h2 class="text-2xl font-bold text-gray-900 mb-6">Configurações do Sistema</h2>
             <div class="tabs border-b border-gray-200">
                 <nav class="-mb-px flex space-x-6" aria-label="Tabs">
@@ -220,6 +238,12 @@
                 <label for="user-modal-perfil" class="block text-sm font-medium text-gray-700">Perfil de Acesso</label>
                 <select id="user-modal-perfil" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select>
             </div>
+            <div class="border-t pt-4">
+                <label class="block text-sm font-medium text-gray-700">Acesso aos Módulos</label>
+                <div id="user-modal-permissions" class="mt-2 space-y-2">
+                    <!-- Checkboxes de permissão serão inseridos aqui -->
+                </div>
+            </div>
         </form>
         <div class="flex justify-end items-center pt-6 mt-6 border-t gap-4">
             <button id="cancel-user-settings-btn" class="rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Cancelar</button>
@@ -229,20 +253,76 @@
 </div>
 
 <div id="confirm-action-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
-    <!-- Conteúdo do Modal de Confirmação -->
+    <div class="relative mx-auto p-6 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <h3 id="confirm-action-title" class="text-xl font-semibold text-gray-900">Confirmar Ação</h3>
+        <div class="py-6">
+            <p id="confirm-action-text" class="text-gray-600"></p>
+        </div>
+        <div class="flex justify-end items-center pt-4 border-t gap-4">
+            <button id="reject-action-btn" class="rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Cancelar</button>
+            <button id="confirm-action-btn" class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">Confirmar</button>
+        </div>
+    </div>
 </div>
 
 <!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
 <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
-<script src="settings.js?v=1.0.4" defer></script>
-<!-- **ATUALIZAÇÃO:** Script para inicializar os ícones e a sidebar nesta página. -->
+<script src="settings.js?v=1.0.5" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
-        // A lógica da sidebar foi movida para o settings.js para evitar conflitos
+
+        const sidebar = document.getElementById('sidebar');
+        
+        const setupDesktopSidebar = () => {
+            const desktopToggleButton = document.getElementById('sidebar-toggle');
+            if (!desktopToggleButton) return;
+            
+            const setDesktopSidebarState = (collapsed) => {
+                sidebar.classList.toggle('collapsed', collapsed);
+                localStorage.setItem('sidebar_collapsed', collapsed);
+            };
+
+            const isDesktopCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+            setDesktopSidebarState(isDesktopCollapsed);
+
+            desktopToggleButton.addEventListener('click', () => {
+                const currentlyCollapsed = sidebar.classList.contains('collapsed');
+                setDesktopSidebarState(!currentlyCollapsed);
+            });
+        };
+
+        const setupMobileSidebar = () => {
+            const mobileMenuButton = document.getElementById('mobile-menu-button');
+            const overlay = document.getElementById('mobile-menu-overlay');
+            if (!mobileMenuButton || !overlay) return;
+
+            mobileMenuButton.addEventListener('click', () => {
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.remove('hidden');
+            });
+            
+            overlay.addEventListener('click', () => {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+            });
+        };
+        
+        const loadCompanyLogo = () => {
+            const companyLogo = document.getElementById('company-logo');
+            if (!companyLogo) return;
+            const logoBase64 = localStorage.getItem('company_logo');
+            if (logoBase64) {
+                companyLogo.src = logoBase64;
+                companyLogo.style.display = 'block';
+            }
+        };
+
+        loadCompanyLogo();
+        setupDesktopSidebar();
+        setupMobileSidebar();
     });
 </script>
-<script src="settings.js?v=1.0.5" defer></script>
 </body>
 </html>

@@ -5,76 +5,45 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Despesas - Luca Gerencial</title>
     
-    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Litepicker (Calendário) CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css"/>
-    
-    <!-- Ícone da Página -->
     <link rel="icon" href="assets/favicon.ico" type="image/x-icon">
-    
-    <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-        [data-feather] {
-            width: 1.25rem;
-            height: 1.25rem;
-        }
-        input::-webkit-outer-spin-button,
-        input::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-        input[type=number] {
-            -moz-appearance: textfield;
-        }
-        .modal.hidden {
-            display: none;
-        }
-        .cancel-btn {
-            padding: 0.25rem 0.75rem;
-            border-radius: 0.375rem;
-            color: white;
-            font-size: 0.75rem;
-            font-weight: 600;
-            border: none;
-            cursor: pointer;
-            background-color: #ef4444; /* Vermelho */
-        }
-        .cancel-btn:hover {
-            background-color: #dc2626;
-        }
-        #sidebar.collapsed .sidebar-link {
-            justify-content: center;
-        }
-        /* Ajuste para logo na sidebar */
-        #company-logo {
-            max-height: 40px; /* Ajuste a altura máxima conforme necessário */
-            max-width: 40px;  /* Ajuste a largura máxima conforme necessário */
-            transition: opacity 0.3s ease-in-out;
-        }
-        #sidebar.collapsed #company-logo {
-            opacity: 0; /* Esconde a logo suavemente quando recolhido */
-        }
+        body { font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        [data-feather] { width: 1.25rem; height: 1.25rem; }
+        .cancel-btn { padding: 0.25rem 0.75rem; border-radius: 0.375rem; color: white; font-size: 0.75rem; font-weight: 600; border: none; cursor: pointer; background-color: #ef4444; transition: background-color 0.2s; }
+        .cancel-btn:hover { background-color: #dc2626; }
+        
+        /* Lógica de CSS para a Sidebar */
+        #sidebar { width: 16rem; }
+        #sidebar .sidebar-text, #sidebar #toggle-icon-collapse { display: inline; }
+        #sidebar #toggle-icon-expand { display: none; }
+        #sidebar.collapsed { width: 5rem; }
+        #sidebar.collapsed .sidebar-link { justify-content: center; }
+        #sidebar.collapsed .sidebar-text, #sidebar.collapsed #company-logo, #sidebar.collapsed #toggle-icon-collapse { display: none; }
+        #sidebar.collapsed #toggle-icon-expand { display: block; }
+
+        .modal.hidden { display: none; }
     </style>
 </head>
 <body class="h-full">
 
 <div class="flex h-full">
-    <!-- Sidebar -->
-    <nav id="sidebar" class="w-64 bg-white shadow-lg hidden md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
+    <!-- Overlay para o menu mobile -->
+    <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
+
+    <!-- Sidebar com a nova estrutura responsiva -->
+    <nav id="sidebar" class="fixed inset-y-0 left-0 bg-white shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
         <div class="flex flex-col h-full">
             <div class="h-16 flex items-center justify-center border-b px-4 gap-2">
-                <img id="company-logo" src="" alt="Logo da Empresa" style="display: none;">
+                <img id="company-logo" src="" alt="Logo da Empresa" style="display: none;" class="max-h-10 max-w-10">
                 <h1 class="text-xl font-bold text-indigo-600 overflow-hidden"><span class="sidebar-text">Luca Gerencial</span></h1>
             </div>
+            
             <div class="flex-grow p-4">
                 <ul class="space-y-2">
                     <li>
@@ -90,6 +59,12 @@
                         </a>
                     </li>
                     <li>
+                        <a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">
+                            <span data-feather="truck"></span>
+                            <span class="sidebar-text">Logística</span>
+                        </a>
+                    </li>
+                    <li>
                         <a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">
                             <span data-feather="settings"></span>
                             <span class="sidebar-text">Configurações</span>
@@ -97,10 +72,11 @@
                     </li>
                 </ul>
             </div>
+            
             <div class="p-2 border-t">
-                <button id="sidebar-toggle" class="w-full flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none">
+                <button id="sidebar-toggle" class="w-full hidden md:flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none">
                     <svg id="toggle-icon-collapse" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" /></svg>
-                    <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
+                    <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
                 </button>
             </div>
         </div>
@@ -108,8 +84,12 @@
     
     <!-- Área de Conteúdo Principal -->
     <div class="flex-1 flex flex-col">
-        <header class="bg-white shadow-sm border-b h-16 flex items-center justify-end px-4 sm:px-6 lg:px-8 flex-shrink-0">
-            <div class="flex items-center gap-4">
+        <header class="bg-white shadow-sm border-b h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
+            <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900">
+                <span data-feather="menu"></span>
+            </button>
+            <div class="hidden md:block"></div>
+            <div class="flex items-center gap-4 ml-auto">
                 <span class="text-sm text-gray-700">Olá, <strong id="user-name" class="font-medium">Utilizador</strong>!</span>
                 <button id="logout-button" class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500">Sair</button>
             </div>
@@ -127,11 +107,9 @@
                 </div>
             </div>
 
-            <!-- Filtros -->
             <div class="bg-white p-4 rounded-lg shadow mb-6">
-                <!-- ATUALIZAÇÃO: Removida classe de alinhamento do grid. O alinhamento será feito em cada item. -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
-                    <div class="xl:col-span-2">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                    <div class="xl:col-span-1">
                         <label for="filter-date-range" class="block text-sm font-medium text-gray-700">Período</label>
                         <input type="text" id="filter-date-range" placeholder="Selecione um intervalo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                     </div>
@@ -151,19 +129,17 @@
                         <label for="filter-filial" class="block text-sm font-medium text-gray-700">Filial</label>
                         <select id="filter-filial" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select>
                     </div>
-                    <!-- ATUALIZAÇÃO: Wrapper para os botões que usa flexbox para empurrá-los para baixo. -->
                     <div class="flex flex-col justify-end">
-                        <div class="flex gap-2">
-                            <button id="filter-button" class="w-full justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">Filtrar</button>
-                            <button id="clear-filter-button" class="w-full justify-center rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Limpar</button>
+                        <div class="flex gap-2 w-full flex-col sm:flex-row">
+                            <button id="filter-button" class="w-full sm:w-1/2 justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">Filtrar</button>
+                            <button id="clear-filter-button" class="w-full sm:w-1/2 justify-center rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Limpar</button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Tabela de Despesas -->
             <div class="bg-white rounded-lg shadow overflow-x-auto">
-                <table id="tabela-despesas" class="min-w-full divide-y divide-gray-200">
+                <table id="tabela-despesas" class="min-w-full">
                     <thead class="bg-gray-50">
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
@@ -178,13 +154,12 @@
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Utilizador</th>
                         </tr>
                     </thead>
-                    <tbody class="bg-white divide-y divide-gray-200 text-sm"></tbody>
+                    <tbody class="bg-white text-sm divide-y divide-gray-200"></tbody>
                 </table>
                 <p id="no-data-message" class="text-center p-8 text-gray-500 hidden">Nenhuma despesa encontrada.</p>
             </div>
             
-            <!-- Paginação -->
-            <div class="flex items-center justify-between mt-6">
+            <div class="flex flex-col sm:flex-row items-center justify-between mt-6 gap-4">
                 <div class="flex items-center gap-2 text-sm">
                     <label for="items-per-page">Itens por página:</label>
                     <select id="items-per-page" class="rounded-md border-gray-300 text-sm">
@@ -271,7 +246,7 @@
             <div class="mt-6 space-y-6">
                 <div>
                     <label for="export-date-range" class="block text-sm font-medium text-gray-700">Período do Relatório</label>
-                    <input type="text" id="export-date-range" placeholder="Selecione um intervalo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    <input type="text" id="export-date-range" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                 </div>
                 <div id="export-filial-group" class="hidden">
                     <label for="export-filial-select" class="block text-sm font-medium text-gray-700">Filial</label>
@@ -302,52 +277,61 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
-    
+    <script defer="" src="despesas.js?v=1.0.5"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            feather.replace(); 
+            feather.replace();
 
             const sidebar = document.getElementById('sidebar');
-            const toggleButton = document.getElementById('sidebar-toggle');
-            const sidebarTexts = document.querySelectorAll('.sidebar-text');
-            const iconCollapse = document.getElementById('toggle-icon-collapse');
-            const iconExpand = document.getElementById('toggle-icon-expand');
-            const companyLogo = document.getElementById('company-logo');
+            
+            const setupDesktopSidebar = () => {
+                const desktopToggleButton = document.getElementById('sidebar-toggle');
+                if (!desktopToggleButton) return;
+                
+                const setDesktopSidebarState = (collapsed) => {
+                    sidebar.classList.toggle('collapsed', collapsed);
+                    localStorage.setItem('sidebar_collapsed', collapsed);
+                };
 
+                const isDesktopCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+                setDesktopSidebarState(isDesktopCollapsed);
+
+                desktopToggleButton.addEventListener('click', () => {
+                    const currentlyCollapsed = sidebar.classList.contains('collapsed');
+                    setDesktopSidebarState(!currentlyCollapsed);
+                });
+            };
+
+            const setupMobileSidebar = () => {
+                const mobileMenuButton = document.getElementById('mobile-menu-button');
+                const overlay = document.getElementById('mobile-menu-overlay');
+                if (!mobileMenuButton || !overlay) return;
+
+                mobileMenuButton.addEventListener('click', () => {
+                    sidebar.classList.remove('-translate-x-full');
+                    overlay.classList.remove('hidden');
+                });
+                
+                overlay.addEventListener('click', () => {
+                    sidebar.classList.add('-translate-x-full');
+                    overlay.classList.add('hidden');
+                });
+            };
+            
             const loadCompanyLogo = () => {
+                const companyLogo = document.getElementById('company-logo');
+                if (!companyLogo) return;
                 const logoBase64 = localStorage.getItem('company_logo');
                 if (logoBase64) {
                     companyLogo.src = logoBase64;
                     companyLogo.style.display = 'block';
                 }
             };
-            
+
             loadCompanyLogo();
-
-            const setSidebarState = (collapsed) => {
-                sidebar.classList.toggle('w-64', !collapsed);
-                sidebar.classList.toggle('w-20', collapsed);
-                sidebar.classList.toggle('collapsed', collapsed);
-                
-                sidebarTexts.forEach(text => {
-                    text.classList.toggle('hidden', collapsed);
-                });
-                
-                iconCollapse.classList.toggle('hidden', collapsed);
-                iconExpand.classList.toggle('hidden', !collapsed);
-
-                localStorage.setItem('sidebar_collapsed', collapsed);
-            };
-
-            const isCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
-            setSidebarState(isCollapsed);
-
-            toggleButton.addEventListener('click', () => {
-                const currentlyCollapsed = sidebar.classList.contains('collapsed');
-                setSidebarState(!currentlyCollapsed);
-            });
+            setupDesktopSidebar();
+            setupMobileSidebar();
         });
     </script>
-    <script src="despesas.js?v=1.0.5" defer></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-// index.js (Backend Completo com Perfis de Acesso e Gestão)
+// index.js (Backend Completo com Perfis de Acesso, Permissões e Logística)
 
 // 1. Importação das bibliotecas
 const express = require('express');
@@ -24,7 +24,7 @@ if (!JWT_SECRET || !process.env.DB_HOST) {
 }
 
 app.use(cors({ origin: '*' }));
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '10mb' }));
 
 // 3. Configuração da Base de Dados
 const dbConfig = {
@@ -99,7 +99,7 @@ apiRouter.post('/login', async (req, res) => {
             departamento: user.depart_user,
             perfil: user.perfil_acesso
         };
-        const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+        const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '8h' });
         await connection.end();
         res.json({ message: 'Login bem-sucedido!', accessToken });
 
@@ -141,7 +141,7 @@ apiRouter.post('/signup', async (req, res) => {
         const datacad_user = new Date().toISOString().slice(0, 10);
         
         const insertSql = `INSERT INTO cad_user (ID, datacad_user, nome_user, senha_hash_user, depart_user, unidade_user, email_user, cargo_user, cpf_user, status_user, id_perfil) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-        const defaultProfileId = 1; 
+        const defaultProfileId = 2; // Supondo que o perfil 'Comercial' tem o id 2
         const params = [newId, datacad_user, nome_user, senha_hash_user, depart_user, unidade_user, email_user, cargo_user, cpf_user, 'Pendente', defaultProfileId];
         
         await connection.execute(insertSql, params);
@@ -160,8 +160,9 @@ apiRouter.post('/signup', async (req, res) => {
 
 // --- ROTAS DE GESTÃO DE UTILIZADORES ---
 apiRouter.get('/users', authenticateToken, authorizeAdmin, async (req, res) => {
+    let connection;
     try {
-        const connection = await mysql.createConnection(dbConfig);
+        connection = await mysql.createConnection(dbConfig);
         const sql = `
             SELECT u.ID, u.nome_user, u.email_user, u.cargo_user, u.unidade_user, u.status_user, p.nome_perfil as perfil_acesso, u.id_perfil
             FROM cad_user u
@@ -172,6 +173,7 @@ apiRouter.get('/users', authenticateToken, authorizeAdmin, async (req, res) => {
         res.json(users);
     } catch (error) { 
         console.error("Erro ao buscar utilizadores:", error);
+        if (connection) await connection.end();
         res.status(500).json({ error: 'Erro ao buscar utilizadores.' }); 
     }
 });
@@ -273,46 +275,6 @@ apiRouter.get('/despesas', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Erro ao buscar despesas:', error);
         res.status(500).json({ error: 'Erro ao buscar despesas.' });
-    }
-});
-
-// Rota para adicionar uma nova despesa
-apiRouter.post('/despesas', authenticateToken, async (req, res) => {
-    const { perfil, unidade: unidadeUsuarioToken, userId, nome: nomeUsuario } = req.user;
-    try {
-        const { dsp_valordsp, dsp_descricao, dsp_tipo, dsp_grupo, dsp_datadesp, dsp_filial } = req.body;
-        let filialDeLancamento = unidadeUsuarioToken;
-        if (privilegedAccessProfiles.includes(perfil) && dsp_filial) { 
-            filialDeLancamento = dsp_filial; 
-        }
-        if (!filialDeLancamento) return res.status(400).json({ error: 'Filial para lançamento não pôde ser determinada.' });
-        if (!dsp_valordsp || !dsp_descricao || !dsp_datadesp || !dsp_tipo || !dsp_grupo) return res.status(400).json({ error: 'Todos os campos são obrigatórios.' });
-        
-        const connection = await mysql.createConnection(dbConfig);
-        const sql = 'INSERT INTO despesa_caixa (dsp_valordsp, dsp_descricao, dsp_tipo, dsp_grupo, dsp_datadesp, dsp_filial, id_usuario_lancamento, dsp_status, dsp_datalanc, dsp_userlanc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-        await connection.execute(sql, [dsp_valordsp, dsp_descricao, dsp_tipo, dsp_grupo, dsp_datadesp, filialDeLancamento, userId, 1, new Date(), nomeUsuario]);
-        await connection.end();
-        res.status(201).json({ message: 'Despesa adicionada com sucesso!' });
-    } catch (error) {
-        console.error('Erro ao adicionar despesa:', error);
-        res.status(500).json({ error: 'Erro ao adicionar despesa.' });
-    }
-});
-
-// Rota para cancelar uma despesa
-apiRouter.put('/despesas/:id/cancelar', authenticateToken, async (req, res) => {
-    const { id } = req.params;
-    const { nome: nomeUsuarioCancelou } = req.user;
-    try {
-        const connection = await mysql.createConnection(dbConfig);
-        const sql = 'UPDATE despesa_caixa SET dsp_status = ?, dsp_usercan = ?, dsp_datacanc = ? WHERE ID = ?';
-        const [result] = await connection.execute(sql, [2, nomeUsuarioCancelou, new Date(), id]);
-        await connection.end();
-        if (result.affectedRows === 0) return res.status(404).json({ message: 'Despesa não encontrada.' });
-        res.json({ message: `Despesa ${id} cancelada com sucesso!` });
-    } catch (error) {
-        console.error('Erro ao cancelar despesa:', error);
-        res.status(500).json({ error: 'Erro ao cancelar a despesa.' });
     }
 });
 
@@ -499,14 +461,20 @@ apiRouter.post('/perfis-acesso', authenticateToken, authorizeAdmin, async (req, 
     if (!nome_perfil || !dashboard_type) {
         return res.status(400).json({ error: 'Nome do perfil e tipo de dashboard são obrigatórios.' });
     }
+    let connection;
     try {
-        const connection = await mysql.createConnection(dbConfig);
-        const sql = `INSERT INTO perfis_acesso (nome_perfil, dashboard_type) VALUES (?, ?)`;
-        await connection.execute(sql, [nome_perfil, dashboard_type]);
+        connection = await mysql.createConnection(dbConfig);
+        const [maxIdResult] = await connection.execute('SELECT MAX(id) as maxId FROM perfis_acesso');
+        const newId = (maxIdResult[0].maxId || 0) + 1;
+        
+        const sql = `INSERT INTO perfis_acesso (id, nome_perfil, dashboard_type) VALUES (?, ?, ?)`;
+        await connection.execute(sql, [newId, nome_perfil, dashboard_type]);
+        
         await connection.end();
         res.status(201).json({ message: 'Perfil de acesso criado com sucesso.' });
     } catch (error) {
         console.error("Erro ao criar perfil de acesso:", error);
+        if (connection) await connection.end();
         res.status(500).json({ error: 'Erro ao criar o perfil de acesso.' });
     }
 });
@@ -540,6 +508,145 @@ apiRouter.delete('/perfis-acesso/:id', authenticateToken, authorizeAdmin, async 
     } catch (error) {
         console.error("Erro ao apagar perfil de acesso:", error);
         res.status(500).json({ error: 'Erro ao apagar o perfil.' });
+    }
+});
+
+
+// --- ROTAS PARA PERMISSÕES DE MÓDULOS ---
+apiRouter.get('/perfis/:id/permissoes', authenticateToken, authorizeAdmin, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const connection = await mysql.createConnection(dbConfig);
+        const [rows] = await connection.execute('SELECT nome_modulo, permitido FROM perfil_permissoes WHERE id_perfil = ?', [id]);
+        await connection.end();
+        res.json(rows);
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao buscar permissões do perfil.' });
+    }
+});
+
+apiRouter.put('/perfis/:id/permissoes', authenticateToken, authorizeAdmin, async (req, res) => {
+    const { id } = req.params;
+    const permissoes = req.body; // Ex: [{ nome_modulo: 'Logística', permitido: true }, ...]
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        await connection.beginTransaction();
+
+        // Apaga as permissões antigas para inserir as novas
+        await connection.execute('DELETE FROM perfil_permissoes WHERE id_perfil = ?', [id]);
+
+        if (permissoes && permissoes.length > 0) {
+            const sql = 'INSERT INTO perfil_permissoes (id_perfil, nome_modulo, permitido) VALUES ?';
+            const values = permissoes.map(p => [id, p.nome_modulo, p.permitido]);
+            await connection.query(sql, [values]);
+        }
+        
+        await connection.commit();
+        await connection.end();
+        res.json({ message: 'Permissões do perfil atualizadas com sucesso.' });
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error("Erro ao atualizar permissões:", error);
+        res.status(500).json({ error: 'Erro ao atualizar permissões.' });
+    }
+});
+
+
+// --- ROTAS PARA O MÓDULO DE LOGÍSTICA ---
+apiRouter.get('/veiculos', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            SELECT v.*, p.NOME_PARAMETRO as nome_filial 
+            FROM veiculos v
+            LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
+            ORDER BY v.modelo, v.placa`;
+        const [veiculos] = await connection.execute(sql);
+        await connection.end();
+        res.json(veiculos);
+    } catch (error) {
+        console.error("Erro ao buscar veículos:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro ao buscar veículos.' });
+    }
+});
+
+apiRouter.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) => {
+    const { placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status } = req.body;
+    
+    if (!placa || !marca || !modelo) {
+        return res.status(400).json({ error: 'Placa, marca e modelo são obrigatórios.' });
+    }
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            INSERT INTO veiculos (placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        
+        await connection.execute(sql, [placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status]);
+        
+        await connection.end();
+        res.status(201).json({ message: 'Veículo adicionado com sucesso!' });
+    } catch (error) {
+        console.error("Erro ao adicionar veículo:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro ao adicionar veículo. Verifique se a placa, renavam ou chassi já existem.' });
+    }
+});
+
+apiRouter.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status } = req.body;
+
+    if (!placa || !marca || !modelo) {
+        return res.status(400).json({ error: 'Placa, marca e modelo são obrigatórios.' });
+    }
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            UPDATE veiculos SET 
+            placa = ?, marca = ?, modelo = ?, ano_fabricacao = ?, ano_modelo = ?, 
+            renavam = ?, chassi = ?, id_filial = ?, status = ? 
+            WHERE id = ?`;
+        
+        const [result] = await connection.execute(sql, [placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status, id]);
+        
+        await connection.end();
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Veículo não encontrado.' });
+        }
+        res.json({ message: 'Veículo atualizado com sucesso!' });
+    } catch (error) {
+        console.error("Erro ao atualizar veículo:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro ao atualizar veículo.' });
+    }
+});
+
+apiRouter.delete('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) => {
+    const { id } = req.params;
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const [result] = await connection.execute('DELETE FROM veiculos WHERE id = ?', [id]);
+        await connection.end();
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Veículo não encontrado.' });
+        }
+        res.json({ message: 'Veículo apagado com sucesso.' });
+    } catch (error) {
+        console.error("Erro ao apagar veículo:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro ao apagar veículo.' });
     }
 });
 
