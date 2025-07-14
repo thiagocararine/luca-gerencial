@@ -282,7 +282,6 @@ apiRouter.post('/despesas', authenticateToken, async (req, res) => {
     const { dsp_datadesp, dsp_descricao, dsp_valordsp, dsp_tipo, dsp_grupo, dsp_filial } = req.body;
     const { nome: nomeUsuario, unidade: unidadeUsuario } = req.user;
 
-    // Validação básica dos dados recebidos
     if (!dsp_datadesp || !dsp_descricao || !dsp_valordsp || !dsp_tipo || !dsp_grupo) {
         return res.status(400).json({ error: "Todos os campos obrigatórios devem ser preenchidos." });
     }
@@ -296,9 +295,7 @@ apiRouter.post('/despesas', authenticateToken, async (req, res) => {
             (dsp_datadesp, dsp_descricao, dsp_valordsp, dsp_tipo, dsp_grupo, dsp_filial, dsp_userlanc, dsp_status, dsp_datalanc) 
             VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW())`;
             
-        // Se o utilizador não for privilegiado, usa a sua própria filial. Se for, usa a que veio do formulário.
         const filialParaInserir = dsp_filial || unidadeUsuario;
-
         const params = [dsp_datadesp, dsp_descricao, dsp_valordsp, dsp_tipo, dsp_grupo, filialParaInserir, nomeUsuario];
 
         await connection.execute(sql, params);
@@ -313,14 +310,11 @@ apiRouter.post('/despesas', authenticateToken, async (req, res) => {
     }
 });
 
-// Você também precisará de uma rota para CANCELAR despesas, que parece estar faltando.
-// O seu frontend (despesas.js) tenta chamar /api/despesas/:id/cancelar
 apiRouter.put('/despesas/:id/cancelar', authenticateToken, async (req, res) => {
     const { id } = req.params;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        // O status 2 significa "Cancelado"
         const sql = `UPDATE despesa_caixa SET dsp_status = 2 WHERE ID = ?`;
         const [result] = await connection.execute(sql, [id]);
         await connection.end();
@@ -613,7 +607,9 @@ apiRouter.put('/perfis/:id/permissoes', authenticateToken, authorizeAdmin, async
 });
 
 
-// --- ROTAS PARA O MÓDULO DE LOGÍSTICA ---
+// --- ROTAS PARA O MÓDULO DE LOGÍSTICA (CRUD COMPLETO) ---
+
+// GET: Buscar todos os veículos
 apiRouter.get('/veiculos', authenticateToken, async (req, res) => {
     let connection;
     try {
@@ -633,11 +629,43 @@ apiRouter.get('/veiculos', authenticateToken, async (req, res) => {
     }
 });
 
+// **NOVO** GET: Buscar marcas únicas de veículos
+apiRouter.get('/veiculos/marcas', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const [marcas] = await connection.execute('SELECT DISTINCT marca FROM veiculos WHERE marca IS NOT NULL ORDER BY marca');
+        await connection.end();
+        res.json(marcas.map(m => m.marca));
+    } catch (error) {
+        console.error("Erro ao buscar marcas de veículos:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro ao buscar marcas.' });
+    }
+});
+
+// **NOVO** GET: Buscar modelos únicos de veículos
+apiRouter.get('/veiculos/modelos', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const [modelos] = await connection.execute('SELECT DISTINCT modelo FROM veiculos WHERE modelo IS NOT NULL ORDER BY modelo');
+        await connection.end();
+        res.json(modelos.map(m => m.modelo));
+    } catch (error) {
+        console.error("Erro ao buscar modelos de veículos:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro ao buscar modelos.' });
+    }
+});
+
+
+// POST: Adicionar um novo veículo
 apiRouter.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) => {
     const { placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status } = req.body;
     
-    if (!placa || !marca || !modelo) {
-        return res.status(400).json({ error: 'Placa, marca e modelo são obrigatórios.' });
+    if (!placa || !marca || !modelo || !id_filial || !status) {
+        return res.status(400).json({ error: 'Placa, marca, modelo, filial e status são obrigatórios.' });
     }
 
     let connection;
@@ -647,23 +675,28 @@ apiRouter.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) 
             INSERT INTO veiculos (placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
         
-        await connection.execute(sql, [placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status]);
+        await connection.execute(sql, [placa, marca, modelo, ano_fabricacao || null, ano_modelo || null, renavam || null, chassi || null, id_filial, status]);
         
         await connection.end();
         res.status(201).json({ message: 'Veículo adicionado com sucesso!' });
     } catch (error) {
         console.error("Erro ao adicionar veículo:", error);
         if (connection) await connection.end();
-        res.status(500).json({ error: 'Erro ao adicionar veículo. Verifique se a placa, renavam ou chassi já existem.' });
+        // Verifica se o erro é de entrada duplicada (placa, renavam, chassi)
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ error: 'Erro: Placa, RENAVAM ou Chassi já registado.' });
+        }
+        res.status(500).json({ error: 'Erro interno ao adicionar o veículo.' });
     }
 });
 
+// PUT: Atualizar um veículo existente
 apiRouter.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) => {
     const { id } = req.params;
     const { placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status } = req.body;
 
-    if (!placa || !marca || !modelo) {
-        return res.status(400).json({ error: 'Placa, marca e modelo são obrigatórios.' });
+    if (!placa || !marca || !modelo || !id_filial || !status) {
+        return res.status(400).json({ error: 'Placa, marca, modelo, filial e status são obrigatórios.' });
     }
 
     let connection;
@@ -675,7 +708,7 @@ apiRouter.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, re
             renavam = ?, chassi = ?, id_filial = ?, status = ? 
             WHERE id = ?`;
         
-        const [result] = await connection.execute(sql, [placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status, id]);
+        const [result] = await connection.execute(sql, [placa, marca, modelo, ano_fabricacao || null, ano_modelo || null, renavam || null, chassi || null, id_filial, status, id]);
         
         await connection.end();
 
@@ -686,15 +719,20 @@ apiRouter.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, re
     } catch (error) {
         console.error("Erro ao atualizar veículo:", error);
         if (connection) await connection.end();
-        res.status(500).json({ error: 'Erro ao atualizar veículo.' });
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ error: 'Erro: Placa, RENAVAM ou Chassi já pertencem a outro veículo.' });
+        }
+        res.status(500).json({ error: 'Erro interno ao atualizar o veículo.' });
     }
 });
 
+// DELETE: Apagar um veículo
 apiRouter.delete('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) => {
     const { id } = req.params;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
+        // Adicionar verificações aqui se houver tabelas dependentes (manutenções, etc.)
         const [result] = await connection.execute('DELETE FROM veiculos WHERE id = ?', [id]);
         await connection.end();
 
@@ -705,10 +743,13 @@ apiRouter.delete('/veiculos/:id', authenticateToken, authorizeAdmin, async (req,
     } catch (error) {
         console.error("Erro ao apagar veículo:", error);
         if (connection) await connection.end();
-        res.status(500).json({ error: 'Erro ao apagar veículo.' });
+        // Se houver uma restrição de chave estrangeira
+        if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+            return res.status(409).json({ error: 'Não é possível apagar este veículo pois ele possui registos associados (manutenções, documentos, etc.).' });
+        }
+        res.status(500).json({ error: 'Erro interno ao apagar o veículo.' });
     }
 });
-
 
 // --- ROTA DE CONFIGURAÇÃO DA LOGO ---
 const logoConfigPath = path.join(__dirname, 'config_logo.json');
