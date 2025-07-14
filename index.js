@@ -1,5 +1,5 @@
 // index.js (Backend Completo com Perfis de Acesso, Permissões e Logística)
-
+console.log("--- O SERVIDOR FOI REINICIADO COM A VERSÃO MAIS RECENTE DO CÓDIGO ---");
 // 1. Importação das bibliotecas
 const express = require('express');
 const mysql = require('mysql2/promise');
@@ -278,6 +278,65 @@ apiRouter.get('/despesas', authenticateToken, async (req, res) => {
     }
 });
 
+apiRouter.post('/despesas', authenticateToken, async (req, res) => {
+    const { dsp_datadesp, dsp_descricao, dsp_valordsp, dsp_tipo, dsp_grupo, dsp_filial } = req.body;
+    const { nome: nomeUsuario, unidade: unidadeUsuario } = req.user;
+
+    // Validação básica dos dados recebidos
+    if (!dsp_datadesp || !dsp_descricao || !dsp_valordsp || !dsp_tipo || !dsp_grupo) {
+        return res.status(400).json({ error: "Todos os campos obrigatórios devem ser preenchidos." });
+    }
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        
+        const sql = `
+            INSERT INTO despesa_caixa 
+            (dsp_datadesp, dsp_descricao, dsp_valordsp, dsp_tipo, dsp_grupo, dsp_filial, dsp_userlanc, dsp_status, dsp_datalanc) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW())`;
+            
+        // Se o utilizador não for privilegiado, usa a sua própria filial. Se for, usa a que veio do formulário.
+        const filialParaInserir = dsp_filial || unidadeUsuario;
+
+        const params = [dsp_datadesp, dsp_descricao, dsp_valordsp, dsp_tipo, dsp_grupo, filialParaInserir, nomeUsuario];
+
+        await connection.execute(sql, params);
+        await connection.end();
+        
+        res.status(201).json({ message: 'Despesa adicionada com sucesso!' });
+
+    } catch (error) {
+        console.error("Erro ao adicionar despesa:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro interno ao adicionar a despesa.' });
+    }
+});
+
+// Você também precisará de uma rota para CANCELAR despesas, que parece estar faltando.
+// O seu frontend (despesas.js) tenta chamar /api/despesas/:id/cancelar
+apiRouter.put('/despesas/:id/cancelar', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        // O status 2 significa "Cancelado"
+        const sql = `UPDATE despesa_caixa SET dsp_status = 2 WHERE ID = ?`;
+        const [result] = await connection.execute(sql, [id]);
+        await connection.end();
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Despesa não encontrada.' });
+        }
+        
+        res.json({ message: 'Despesa cancelada com sucesso.' });
+
+    } catch (error) {
+        console.error("Erro ao cancelar despesa:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro ao cancelar a despesa.' });
+    }
+});
 
 // --- ROTA DO DASHBOARD (Refatorada para Perfis) ---
 apiRouter.get('/dashboard-summary', authenticateToken, async (req, res) => {
