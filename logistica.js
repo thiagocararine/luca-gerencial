@@ -1,11 +1,12 @@
-// logistica.js (Frontend com Filtros e Modal de Gestão por Abas)
+// logistica.js (Frontend com Filtros, Gestão por Abas e Lançamento de Custo de Frota)
 
 document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
 // --- Constantes e Variáveis de Estado Globais ---
-const apiUrlBase = 'http://localhost:3000/api'; // Use localhost para desenvolvimento
+const apiUrlBase = 'http://10.113.0.17:3000/api';
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 let allVehicles = []; // Guarda todos os veículos para filtragem no frontend
+let currentVehicleId = null; // Guarda o ID do veículo a ser gerido
 let vehicleToDeleteId = null;
 
 /**
@@ -22,6 +23,7 @@ async function initLogisticaPage() {
     const userProfile = getUserProfile();
     if (!privilegedAccessProfiles.includes(userProfile)) {
         document.getElementById('add-vehicle-button').style.display = 'none';
+        document.getElementById('add-fleet-cost-button').style.display = 'none';
         document.getElementById('filial-filter-container').style.display = 'none';
     }
 
@@ -32,27 +34,30 @@ async function initLogisticaPage() {
         populateModeloSuggestions()
     ]);
     await loadVehicles();
+    await loadFleetCosts();
 }
 
 /**
  * Configura todos os event listeners da página.
  */
 function setupEventListeners() {
+    // Listeners Gerais
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('add-vehicle-button')?.addEventListener('click', () => openVehicleModal());
-    
-    // Filtros
+    document.getElementById('add-fleet-cost-button')?.addEventListener('click', openFleetCostModal);
+
+    // Listeners de Filtros
     document.getElementById('filter-button').addEventListener('click', applyFilters);
     document.getElementById('clear-filter-button').addEventListener('click', clearFilters);
 
-    // Modal de Veículo (Adicionar/Editar)
+    // Listeners do Modal de Veículo (Adicionar/Editar)
     const vehicleModal = document.getElementById('vehicle-modal');
     vehicleModal.querySelector('#close-vehicle-modal-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
     vehicleModal.querySelector('#cancel-vehicle-form-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
     vehicleModal.querySelector('#vehicle-form').addEventListener('submit', handleVehicleFormSubmit);
     vehicleModal.querySelector('#has-placa-checkbox').addEventListener('change', handleHasPlacaChange);
     
-    // Validação em tempo real
+    // Listeners de validação em tempo real
     const placaInput = vehicleModal.querySelector('#vehicle-placa');
     placaInput.addEventListener('input', (e) => {
         e.target.value = e.target.value.toUpperCase();
@@ -64,25 +69,44 @@ function setupEventListeners() {
         validateRenavam(e.target.value);
     });
 
-    // Modal de Exclusão
+    // Listeners do Modal de Exclusão
     const deleteModal = document.getElementById('confirm-delete-modal');
     deleteModal.querySelector('#cancel-delete-btn').addEventListener('click', () => deleteModal.classList.add('hidden'));
     deleteModal.querySelector('#confirm-delete-btn').addEventListener('click', () => {
         if (vehicleToDeleteId) deleteVehicle(vehicleToDeleteId);
     });
 
-    // Modal de Gestão (Detalhes/Abas)
+    // Listeners do Modal de Gestão (Detalhes/Abas)
     const detailsModal = document.getElementById('details-modal');
     detailsModal.querySelector('#close-details-modal-btn').addEventListener('click', () => detailsModal.classList.add('hidden'));
     detailsModal.querySelector('#details-tabs').addEventListener('click', (e) => {
         if (e.target.matches('.tab-button')) {
-            switchTab(e.target.dataset.tab);
+            switchTab(e.target.dataset.tab, currentVehicleId);
         }
     });
+    detailsModal.querySelector('#add-maintenance-btn').addEventListener('click', () => {
+        openMaintenanceModal(currentVehicleId);
+    });
+
+    // Listeners do Modal de Manutenção
+    const maintenanceModal = document.getElementById('maintenance-modal');
+    maintenanceModal.querySelector('#close-maintenance-modal-btn').addEventListener('click', () => maintenanceModal.classList.add('hidden'));
+    maintenanceModal.querySelector('#cancel-maintenance-form-btn').addEventListener('click', () => maintenanceModal.classList.add('hidden'));
+    maintenanceModal.querySelector('#lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('maintenance'));
+    maintenanceModal.querySelector('#maintenance-despesa-interna-btn').addEventListener('click', () => useInternalExpense('maintenance'));
+    maintenanceModal.querySelector('#maintenance-form').addEventListener('submit', handleMaintenanceFormSubmit);
+
+    // Listeners do Modal de Custo de Frota
+    const fleetCostModal = document.getElementById('fleet-cost-modal');
+    fleetCostModal.querySelector('#close-fleet-cost-modal-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
+    fleetCostModal.querySelector('#cancel-fleet-cost-form-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
+    fleetCostModal.querySelector('#fleet-cost-lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('fleet-cost'));
+    fleetCostModal.querySelector('#fleet-cost-despesa-interna-btn').addEventListener('click', () => useInternalExpense('fleet-cost'));
+    fleetCostModal.querySelector('#fleet-cost-form').addEventListener('submit', handleFleetCostFormSubmit);
 
     // Delegação de evento e responsividade
     document.getElementById('content-area').addEventListener('click', handleContentClick);
-    window.addEventListener('resize', renderContent);
+    window.addEventListener('resize', () => renderContent(allVehicles));
 }
 
 /**
@@ -90,10 +114,8 @@ function setupEventListeners() {
  */
 async function loadVehicles() {
     const contentArea = document.getElementById('content-area');
-    const noDataMessage = document.getElementById('no-data-message');
-    
     contentArea.innerHTML = '<p class="text-center p-8 text-gray-500">A carregar veículos...</p>';
-    noDataMessage.classList.add('hidden');
+    document.getElementById('no-data-message').classList.add('hidden');
 
     try {
         const response = await fetch(`${apiUrlBase}/veiculos`, {
@@ -102,7 +124,7 @@ async function loadVehicles() {
         if (!response.ok) throw new Error(`Falha ao buscar veículos: ${response.statusText}`);
 
         allVehicles = await response.json();
-        applyFilters(); // Aplica filtros (ou mostra tudo)
+        applyFilters();
 
     } catch (error) {
         console.error("Erro ao carregar veículos:", error);
@@ -120,8 +142,8 @@ function applyFilters() {
 
     const filteredVehicles = allVehicles.filter(vehicle => {
         const searchMatch = !searchTerm || 
-                            vehicle.placa.toLowerCase().includes(searchTerm) || 
-                            vehicle.modelo.toLowerCase().includes(searchTerm);
+                            (vehicle.placa && vehicle.placa.toLowerCase().includes(searchTerm)) || 
+                            (vehicle.modelo && vehicle.modelo.toLowerCase().includes(searchTerm));
         const filialMatch = !filial || vehicle.id_filial == filial;
         const statusMatch = !status || vehicle.status === status;
 
@@ -141,26 +163,24 @@ function clearFilters() {
     applyFilters();
 }
 
-
 /**
  * Decide se renderiza cartões ou tabela com base no tamanho do ecrã.
  * @param {Array} vehicles - A lista de veículos a ser renderizada.
  */
-function renderContent(vehicles = allVehicles) {
+function renderContent(vehicles) {
     const contentArea = document.getElementById('content-area');
     const noDataMessage = document.getElementById('no-data-message');
     contentArea.innerHTML = '';
 
     if (vehicles.length === 0) {
         noDataMessage.classList.remove('hidden');
-        return;
-    }
-    noDataMessage.classList.add('hidden');
-
-    if (window.innerWidth < 768) {
-        renderVehicleCards(vehicles, contentArea);
     } else {
-        renderVehicleTable(vehicles, contentArea);
+        noDataMessage.classList.add('hidden');
+        if (window.innerWidth < 768) {
+            renderVehicleCards(vehicles, contentArea);
+        } else {
+            renderVehicleTable(vehicles, contentArea);
+        }
     }
     feather.replace();
 }
@@ -216,8 +236,7 @@ function renderVehicleTable(vehicles, container) {
                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
             </tr>
         </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
-        </tbody>
+        <tbody class="bg-white divide-y divide-gray-200"></tbody>
     `;
 
     const tbody = table.querySelector('tbody');
@@ -276,45 +295,339 @@ function handleContentClick(event) {
 
 /**
  * Abre o modal de gestão com abas.
- * @param {object} vehicle - O objeto do veículo.
  */
 function openDetailsModal(vehicle) {
+    currentVehicleId = vehicle.id;
     const modal = document.getElementById('details-modal');
     document.getElementById('details-modal-title').textContent = `Gestão de: ${vehicle.modelo} - ${vehicle.placa}`;
     
-    // Preenche a aba de detalhes
+    modal.classList.remove('hidden');
+    switchTab('details', vehicle.id); 
+    feather.replace();
+}
+
+/**
+ * Lógica para trocar de aba no modal de gestão e carregar dados.
+ */
+async function switchTab(tabName, vehicleId) {
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    document.querySelectorAll('.tab-button').forEach(button => button.classList.remove('active'));
+
+    document.getElementById(`${tabName}-tab-content`).classList.add('active');
+    document.querySelector(`.tab-button[data-tab="${tabName}"]`).classList.add('active');
+
+    if (tabName === 'details') {
+        const vehicle = allVehicles.find(v => v.id === vehicleId);
+        renderDetailsTab(vehicle);
+    } else if (tabName === 'maintenance') {
+        await fetchAndDisplayMaintenanceHistory(vehicleId);
+    }
+}
+
+/**
+ * Preenche a aba de detalhes do veículo.
+ */
+function renderDetailsTab(vehicle) {
     const detailsContent = document.getElementById('details-tab-content');
     detailsContent.innerHTML = `
         <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
             <div><strong class="block text-gray-500">Placa</strong><span>${vehicle.placa}</span></div>
             <div><strong class="block text-gray-500">Marca</strong><span>${vehicle.marca}</span></div>
             <div><strong class="block text-gray-500">Modelo</strong><span>${vehicle.modelo}</span></div>
-            <div><strong class="block text-gray-500">Ano Fab./Mod.</strong><span>${vehicle.ano_fabricacao}/${vehicle.ano_modelo}</span></div>
+            <div><strong class="block text-gray-500">Ano Fab./Mod.</strong><span>${vehicle.ano_fabricacao || 'N/A'}/${vehicle.ano_modelo || 'N/A'}</span></div>
             <div><strong class="block text-gray-500">RENAVAM</strong><span>${vehicle.renavam || 'N/A'}</span></div>
             <div class="md:col-span-2"><strong class="block text-gray-500">Chassi</strong><span>${vehicle.chassi || 'N/A'}</span></div>
             <div><strong class="block text-gray-500">Filial</strong><span>${vehicle.nome_filial || 'N/A'}</span></div>
             <div><strong class="block text-gray-500">Status</strong><span>${vehicle.status}</span></div>
         </div>
     `;
+}
 
-    // Reset e mostra o modal
-    switchTab('details'); // Garante que a primeira aba está ativa
+/**
+ * Busca e exibe o histórico de manutenções.
+ */
+async function fetchAndDisplayMaintenanceHistory(vehicleId) {
+    const container = document.getElementById('maintenance-history-container');
+    container.innerHTML = '<p class="text-center text-gray-500">A carregar histórico...</p>';
+    try {
+        const response = await fetch(`${apiUrlBase}/veiculos/${vehicleId}/manutencoes`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error('Falha ao buscar histórico.');
+        
+        const manutenções = await response.json();
+        
+        if (manutenções.length === 0) {
+            container.innerHTML = '<p class="text-center text-gray-500">Nenhuma manutenção registada para este veículo.</p>';
+            return;
+        }
+
+        const table = document.createElement('table');
+        table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+        table.innerHTML = `
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Tipo</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Fornecedor</th>
+                    <th class="px-4 py-2 text-right font-medium text-gray-500">Custo</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200"></tbody>
+        `;
+        const tbody = table.querySelector('tbody');
+        manutenções.forEach(m => {
+            const tr = tbody.insertRow();
+            tr.innerHTML = `
+                <td class="px-4 py-2">${new Date(m.data_manutencao).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+                <td class="px-4 py-2">${m.tipo_manutencao}</td>
+                <td class="px-4 py-2">${m.nome_fornecedor || 'N/A'}</td>
+                <td class="px-4 py-2 text-right">R$ ${parseFloat(m.custo).toFixed(2)}</td>
+            `;
+        });
+        container.innerHTML = '';
+        container.appendChild(table);
+
+    } catch (error) {
+        container.innerHTML = '<p class="text-center text-red-500">Erro ao carregar histórico.</p>';
+        console.error(error);
+    }
+}
+
+/**
+ * Abre o modal para adicionar uma nova manutenção.
+ */
+function openMaintenanceModal(vehicleId) {
+    const modal = document.getElementById('maintenance-modal');
+    const form = document.getElementById('maintenance-form');
+    form.reset();
+    document.getElementById('maintenance-vehicle-id').value = vehicleId;
+    document.getElementById('maintenance-fornecedor-id').value = '';
+    document.getElementById('maintenance-date').value = new Date().toISOString().split('T')[0];
     modal.classList.remove('hidden');
     feather.replace();
 }
 
 /**
- * Lógica para trocar de aba no modal de gestão.
- * @param {string} tabName - O nome da aba para ativar.
+ * Lida com o envio do formulário de manutenção.
  */
-function switchTab(tabName) {
-    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-    document.querySelectorAll('.tab-button').forEach(button => button.classList.remove('active'));
+async function handleMaintenanceFormSubmit(event) {
+    event.preventDefault();
+    const saveBtn = document.getElementById('save-maintenance-btn');
+    saveBtn.disabled = true;
 
-    document.getElementById(`${tabName}-tab-content`).classList.add('active');
-    document.querySelector(`.tab-button[data-tab="${tabName}"]`).classList.add('active');
+    const maintenanceData = {
+        id_veiculo: document.getElementById('maintenance-vehicle-id').value,
+        data_manutencao: document.getElementById('maintenance-date').value,
+        custo: document.getElementById('maintenance-cost').value,
+        tipo_manutencao: document.getElementById('maintenance-type').value,
+        descricao: document.getElementById('maintenance-description').value,
+        id_fornecedor: document.getElementById('maintenance-fornecedor-id').value,
+    };
+
+    if (!maintenanceData.id_fornecedor) {
+        alert('Por favor, consulte um CNPJ válido ou marque como despesa interna.');
+        saveBtn.disabled = false;
+        return;
+    }
+
+    try {
+        const response = await fetch(`${apiUrlBase}/veiculos/${maintenanceData.id_veiculo}/manutencoes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify(maintenanceData)
+        });
+        if (!response.ok) throw new Error('Falha ao salvar manutenção.');
+
+        document.getElementById('maintenance-modal').classList.add('hidden');
+        alert('Manutenção registada com sucesso!');
+        await fetchAndDisplayMaintenanceHistory(maintenanceData.id_veiculo);
+
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        saveBtn.disabled = false;
+    }
 }
 
+/**
+ * Abre o modal para adicionar um novo custo de frota.
+ */
+function openFleetCostModal() {
+    const modal = document.getElementById('fleet-cost-modal');
+    modal.querySelector('form').reset();
+    document.getElementById('fleet-cost-fornecedor-id').value = '';
+    document.getElementById('fleet-cost-date').value = new Date().toISOString().split('T')[0];
+    modal.classList.remove('hidden');
+    feather.replace();
+}
+
+/**
+ * Lida com o envio do formulário de custo de frota.
+ */
+async function handleFleetCostFormSubmit(event) {
+    event.preventDefault();
+    const saveBtn = document.getElementById('save-fleet-cost-btn');
+    saveBtn.disabled = true;
+
+    const selectedFiliais = Array.from(document.getElementById('fleet-cost-filiais').selectedOptions).map(opt => opt.value);
+
+    const costData = {
+        descricao: document.getElementById('fleet-cost-description').value,
+        custo: document.getElementById('fleet-cost-value').value,
+        data_custo: document.getElementById('fleet-cost-date').value,
+        id_fornecedor: document.getElementById('fleet-cost-fornecedor-id').value,
+        filiais_rateio: selectedFiliais
+    };
+
+    if (!costData.id_fornecedor) {
+        alert('Por favor, associe um fornecedor ou marque como despesa interna.');
+        saveBtn.disabled = false;
+        return;
+    }
+    if (costData.filiais_rateio.length === 0) {
+        alert('Por favor, selecione pelo menos uma filial para o rateio.');
+        saveBtn.disabled = false;
+        return;
+    }
+
+    try {
+        const response = await fetch(`${apiUrlBase}/custos-frota`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify(costData)
+        });
+        if (!response.ok) throw new Error('Falha ao salvar custo de frota.');
+
+        document.getElementById('fleet-cost-modal').classList.add('hidden');
+        alert('Custo de frota registado com sucesso!');
+        await loadFleetCosts();
+
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        saveBtn.disabled = false;
+    }
+}
+
+/**
+ * Busca e exibe o histórico de custos gerais da frota.
+ */
+async function loadFleetCosts() {
+    const container = document.getElementById('fleet-costs-history-container');
+    container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
+    try {
+        const response = await fetch(`${apiUrlBase}/custos-frota`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error('Falha ao buscar custos.');
+        
+        const custos = await response.json();
+        
+        if (custos.length === 0) {
+            container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo geral registado.</p>';
+            return;
+        }
+
+        const table = document.createElement('table');
+        table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+        table.innerHTML = `
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Descrição</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Fornecedor</th>
+                    <th class="px-4 py-2 text-right font-medium text-gray-500">Custo Total</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200"></tbody>
+        `;
+        const tbody = table.querySelector('tbody');
+        custos.forEach(c => {
+            const tr = tbody.insertRow();
+            tr.innerHTML = `
+                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+                <td class="px-4 py-2">${c.descricao}</td>
+                <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
+                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
+            `;
+        });
+        container.innerHTML = '';
+        container.appendChild(table);
+
+    } catch (error) {
+        container.innerHTML = '<p class="text-center p-4 text-red-500">Erro ao carregar custos.</p>';
+        console.error(error);
+    }
+}
+
+/**
+ * Usa um fornecedor genérico para despesas internas.
+ */
+function useInternalExpense(context) {
+    const cnpjInput = document.getElementById(`${context}-cnpj`);
+    cnpjInput.value = '00.000.000/0000-00';
+    lookupCnpj(context);
+}
+
+/**
+ * Consulta um CNPJ na BrasilAPI e no nosso DB.
+ */
+async function lookupCnpj(context) {
+    const cnpj = document.getElementById(`${context}-cnpj`).value.replace(/\D/g, '');
+    const loader = document.getElementById(`${context}-cnpj-loader`);
+    const razaoSocialInput = document.getElementById(`${context}-razao-social`);
+    const fornecedorIdInput = document.getElementById(`${context}-fornecedor-id`);
+
+    if (cnpj.length !== 14 && cnpj !== '00000000000000') {
+        alert('Por favor, insira um CNPJ válido com 14 dígitos.');
+        return;
+    }
+
+    loader.style.display = 'block';
+    razaoSocialInput.value = '';
+    fornecedorIdInput.value = '';
+
+    try {
+        let fornecedorData;
+        if (cnpj === '00000000000000') {
+            fornecedorData = { cnpj, razao_social: 'Despesa Interna' };
+        } else {
+            const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+            if (!response.ok) throw new Error('CNPJ não encontrado ou inválido.');
+            const data = await response.json();
+            fornecedorData = {
+                cnpj: data.cnpj,
+                razao_social: data.razao_social,
+                nome_fantasia: data.nome_fantasia,
+                logradouro: data.logradouro,
+                numero: data.numero,
+                bairro: data.bairro,
+                municipio: data.municipio,
+                uf: data.uf,
+                cep: data.cep
+            };
+        }
+        
+        const nossoDbResponse = await fetch(`${apiUrlBase}/fornecedores/cnpj`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify(fornecedorData)
+        });
+        
+        if (!nossoDbResponse.ok) throw new Error('Erro ao registar fornecedor no sistema.');
+        
+        const fornecedor = await nossoDbResponse.json();
+        razaoSocialInput.value = fornecedor.razao_social;
+        fornecedorIdInput.value = fornecedor.id;
+
+    } catch (error) {
+        alert(error.message);
+        razaoSocialInput.value = 'Falha na consulta.';
+    } finally {
+        loader.style.display = 'none';
+    }
+}
 
 /**
  * Abre o modal para adicionar ou editar um veículo.
@@ -451,11 +764,12 @@ async function deleteVehicle(id) {
 }
 
 /**
- * Busca a lista de filiais e preenche o select no formulário.
+ * Busca a lista de filiais e preenche os selects.
  */
 async function populateFilialSelects() {
     await populateSelectWithOptions(`${apiUrlBase}/parametros?cod=Unidades`, 'filter-filial', 'ID', 'NOME_PARAMETRO', 'Todas as Filiais');
     await populateSelectWithOptions(`${apiUrlBase}/parametros?cod=Unidades`, 'vehicle-filial', 'ID', 'NOME_PARAMETRO', '-- Selecione a Filial --');
+    await populateSelectWithOptions(`${apiUrlBase}/parametros?cod=Unidades`, 'fleet-cost-filiais', 'ID', 'NOME_PARAMETRO', '');
 }
 
 /**
@@ -472,9 +786,9 @@ async function populateModeloSuggestions() {
     await populateDatalistWithOptions(`${apiUrlBase}/veiculos/modelos`, 'modelos-list');
 }
 
-
-// --- FUNÇÕES DE VALIDAÇÃO E LÓGICA DE UI ---
-
+/**
+ * Lógica de UI e Validações
+ */
 function handleHasPlacaChange() {
     const hasPlacaCheckbox = document.getElementById('has-placa-checkbox');
     const placaInput = document.getElementById('vehicle-placa');
@@ -491,7 +805,7 @@ function handleHasPlacaChange() {
         placaInput.required = false;
         placaInput.classList.add('opacity-50', 'bg-gray-200');
         placaInput.value = 'SEM PLACA';
-        placaError.style.display = 'none'; // Esconde o erro quando o campo é desativado
+        placaError.style.display = 'none';
     }
 }
 
@@ -514,9 +828,9 @@ function validatePlaca(placa) {
     const placaError = document.getElementById('placa-error');
     if (!placa) {
         placaError.style.display = 'block';
-        return false; // Placa é obrigatória se o checkbox estiver marcado
+        return false;
     }
-    const placaPattern = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/; // Padrão Mercosul e antigo
+    const placaPattern = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/;
     const isValid = placaPattern.test(placa);
     placaError.style.display = isValid ? 'none' : 'block';
     return isValid;
@@ -526,7 +840,7 @@ function validateRenavam(renavam) {
     const renavamError = document.getElementById('renavam-error');
     if (!renavam) {
         renavamError.style.display = 'none';
-        return true; // RENAVAM é opcional
+        return true;
     }
     const isValid = /^\d{11}$/.test(renavam);
     renavamError.style.display = isValid ? 'none' : 'block';
@@ -534,8 +848,9 @@ function validateRenavam(renavam) {
 }
 
 
-// --- FUNÇÕES AUXILIARES ---
-
+/**
+ * Funções Auxiliares
+ */
 async function populateSelectWithOptions(url, selectId, valueKey, textKey, placeholder) {
     const selectElement = document.getElementById(selectId);
     try {

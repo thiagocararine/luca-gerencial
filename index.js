@@ -1,5 +1,6 @@
 // index.js (Backend Completo com Perfis de Acesso, Permissões e Logística)
 console.log("--- O SERVIDOR FOI REINICIADO COM A VERSÃO MAIS RECENTE DO CÓDIGO ---");
+
 // 1. Importação das bibliotecas
 const express = require('express');
 const mysql = require('mysql2/promise');
@@ -8,6 +9,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const fs = require('fs').promises;
 const path = require('path');
+const multer = require('multer');
 require('dotenv').config();
 
 // 2. Configurações da Aplicação
@@ -23,10 +25,34 @@ if (!JWT_SECRET || !process.env.DB_HOST) {
     process.exit(1);
 }
 
+// 3. Middlewares e Configurações Globais do Express
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '10mb' }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// 3. Configuração da Base de Dados
+// Configuração do Multer para armazenamento de ficheiros
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const baseDest = 'uploads/';
+        fs.mkdir(path.join(__dirname, baseDest), { recursive: true }).then(() => {
+            let subFolder = '';
+            if (file.fieldname === 'documento_veiculo') subFolder = 'documentos/';
+            if (file.fieldname === 'foto_veiculo') subFolder = 'fotos_veiculos/';
+            
+            const finalDest = path.join(baseDest, subFolder);
+             fs.mkdir(path.join(__dirname, finalDest), { recursive: true })
+                .then(() => cb(null, finalDest))
+                .catch(err => cb(err));
+        }).catch(err => cb(err));
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+const upload = multer({ storage: storage });
+
+// 4. Configuração da Base de Dados
 const dbConfig = {
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -34,15 +60,13 @@ const dbConfig = {
     database: process.env.DB_DATABASE
 };
 
-// 4. Middlewares
+// 5. Middlewares de Autenticação e Autorização
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
     if (token == null) return res.sendStatus(401);
     jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) {
-            return res.sendStatus(403);
-        }
+        if (err) { return res.sendStatus(403); }
         req.user = user;
         next();
     });
@@ -55,9 +79,9 @@ function authorizeAdmin(req, res, next) {
     next();
 }
 
-// 5. Rotas da API
+// 6. Definição das Rotas da API
 
-// Rota de Login
+// --- ROTAS DE AUTENTICAÇÃO E UTILIZADORES ---
 apiRouter.post('/login', async (req, res) => {
     const { identifier, senha } = req.body;
     if (!identifier || !senha) return res.status(400).json({ error: 'Identificador e senha são obrigatórios.' });
@@ -110,8 +134,6 @@ apiRouter.post('/login', async (req, res) => {
     }
 });
 
-
-// Rota de Registo
 apiRouter.post('/signup', async (req, res) => {
     const { nome_user, email_user, cpf_user, senha, depart_user, unidade_user, cargo_user } = req.body;
     if (!nome_user || !email_user || !cpf_user || !senha || !depart_user || !unidade_user || !cargo_user) {
@@ -157,8 +179,6 @@ apiRouter.post('/signup', async (req, res) => {
     }
 });
 
-
-// --- ROTAS DE GESTÃO DE UTILIZADORES ---
 apiRouter.get('/users', authenticateToken, authorizeAdmin, async (req, res) => {
     let connection;
     try {
@@ -332,7 +352,7 @@ apiRouter.put('/despesas/:id/cancelar', authenticateToken, async (req, res) => {
     }
 });
 
-// --- ROTA DO DASHBOARD (Refatorada para Perfis) ---
+// --- ROTA DO DASHBOARD ---
 apiRouter.get('/dashboard-summary', authenticateToken, async (req, res) => {
     const { perfil, unidade: unidadeUsuario } = req.user;
     const canViewAllFiliais = privilegedAccessProfiles.includes(perfil);
@@ -349,6 +369,7 @@ apiRouter.get('/dashboard-summary', authenticateToken, async (req, res) => {
         const dashboardType = (perfilResult[0] && perfilResult[0].dashboard_type) || 'Nenhum';
 
         if (dashboardType === 'Nenhum') {
+            await connection.end();
             return res.json({ dashboardType: 'Nenhum' });
         }
 
@@ -406,13 +427,13 @@ apiRouter.get('/dashboard-summary', authenticateToken, async (req, res) => {
             responsePayload.utilizadoresPendentes = utilizadoresPendentesResult[0].count || 0;
         }
 
+        await connection.end();
         return res.json(responsePayload);
 
     } catch (error) {
         console.error("Erro ao buscar dados do dashboard:", error);
-        res.status(500).json({ error: "Erro ao buscar dados para o dashboard." });
-    } finally {
         if (connection) await connection.end();
+        res.status(500).json({ error: "Erro ao buscar dados para o dashboard." });
     }
 });
 
@@ -580,14 +601,13 @@ apiRouter.get('/perfis/:id/permissoes', authenticateToken, authorizeAdmin, async
 
 apiRouter.put('/perfis/:id/permissoes', authenticateToken, authorizeAdmin, async (req, res) => {
     const { id } = req.params;
-    const permissoes = req.body; // Ex: [{ nome_modulo: 'Logística', permitido: true }, ...]
+    const permissoes = req.body; 
 
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
 
-        // Apaga as permissões antigas para inserir as novas
         await connection.execute('DELETE FROM perfil_permissoes WHERE id_perfil = ?', [id]);
 
         if (permissoes && permissoes.length > 0) {
@@ -606,8 +626,38 @@ apiRouter.put('/perfis/:id/permissoes', authenticateToken, authorizeAdmin, async
     }
 });
 
+// --- ROTA DE CONFIGURAÇÃO DA LOGO ---
+const logoConfigPath = path.join(__dirname, 'config_logo.json');
+apiRouter.post('/config/logo', authenticateToken, authorizeAdmin, async (req, res) => {
+    try {
+        const { logoBase64 } = req.body;
+        await fs.writeFile(logoConfigPath, JSON.stringify({ logoBase64 }));
+        res.json({ message: 'Logo salva com sucesso.' });
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao salvar a logo.' });
+    }
+});
+apiRouter.get('/config/logo', authenticateToken, async (req, res) => {
+     try {
+        const data = await fs.readFile(logoConfigPath, 'utf8');
+        res.json(JSON.parse(data));
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            return res.status(200).json({ logoBase64: null });
+        }
+        res.status(500).json({ error: 'Erro ao carregar a logo.' });
+    }
+});
 
-// --- ROTAS PARA O MÓDULO DE LOGÍSTICA (CRUD COMPLETO) ---
+// --- ROTAS PARA O MÓDULO DE LOGÍSTICA ---
+
+// Rota de Exemplo para Upload
+apiRouter.post('/upload', authenticateToken, upload.single('documento_veiculo'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).send('Nenhum ficheiro enviado.');
+    }
+    res.json({ filePath: `/${req.file.path.replace(/\\/g, '/')}` });
+});
 
 // GET: Buscar todos os veículos
 apiRouter.get('/veiculos', authenticateToken, async (req, res) => {
@@ -629,7 +679,7 @@ apiRouter.get('/veiculos', authenticateToken, async (req, res) => {
     }
 });
 
-// **NOVO** GET: Buscar marcas únicas de veículos
+// GET: Buscar marcas únicas de veículos
 apiRouter.get('/veiculos/marcas', authenticateToken, async (req, res) => {
     let connection;
     try {
@@ -644,7 +694,7 @@ apiRouter.get('/veiculos/marcas', authenticateToken, async (req, res) => {
     }
 });
 
-// **NOVO** GET: Buscar modelos únicos de veículos
+// GET: Buscar modelos únicos de veículos
 apiRouter.get('/veiculos/modelos', authenticateToken, async (req, res) => {
     let connection;
     try {
@@ -658,7 +708,6 @@ apiRouter.get('/veiculos/modelos', authenticateToken, async (req, res) => {
         res.status(500).json({ error: 'Erro ao buscar modelos.' });
     }
 });
-
 
 // POST: Adicionar um novo veículo
 apiRouter.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) => {
@@ -682,7 +731,6 @@ apiRouter.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) 
     } catch (error) {
         console.error("Erro ao adicionar veículo:", error);
         if (connection) await connection.end();
-        // Verifica se o erro é de entrada duplicada (placa, renavam, chassi)
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(409).json({ error: 'Erro: Placa, RENAVAM ou Chassi já registado.' });
         }
@@ -732,7 +780,6 @@ apiRouter.delete('/veiculos/:id', authenticateToken, authorizeAdmin, async (req,
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        // Adicionar verificações aqui se houver tabelas dependentes (manutenções, etc.)
         const [result] = await connection.execute('DELETE FROM veiculos WHERE id = ?', [id]);
         await connection.end();
 
@@ -743,7 +790,6 @@ apiRouter.delete('/veiculos/:id', authenticateToken, authorizeAdmin, async (req,
     } catch (error) {
         console.error("Erro ao apagar veículo:", error);
         if (connection) await connection.end();
-        // Se houver uma restrição de chave estrangeira
         if (error.code === 'ER_ROW_IS_REFERENCED_2') {
             return res.status(409).json({ error: 'Não é possível apagar este veículo pois ele possui registos associados (manutenções, documentos, etc.).' });
         }
@@ -751,33 +797,155 @@ apiRouter.delete('/veiculos/:id', authenticateToken, authorizeAdmin, async (req,
     }
 });
 
-// --- ROTA DE CONFIGURAÇÃO DA LOGO ---
-const logoConfigPath = path.join(__dirname, 'config_logo.json');
-apiRouter.post('/config/logo', authenticateToken, authorizeAdmin, async (req, res) => {
+// Rota para buscar manutenções de um veículo
+apiRouter.get('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    let connection;
     try {
-        const { logoBase64 } = req.body;
-        await fs.writeFile(logoConfigPath, JSON.stringify({ logoBase64 }));
-        res.json({ message: 'Logo salva com sucesso.' });
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            SELECT vm.*, u.nome_user as nome_utilizador, f.razao_social as nome_fornecedor
+            FROM veiculo_manutencoes vm
+            LEFT JOIN cad_user u ON vm.id_user_lanc = u.ID
+            LEFT JOIN fornecedores f ON vm.id_fornecedor = f.id
+            WHERE vm.id_veiculo = ?
+            ORDER BY vm.data_manutencao DESC`;
+        const [manutencoes] = await connection.execute(sql, [id]);
+        await connection.end();
+        res.json(manutencoes);
     } catch (error) {
-        res.status(500).json({ error: 'Erro ao salvar a logo.' });
+        console.error("Erro ao buscar manutenções:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro ao buscar manutenções.' });
     }
 });
-apiRouter.get('/config/logo', authenticateToken, async (req, res) => {
-     try {
-        const data = await fs.readFile(logoConfigPath, 'utf8');
-        res.json(JSON.parse(data));
+
+// Rota para adicionar uma manutenção
+apiRouter.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
+    const { id: id_veiculo } = req.params;
+    const { data_manutencao, descricao, custo, tipo_manutencao, id_fornecedor } = req.body;
+    const { userId } = req.user;
+
+    if (!data_manutencao || !custo || !tipo_manutencao || !id_fornecedor) {
+        return res.status(400).json({ error: 'Todos os campos da manutenção são obrigatórios.' });
+    }
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            INSERT INTO veiculo_manutencoes (id_veiculo, data_manutencao, descricao, custo, tipo_manutencao, id_user_lanc, id_fornecedor)
+            VALUES (?, ?, ?, ?, ?, ?, ?)`;
+        await connection.execute(sql, [id_veiculo, data_manutencao, descricao, custo, tipo_manutencao, userId, id_fornecedor]);
+        await connection.end();
+        res.status(201).json({ message: 'Manutenção registada com sucesso!' });
     } catch (error) {
-        if (error.code === 'ENOENT') {
-            return res.status(200).json({ logoBase64: null });
+        console.error("Erro ao adicionar manutenção:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro interno ao adicionar manutenção.' });
+    }
+});
+
+// Rota para buscar ou criar um fornecedor pelo CNPJ
+apiRouter.post('/fornecedores/cnpj', authenticateToken, async (req, res) => {
+    const { cnpj, razao_social, nome_fantasia, ...outrosDados } = req.body;
+    if (!cnpj) return res.status(400).json({ error: 'CNPJ é obrigatório.' });
+    
+    const cleanedCnpj = cnpj.replace(/\D/g, '');
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        let [fornecedor] = await connection.execute('SELECT * FROM fornecedores WHERE cnpj = ?', [cleanedCnpj]);
+
+        if (fornecedor.length > 0) {
+            await connection.end();
+            return res.json(fornecedor[0]);
+        } else {
+            if (!razao_social) {
+                await connection.end();
+                return res.status(400).json({ error: 'Razão Social é obrigatória para criar um novo fornecedor.' });
+            }
+            const sql = `
+                INSERT INTO fornecedores (cnpj, razao_social, nome_fantasia, logradouro, numero, bairro, municipio, uf, cep)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            const [result] = await connection.execute(sql, [
+                cleanedCnpj,
+                razao_social,
+                nome_fantasia || razao_social,
+                outrosDados.logradouro || null,
+                outrosDados.numero || null,
+                outrosDados.bairro || null,
+                outrosDados.municipio || null,
+                outrosDados.uf || null,
+                outrosDados.cep ? outrosDados.cep.replace(/\D/g, '') : null
+            ]);
+            
+            const novoFornecedor = {
+                id: result.insertId,
+                cnpj: cleanedCnpj,
+                razao_social,
+                nome_fantasia: nome_fantasia || razao_social,
+                ...outrosDados
+            };
+            await connection.end();
+            return res.status(201).json(novoFornecedor);
         }
-        res.status(500).json({ error: 'Erro ao carregar a logo.' });
+    } catch (error) {
+        console.error("Erro ao gerir fornecedor:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro interno ao gerir fornecedor.' });
+    }
+});
+
+// Rota para CUSTOS GERAIS DA FROTA (RATEIO)
+apiRouter.post('/custos-frota', authenticateToken, authorizeAdmin, async (req, res) => {
+    const { descricao, custo, data_custo, id_fornecedor, filiais_rateio } = req.body;
+    const { userId } = req.user;
+    if (!descricao || !custo || !data_custo || !filiais_rateio || filiais_rateio.length === 0) {
+        return res.status(400).json({ error: 'Todos os campos, incluindo pelo menos uma filial, são obrigatórios.' });
+    }
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            INSERT INTO custos_frota (descricao, custo, data_custo, id_fornecedor, filiais_rateio, id_user_lanc)
+            VALUES (?, ?, ?, ?, ?, ?)`;
+        const filiaisJson = JSON.stringify(filiais_rateio);
+        await connection.execute(sql, [descricao, custo, data_custo, id_fornecedor, filiaisJson, userId]);
+        await connection.end();
+        res.status(201).json({ message: 'Custo de frota registado com sucesso!' });
+    } catch (error) {
+        console.error("Erro ao adicionar custo de frota:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro interno ao adicionar custo de frota.' });
+    }
+});
+
+apiRouter.get('/custos-frota', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            SELECT cf.*, f.razao_social as nome_fornecedor, u.nome_user as nome_utilizador
+            FROM custos_frota cf
+            LEFT JOIN fornecedores f ON cf.id_fornecedor = f.id
+            LEFT JOIN cad_user u ON cf.id_user_lanc = u.ID
+            ORDER BY cf.data_custo DESC`;
+        const [custos] = await connection.execute(sql);
+        await connection.end();
+        res.json(custos);
+    } catch (error) {
+        console.error("Erro ao buscar custos de frota:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro ao buscar custos de frota.' });
     }
 });
 
 // Usamos o prefixo /api para todas as rotas do router
 app.use('/api', apiRouter);
 
-// 6. Iniciar o Servidor
+// 7. Iniciar o Servidor
 app.listen(port, () => {
     console.log(`🚀 Servidor a ser executado em http://localhost:${port}`);
 });

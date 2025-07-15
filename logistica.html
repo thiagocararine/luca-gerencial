@@ -31,24 +31,28 @@
         .action-btn:disabled { background-color: #9ca3af; cursor: not-allowed; }
 
         .form-input {
-            background-color: #f9fafb; /* bg-gray-50 */
+            background-color: #f9fafb;
+            border-color: #d1d5db;
+        }
+        .form-input:focus {
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 1px #4f46e5;
         }
         .validation-error {
-            color: #ef4444; /* text-red-500 */
-            font-size: 0.75rem; /* text-xs */
-            margin-top: 0.25rem; /* mt-1 */
-            display: none; /* Escondido por padrão */
+            color: #ef4444;
+            font-size: 0.75rem;
+            margin-top: 0.25rem;
+            display: none;
         }
-        /* Estilos para as abas do modal */
         .tab-button {
             padding: 0.5rem 1rem;
             cursor: pointer;
             border-bottom: 2px solid transparent;
-            color: #6b7280; /* text-gray-500 */
+            color: #6b7280;
         }
         .tab-button.active {
-            border-bottom-color: #4f46e5; /* border-indigo-600 */
-            color: #4f46e5; /* text-indigo-600 */
+            border-bottom-color: #4f46e5;
+            color: #4f46e5;
             font-weight: 600;
         }
         .tab-content {
@@ -56,6 +60,9 @@
         }
         .tab-content.active {
             display: block;
+        }
+        .multi-select {
+            height: 120px;
         }
     </style>
 </head>
@@ -65,7 +72,6 @@
     <!-- Overlay e Sidebar -->
     <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
     <nav id="sidebar" class="fixed inset-y-0 left-0 bg-white shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
-        <!-- Conteúdo da Sidebar (igual às outras páginas) -->
         <div class="flex flex-col h-full">
             <div class="h-16 flex items-center justify-center border-b px-4 gap-2">
                 <img id="company-logo" src="" alt="Logo da Empresa" style="display: none; max-height: 40px;" class="max-h-10 max-w-10">
@@ -101,12 +107,16 @@
         <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
                 <h2 class="text-2xl font-bold text-gray-900">Gestão de Frota</h2>
-                <button id="add-vehicle-button" class="action-btn bg-indigo-600 hover:bg-indigo-700 flex items-center gap-2">
-                    <span data-feather="plus"></span>Adicionar Veículo
-                </button>
+                <div class="flex items-center gap-2">
+                    <button id="add-fleet-cost-button" class="action-btn bg-teal-600 hover:bg-teal-700 flex items-center gap-2">
+                        <span data-feather="trending-up"></span>Lançar Custo de Frota
+                    </button>
+                    <button id="add-vehicle-button" class="action-btn bg-indigo-600 hover:bg-indigo-700 flex items-center gap-2">
+                        <span data-feather="plus"></span>Adicionar Veículo
+                    </button>
+                </div>
             </div>
 
-            <!-- **NOVO** Barra de Filtros -->
             <div class="bg-white p-4 rounded-lg shadow mb-6">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div>
@@ -137,15 +147,18 @@
                 </div>
             </div>
             
-            <div id="content-area" class="bg-white rounded-lg shadow overflow-hidden">
-                <!-- A área de conteúdo será preenchida pelo JS -->
-            </div>
+            <div id="content-area" class="bg-white rounded-lg shadow overflow-hidden"></div>
             <p id="no-data-message" class="text-center p-8 text-gray-500 hidden">Nenhum veículo encontrado.</p>
+
+            <div class="mt-8">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">Histórico de Custos Gerais da Frota</h3>
+                <div id="fleet-costs-history-container" class="bg-white rounded-lg shadow overflow-hidden"></div>
+            </div>
         </main>
     </div>
 </div>
 
-<!-- **NOVO** Modal de Gestão Completo (Detalhes, Manutenção, etc.) -->
+<!-- Modal de Gestão Completo -->
 <div id="details-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
     <div class="relative mx-auto w-full max-w-4xl shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between p-4 border-b">
@@ -155,30 +168,26 @@
             </button>
         </div>
         <div class="p-4">
-            <!-- Abas de Navegação -->
             <div class="border-b border-gray-200">
                 <nav id="details-tabs" class="-mb-px flex space-x-6" aria-label="Tabs">
                     <button class="tab-button active" data-tab="details">Detalhes</button>
                     <button class="tab-button" data-tab="maintenance">Manutenções</button>
                     <button class="tab-button" data-tab="documents">Documentos</button>
-                    <button class="tab-button" data-tab="photos">Fotos</button>
                 </nav>
             </div>
-            <!-- Conteúdo das Abas -->
-            <div class="py-4">
-                <div id="details-tab-content" class="tab-content active">
-                    <!-- Conteúdo dos Detalhes será preenchido pelo JS -->
-                </div>
+            <div class="py-4 max-h-[60vh] overflow-y-auto">
+                <div id="details-tab-content" class="tab-content active"></div>
                 <div id="maintenance-tab-content" class="tab-content">
-                    <h4 class="text-lg font-semibold mb-4">Histórico de Manutenções</h4>
-                    <p class="text-center text-gray-500">Funcionalidade a ser implementada.</p>
+                    <div class="flex justify-between items-center mb-4">
+                        <h4 class="text-lg font-semibold">Histórico de Manutenções</h4>
+                        <button id="add-maintenance-btn" class="action-btn bg-green-600 hover:bg-green-700 flex items-center gap-2 text-sm">
+                            <span data-feather="plus-circle" class="w-4 h-4"></span>Nova Manutenção
+                        </button>
+                    </div>
+                    <div id="maintenance-history-container" class="overflow-x-auto"></div>
                 </div>
                 <div id="documents-tab-content" class="tab-content">
                      <h4 class="text-lg font-semibold mb-4">Documentos do Veículo</h4>
-                    <p class="text-center text-gray-500">Funcionalidade a ser implementada.</p>
-                </div>
-                <div id="photos-tab-content" class="tab-content">
-                     <h4 class="text-lg font-semibold mb-4">Galeria de Fotos</h4>
                     <p class="text-center text-gray-500">Funcionalidade a ser implementada.</p>
                 </div>
             </div>
@@ -186,6 +195,129 @@
     </div>
 </div>
 
+<!-- Modal para Adicionar/Editar Manutenção -->
+<div id="maintenance-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
+    <div class="relative mx-auto border w-full max-w-2xl shadow-lg rounded-md bg-white">
+        <div class="flex items-start justify-between p-4 border-b">
+            <h3 id="maintenance-modal-title" class="text-xl font-semibold">Adicionar Manutenção</h3>
+            <button id="close-maintenance-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center">
+                <span data-feather="x"></span>
+            </button>
+        </div>
+        <form id="maintenance-form" class="p-6">
+            <input type="hidden" id="maintenance-vehicle-id">
+            <input type="hidden" id="maintenance-fornecedor-id">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-6">
+                <div>
+                    <label for="maintenance-date" class="block font-medium">Data</label>
+                    <input type="date" id="maintenance-date" required class="form-input mt-1 block w-full rounded-md border-gray-300">
+                </div>
+                <div>
+                    <label for="maintenance-cost" class="block font-medium">Custo (R$)</label>
+                    <input type="number" step="0.01" id="maintenance-cost" required placeholder="150.00" class="form-input mt-1 block w-full rounded-md border-gray-300">
+                </div>
+                <div>
+                    <label for="maintenance-type" class="block font-medium">Tipo</label>
+                    <select id="maintenance-type" required class="form-input mt-1 block w-full rounded-md border-gray-300">
+                        <option>Preventiva</option>
+                        <option>Corretiva</option>
+                        <option>Pneu</option>
+                        <option>Outra</option>
+                    </select>
+                </div>
+                <div class="md:col-span-3">
+                    <label for="maintenance-description" class="block font-medium">Descrição</label>
+                    <textarea id="maintenance-description" rows="2" class="form-input mt-1 block w-full rounded-md border-gray-300" placeholder="Ex: Troca de óleo e filtros..."></textarea>
+                </div>
+            </div>
+            <div class="border-t pt-4">
+                 <h4 class="text-lg font-medium text-gray-800 mb-2">Fornecedor</h4>
+                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div class="md:col-span-1">
+                        <label for="maintenance-cnpj" class="block font-medium">CNPJ</label>
+                        <div class="flex">
+                            <input type="text" id="maintenance-cnpj" class="form-input mt-1 block w-full rounded-l-md" placeholder="Digite o CNPJ">
+                            <button type="button" id="lookup-cnpj-btn" class="bg-indigo-600 text-white p-2 mt-1 rounded-r-md hover:bg-indigo-700">
+                                <span data-feather="search" class="w-4 h-4"></span>
+                            </button>
+                        </div>
+                         <div id="maintenance-cnpj-loader" class="hidden mt-1 text-xs text-blue-600">A procurar...</div>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="maintenance-razao-social" class="block font-medium">Razão Social</label>
+                        <input type="text" id="maintenance-razao-social" required class="form-input mt-1 block w-full bg-gray-200" readonly>
+                    </div>
+                 </div>
+                 <div class="mt-2 text-right">
+                     <button type="button" id="maintenance-despesa-interna-btn" class="text-sm text-indigo-600 hover:underline">É uma despesa interna?</button>
+                 </div>
+            </div>
+            <div class="flex justify-end items-center pt-6 border-t mt-6 gap-4">
+                <button type="button" id="cancel-maintenance-form-btn" class="action-btn bg-gray-500 hover:bg-gray-600">Cancelar</button>
+                <button type="submit" id="save-maintenance-btn" class="action-btn bg-green-600 hover:bg-green-700">Salvar Manutenção</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal para Adicionar Custo de Frota (Rateio) -->
+<div id="fleet-cost-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
+    <div class="relative mx-auto border w-full max-w-3xl shadow-lg rounded-md bg-white">
+        <div class="flex items-start justify-between p-4 border-b">
+            <h3 class="text-xl font-semibold">Lançar Custo Geral de Frota</h3>
+            <button id="close-fleet-cost-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center">
+                <span data-feather="x"></span>
+            </button>
+        </div>
+        <form id="fleet-cost-form" class="p-6">
+            <input type="hidden" id="fleet-cost-fornecedor-id">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6">
+                <div class="md:col-span-2">
+                    <label for="fleet-cost-description" class="block font-medium">Descrição do Custo</label>
+                    <input type="text" id="fleet-cost-description" required class="form-input mt-1 block w-full" placeholder="Ex: Seguro Anual da Frota">
+                </div>
+                <div>
+                    <label for="fleet-cost-date" class="block font-medium">Data</label>
+                    <input type="date" id="fleet-cost-date" required class="form-input mt-1 block w-full">
+                </div>
+                <div>
+                    <label for="fleet-cost-value" class="block font-medium">Custo Total (R$)</label>
+                    <input type="number" step="0.01" id="fleet-cost-value" required placeholder="5000.00" class="form-input mt-1 block w-full">
+                </div>
+                <div class="md:col-span-2">
+                    <label for="fleet-cost-filiais" class="block font-medium">Ratear entre as Filiais (selecione uma ou mais)</label>
+                    <select id="fleet-cost-filiais" multiple required class="form-input multi-select mt-1 block w-full"></select>
+                </div>
+            </div>
+            <div class="border-t pt-4">
+                 <h4 class="text-lg font-medium text-gray-800 mb-2">Fornecedor</h4>
+                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div class="md:col-span-1">
+                        <label for="fleet-cost-cnpj" class="block font-medium">CNPJ</label>
+                        <div class="flex">
+                            <input type="text" id="fleet-cost-cnpj" class="form-input mt-1 block w-full rounded-l-md" placeholder="Digite o CNPJ">
+                            <button type="button" id="fleet-cost-lookup-cnpj-btn" class="bg-indigo-600 text-white p-2 mt-1 rounded-r-md hover:bg-indigo-700">
+                                <span data-feather="search" class="w-4 h-4"></span>
+                            </button>
+                        </div>
+                         <div id="fleet-cost-cnpj-loader" class="hidden mt-1 text-xs text-blue-600">A procurar...</div>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="fleet-cost-razao-social" class="block font-medium">Razão Social</label>
+                        <input type="text" id="fleet-cost-razao-social" required class="form-input mt-1 block w-full bg-gray-200" readonly>
+                    </div>
+                 </div>
+                 <div class="mt-2 text-right">
+                     <button type="button" id="fleet-cost-despesa-interna-btn" class="text-sm text-indigo-600 hover:underline">É uma despesa interna?</button>
+                 </div>
+            </div>
+            <div class="flex justify-end items-center pt-6 border-t mt-6 gap-4">
+                <button type="button" id="cancel-fleet-cost-form-btn" class="action-btn bg-gray-500 hover:bg-gray-600">Cancelar</button>
+                <button type="submit" id="save-fleet-cost-btn" class="action-btn bg-teal-600 hover:bg-teal-700">Salvar Custo</button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <!-- Modal para Adicionar/Editar Veículo -->
 <div id="vehicle-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
@@ -199,7 +331,6 @@
         <form id="vehicle-form" class="mt-6 space-y-4">
             <input type="hidden" id="vehicle-id">
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-5 text-sm">
-                
                 <div class="lg:col-span-3 grid grid-cols-3 gap-4 items-end">
                     <div class="col-span-2">
                         <label for="vehicle-placa" class="block font-medium text-gray-700">Placa</label>
@@ -211,7 +342,6 @@
                         <label for="has-placa-checkbox" class="ml-2 block text-sm text-gray-900">Possui placa</label>
                     </div>
                 </div>
-
                 <div>
                     <label for="vehicle-marca" class="block font-medium text-gray-700">Marca</label>
                     <input type="text" id="vehicle-marca" list="marcas-list" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
@@ -277,11 +407,10 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script src="logistica.js?v=1.5.0" defer></script>
+<script src="logistica.js?v=1.6.0" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
-        // Script da Sidebar (consistente com as outras páginas)
         const sidebar = document.getElementById('sidebar');
         const desktopToggleButton = document.getElementById('sidebar-toggle');
         const mobileMenuButton = document.getElementById('mobile-menu-button');
