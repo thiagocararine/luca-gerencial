@@ -3,7 +3,7 @@
 document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
 // --- Constantes e Variáveis de Estado Globais ---
-const apiUrlBase = 'http://10.113.0.17:3000/api';
+const apiUrlBase = 'http://localhost:3000/api';
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 let allVehicles = []; // Guarda todos os veículos para filtragem no frontend
 let currentVehicleId = null; // Guarda o ID do veículo a ser gerido
@@ -30,8 +30,7 @@ async function initLogisticaPage() {
     setupEventListeners();
     await Promise.all([
         populateFilialSelects(),
-        populateMarcaSuggestions(),
-        populateModeloSuggestions()
+        populateMarcasFIPE()
     ]);
     await loadVehicles();
     await loadFleetCosts();
@@ -56,6 +55,7 @@ function setupEventListeners() {
     vehicleModal.querySelector('#cancel-vehicle-form-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
     vehicleModal.querySelector('#vehicle-form').addEventListener('submit', handleVehicleFormSubmit);
     vehicleModal.querySelector('#has-placa-checkbox').addEventListener('change', handleHasPlacaChange);
+    vehicleModal.querySelector('#vehicle-marca').addEventListener('change', handleMarcaChange);
     
     // Listeners de validação em tempo real
     const placaInput = vehicleModal.querySelector('#vehicle-placa');
@@ -632,10 +632,12 @@ async function lookupCnpj(context) {
 /**
  * Abre o modal para adicionar ou editar um veículo.
  */
-function openVehicleModal(vehicle = null) {
+async function openVehicleModal(vehicle = null) {
     const modal = document.getElementById('vehicle-modal');
     const form = document.getElementById('vehicle-form');
     const title = document.getElementById('vehicle-modal-title');
+    const marcaSelect = document.getElementById('vehicle-marca');
+    const modeloSelect = document.getElementById('vehicle-modelo');
     
     form.reset();
     document.getElementById('placa-error').style.display = 'none';
@@ -645,8 +647,6 @@ function openVehicleModal(vehicle = null) {
         title.textContent = 'Editar Veículo';
         document.getElementById('vehicle-id').value = vehicle.id;
         document.getElementById('vehicle-placa').value = vehicle.placa || '';
-        document.getElementById('vehicle-marca').value = vehicle.marca || '';
-        document.getElementById('vehicle-modelo').value = vehicle.modelo || '';
         document.getElementById('vehicle-ano-fabricacao').value = vehicle.ano_fabricacao || '';
         document.getElementById('vehicle-ano-modelo').value = vehicle.ano_modelo || '';
         document.getElementById('vehicle-renavam').value = vehicle.renavam || '';
@@ -656,10 +656,19 @@ function openVehicleModal(vehicle = null) {
 
         const hasPlaca = vehicle.placa && vehicle.placa.toUpperCase() !== 'SEM PLACA';
         document.getElementById('has-placa-checkbox').checked = hasPlaca;
+        
+        await populateMarcasFIPE();
+        const marcaOption = Array.from(marcaSelect.options).find(opt => opt.textContent === vehicle.marca);
+        if (marcaOption) {
+            marcaSelect.value = marcaOption.value;
+            await populateModelosFIPE(marcaOption.value);
+            modeloSelect.value = vehicle.modelo;
+        }
 
     } else {
         title.textContent = 'Adicionar Veículo';
-        document.getElementById('vehicle-id').value = '';
+        modeloSelect.innerHTML = '<option value="">-- Selecione uma Marca Primeiro --</option>';
+        modeloSelect.disabled = true;
         document.getElementById('has-placa-checkbox').checked = true;
     }
     
@@ -684,12 +693,15 @@ async function handleVehicleFormSubmit(event) {
     saveBtn.textContent = 'A salvar...';
 
     const id = document.getElementById('vehicle-id').value;
+    const marcaSelect = document.getElementById('vehicle-marca');
+    const modeloSelect = document.getElementById('vehicle-modelo');
+
     const vehicleData = {
         placa: document.getElementById('has-placa-checkbox').checked 
                ? document.getElementById('vehicle-placa').value 
                : 'SEM PLACA',
-        marca: document.getElementById('vehicle-marca').value,
-        modelo: document.getElementById('vehicle-modelo').value,
+        marca: marcaSelect.options[marcaSelect.selectedIndex].text,
+        modelo: modeloSelect.options[modeloSelect.selectedIndex].text,
         ano_fabricacao: document.getElementById('vehicle-ano-fabricacao').value,
         ano_modelo: document.getElementById('vehicle-ano-modelo').value,
         renavam: document.getElementById('vehicle-renavam').value,
@@ -716,7 +728,6 @@ async function handleVehicleFormSubmit(event) {
         document.getElementById('vehicle-modal').classList.add('hidden');
         alert(`Veículo ${id ? 'atualizado' : 'adicionado'} com sucesso!`);
         await loadVehicles();
-        await Promise.all([populateMarcaSuggestions(), populateModeloSuggestions()]);
 
     } catch (error) {
         alert(`Erro: ${error.message}`);
@@ -773,17 +784,74 @@ async function populateFilialSelects() {
 }
 
 /**
- * Busca a lista de marcas e preenche o datalist.
+ * Busca as marcas na nossa API (que busca na BrasilAPI) e preenche o select.
  */
-async function populateMarcaSuggestions() {
-    await populateDatalistWithOptions(`${apiUrlBase}/veiculos/marcas`, 'marcas-list');
+async function populateMarcasFIPE() {
+    const selectElement = document.getElementById('vehicle-marca');
+    selectElement.innerHTML = '<option value="">A carregar...</option>';
+    try {
+        const response = await fetch(`${apiUrlBase}/fipe/marcas`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error('Falha ao carregar marcas FIPE.');
+        
+        const marcas = await response.json();
+        selectElement.innerHTML = '<option value="">-- Selecione uma Marca --</option>';
+        marcas.forEach(marca => {
+            const option = document.createElement('option');
+            option.value = marca.codigo;
+            option.textContent = marca.nome;
+            selectElement.appendChild(option);
+        });
+    } catch (error) {
+        selectElement.innerHTML = '<option value="">Erro ao carregar marcas</option>';
+        console.error(error);
+    }
 }
 
 /**
- * Busca a lista de modelos e preenche o datalist.
+ * Lida com a mudança no menu de seleção de marca.
  */
-async function populateModeloSuggestions() {
-    await populateDatalistWithOptions(`${apiUrlBase}/veiculos/modelos`, 'modelos-list');
+function handleMarcaChange() {
+    const marcaSelect = document.getElementById('vehicle-marca');
+    const modeloSelect = document.getElementById('vehicle-modelo');
+    const marcaCodigo = marcaSelect.value;
+
+    modeloSelect.innerHTML = '<option value="">A carregar modelos...</option>';
+    modeloSelect.disabled = true;
+
+    if (marcaCodigo) {
+        populateModelosFIPE(marcaCodigo);
+    } else {
+        modeloSelect.innerHTML = '<option value="">-- Selecione uma Marca Primeiro --</option>';
+    }
+}
+
+/**
+ * Busca os modelos de uma marca específica e preenche o select de modelos.
+ */
+async function populateModelosFIPE(marcaCodigo) {
+    const modeloSelect = document.getElementById('vehicle-modelo');
+    try {
+        const response = await fetch(`${apiUrlBase}/fipe/modelos/${marcaCodigo}`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error('Falha ao carregar modelos FIPE.');
+        
+        const data = await response.json();
+        modeloSelect.innerHTML = '<option value="">-- Selecione um Modelo --</option>';
+        data.modelos.forEach(modelo => {
+            const option = document.createElement('option');
+            option.value = modelo.nome;
+            option.textContent = modelo.nome;
+            modeloSelect.appendChild(option);
+        });
+        modeloSelect.disabled = false;
+
+    } catch (error) {
+        modeloSelect.innerHTML = '<option value="">Erro ao carregar modelos</option>';
+        console.error(error);
+    }
 }
 
 /**
@@ -867,24 +935,6 @@ async function populateSelectWithOptions(url, selectId, valueKey, textKey, place
         });
     } catch (error) {
         selectElement.innerHTML = `<option value="">Erro ao carregar</option>`;
-        console.error(error);
-    }
-}
-
-async function populateDatalistWithOptions(url, datalistId) {
-    const datalistElement = document.getElementById(datalistId);
-    try {
-        const response = await fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!response.ok) throw new Error(`Falha ao carregar dados para ${datalistId}.`);
-        
-        const items = await response.json();
-        datalistElement.innerHTML = '';
-        items.forEach(item => {
-            const option = document.createElement('option');
-            option.value = item;
-            datalistElement.appendChild(option);
-        });
-    } catch (error) {
         console.error(error);
     }
 }

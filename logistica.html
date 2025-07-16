@@ -345,13 +345,11 @@
                 </div>
                 <div>
                     <label for="vehicle-marca" class="block font-medium text-gray-700">Marca</label>
-                    <input type="text" id="vehicle-marca" list="marcas-list" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                    <datalist id="marcas-list"></datalist>
+                    <select id="vehicle-marca" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></select>
                 </div>
                 <div>
                     <label for="vehicle-modelo" class="block font-medium text-gray-700">Modelo</label>
-                    <input type="text" id="vehicle-modelo" list="modelos-list" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                    <datalist id="modelos-list"></datalist>
+                    <select id="vehicle-modelo" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" disabled></select>
                 </div>
                 <div>
                     <label for="vehicle-ano-fabricacao" class="block font-medium text-gray-700">Ano Fab.</label>
@@ -408,7 +406,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script src="logistica.js?v=1.6.0" defer></script>
+<script src="logistica.js?v=1.7.0" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
