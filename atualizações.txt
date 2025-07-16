@@ -1,0 +1,11 @@
+- Incluir a API da FIPE, para buscar as informaçoes mais nescessárias para o cadastro do veículos.
+
+- Incluir uma validação para cadastro de modelos e marcas de veículos.
+
+- Tipo de manutenção será "Mão de Obra", "Peça". (Na descrição incluir os dados do serviço, ou a peça)
+
+- Incluir dentro da tabela Veiculos (Log de Alteração do cadastro do veículo no banco de dados, e permissão de visualização apenas para o adm do sistema.)
+
+- Permitir exportar o histórico do veiculo dentro de um periodo de tempo.
+
+- Retirar o botão "Apagar" do logistica.html

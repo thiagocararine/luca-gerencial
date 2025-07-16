@@ -10,7 +10,7 @@ const bcrypt = require('bcryptjs');
 const fs = require('fs').promises;
 const path = require('path');
 const multer = require('multer');
-const fetch = require('node-fetch'); // **NOVO** para chamadas de API externas
+const fetch = require('node-fetch'); // Necessário para chamadas de API externas
 require('dotenv').config();
 
 // 2. Configurações da Aplicação
@@ -164,7 +164,7 @@ apiRouter.post('/signup', async (req, res) => {
         const datacad_user = new Date().toISOString().slice(0, 10);
         
         const insertSql = `INSERT INTO cad_user (ID, datacad_user, nome_user, senha_hash_user, depart_user, unidade_user, email_user, cargo_user, cpf_user, status_user, id_perfil) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-        const defaultProfileId = 2; // Supondo que o perfil 'Comercial' tem o id 2
+        const defaultProfileId = 2;
         const params = [newId, datacad_user, nome_user, senha_hash_user, depart_user, unidade_user, email_user, cargo_user, cpf_user, 'Pendente', defaultProfileId];
         
         await connection.execute(insertSql, params);
@@ -652,55 +652,6 @@ apiRouter.get('/config/logo', authenticateToken, async (req, res) => {
 
 // --- ROTAS PARA O MÓDULO DE LOGÍSTICA ---
 
-// **NOVO** Rota para buscar marcas de veículos da FIPE
-apiRouter.get('/fipe/marcas', authenticateToken, async (req, res) => {
-    try {
-        const response = await fetch('https://brasilapi.com.br/api/fipe/marcas/v1/carros');
-        if (!response.ok) {
-            throw new Error('Falha ao buscar dados da BrasilAPI');
-        }
-        const marcas = await response.json();
-        res.json(marcas);
-    } catch (error) {
-        console.error("Erro ao buscar marcas FIPE:", error);
-        res.status(500).json({ error: 'Erro ao buscar marcas de veículos.' });
-    }
-});
-
-// **NOVO** Rota para buscar modelos de uma marca específica
-apiRouter.get('/fipe/modelos/:marcaCodigo', authenticateToken, async (req, res) => {
-    const { marcaCodigo } = req.params;
-    try {
-        const response = await fetch(`https://brasilapi.com.br/api/fipe/marcas/v1/carros`);
-        if (!response.ok) throw new Error('Falha ao buscar dados da BrasilAPI');
-        
-        const marcas = await response.json();
-        const marcaEncontrada = marcas.find(m => m.codigo == marcaCodigo);
-
-        if (marcaEncontrada) {
-            // A API da BrasilAPI não tem um endpoint direto para modelos, então simulamos
-            // buscando na tabela FIPE completa. Para este exemplo, vamos retornar uma lista fixa.
-            // Em um cenário real, você poderia ter uma tabela de modelos ou usar outra API.
-            const responseModelos = await fetch(`https://brasilapi.com.br/api/fipe/tabelas/v1`);
-            const tabelaFipe = await responseModelos.json();
-            const codigoTabela = tabelaFipe[0].codigo; // Pega a tabela mais recente
-
-            const responsePrecos = await fetch(`https://brasilapi.com.br/api/fipe/preco/v1/${codigoTabela}?marca=${marcaEncontrada.nome}`);
-            const precos = await responsePrecos.json();
-            
-            // Extrai modelos únicos
-            const modelos = [...new Set(precos.map(item => item.modelo))].map(modelo => ({ nome: modelo }));
-
-            res.json({ modelos: modelos });
-        } else {
-            res.status(404).json({ error: 'Marca não encontrada' });
-        }
-    } catch (error) {
-        console.error(`Erro ao buscar modelos para a marca ${marcaCodigo}:`, error);
-        res.status(500).json({ error: 'Erro ao buscar modelos de veículos.' });
-    }
-});
-
 // Rota de Exemplo para Upload
 apiRouter.post('/upload', authenticateToken, upload.single('documento_veiculo'), (req, res) => {
     if (!req.file) {
@@ -729,33 +680,40 @@ apiRouter.get('/veiculos', authenticateToken, async (req, res) => {
     }
 });
 
-// GET: Buscar marcas únicas de veículos
-apiRouter.get('/veiculos/marcas', authenticateToken, async (req, res) => {
-    let connection;
+// GET: Buscar marcas únicas de veículos da FIPE
+apiRouter.get('/fipe/marcas', authenticateToken, async (req, res) => {
     try {
-        connection = await mysql.createConnection(dbConfig);
-        const [marcas] = await connection.execute('SELECT DISTINCT marca FROM veiculos WHERE marca IS NOT NULL ORDER BY marca');
-        await connection.end();
-        res.json(marcas.map(m => m.marca));
+        const response = await fetch('https://brasilapi.com.br/api/fipe/marcas/v1/carros');
+        if (!response.ok) {
+            throw new Error('Falha ao buscar dados da BrasilAPI');
+        }
+        const marcas = await response.json();
+        res.json(marcas);
     } catch (error) {
-        console.error("Erro ao buscar marcas de veículos:", error);
-        if (connection) await connection.end();
-        res.status(500).json({ error: 'Erro ao buscar marcas.' });
+        console.error("Erro ao buscar marcas FIPE:", error);
+        res.status(500).json({ error: 'Erro ao buscar marcas de veículos.' });
     }
 });
 
-// GET: Buscar modelos únicos de veículos
-apiRouter.get('/veiculos/modelos', authenticateToken, async (req, res) => {
-    let connection;
+// GET: Buscar modelos de uma marca específica da FIPE
+apiRouter.get('/fipe/modelos/:marcaCodigo', authenticateToken, async (req, res) => {
+    const { marcaCodigo } = req.params;
     try {
-        connection = await mysql.createConnection(dbConfig);
-        const [modelos] = await connection.execute('SELECT DISTINCT modelo FROM veiculos WHERE modelo IS NOT NULL ORDER BY modelo');
-        await connection.end();
-        res.json(modelos.map(m => m.modelo));
+        const responseTabelas = await fetch('https://brasilapi.com.br/api/fipe/tabelas/v1');
+        if (!responseTabelas.ok) throw new Error('Falha ao buscar tabelas FIPE.');
+        const tabelas = await responseTabelas.json();
+        const codigoTabela = tabelas[0].codigo;
+
+        const responsePrecos = await fetch(`https://brasilapi.com.br/api/fipe/preco/v1/${codigoTabela}?marcaCodigo=${marcaCodigo}`);
+        if (!responsePrecos.ok) throw new Error('Falha ao buscar preços para a marca.');
+        
+        const precos = await responsePrecos.json();
+        const modelos = [...new Set(precos.map(item => item.modelo))].map(modelo => ({ nome: modelo }));
+
+        res.json({ modelos: modelos });
     } catch (error) {
-        console.error("Erro ao buscar modelos de veículos:", error);
-        if (connection) await connection.end();
-        res.status(500).json({ error: 'Erro ao buscar modelos.' });
+        console.error(`Erro ao buscar modelos para a marca ${marcaCodigo}:`, error);
+        res.status(500).json({ error: 'Erro ao buscar modelos de veículos.' });
     }
 });
 
