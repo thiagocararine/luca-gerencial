@@ -830,6 +830,7 @@ function handleMarcaChange() {
  * Busca os modelos de uma marca específica e preenche o datalist de modelos.
  */
 async function populateModelosFIPE(marcaCodigo) {
+    console.log('[DEBUG] marcaCodigo recebido:', marcaCodigo);
     const datalistElement = document.getElementById('modelos-list');
     datalistElement.innerHTML = '';
     try {
