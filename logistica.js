@@ -41,13 +41,16 @@ async function initLogisticaPage() {
  * Configura todos os event listeners da página.
  */
 function setupEventListeners() {
+    // Listeners Gerais
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('add-vehicle-button')?.addEventListener('click', () => openVehicleModal());
     document.getElementById('add-fleet-cost-button')?.addEventListener('click', openFleetCostModal);
 
+    // Listeners de Filtros
     document.getElementById('filter-button').addEventListener('click', applyFilters);
     document.getElementById('clear-filter-button').addEventListener('click', clearFilters);
 
+    // Listeners do Modal de Veículo (Adicionar/Editar)
     const vehicleModal = document.getElementById('vehicle-modal');
     vehicleModal.querySelector('#close-vehicle-modal-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
     vehicleModal.querySelector('#cancel-vehicle-form-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
@@ -55,6 +58,7 @@ function setupEventListeners() {
     vehicleModal.querySelector('#has-placa-checkbox').addEventListener('change', handleHasPlacaChange);
     vehicleModal.querySelector('#vehicle-marca').addEventListener('change', handleMarcaChange);
     
+    // Listeners de validação em tempo real
     const placaInput = vehicleModal.querySelector('#vehicle-placa');
     placaInput.addEventListener('input', (e) => {
         e.target.value = e.target.value.toUpperCase();
@@ -66,12 +70,14 @@ function setupEventListeners() {
         validateRenavam(e.target.value);
     });
 
+    // Listeners do Modal de Exclusão
     const deleteModal = document.getElementById('confirm-delete-modal');
     deleteModal.querySelector('#cancel-delete-btn').addEventListener('click', () => deleteModal.classList.add('hidden'));
     deleteModal.querySelector('#confirm-delete-btn').addEventListener('click', () => {
         if (vehicleToDeleteId) deleteVehicle(vehicleToDeleteId);
     });
 
+    // Listeners do Modal de Gestão (Detalhes/Abas)
     const detailsModal = document.getElementById('details-modal');
     detailsModal.querySelector('#close-details-modal-btn').addEventListener('click', () => detailsModal.classList.add('hidden'));
     detailsModal.querySelector('#details-tabs').addEventListener('click', (e) => {
@@ -83,6 +89,7 @@ function setupEventListeners() {
         openMaintenanceModal(currentVehicleId);
     });
 
+    // Listeners do Modal de Manutenção
     const maintenanceModal = document.getElementById('maintenance-modal');
     maintenanceModal.querySelector('#close-maintenance-modal-btn').addEventListener('click', () => maintenanceModal.classList.add('hidden'));
     maintenanceModal.querySelector('#cancel-maintenance-form-btn').addEventListener('click', () => maintenanceModal.classList.add('hidden'));
@@ -90,6 +97,7 @@ function setupEventListeners() {
     maintenanceModal.querySelector('#maintenance-despesa-interna-btn').addEventListener('click', () => useInternalExpense('maintenance'));
     maintenanceModal.querySelector('#maintenance-form').addEventListener('submit', handleMaintenanceFormSubmit);
 
+    // Listeners do Modal de Custo de Frota
     const fleetCostModal = document.getElementById('fleet-cost-modal');
     fleetCostModal.querySelector('#close-fleet-cost-modal-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
     fleetCostModal.querySelector('#cancel-fleet-cost-form-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
@@ -97,6 +105,7 @@ function setupEventListeners() {
     fleetCostModal.querySelector('#fleet-cost-despesa-interna-btn').addEventListener('click', () => useInternalExpense('fleet-cost'));
     fleetCostModal.querySelector('#fleet-cost-form').addEventListener('submit', handleFleetCostFormSubmit);
 
+    // Delegação de evento e responsividade
     document.getElementById('content-area').addEventListener('click', handleContentClick);
     window.addEventListener('resize', () => renderContent(allVehicles));
 }
@@ -651,12 +660,12 @@ async function openVehicleModal(vehicle = null) {
         const hasPlaca = vehicle.placa && vehicle.placa.toUpperCase() !== 'SEM PLACA';
         document.getElementById('has-placa-checkbox').checked = hasPlaca;
         
-        handleMarcaChange(); // Ativa e preenche os modelos se a marca for válida
+        handleMarcaChange();
 
     } else {
         title.textContent = 'Adicionar Veículo';
         document.getElementById('vehicle-id').value = '';
-        modeloInput.innerHTML = '';
+        modeloInput.value = '';
         modeloInput.disabled = true;
         document.getElementById('has-placa-checkbox').checked = true;
     }
@@ -780,12 +789,12 @@ async function populateMarcasFIPE() {
         });
         if (!response.ok) throw new Error('Falha ao carregar marcas FIPE.');
         
-        fipeMarcas = await response.json(); // Guarda a lista completa
+        fipeMarcas = await response.json();
         datalistElement.innerHTML = '';
         fipeMarcas.forEach(marca => {
             const option = document.createElement('option');
             option.value = marca.nome;
-            option.dataset.codigo = marca.codigo; // Guarda o código aqui
+            option.dataset.codigo = marca.codigo;
             datalistElement.appendChild(option);
         });
     } catch (error) {
