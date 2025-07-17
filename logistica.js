@@ -3,7 +3,7 @@
 document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
 // --- Constantes e Variáveis de Estado Globais ---
-const apiUrlBase = 'http://10.113.0.17:3000/api';
+const apiUrlBase = 'http://localhost:3000/api';
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 let allVehicles = []; // Guarda todos os veículos para filtragem no frontend
 let fipeMarcas = []; // Guarda as marcas da FIPE para encontrar o código
@@ -644,7 +644,6 @@ async function openVehicleModal(vehicle = null) {
     document.getElementById('placa-error').style.display = 'none';
     document.getElementById('renavam-error').style.display = 'none';
     
-    // Limpa e desativa o campo de modelo inicialmente
     modeloInput.value = '';
     modeloInput.disabled = true;
     document.getElementById('modelos-list').innerHTML = '';
@@ -665,7 +664,7 @@ async function openVehicleModal(vehicle = null) {
         const hasPlaca = vehicle.placa && vehicle.placa.toUpperCase() !== 'SEM PLACA';
         document.getElementById('has-placa-checkbox').checked = hasPlaca;
         
-        handleMarcaChange(); // Ativa e preenche os modelos se a marca for válida
+        handleMarcaChange();
 
     } else {
         title.textContent = 'Adicionar Veículo';
@@ -784,7 +783,7 @@ async function populateFilialSelects() {
 /**
  * Busca as marcas na nossa API (que busca na BrasilAPI) e preenche o datalist.
  */
-/** async function populateMarcasFIPE() {
+async function populateMarcasFIPE() {
     const datalistElement = document.getElementById('marcas-list');
     try {
         const response = await fetch(`${apiUrlBase}/fipe/marcas`, {
@@ -803,47 +802,7 @@ async function populateFilialSelects() {
     } catch (error) {
         console.error(error);
     }
-} 
-*/
-async function populateMarcasFIPE() {
-    const select = document.getElementById('vehicle-marca');
-    select.innerHTML = '<option value="">Selecione a marca...</option>';
-
-    try {
-        const response = await fetch(`${apiUrlBase}/fipe/marcas`, {
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
-
-        const marcas = await response.json();
-
-        marcas.forEach(marca => {
-            const option = document.createElement('option');
-            option.value = marca.codigo; // <-- código correto como value!
-            option.textContent = marca.nome;
-            select.appendChild(option);
-        });
-
-        new TomSelect('#vehicle-marca', {
-            create: false,
-            sortField: {
-                field: "text",
-                direction: "asc"
-            },
-            placeholder: "Digite ou selecione a marca",
-        });
-
-    } catch (error) {
-        console.error('Erro ao carregar marcas FIPE:', error);
-    }
 }
-
-document.getElementById('vehicle-marca').addEventListener('change', (event) => {
-    const marcaCodigo = event.target.value;
-    console.log('[DEBUG] marcaCodigo recebido:', marcaCodigo);
-    if (marcaCodigo) {
-        populateModelosFIPE(marcaCodigo);
-    }
-});
 
 /**
  * Lida com a mudança no campo de marca.
@@ -870,7 +829,6 @@ function handleMarcaChange() {
  * Busca os modelos de uma marca específica e preenche o datalist de modelos.
  */
 async function populateModelosFIPE(marcaCodigo) {
-    console.log('[DEBUG] marcaCodigo recebido:', marcaCodigo);
     const datalistElement = document.getElementById('modelos-list');
     datalistElement.innerHTML = '';
     try {

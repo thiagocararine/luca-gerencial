@@ -698,6 +698,9 @@ apiRouter.get('/fipe/marcas', authenticateToken, async (req, res) => {
 // GET: Buscar modelos de uma marca específica da FIPE
 apiRouter.get('/fipe/modelos/:marcaCodigo', authenticateToken, async (req, res) => {
     const { marcaCodigo } = req.params;
+    if (!marcaCodigo || marcaCodigo === 'undefined') {
+        return res.status(400).json({ error: 'Código da marca é inválido.' });
+    }
     try {
         const responseTabelas = await fetch('https://brasilapi.com.br/api/fipe/tabelas/v1');
         if (!responseTabelas.ok) throw new Error('Falha ao buscar tabelas FIPE.');
