@@ -6,6 +6,8 @@
     <title>Logística - Luca Gerencial</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tom-select/dist/css/tom-select.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js"></script>
     <link rel="icon" href="assets/favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -342,11 +344,18 @@
                         <label for="has-placa-checkbox" class="ml-2 block text-sm text-gray-900">Possui placa</label>
                     </div>
                 </div>
-                <div>
+                <!-- <div>
                     <label for="vehicle-marca" class="block font-medium text-gray-700">Marca</label>
                     <input type="text" id="vehicle-marca" list="marcas-list" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                     <datalist id="marcas-list"></datalist>
-                </div>
+                </div> -->
+                <div>
+                    <label for="vehicle-marca" class="block font-medium text-gray-700">Marca</label>
+                    <select id="vehicle-marca" required
+                        class="form-select mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">Carregando marcas...</option>
+                    </select>
+                </div>    
                 <div>
                     <label for="vehicle-modelo" class="block font-medium text-gray-700">Modelo</label>
                     <input type="text" id="vehicle-modelo" list="modelos-list" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" disabled>

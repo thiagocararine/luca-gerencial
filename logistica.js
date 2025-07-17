@@ -784,7 +784,7 @@ async function populateFilialSelects() {
 /**
  * Busca as marcas na nossa API (que busca na BrasilAPI) e preenche o datalist.
  */
-async function populateMarcasFIPE() {
+/** async function populateMarcasFIPE() {
     const datalistElement = document.getElementById('marcas-list');
     try {
         const response = await fetch(`${apiUrlBase}/fipe/marcas`, {
@@ -803,7 +803,47 @@ async function populateMarcasFIPE() {
     } catch (error) {
         console.error(error);
     }
+} 
+*/
+async function populateMarcasFIPE() {
+    const select = document.getElementById('vehicle-marca');
+    select.innerHTML = '<option value="">Selecione a marca...</option>';
+
+    try {
+        const response = await fetch(`${apiUrlBase}/fipe/marcas`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+
+        const marcas = await response.json();
+
+        marcas.forEach(marca => {
+            const option = document.createElement('option');
+            option.value = marca.codigo; // <-- código correto como value!
+            option.textContent = marca.nome;
+            select.appendChild(option);
+        });
+
+        new TomSelect('#vehicle-marca', {
+            create: false,
+            sortField: {
+                field: "text",
+                direction: "asc"
+            },
+            placeholder: "Digite ou selecione a marca",
+        });
+
+    } catch (error) {
+        console.error('Erro ao carregar marcas FIPE:', error);
+    }
 }
+
+document.getElementById('vehicle-marca').addEventListener('change', (event) => {
+    const marcaCodigo = event.target.value;
+    console.log('[DEBUG] marcaCodigo recebido:', marcaCodigo);
+    if (marcaCodigo) {
+        populateModelosFIPE(marcaCodigo);
+    }
+});
 
 /**
  * Lida com a mudança no campo de marca.
