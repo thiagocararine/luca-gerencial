@@ -3,7 +3,7 @@
 document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
 // --- Constantes e Variáveis de Estado Globais ---
-const apiUrlBase = 'http://localhost:3000/api';
+const apiUrlBase = 'http://10.113.0.17:3000/api';
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 let allVehicles = []; // Guarda todos os veículos para filtragem no frontend
 let fipeMarcas = []; // Guarda as marcas da FIPE para encontrar o código
