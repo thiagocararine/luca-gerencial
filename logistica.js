@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', initLogisticaPage);
 const apiUrlBase = 'http://10.113.0.17:3000/api';
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 let allVehicles = []; // Guarda todos os veículos para filtragem no frontend
+let fipeMarcas = []; // Guarda as marcas da FIPE para encontrar o código
 let currentVehicleId = null; // Guarda o ID do veículo a ser gerido
 let vehicleToDeleteId = null;
 
@@ -40,16 +41,13 @@ async function initLogisticaPage() {
  * Configura todos os event listeners da página.
  */
 function setupEventListeners() {
-    // Listeners Gerais
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('add-vehicle-button')?.addEventListener('click', () => openVehicleModal());
     document.getElementById('add-fleet-cost-button')?.addEventListener('click', openFleetCostModal);
 
-    // Listeners de Filtros
     document.getElementById('filter-button').addEventListener('click', applyFilters);
     document.getElementById('clear-filter-button').addEventListener('click', clearFilters);
 
-    // Listeners do Modal de Veículo (Adicionar/Editar)
     const vehicleModal = document.getElementById('vehicle-modal');
     vehicleModal.querySelector('#close-vehicle-modal-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
     vehicleModal.querySelector('#cancel-vehicle-form-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
@@ -57,7 +55,6 @@ function setupEventListeners() {
     vehicleModal.querySelector('#has-placa-checkbox').addEventListener('change', handleHasPlacaChange);
     vehicleModal.querySelector('#vehicle-marca').addEventListener('change', handleMarcaChange);
     
-    // Listeners de validação em tempo real
     const placaInput = vehicleModal.querySelector('#vehicle-placa');
     placaInput.addEventListener('input', (e) => {
         e.target.value = e.target.value.toUpperCase();
@@ -69,14 +66,12 @@ function setupEventListeners() {
         validateRenavam(e.target.value);
     });
 
-    // Listeners do Modal de Exclusão
     const deleteModal = document.getElementById('confirm-delete-modal');
     deleteModal.querySelector('#cancel-delete-btn').addEventListener('click', () => deleteModal.classList.add('hidden'));
     deleteModal.querySelector('#confirm-delete-btn').addEventListener('click', () => {
         if (vehicleToDeleteId) deleteVehicle(vehicleToDeleteId);
     });
 
-    // Listeners do Modal de Gestão (Detalhes/Abas)
     const detailsModal = document.getElementById('details-modal');
     detailsModal.querySelector('#close-details-modal-btn').addEventListener('click', () => detailsModal.classList.add('hidden'));
     detailsModal.querySelector('#details-tabs').addEventListener('click', (e) => {
@@ -88,7 +83,6 @@ function setupEventListeners() {
         openMaintenanceModal(currentVehicleId);
     });
 
-    // Listeners do Modal de Manutenção
     const maintenanceModal = document.getElementById('maintenance-modal');
     maintenanceModal.querySelector('#close-maintenance-modal-btn').addEventListener('click', () => maintenanceModal.classList.add('hidden'));
     maintenanceModal.querySelector('#cancel-maintenance-form-btn').addEventListener('click', () => maintenanceModal.classList.add('hidden'));
@@ -96,7 +90,6 @@ function setupEventListeners() {
     maintenanceModal.querySelector('#maintenance-despesa-interna-btn').addEventListener('click', () => useInternalExpense('maintenance'));
     maintenanceModal.querySelector('#maintenance-form').addEventListener('submit', handleMaintenanceFormSubmit);
 
-    // Listeners do Modal de Custo de Frota
     const fleetCostModal = document.getElementById('fleet-cost-modal');
     fleetCostModal.querySelector('#close-fleet-cost-modal-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
     fleetCostModal.querySelector('#cancel-fleet-cost-form-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
@@ -104,7 +97,6 @@ function setupEventListeners() {
     fleetCostModal.querySelector('#fleet-cost-despesa-interna-btn').addEventListener('click', () => useInternalExpense('fleet-cost'));
     fleetCostModal.querySelector('#fleet-cost-form').addEventListener('submit', handleFleetCostFormSubmit);
 
-    // Delegação de evento e responsividade
     document.getElementById('content-area').addEventListener('click', handleContentClick);
     window.addEventListener('resize', () => renderContent(allVehicles));
 }
@@ -636,8 +628,8 @@ async function openVehicleModal(vehicle = null) {
     const modal = document.getElementById('vehicle-modal');
     const form = document.getElementById('vehicle-form');
     const title = document.getElementById('vehicle-modal-title');
-    const marcaSelect = document.getElementById('vehicle-marca');
-    const modeloSelect = document.getElementById('vehicle-modelo');
+    const marcaInput = document.getElementById('vehicle-marca');
+    const modeloInput = document.getElementById('vehicle-modelo');
     
     form.reset();
     document.getElementById('placa-error').style.display = 'none';
@@ -647,6 +639,8 @@ async function openVehicleModal(vehicle = null) {
         title.textContent = 'Editar Veículo';
         document.getElementById('vehicle-id').value = vehicle.id;
         document.getElementById('vehicle-placa').value = vehicle.placa || '';
+        marcaInput.value = vehicle.marca || '';
+        modeloInput.value = vehicle.modelo || '';
         document.getElementById('vehicle-ano-fabricacao').value = vehicle.ano_fabricacao || '';
         document.getElementById('vehicle-ano-modelo').value = vehicle.ano_modelo || '';
         document.getElementById('vehicle-renavam').value = vehicle.renavam || '';
@@ -657,18 +651,13 @@ async function openVehicleModal(vehicle = null) {
         const hasPlaca = vehicle.placa && vehicle.placa.toUpperCase() !== 'SEM PLACA';
         document.getElementById('has-placa-checkbox').checked = hasPlaca;
         
-        await populateMarcasFIPE();
-        const marcaOption = Array.from(marcaSelect.options).find(opt => opt.textContent === vehicle.marca);
-        if (marcaOption) {
-            marcaSelect.value = marcaOption.value;
-            await populateModelosFIPE(marcaOption.value);
-            modeloSelect.value = vehicle.modelo;
-        }
+        handleMarcaChange(); // Ativa e preenche os modelos se a marca for válida
 
     } else {
         title.textContent = 'Adicionar Veículo';
-        modeloSelect.innerHTML = '<option value="">-- Selecione uma Marca Primeiro --</option>';
-        modeloSelect.disabled = true;
+        document.getElementById('vehicle-id').value = '';
+        modeloInput.innerHTML = '';
+        modeloInput.disabled = true;
         document.getElementById('has-placa-checkbox').checked = true;
     }
     
@@ -693,15 +682,12 @@ async function handleVehicleFormSubmit(event) {
     saveBtn.textContent = 'A salvar...';
 
     const id = document.getElementById('vehicle-id').value;
-    const marcaSelect = document.getElementById('vehicle-marca');
-    const modeloSelect = document.getElementById('vehicle-modelo');
-
     const vehicleData = {
         placa: document.getElementById('has-placa-checkbox').checked 
                ? document.getElementById('vehicle-placa').value 
                : 'SEM PLACA',
-        marca: marcaSelect.options[marcaSelect.selectedIndex].text,
-        modelo: modeloSelect.options[modeloSelect.selectedIndex].text,
+        marca: document.getElementById('vehicle-marca').value,
+        modelo: document.getElementById('vehicle-modelo').value,
         ano_fabricacao: document.getElementById('vehicle-ano-fabricacao').value,
         ano_modelo: document.getElementById('vehicle-ano-modelo').value,
         renavam: document.getElementById('vehicle-renavam').value,
@@ -784,54 +770,56 @@ async function populateFilialSelects() {
 }
 
 /**
- * Busca as marcas na nossa API (que busca na BrasilAPI) e preenche o select.
+ * Busca as marcas na nossa API (que busca na BrasilAPI) e preenche o datalist.
  */
 async function populateMarcasFIPE() {
-    const selectElement = document.getElementById('vehicle-marca');
-    selectElement.innerHTML = '<option value="">A carregar...</option>';
+    const datalistElement = document.getElementById('marcas-list');
     try {
         const response = await fetch(`${apiUrlBase}/fipe/marcas`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         if (!response.ok) throw new Error('Falha ao carregar marcas FIPE.');
         
-        const marcas = await response.json();
-        selectElement.innerHTML = '<option value="">-- Selecione uma Marca --</option>';
-        marcas.forEach(marca => {
+        fipeMarcas = await response.json(); // Guarda a lista completa
+        datalistElement.innerHTML = '';
+        fipeMarcas.forEach(marca => {
             const option = document.createElement('option');
-            option.value = marca.codigo;
-            option.textContent = marca.nome;
-            selectElement.appendChild(option);
+            option.value = marca.nome;
+            option.dataset.codigo = marca.codigo; // Guarda o código aqui
+            datalistElement.appendChild(option);
         });
     } catch (error) {
-        selectElement.innerHTML = '<option value="">Erro ao carregar marcas</option>';
         console.error(error);
     }
 }
 
 /**
- * Lida com a mudança no menu de seleção de marca.
+ * Lida com a mudança no campo de marca.
  */
 function handleMarcaChange() {
-    const marcaSelect = document.getElementById('vehicle-marca');
-    const modeloSelect = document.getElementById('vehicle-modelo');
-    const marcaCodigo = marcaSelect.value;
+    const marcaInput = document.getElementById('vehicle-marca');
+    const modeloInput = document.getElementById('vehicle-modelo');
+    const marcaNome = marcaInput.value;
 
-    modeloSelect.innerHTML = '<option value="">A carregar modelos...</option>';
-    modeloSelect.disabled = true;
+    const marcaSelecionada = fipeMarcas.find(m => m.nome.toLowerCase() === marcaNome.toLowerCase());
 
-    if (marcaCodigo) {
-        populateModelosFIPE(marcaCodigo);
+    modeloInput.value = '';
+    document.getElementById('modelos-list').innerHTML = '';
+
+    if (marcaSelecionada) {
+        modeloInput.disabled = false;
+        populateModelosFIPE(marcaSelecionada.codigo);
     } else {
-        modeloSelect.innerHTML = '<option value="">-- Selecione uma Marca Primeiro --</option>';
+        modeloInput.disabled = true;
     }
 }
 
 /**
- * Busca os modelos de uma marca específica e preenche o select de modelos.
+ * Busca os modelos de uma marca específica e preenche o datalist de modelos.
  */
 async function populateModelosFIPE(marcaCodigo) {
-    const modeloSelect = document.getElementById('vehicle-modelo');
+    const datalistElement = document.getElementById('modelos-list');
+    datalistElement.innerHTML = '';
     try {
         const response = await fetch(`${apiUrlBase}/fipe/modelos/${marcaCodigo}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
@@ -839,17 +827,12 @@ async function populateModelosFIPE(marcaCodigo) {
         if (!response.ok) throw new Error('Falha ao carregar modelos FIPE.');
         
         const data = await response.json();
-        modeloSelect.innerHTML = '<option value="">-- Selecione um Modelo --</option>';
         data.modelos.forEach(modelo => {
             const option = document.createElement('option');
             option.value = modelo.nome;
-            option.textContent = modelo.nome;
-            modeloSelect.appendChild(option);
+            datalistElement.appendChild(option);
         });
-        modeloSelect.disabled = false;
-
     } catch (error) {
-        modeloSelect.innerHTML = '<option value="">Erro ao carregar modelos</option>';
         console.error(error);
     }
 }
