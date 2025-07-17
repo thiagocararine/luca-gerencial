@@ -644,6 +644,11 @@ async function openVehicleModal(vehicle = null) {
     document.getElementById('placa-error').style.display = 'none';
     document.getElementById('renavam-error').style.display = 'none';
     
+    // Limpa e desativa o campo de modelo inicialmente
+    modeloInput.value = '';
+    modeloInput.disabled = true;
+    document.getElementById('modelos-list').innerHTML = '';
+
     if (vehicle) {
         title.textContent = 'Editar Veículo';
         document.getElementById('vehicle-id').value = vehicle.id;
@@ -660,13 +665,11 @@ async function openVehicleModal(vehicle = null) {
         const hasPlaca = vehicle.placa && vehicle.placa.toUpperCase() !== 'SEM PLACA';
         document.getElementById('has-placa-checkbox').checked = hasPlaca;
         
-        handleMarcaChange();
+        handleMarcaChange(); // Ativa e preenche os modelos se a marca for válida
 
     } else {
         title.textContent = 'Adicionar Veículo';
         document.getElementById('vehicle-id').value = '';
-        modeloInput.value = '';
-        modeloInput.disabled = true;
         document.getElementById('has-placa-checkbox').checked = true;
     }
     
