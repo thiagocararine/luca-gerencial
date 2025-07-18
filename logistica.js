@@ -1,4 +1,4 @@
-// logistica.js (Frontend com Filtros, Gestão por Abas e Lançamento de Custo de Frota)
+// logistica.js (Atualizado para usar parâmetros do DB em vez da FIPE)
 
 document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
@@ -6,7 +6,9 @@ document.addEventListener('DOMContentLoaded', initLogisticaPage);
 const apiUrlBase = 'http://10.113.0.17:3000/api';
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 let allVehicles = []; // Guarda todos os veículos para filtragem no frontend
-let fipeMarcas = []; // Guarda as marcas da FIPE para encontrar o código
+// ALTERADO: Variáveis para armazenar os parâmetros do banco de dados
+let dbMarcas = []; 
+let dbModelos = [];
 let currentVehicleId = null; // Guarda o ID do veículo a ser gerido
 let vehicleToDeleteId = null;
 
@@ -29,10 +31,13 @@ async function initLogisticaPage() {
     }
 
     setupEventListeners();
+    
+    // ALTERADO: Chamada para carregar os parâmetros do nosso banco de dados
     await Promise.all([
         populateFilialSelects(),
-        populateMarcasFIPE()
+        loadMarcasAndModelosFromDB() // Substitui a chamada à FIPE
     ]);
+
     await loadVehicles();
     await loadFleetCosts();
 }
@@ -56,7 +61,8 @@ function setupEventListeners() {
     vehicleModal.querySelector('#cancel-vehicle-form-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
     vehicleModal.querySelector('#vehicle-form').addEventListener('submit', handleVehicleFormSubmit);
     vehicleModal.querySelector('#has-placa-checkbox').addEventListener('change', handleHasPlacaChange);
-    vehicleModal.querySelector('#vehicle-marca').addEventListener('change', handleMarcaChange);
+    // ALTERADO: O evento agora é 'input' para funcionar melhor com o datalist
+    vehicleModal.querySelector('#vehicle-marca').addEventListener('input', handleMarcaChange); 
     
     // Listeners de validação em tempo real
     const placaInput = vehicleModal.querySelector('#vehicle-placa');
@@ -109,6 +115,71 @@ function setupEventListeners() {
     document.getElementById('content-area').addEventListener('click', handleContentClick);
     window.addEventListener('resize', () => renderContent(allVehicles));
 }
+
+// NOVO: Função para carregar Marcas e Modelos do nosso DB
+async function loadMarcasAndModelosFromDB() {
+    const datalistMarcas = document.getElementById('marcas-list');
+    try {
+        // Busca as marcas e modelos em paralelo
+        const [marcasResponse, modelosResponse] = await Promise.all([
+            fetch(`${apiUrlBase}/parametros?cod=Marca - Veículo`, { headers: { 'Authorization': `Bearer ${getToken()}` } }),
+            fetch(`${apiUrlBase}/parametros?cod=Modelo - Veículo`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
+        ]);
+
+        if (!marcasResponse.ok || !modelosResponse.ok) {
+            throw new Error('Falha ao carregar parâmetros de veículos do banco de dados.');
+        }
+
+        dbMarcas = await marcasResponse.json();
+        dbModelos = await modelosResponse.json();
+        
+        datalistMarcas.innerHTML = '';
+        dbMarcas.forEach(marca => {
+            const option = document.createElement('option');
+            option.value = marca.NOME_PARAMETRO;
+            // Guardamos a chave de vinculação no dataset para fácil acesso
+            option.dataset.keyVinculacao = marca.KEY_VINCULACAO; 
+            datalistMarcas.appendChild(option);
+        });
+
+    } catch (error) {
+        console.error("Erro ao carregar marcas e modelos:", error);
+        datalistMarcas.innerHTML = ''; // Limpa em caso de erro
+    }
+}
+
+// ALTERADO: Lógica para filtrar modelos com base na marca selecionada
+function handleMarcaChange() {
+    const marcaInput = document.getElementById('vehicle-marca');
+    const modeloInput = document.getElementById('vehicle-modelo');
+    const modelosDatalist = document.getElementById('modelos-list');
+    
+    const marcaNome = marcaInput.value;
+    // Encontra a marca selecionada no nosso array `dbMarcas`
+    const marcaSelecionada = dbMarcas.find(m => m.NOME_PARAMETRO.toLowerCase() === marcaNome.toLowerCase());
+
+    modeloInput.value = ''; // Limpa o campo de modelo
+    modelosDatalist.innerHTML = ''; // Limpa as opções anteriores
+
+    if (marcaSelecionada) {
+        // Encontramos a marca, agora filtramos os modelos
+        const keyVinculacaoMarca = marcaSelecionada.KEY_VINCULACAO;
+        
+        // Filtra o array `dbModelos` para encontrar os correspondentes
+        const modelosFiltrados = dbModelos.filter(mod => mod.KEY_VINCULACAO == keyVinculacaoMarca);
+
+        modelosFiltrados.forEach(modelo => {
+            const option = document.createElement('option');
+            option.value = modelo.NOME_PARAMETRO;
+            modelosDatalist.appendChild(option);
+        });
+        
+        modeloInput.disabled = false; // Habilita o campo de modelo
+    } else {
+        modeloInput.disabled = true; // Desabilita se nenhuma marca válida for selecionada
+    }
+}
+
 
 /**
  * Busca os dados dos veículos na API.
@@ -653,6 +724,7 @@ async function openVehicleModal(vehicle = null) {
         document.getElementById('vehicle-id').value = vehicle.id;
         document.getElementById('vehicle-placa').value = vehicle.placa || '';
         marcaInput.value = vehicle.marca || '';
+        // Preenche o modelo ANTES de chamar a handleMarcaChange
         modeloInput.value = vehicle.modelo || '';
         document.getElementById('vehicle-ano-fabricacao').value = vehicle.ano_fabricacao || '';
         document.getElementById('vehicle-ano-modelo').value = vehicle.ano_modelo || '';
@@ -664,7 +736,11 @@ async function openVehicleModal(vehicle = null) {
         const hasPlaca = vehicle.placa && vehicle.placa.toUpperCase() !== 'SEM PLACA';
         document.getElementById('has-placa-checkbox').checked = hasPlaca;
         
+        // Agora que a marca está no campo, podemos popular os modelos correspondentes
         handleMarcaChange();
+        // E restauramos o valor do modelo que foi limpo pela handleMarcaChange
+        modeloInput.value = vehicle.modelo || '';
+
 
     } else {
         title.textContent = 'Adicionar Veículo';
@@ -780,73 +856,10 @@ async function populateFilialSelects() {
     await populateSelectWithOptions(`${apiUrlBase}/parametros?cod=Unidades`, 'fleet-cost-filiais', 'ID', 'NOME_PARAMETRO', '');
 }
 
-/**
- * Busca as marcas na nossa API (que busca na BrasilAPI) e preenche o datalist.
- */
-async function populateMarcasFIPE() {
-    const datalistElement = document.getElementById('marcas-list');
-    try {
-        const response = await fetch(`${apiUrlBase}/fipe/marcas`, {
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
-        if (!response.ok) throw new Error('Falha ao carregar marcas FIPE.');
-        
-        fipeMarcas = await response.json();
-        datalistElement.innerHTML = '';
-        fipeMarcas.forEach(marca => {
-            const option = document.createElement('option');
-            option.value = marca.nome;
-            option.dataset.codigo = marca.codigo;
-            datalistElement.appendChild(option);
-        });
-    } catch (error) {
-        console.error(error);
-    }
-}
 
-/**
- * Lida com a mudança no campo de marca.
- */
-function handleMarcaChange() {
-    const marcaInput = document.getElementById('vehicle-marca');
-    const modeloInput = document.getElementById('vehicle-modelo');
-    const marcaNome = marcaInput.value;
-
-    const marcaSelecionada = fipeMarcas.find(m => m.nome.toLowerCase() === marcaNome.toLowerCase());
-
-    modeloInput.value = '';
-    document.getElementById('modelos-list').innerHTML = '';
-
-    if (marcaSelecionada) {
-        modeloInput.disabled = false;
-        populateModelosFIPE(marcaSelecionada.codigo);
-    } else {
-        modeloInput.disabled = true;
-    }
-}
-
-/**
- * Busca os modelos de uma marca específica e preenche o datalist de modelos.
- */
-async function populateModelosFIPE(marcaCodigo) {
-    const datalistElement = document.getElementById('modelos-list');
-    datalistElement.innerHTML = '';
-    try {
-        const response = await fetch(`${apiUrlBase}/fipe/modelos/${marcaCodigo}`, {
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
-        if (!response.ok) throw new Error('Falha ao carregar modelos FIPE.');
-        
-        const data = await response.json();
-        data.modelos.forEach(modelo => {
-            const option = document.createElement('option');
-            option.value = modelo.nome;
-            datalistElement.appendChild(option);
-        });
-    } catch (error) {
-        console.error(error);
-    }
-}
+// REMOVIDO: Funções relacionadas à API FIPE não são mais necessárias
+// async function populateMarcasFIPE() { ... }
+// async function populateModelosFIPE(marcaCodigo) { ... }
 
 /**
  * Lógica de UI e Validações
