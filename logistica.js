@@ -1,16 +1,17 @@
-// logistica.js (Atualizado para usar parâmetros do DB em vez da FIPE)
+// logistica.js (Completo com funcionalidade de Exportar Relatório de Manutenção)
 
 document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
 // --- Constantes e Variáveis de Estado Globais ---
 const apiUrlBase = 'http://10.113.0.17:3000/api';
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
-let allVehicles = []; // Guarda todos os veículos para filtragem no frontend
-// ALTERADO: Variáveis para armazenar os parâmetros do banco de dados
+let allVehicles = []; 
 let dbMarcas = []; 
 let dbModelos = [];
-let currentVehicleId = null; // Guarda o ID do veículo a ser gerido
+let currentVehicleId = null; 
 let vehicleToDeleteId = null;
+let maintenanceExportDatepicker = null; // Datepicker para o novo modal
+let LOGO_BASE64 = null; // Para armazenar a logo da empresa
 
 /**
  * Função principal que inicializa a página de logística.
@@ -31,11 +32,12 @@ async function initLogisticaPage() {
     }
 
     setupEventListeners();
+    setupMaintenanceExportModal(); // Inicializa o novo datepicker
     
-    // ALTERADO: Chamada para carregar os parâmetros do nosso banco de dados
     await Promise.all([
         populateFilialSelects(),
-        loadMarcasAndModelosFromDB() // Substitui a chamada à FIPE
+        loadMarcasAndModelosFromDB(),
+        loadCurrentLogo() // Carrega a logo para os relatórios
     ]);
 
     await loadVehicles();
@@ -46,161 +48,248 @@ async function initLogisticaPage() {
  * Configura todos os event listeners da página.
  */
 function setupEventListeners() {
-    // Listeners Gerais
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('add-vehicle-button')?.addEventListener('click', () => openVehicleModal());
     document.getElementById('add-fleet-cost-button')?.addEventListener('click', openFleetCostModal);
-
-    // Listeners de Filtros
     document.getElementById('filter-button').addEventListener('click', applyFilters);
     document.getElementById('clear-filter-button').addEventListener('click', clearFilters);
-
-    // Listeners do Modal de Veículo (Adicionar/Editar)
     const vehicleModal = document.getElementById('vehicle-modal');
     vehicleModal.querySelector('#close-vehicle-modal-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
     vehicleModal.querySelector('#cancel-vehicle-form-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
     vehicleModal.querySelector('#vehicle-form').addEventListener('submit', handleVehicleFormSubmit);
     vehicleModal.querySelector('#has-placa-checkbox').addEventListener('change', handleHasPlacaChange);
-    // ALTERADO: O evento agora é 'input' para funcionar melhor com o datalist
     vehicleModal.querySelector('#vehicle-marca').addEventListener('input', handleMarcaChange); 
-    
-    // Listeners de validação em tempo real
     const placaInput = vehicleModal.querySelector('#vehicle-placa');
-    placaInput.addEventListener('input', (e) => {
-        e.target.value = e.target.value.toUpperCase();
-        validatePlaca(e.target.value);
-    });
+    placaInput.addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase(); validatePlaca(e.target.value); });
     const renavamInput = vehicleModal.querySelector('#vehicle-renavam');
-    renavamInput.addEventListener('input', (e) => {
-        e.target.value = e.target.value.replace(/\D/g, '');
-        validateRenavam(e.target.value);
-    });
-
-    // Listeners do Modal de Exclusão
+    renavamInput.addEventListener('input', (e) => { e.target.value = e.target.value.replace(/\D/g, ''); validateRenavam(e.target.value); });
     const deleteModal = document.getElementById('confirm-delete-modal');
     deleteModal.querySelector('#cancel-delete-btn').addEventListener('click', () => deleteModal.classList.add('hidden'));
-    deleteModal.querySelector('#confirm-delete-btn').addEventListener('click', () => {
-        if (vehicleToDeleteId) deleteVehicle(vehicleToDeleteId);
-    });
-
-    // Listeners do Modal de Gestão (Detalhes/Abas)
+    deleteModal.querySelector('#confirm-delete-btn').addEventListener('click', () => { if (vehicleToDeleteId) deleteVehicle(vehicleToDeleteId); });
     const detailsModal = document.getElementById('details-modal');
     detailsModal.querySelector('#close-details-modal-btn').addEventListener('click', () => detailsModal.classList.add('hidden'));
-    detailsModal.querySelector('#details-tabs').addEventListener('click', (e) => {
-        if (e.target.matches('.tab-button')) {
-            switchTab(e.target.dataset.tab, currentVehicleId);
+    detailsModal.querySelector('#details-tabs').addEventListener('click', (e) => { if (e.target.matches('.tab-button')) { switchTab(e.target.dataset.tab, currentVehicleId); } });
+    
+    const maintenanceTab = document.getElementById('maintenance-tab-content');
+    maintenanceTab.addEventListener('click', (e) => {
+        if (e.target.closest('#add-maintenance-btn')) {
+            openMaintenanceModal(currentVehicleId);
+        }
+        if (e.target.closest('#export-maintenance-report-btn')) {
+            openMaintenanceExportModal();
         }
     });
-    detailsModal.querySelector('#add-maintenance-btn').addEventListener('click', () => {
-        openMaintenanceModal(currentVehicleId);
-    });
 
-    // Listeners do Modal de Manutenção
     const maintenanceModal = document.getElementById('maintenance-modal');
     maintenanceModal.querySelector('#close-maintenance-modal-btn').addEventListener('click', () => maintenanceModal.classList.add('hidden'));
     maintenanceModal.querySelector('#cancel-maintenance-form-btn').addEventListener('click', () => maintenanceModal.classList.add('hidden'));
     maintenanceModal.querySelector('#lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('maintenance'));
     maintenanceModal.querySelector('#maintenance-despesa-interna-btn').addEventListener('click', () => useInternalExpense('maintenance'));
     maintenanceModal.querySelector('#maintenance-form').addEventListener('submit', handleMaintenanceFormSubmit);
-
-    // Listeners do Modal de Custo de Frota
     const fleetCostModal = document.getElementById('fleet-cost-modal');
     fleetCostModal.querySelector('#close-fleet-cost-modal-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
     fleetCostModal.querySelector('#cancel-fleet-cost-form-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
     fleetCostModal.querySelector('#fleet-cost-lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('fleet-cost'));
     fleetCostModal.querySelector('#fleet-cost-despesa-interna-btn').addEventListener('click', () => useInternalExpense('fleet-cost'));
     fleetCostModal.querySelector('#fleet-cost-form').addEventListener('submit', handleFleetCostFormSubmit);
-
-    // Delegação de evento e responsividade
     document.getElementById('content-area').addEventListener('click', handleContentClick);
     window.addEventListener('resize', () => renderContent(allVehicles));
+
+    document.getElementById('close-maintenance-export-modal-btn').addEventListener('click', () => document.getElementById('maintenance-export-modal').classList.add('hidden'));
+    document.getElementById('generate-maintenance-pdf-btn').addEventListener('click', exportMaintenanceReportPDF);
 }
 
-// NOVO: Função para carregar Marcas e Modelos do nosso DB
+function setupMaintenanceExportModal() {
+    maintenanceExportDatepicker = new Litepicker({
+        element: document.getElementById('maintenance-export-date-range'),
+        singleMode: false,
+        lang: 'pt-BR',
+        format: 'DD/MM/YYYY',
+    });
+}
+
+function openMaintenanceExportModal() {
+    maintenanceExportDatepicker.clearSelection();
+    document.getElementById('maintenance-export-modal').classList.remove('hidden');
+    feather.replace();
+}
+
+async function exportMaintenanceReportPDF() {
+    const btn = document.getElementById('generate-maintenance-pdf-btn');
+    btn.textContent = 'A gerar...';
+    btn.disabled = true;
+
+    try {
+        if (!currentVehicleId) throw new Error("ID do veículo não encontrado.");
+        const vehicle = allVehicles.find(v => v.id === currentVehicleId);
+        if (!vehicle) throw new Error("Dados do veículo não encontrados.");
+
+        const startDate = maintenanceExportDatepicker.getStartDate()?.toJSDate();
+        const endDate = maintenanceExportDatepicker.getEndDate()?.toJSDate();
+
+        if (!startDate || !endDate) {
+            alert("Por favor, selecione um período para gerar o relatório.");
+            return;
+        }
+
+        const response = await fetch(`${apiUrlBase}/veiculos/${currentVehicleId}/manutencoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao buscar dados de manutenção.');
+        const allManutencoes = await response.json();
+
+        const manutençõesFiltradas = allManutencoes.filter(m => {
+            const dataManutencao = new Date(m.data_manutencao);
+            return dataManutencao >= startDate && dataManutencao <= endDate;
+        });
+
+        if (manutençõesFiltradas.length === 0) {
+            alert("Nenhuma manutenção encontrada no período selecionado.");
+            return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+
+        // Cabeçalho com a logo
+        if (LOGO_BASE64) {
+            try {
+                // Adiciona a imagem com largura de 25mm e altura calculada automaticamente
+                doc.addImage(LOGO_BASE64, 'PNG', 14, 15, 25, 0);
+            } catch (e) {
+                console.error("A logo carregada é inválida e não será adicionada ao PDF.", e);
+            }
+        }
+        doc.setFontSize(18);
+        doc.text('Relatório de Manutenções', doc.internal.pageSize.getWidth() / 2, 22, { align: 'center' });
+        doc.setFontSize(11);
+        doc.text(`Veículo: ${vehicle.modelo} - ${vehicle.placa}`, 14, 35);
+        doc.text(`Período: ${startDate.toLocaleDateString('pt-BR')} a ${endDate.toLocaleDateString('pt-BR')}`, 14, 40);
+
+        // Tabela de Lançamentos
+        const body = manutençõesFiltradas.map(m => [
+            new Date(m.data_manutencao).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
+            m.tipo_manutencao,
+            m.nome_fornecedor || 'N/A',
+            m.descricao || '',
+            parseFloat(m.custo).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+        ]);
+
+        doc.autoTable({
+            head: [['Data', 'Tipo', 'Fornecedor', 'Descrição', 'Custo']],
+            body: body,
+            startY: 50,
+            theme: 'grid',
+            headStyles: { fillColor: [41, 128, 185] },
+            // Estilos para evitar quebra de linha
+            columnStyles: {
+                2: { cellWidth: 45, overflow: 'ellipsize' }, // Fornecedor
+                3: { cellWidth: 'auto', overflow: 'ellipsize' }, // Descrição
+            }
+        });
+
+        // Calcula os totais por tipo
+        const totaisPorTipo = manutençõesFiltradas.reduce((acc, m) => {
+            const tipo = m.tipo_manutencao || 'Não especificado';
+            const custo = parseFloat(m.custo) || 0;
+            acc[tipo] = (acc[tipo] || 0) + custo;
+            return acc;
+        }, {});
+        
+        const totalGeral = Object.values(totaisPorTipo).reduce((sum, value) => sum + value, 0);
+
+        // Cria o corpo da tabela de resumo
+        const summaryBody = Object.entries(totaisPorTipo).map(([tipo, total]) => {
+            return [`${tipo}`, total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })];
+        });
+
+        // Adiciona a tabela de resumo
+        doc.autoTable({
+            head: [['Resumo por Tipo', 'Custo Total']],
+            body: summaryBody,
+            startY: doc.autoTable.previous.finalY + 10,
+            theme: 'striped',
+            foot: [['Total Geral', totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]],
+            footStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold' }
+        });
+        
+        doc.save(`Relatorio_Manutencao_${vehicle.placa}.pdf`);
+        document.getElementById('maintenance-export-modal').classList.add('hidden');
+
+    } catch (error) {
+        alert(`Erro ao gerar PDF: ${error.message}`);
+    } finally {
+        btn.textContent = 'Gerar PDF';
+        btn.disabled = false;
+    }
+}
+
+async function loadCurrentLogo() {
+    try {
+        const response = await fetch(`${apiUrlBase}/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data.logoBase64) {
+            LOGO_BASE64 = data.logoBase64;
+        }
+    } catch (error) {
+        console.error("Não foi possível carregar a logo atual:", error);
+    }
+}
+
 async function loadMarcasAndModelosFromDB() {
     const datalistMarcas = document.getElementById('marcas-list');
     try {
-        // Busca as marcas e modelos em paralelo
         const [marcasResponse, modelosResponse] = await Promise.all([
             fetch(`${apiUrlBase}/parametros?cod=Marca - Veículo`, { headers: { 'Authorization': `Bearer ${getToken()}` } }),
             fetch(`${apiUrlBase}/parametros?cod=Modelo - Veículo`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
         ]);
-
-        if (!marcasResponse.ok || !modelosResponse.ok) {
-            throw new Error('Falha ao carregar parâmetros de veículos do banco de dados.');
-        }
-
+        if (!marcasResponse.ok || !modelosResponse.ok) throw new Error('Falha ao carregar parâmetros de veículos.');
         dbMarcas = await marcasResponse.json();
         dbModelos = await modelosResponse.json();
-        
         datalistMarcas.innerHTML = '';
         dbMarcas.forEach(marca => {
             const option = document.createElement('option');
             option.value = marca.NOME_PARAMETRO;
-            // Guardamos a chave de vinculação no dataset para fácil acesso
             option.dataset.keyVinculacao = marca.KEY_VINCULACAO; 
             datalistMarcas.appendChild(option);
         });
-
     } catch (error) {
         console.error("Erro ao carregar marcas e modelos:", error);
-        datalistMarcas.innerHTML = ''; // Limpa em caso de erro
     }
 }
 
-// ALTERADO: Lógica para filtrar modelos com base na marca selecionada
 function handleMarcaChange() {
     const marcaInput = document.getElementById('vehicle-marca');
     const modeloInput = document.getElementById('vehicle-modelo');
     const modelosDatalist = document.getElementById('modelos-list');
-    
     const marcaNome = marcaInput.value;
-    // Encontra a marca selecionada no nosso array `dbMarcas`
     const marcaSelecionada = dbMarcas.find(m => m.NOME_PARAMETRO.toLowerCase() === marcaNome.toLowerCase());
-
-    modeloInput.value = ''; // Limpa o campo de modelo
-    modelosDatalist.innerHTML = ''; // Limpa as opções anteriores
-
+    modeloInput.value = '';
+    modelosDatalist.innerHTML = '';
     if (marcaSelecionada) {
-        // Encontramos a marca, agora filtramos os modelos
         const keyVinculacaoMarca = marcaSelecionada.KEY_VINCULACAO;
-        
-        // Filtra o array `dbModelos` para encontrar os correspondentes
         const modelosFiltrados = dbModelos.filter(mod => mod.KEY_VINCULACAO == keyVinculacaoMarca);
-
         modelosFiltrados.forEach(modelo => {
             const option = document.createElement('option');
             option.value = modelo.NOME_PARAMETRO;
             modelosDatalist.appendChild(option);
         });
-        
-        modeloInput.disabled = false; // Habilita o campo de modelo
+        modeloInput.disabled = false;
     } else {
-        modeloInput.disabled = true; // Desabilita se nenhuma marca válida for selecionada
+        modeloInput.disabled = true;
     }
 }
 
-
-/**
- * Busca os dados dos veículos na API.
- */
 async function loadVehicles() {
     const contentArea = document.getElementById('content-area');
     contentArea.innerHTML = '<p class="text-center p-8 text-gray-500">A carregar veículos...</p>';
-    document.getElementById('no-data-message').classList.add('hidden');
-
     try {
-        const response = await fetch(`${apiUrlBase}/veiculos`, {
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
+        const response = await fetch(`${apiUrlBase}/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error(`Falha ao buscar veículos: ${response.statusText}`);
-
         allVehicles = await response.json();
         applyFilters();
-
     } catch (error) {
         console.error("Erro ao carregar veículos:", error);
-        contentArea.innerHTML = `<p class="text-center p-8 text-red-600">Erro ao carregar veículos. Verifique a consola.</p>`;
+        contentArea.innerHTML = `<p class="text-center p-8 text-red-600">Erro ao carregar veículos.</p>`;
     }
 }
 
@@ -212,22 +301,26 @@ function applyFilters() {
     const filial = document.getElementById('filter-filial').value;
     const status = document.getElementById('filter-status').value;
 
-    const filteredVehicles = allVehicles.filter(vehicle => {
+    let filteredVehicles = allVehicles.filter(vehicle => {
         const searchMatch = !searchTerm || 
                             (vehicle.placa && vehicle.placa.toLowerCase().includes(searchTerm)) || 
                             (vehicle.modelo && vehicle.modelo.toLowerCase().includes(searchTerm));
         const filialMatch = !filial || vehicle.id_filial == filial;
-        const statusMatch = !status || vehicle.status === status;
-
-        return searchMatch && filialMatch && statusMatch;
+        return searchMatch && filialMatch;
     });
+
+    // Filtro de status com a nova lógica
+    if (status) {
+        // Se um status específico for selecionado, filtra por ele
+        filteredVehicles = filteredVehicles.filter(v => v.status === status);
+    } else {
+        // Se for "Todos" (valor ""), mostra Ativo e Em Manutenção por padrão
+        filteredVehicles = filteredVehicles.filter(v => v.status === 'Ativo' || v.status === 'Em Manutenção');
+    }
 
     renderContent(filteredVehicles);
 }
 
-/**
- * Limpa todos os filtros e re-renderiza a lista completa.
- */
 function clearFilters() {
     document.getElementById('filter-search').value = '';
     document.getElementById('filter-filial').value = '';
@@ -235,15 +328,10 @@ function clearFilters() {
     applyFilters();
 }
 
-/**
- * Decide se renderiza cartões ou tabela com base no tamanho do ecrã.
- * @param {Array} vehicles - A lista de veículos a ser renderizada.
- */
 function renderContent(vehicles) {
     const contentArea = document.getElementById('content-area');
     const noDataMessage = document.getElementById('no-data-message');
     contentArea.innerHTML = '';
-
     if (vehicles.length === 0) {
         noDataMessage.classList.remove('hidden');
     } else {
@@ -257,21 +345,15 @@ function renderContent(vehicles) {
     feather.replace();
 }
 
-/**
- * Renderiza os dados dos veículos como uma lista de cartões.
- */
 function renderVehicleCards(vehicles, container) {
     const cardsContainer = document.createElement('div');
     cardsContainer.className = 'p-4 grid grid-cols-1 sm:grid-cols-2 gap-6';
-    
     vehicles.forEach(vehicle => {
         const card = document.createElement('div');
         card.className = 'vehicle-item bg-white rounded-lg shadow-md overflow-hidden cursor-pointer transform hover:-translate-y-1 transition-transform duration-200';
         card.dataset.id = vehicle.id; 
-        
         const photoUrl = vehicle.foto_principal || 'https://placehold.co/400x250/e2e8f0/4a5568?text=Sem+Foto';
         const statusInfo = getStatusInfo(vehicle.status);
-
         card.innerHTML = `
             <div class="relative">
                 <img src="${photoUrl}" alt="Foto de ${vehicle.modelo}" class="w-full h-40 object-cover">
@@ -284,20 +366,15 @@ function renderVehicleCards(vehicles, container) {
                     <span class="px-2 py-1 text-sm font-semibold text-white bg-gray-800 rounded-md">${vehicle.placa || 'Sem Placa'}</span>
                     <span class="text-sm text-gray-600">${vehicle.nome_filial || 'Sem filial'}</span>
                 </div>
-            </div>
-        `;
+            </div>`;
         cardsContainer.appendChild(card);
     });
     container.appendChild(cardsContainer);
 }
 
-/**
- * Renderiza os dados dos veículos como uma tabela.
- */
 function renderVehicleTable(vehicles, container) {
     const table = document.createElement('table');
     table.className = 'min-w-full divide-y divide-gray-200';
-    
     table.innerHTML = `
         <thead class="bg-gray-50">
             <tr>
@@ -308,16 +385,13 @@ function renderVehicleTable(vehicles, container) {
                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
             </tr>
         </thead>
-        <tbody class="bg-white divide-y divide-gray-200"></tbody>
-    `;
-
+        <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
     const tbody = table.querySelector('tbody');
     vehicles.forEach(vehicle => {
         const statusInfo = getStatusInfo(vehicle.status);
         const tr = document.createElement('tr');
         tr.className = 'vehicle-item hover:bg-gray-50';
         tr.dataset.id = vehicle.id;
-        
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap">
                 <div class="text-sm font-medium text-gray-900">${vehicle.modelo}</div>
@@ -332,30 +406,21 @@ function renderVehicleTable(vehicles, container) {
                 <button class="text-indigo-600 hover:text-indigo-900" data-action="details">Gerir</button>
                 ${privilegedAccessProfiles.includes(getUserProfile()) ? `
                 <button class="text-blue-600 hover:text-blue-900 ml-4" data-action="edit">Editar</button>
-                <button class="text-red-600 hover:text-red-900 ml-4" data-action="delete">Apagar</button>
                 ` : ''}
-            </td>
-        `;
+            </td>`;
         tbody.appendChild(tr);
     });
     container.appendChild(table);
 }
 
-
-/**
- * Lida com cliques no conteúdo principal (cartões ou tabela).
- */
 function handleContentClick(event) {
     const target = event.target;
     const vehicleItem = target.closest('.vehicle-item');
     if (!vehicleItem) return;
-
     const vehicleId = parseInt(vehicleItem.dataset.id, 10);
     const vehicle = allVehicles.find(v => v.id === vehicleId);
     if (!vehicle) return;
-
     const action = target.dataset.action;
-
     if (action === 'edit') {
         openVehicleModal(vehicle);
     } else if (action === 'delete') {
@@ -365,40 +430,36 @@ function handleContentClick(event) {
     }
 }
 
-/**
- * Abre o modal de gestão com abas.
- */
 function openDetailsModal(vehicle) {
     currentVehicleId = vehicle.id;
     const modal = document.getElementById('details-modal');
     document.getElementById('details-modal-title').textContent = `Gestão de: ${vehicle.modelo} - ${vehicle.placa}`;
-    
+    const logsTabButton = document.getElementById('logs-tab-button');
+    if (privilegedAccessProfiles.includes(getUserProfile())) {
+        logsTabButton.style.display = 'block';
+    } else {
+        logsTabButton.style.display = 'none';
+    }
     modal.classList.remove('hidden');
     switchTab('details', vehicle.id); 
     feather.replace();
 }
 
-/**
- * Lógica para trocar de aba no modal de gestão e carregar dados.
- */
 async function switchTab(tabName, vehicleId) {
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
     document.querySelectorAll('.tab-button').forEach(button => button.classList.remove('active'));
-
     document.getElementById(`${tabName}-tab-content`).classList.add('active');
     document.querySelector(`.tab-button[data-tab="${tabName}"]`).classList.add('active');
-
     if (tabName === 'details') {
         const vehicle = allVehicles.find(v => v.id === vehicleId);
         renderDetailsTab(vehicle);
     } else if (tabName === 'maintenance') {
         await fetchAndDisplayMaintenanceHistory(vehicleId);
+    } else if (tabName === 'logs') {
+        await fetchAndDisplayChangeLogs(vehicleId);
     }
 }
 
-/**
- * Preenche a aba de detalhes do veículo.
- */
 function renderDetailsTab(vehicle) {
     const detailsContent = document.getElementById('details-tab-content');
     detailsContent.innerHTML = `
@@ -411,29 +472,20 @@ function renderDetailsTab(vehicle) {
             <div class="md:col-span-2"><strong class="block text-gray-500">Chassi</strong><span>${vehicle.chassi || 'N/A'}</span></div>
             <div><strong class="block text-gray-500">Filial</strong><span>${vehicle.nome_filial || 'N/A'}</span></div>
             <div><strong class="block text-gray-500">Status</strong><span>${vehicle.status}</span></div>
-        </div>
-    `;
+        </div>`;
 }
 
-/**
- * Busca e exibe o histórico de manutenções.
- */
 async function fetchAndDisplayMaintenanceHistory(vehicleId) {
     const container = document.getElementById('maintenance-history-container');
     container.innerHTML = '<p class="text-center text-gray-500">A carregar histórico...</p>';
     try {
-        const response = await fetch(`${apiUrlBase}/veiculos/${vehicleId}/manutencoes`, {
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
+        const response = await fetch(`${apiUrlBase}/veiculos/${vehicleId}/manutencoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar histórico.');
-        
         const manutenções = await response.json();
-        
         if (manutenções.length === 0) {
-            container.innerHTML = '<p class="text-center text-gray-500">Nenhuma manutenção registada para este veículo.</p>';
+            container.innerHTML = '<p class="text-center text-gray-500">Nenhuma manutenção registada.</p>';
             return;
         }
-
         const table = document.createElement('table');
         table.className = 'min-w-full divide-y divide-gray-200 text-sm';
         table.innerHTML = `
@@ -445,8 +497,7 @@ async function fetchAndDisplayMaintenanceHistory(vehicleId) {
                     <th class="px-4 py-2 text-right font-medium text-gray-500">Custo</th>
                 </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-200"></tbody>
-        `;
+            <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
         const tbody = table.querySelector('tbody');
         manutenções.forEach(m => {
             const tr = tbody.insertRow();
@@ -454,21 +505,83 @@ async function fetchAndDisplayMaintenanceHistory(vehicleId) {
                 <td class="px-4 py-2">${new Date(m.data_manutencao).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
                 <td class="px-4 py-2">${m.tipo_manutencao}</td>
                 <td class="px-4 py-2">${m.nome_fornecedor || 'N/A'}</td>
-                <td class="px-4 py-2 text-right">R$ ${parseFloat(m.custo).toFixed(2)}</td>
-            `;
+                <td class="px-4 py-2 text-right">R$ ${parseFloat(m.custo).toFixed(2)}</td>`;
         });
         container.innerHTML = '';
         container.appendChild(table);
-
     } catch (error) {
         container.innerHTML = '<p class="text-center text-red-500">Erro ao carregar histórico.</p>';
         console.error(error);
     }
 }
 
-/**
- * Abre o modal para adicionar uma nova manutenção.
- */
+async function fetchAndDisplayChangeLogs(vehicleId) {
+    const container = document.getElementById('logs-history-container');
+    container.innerHTML = '<p class="text-center text-gray-500">A carregar histórico de alterações...</p>';
+    try {
+        const response = await fetch(`${apiUrlBase}/veiculos/${vehicleId}/logs`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao buscar o log de alterações.');
+        const logs = await response.json();
+        if (logs.length === 0) {
+            container.innerHTML = '<p class="text-center text-gray-500">Nenhuma alteração registada para este veículo.</p>';
+            return;
+        }
+        const table = document.createElement('table');
+        table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+        table.innerHTML = `
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Utilizador</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Campo</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Valor Antigo</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Valor Novo</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
+        const tbody = table.querySelector('tbody');
+        logs.forEach(log => {
+            const tr = tbody.insertRow();
+            const dataFormatada = new Date(log.data_alteracao).toLocaleString('pt-BR', {timeZone: 'UTC'});
+            tr.innerHTML = `
+                <td class="px-4 py-2">${dataFormatada}</td>
+                <td class="px-4 py-2">${log.alterado_por_nome || 'N/A'}</td>
+                <td class="px-4 py-2 font-semibold">${log.campo_alterado}</td>
+                <td class="px-4 py-2">${log.valor_antigo || '<i>vazio</i>'}</td>
+                <td class="px-4 py-2">${log.valor_novo || '<i>vazio</i>'}</td>`;
+        });
+        container.innerHTML = '';
+        container.appendChild(table);
+    } catch (error) {
+        container.innerHTML = '<p class="text-center text-red-500">Erro ao carregar o histórico de alterações.</p>';
+        console.error(error);
+    }
+}
+
+async function populateMaintenanceTypes() {
+    const selectElement = document.getElementById('maintenance-type');
+    selectElement.innerHTML = '<option value="">A carregar...</option>';
+    try {
+        const response = await fetch(`${apiUrlBase}/parametros?cod=Tipo - Manutenção`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao carregar tipos de manutenção.');
+        const items = await response.json();
+        if (items.length === 0) {
+            selectElement.innerHTML = '<option value="">Nenhum tipo registado</option>';
+            return;
+        }
+        selectElement.innerHTML = '<option value="">-- Selecione um Tipo --</option>';
+        items.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item.NOME_PARAMETRO;
+            option.textContent = item.NOME_PARAMETRO;
+            selectElement.appendChild(option);
+        });
+    } catch (error) {
+        selectElement.innerHTML = '<option value="">Erro ao carregar</option>';
+        console.error(error);
+    }
+}
+
 function openMaintenanceModal(vehicleId) {
     const modal = document.getElementById('maintenance-modal');
     const form = document.getElementById('maintenance-form');
@@ -476,18 +589,15 @@ function openMaintenanceModal(vehicleId) {
     document.getElementById('maintenance-vehicle-id').value = vehicleId;
     document.getElementById('maintenance-fornecedor-id').value = '';
     document.getElementById('maintenance-date').value = new Date().toISOString().split('T')[0];
+    populateMaintenanceTypes();
     modal.classList.remove('hidden');
     feather.replace();
 }
 
-/**
- * Lida com o envio do formulário de manutenção.
- */
 async function handleMaintenanceFormSubmit(event) {
     event.preventDefault();
     const saveBtn = document.getElementById('save-maintenance-btn');
     saveBtn.disabled = true;
-
     const maintenanceData = {
         id_veiculo: document.getElementById('maintenance-vehicle-id').value,
         data_manutencao: document.getElementById('maintenance-date').value,
@@ -496,13 +606,16 @@ async function handleMaintenanceFormSubmit(event) {
         descricao: document.getElementById('maintenance-description').value,
         id_fornecedor: document.getElementById('maintenance-fornecedor-id').value,
     };
-
     if (!maintenanceData.id_fornecedor) {
         alert('Por favor, consulte um CNPJ válido ou marque como despesa interna.');
         saveBtn.disabled = false;
         return;
     }
-
+    if (!maintenanceData.tipo_manutencao) {
+        alert('Por favor, selecione um tipo de manutenção.');
+        saveBtn.disabled = false;
+        return;
+    }
     try {
         const response = await fetch(`${apiUrlBase}/veiculos/${maintenanceData.id_veiculo}/manutencoes`, {
             method: 'POST',
@@ -510,11 +623,9 @@ async function handleMaintenanceFormSubmit(event) {
             body: JSON.stringify(maintenanceData)
         });
         if (!response.ok) throw new Error('Falha ao salvar manutenção.');
-
         document.getElementById('maintenance-modal').classList.add('hidden');
         alert('Manutenção registada com sucesso!');
         await fetchAndDisplayMaintenanceHistory(maintenanceData.id_veiculo);
-
     } catch (error) {
         alert(`Erro: ${error.message}`);
     } finally {
@@ -522,9 +633,6 @@ async function handleMaintenanceFormSubmit(event) {
     }
 }
 
-/**
- * Abre o modal para adicionar um novo custo de frota.
- */
 function openFleetCostModal() {
     const modal = document.getElementById('fleet-cost-modal');
     modal.querySelector('form').reset();
@@ -534,16 +642,11 @@ function openFleetCostModal() {
     feather.replace();
 }
 
-/**
- * Lida com o envio do formulário de custo de frota.
- */
 async function handleFleetCostFormSubmit(event) {
     event.preventDefault();
     const saveBtn = document.getElementById('save-fleet-cost-btn');
     saveBtn.disabled = true;
-
     const selectedFiliais = Array.from(document.getElementById('fleet-cost-filiais').selectedOptions).map(opt => opt.value);
-
     const costData = {
         descricao: document.getElementById('fleet-cost-description').value,
         custo: document.getElementById('fleet-cost-value').value,
@@ -551,7 +654,6 @@ async function handleFleetCostFormSubmit(event) {
         id_fornecedor: document.getElementById('fleet-cost-fornecedor-id').value,
         filiais_rateio: selectedFiliais
     };
-
     if (!costData.id_fornecedor) {
         alert('Por favor, associe um fornecedor ou marque como despesa interna.');
         saveBtn.disabled = false;
@@ -562,7 +664,6 @@ async function handleFleetCostFormSubmit(event) {
         saveBtn.disabled = false;
         return;
     }
-
     try {
         const response = await fetch(`${apiUrlBase}/custos-frota`, {
             method: 'POST',
@@ -570,11 +671,9 @@ async function handleFleetCostFormSubmit(event) {
             body: JSON.stringify(costData)
         });
         if (!response.ok) throw new Error('Falha ao salvar custo de frota.');
-
         document.getElementById('fleet-cost-modal').classList.add('hidden');
         alert('Custo de frota registado com sucesso!');
         await loadFleetCosts();
-
     } catch (error) {
         alert(`Erro: ${error.message}`);
     } finally {
@@ -582,25 +681,17 @@ async function handleFleetCostFormSubmit(event) {
     }
 }
 
-/**
- * Busca e exibe o histórico de custos gerais da frota.
- */
 async function loadFleetCosts() {
     const container = document.getElementById('fleet-costs-history-container');
     container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
     try {
-        const response = await fetch(`${apiUrlBase}/custos-frota`, {
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
+        const response = await fetch(`${apiUrlBase}/custos-frota`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar custos.');
-        
         const custos = await response.json();
-        
         if (custos.length === 0) {
             container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo geral registado.</p>';
             return;
         }
-
         const table = document.createElement('table');
         table.className = 'min-w-full divide-y divide-gray-200 text-sm';
         table.innerHTML = `
@@ -612,8 +703,7 @@ async function loadFleetCosts() {
                     <th class="px-4 py-2 text-right font-medium text-gray-500">Custo Total</th>
                 </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-200"></tbody>
-        `;
+            <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
         const tbody = table.querySelector('tbody');
         custos.forEach(c => {
             const tr = tbody.insertRow();
@@ -621,45 +711,34 @@ async function loadFleetCosts() {
                 <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
                 <td class="px-4 py-2">${c.descricao}</td>
                 <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
-                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
-            `;
+                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>`;
         });
         container.innerHTML = '';
         container.appendChild(table);
-
     } catch (error) {
         container.innerHTML = '<p class="text-center p-4 text-red-500">Erro ao carregar custos.</p>';
         console.error(error);
     }
 }
 
-/**
- * Usa um fornecedor genérico para despesas internas.
- */
 function useInternalExpense(context) {
     const cnpjInput = document.getElementById(`${context}-cnpj`);
     cnpjInput.value = '00.000.000/0000-00';
     lookupCnpj(context);
 }
 
-/**
- * Consulta um CNPJ na BrasilAPI e no nosso DB.
- */
 async function lookupCnpj(context) {
     const cnpj = document.getElementById(`${context}-cnpj`).value.replace(/\D/g, '');
     const loader = document.getElementById(`${context}-cnpj-loader`);
     const razaoSocialInput = document.getElementById(`${context}-razao-social`);
     const fornecedorIdInput = document.getElementById(`${context}-fornecedor-id`);
-
     if (cnpj.length !== 14 && cnpj !== '00000000000000') {
         alert('Por favor, insira um CNPJ válido com 14 dígitos.');
         return;
     }
-
     loader.style.display = 'block';
     razaoSocialInput.value = '';
     fornecedorIdInput.value = '';
-
     try {
         let fornecedorData;
         if (cnpj === '00000000000000') {
@@ -680,19 +759,15 @@ async function lookupCnpj(context) {
                 cep: data.cep
             };
         }
-        
         const nossoDbResponse = await fetch(`${apiUrlBase}/fornecedores/cnpj`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify(fornecedorData)
         });
-        
         if (!nossoDbResponse.ok) throw new Error('Erro ao registar fornecedor no sistema.');
-        
         const fornecedor = await nossoDbResponse.json();
         razaoSocialInput.value = fornecedor.razao_social;
         fornecedorIdInput.value = fornecedor.id;
-
     } catch (error) {
         alert(error.message);
         razaoSocialInput.value = 'Falha na consulta.';
@@ -701,30 +776,23 @@ async function lookupCnpj(context) {
     }
 }
 
-/**
- * Abre o modal para adicionar ou editar um veículo.
- */
 async function openVehicleModal(vehicle = null) {
     const modal = document.getElementById('vehicle-modal');
     const form = document.getElementById('vehicle-form');
     const title = document.getElementById('vehicle-modal-title');
     const marcaInput = document.getElementById('vehicle-marca');
     const modeloInput = document.getElementById('vehicle-modelo');
-    
     form.reset();
     document.getElementById('placa-error').style.display = 'none';
     document.getElementById('renavam-error').style.display = 'none';
-    
     modeloInput.value = '';
     modeloInput.disabled = true;
     document.getElementById('modelos-list').innerHTML = '';
-
     if (vehicle) {
         title.textContent = 'Editar Veículo';
         document.getElementById('vehicle-id').value = vehicle.id;
         document.getElementById('vehicle-placa').value = vehicle.placa || '';
         marcaInput.value = vehicle.marca || '';
-        // Preenche o modelo ANTES de chamar a handleMarcaChange
         modeloInput.value = vehicle.modelo || '';
         document.getElementById('vehicle-ano-fabricacao').value = vehicle.ano_fabricacao || '';
         document.getElementById('vehicle-ano-modelo').value = vehicle.ano_modelo || '';
@@ -732,47 +800,32 @@ async function openVehicleModal(vehicle = null) {
         document.getElementById('vehicle-chassi').value = vehicle.chassi || '';
         document.getElementById('vehicle-filial').value = vehicle.id_filial || '';
         document.getElementById('vehicle-status').value = vehicle.status || 'Ativo';
-
         const hasPlaca = vehicle.placa && vehicle.placa.toUpperCase() !== 'SEM PLACA';
         document.getElementById('has-placa-checkbox').checked = hasPlaca;
-        
-        // Agora que a marca está no campo, podemos popular os modelos correspondentes
         handleMarcaChange();
-        // E restauramos o valor do modelo que foi limpo pela handleMarcaChange
         modeloInput.value = vehicle.modelo || '';
-
-
     } else {
         title.textContent = 'Adicionar Veículo';
         document.getElementById('vehicle-id').value = '';
         document.getElementById('has-placa-checkbox').checked = true;
     }
-    
     handleHasPlacaChange();
     modal.classList.remove('hidden');
     feather.replace();
 }
 
-/**
- * Lida com o envio do formulário de veículo (criar ou atualizar).
- */
 async function handleVehicleFormSubmit(event) {
     event.preventDefault();
-
     if (!validateForm()) {
         alert('Por favor, corrija os erros no formulário.');
         return;
     }
-
     const saveBtn = document.getElementById('save-vehicle-btn');
     saveBtn.disabled = true;
     saveBtn.textContent = 'A salvar...';
-
     const id = document.getElementById('vehicle-id').value;
     const vehicleData = {
-        placa: document.getElementById('has-placa-checkbox').checked 
-               ? document.getElementById('vehicle-placa').value 
-               : 'SEM PLACA',
+        placa: document.getElementById('has-placa-checkbox').checked ? document.getElementById('vehicle-placa').value : 'SEM PLACA',
         marca: document.getElementById('vehicle-marca').value,
         modelo: document.getElementById('vehicle-modelo').value,
         ano_fabricacao: document.getElementById('vehicle-ano-fabricacao').value,
@@ -782,26 +835,21 @@ async function handleVehicleFormSubmit(event) {
         id_filial: document.getElementById('vehicle-filial').value,
         status: document.getElementById('vehicle-status').value,
     };
-
     const method = id ? 'PUT' : 'POST';
     const url = id ? `${apiUrlBase}/veiculos/${id}` : `${apiUrlBase}/veiculos`;
-
     try {
         const response = await fetch(url, {
             method: method,
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify(vehicleData)
         });
-
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || 'Falha ao salvar o veículo.');
         }
-        
         document.getElementById('vehicle-modal').classList.add('hidden');
         alert(`Veículo ${id ? 'atualizado' : 'adicionado'} com sucesso!`);
         await loadVehicles();
-
     } catch (error) {
         alert(`Erro: ${error.message}`);
     } finally {
@@ -810,9 +858,6 @@ async function handleVehicleFormSubmit(event) {
     }
 }
 
-/**
- * Abre o modal de confirmação para apagar um veículo.
- */
 function openDeleteConfirmModal(vehicle) {
     vehicleToDeleteId = vehicle.id;
     document.getElementById('delete-vehicle-info').textContent = `${vehicle.modelo} - ${vehicle.placa}`;
@@ -820,25 +865,18 @@ function openDeleteConfirmModal(vehicle) {
     feather.replace();
 }
 
-/**
- * Envia a requisição para apagar o veículo.
- */
 async function deleteVehicle(id) {
     const confirmBtn = document.getElementById('confirm-delete-btn');
     confirmBtn.disabled = true;
-    
     try {
         const response = await fetch(`${apiUrlBase}/veiculos/${id}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
-
         if (!response.ok) throw new Error('Falha ao apagar o veículo.');
-
         document.getElementById('confirm-delete-modal').classList.add('hidden');
         alert('Veículo apagado com sucesso!');
         await loadVehicles();
-
     } catch (error) {
         alert(`Erro: ${error.message}`);
     } finally {
@@ -847,28 +885,16 @@ async function deleteVehicle(id) {
     }
 }
 
-/**
- * Busca a lista de filiais e preenche os selects.
- */
 async function populateFilialSelects() {
     await populateSelectWithOptions(`${apiUrlBase}/parametros?cod=Unidades`, 'filter-filial', 'ID', 'NOME_PARAMETRO', 'Todas as Filiais');
     await populateSelectWithOptions(`${apiUrlBase}/parametros?cod=Unidades`, 'vehicle-filial', 'ID', 'NOME_PARAMETRO', '-- Selecione a Filial --');
     await populateSelectWithOptions(`${apiUrlBase}/parametros?cod=Unidades`, 'fleet-cost-filiais', 'ID', 'NOME_PARAMETRO', '');
 }
 
-
-// REMOVIDO: Funções relacionadas à API FIPE não são mais necessárias
-// async function populateMarcasFIPE() { ... }
-// async function populateModelosFIPE(marcaCodigo) { ... }
-
-/**
- * Lógica de UI e Validações
- */
 function handleHasPlacaChange() {
     const hasPlacaCheckbox = document.getElementById('has-placa-checkbox');
     const placaInput = document.getElementById('vehicle-placa');
     const placaError = document.getElementById('placa-error');
-
     if (hasPlacaCheckbox.checked) {
         placaInput.disabled = false;
         placaInput.required = true;
@@ -888,14 +914,11 @@ function validateForm() {
     const hasPlaca = document.getElementById('has-placa-checkbox').checked;
     const placa = document.getElementById('vehicle-placa').value;
     const renavam = document.getElementById('vehicle-renavam').value;
-    
     let isPlacaValid = true;
     if (hasPlaca) {
         isPlacaValid = validatePlaca(placa);
     }
-
     const isRenavamValid = renavam ? validateRenavam(renavam) : true;
-
     return isPlacaValid && isRenavamValid;
 }
 
@@ -922,16 +945,11 @@ function validateRenavam(renavam) {
     return isValid;
 }
 
-
-/**
- * Funções Auxiliares
- */
 async function populateSelectWithOptions(url, selectId, valueKey, textKey, placeholder) {
     const selectElement = document.getElementById(selectId);
     try {
         const response = await fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error(`Falha ao carregar dados para ${selectId}.`);
-        
         const items = await response.json();
         selectElement.innerHTML = `<option value="">${placeholder}</option>`;
         items.forEach(item => {
@@ -956,14 +974,7 @@ function getStatusInfo(status) {
 }
 
 function getToken() { return localStorage.getItem('lucaUserToken'); }
-function getUserData() {
-    const token = getToken();
-    if (!token) return null;
-    try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; }
-}
+function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
 function getUserName() { return getUserData()?.nome || 'Utilizador'; }
 function getUserProfile() { return getUserData()?.perfil || null; }
-function logout() {
-    localStorage.removeItem('lucaUserToken');
-    window.location.href = 'login.html';
-}
+function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html'; }

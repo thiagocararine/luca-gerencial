@@ -6,6 +6,8 @@
     <title>Logística - Luca Gerencial</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Adicionado Litepicker CSS para o novo modal -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css"/>
     <link rel="icon" href="assets/favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -173,6 +175,7 @@
                     <button class="tab-button active" data-tab="details">Detalhes</button>
                     <button class="tab-button" data-tab="maintenance">Manutenções</button>
                     <button class="tab-button" data-tab="documents">Documentos</button>
+                    <button class="tab-button" data-tab="logs" id="logs-tab-button">Log de Alterações</button>
                 </nav>
             </div>
             <div class="py-4 max-h-[60vh] overflow-y-auto">
@@ -180,15 +183,25 @@
                 <div id="maintenance-tab-content" class="tab-content">
                     <div class="flex justify-between items-center mb-4">
                         <h4 class="text-lg font-semibold">Histórico de Manutenções</h4>
-                        <button id="add-maintenance-btn" class="action-btn bg-green-600 hover:bg-green-700 flex items-center gap-2 text-sm">
-                            <span data-feather="plus-circle" class="w-4 h-4"></span>Nova Manutenção
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <!-- NOVO BOTÃO DE EXPORTAR -->
+                            <button id="export-maintenance-report-btn" class="action-btn bg-cyan-600 hover:bg-cyan-700 flex items-center gap-2 text-sm">
+                                <span data-feather="download" class="w-4 h-4"></span>Exportar
+                            </button>
+                            <button id="add-maintenance-btn" class="action-btn bg-green-600 hover:bg-green-700 flex items-center gap-2 text-sm">
+                                <span data-feather="plus-circle" class="w-4 h-4"></span>Nova Manutenção
+                            </button>
+                        </div>
                     </div>
                     <div id="maintenance-history-container" class="overflow-x-auto"></div>
                 </div>
                 <div id="documents-tab-content" class="tab-content">
                      <h4 class="text-lg font-semibold mb-4">Documentos do Veículo</h4>
                     <p class="text-center text-gray-500">Funcionalidade a ser implementada.</p>
+                </div>
+                <div id="logs-tab-content" class="tab-content">
+                    <h4 class="text-lg font-semibold mb-4">Histórico de Alterações do Veículo</h4>
+                    <div id="logs-history-container" class="overflow-x-auto"></div>
                 </div>
             </div>
         </div>
@@ -219,10 +232,7 @@
                 <div>
                     <label for="maintenance-type" class="block font-medium">Tipo</label>
                     <select id="maintenance-type" required class="form-input mt-1 block w-full rounded-md border-gray-300">
-                        <option>Preventiva</option>
-                        <option>Corretiva</option>
-                        <option>Pneu</option>
-                        <option>Outra</option>
+                        <!-- As opções serão preenchidas dinamicamente pelo JavaScript -->
                     </select>
                 </div>
                 <div class="md:col-span-3">
@@ -259,6 +269,28 @@
         </form>
     </div>
 </div>
+
+<!-- NOVO MODAL DE EXPORTAÇÃO DE MANUTENÇÃO -->
+<div id="maintenance-export-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
+    <div class="relative mx-auto border w-full max-w-md shadow-lg rounded-md bg-white">
+        <div class="flex items-start justify-between p-4 border-b">
+            <h3 class="text-xl font-semibold">Exportar Relatório de Manutenções</h3>
+            <button id="close-maintenance-export-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center">
+                <span data-feather="x"></span>
+            </button>
+        </div>
+        <div class="p-6 space-y-4">
+            <div>
+                <label for="maintenance-export-date-range" class="block text-sm font-medium text-gray-700">Período do Relatório</label>
+                <input type="text" id="maintenance-export-date-range" class="form-input mt-1 block w-full rounded-md border-gray-300">
+            </div>
+        </div>
+        <div class="flex justify-end items-center p-4 border-t mt-2">
+            <button id="generate-maintenance-pdf-btn" class="action-btn bg-cyan-600 hover:bg-cyan-700 w-full">Gerar PDF</button>
+        </div>
+    </div>
+</div>
+
 
 <!-- Modal para Adicionar Custo de Frota (Rateio) -->
 <div id="fleet-cost-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
@@ -407,7 +439,11 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script src="logistica.js?v=1.8.0" defer></script>
+<!-- Adicionados Scripts para PDF e Calendário -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
+<script src="logistica.js?v=1.9.1" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();

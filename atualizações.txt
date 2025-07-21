@@ -1,11 +1,17 @@
-- Incluir a API da FIPE, para buscar as informaçoes mais nescessárias para o cadastro do veículos.
+- Incluir a API da FIPE, para buscar as informaçoes mais nescessárias para o cadastro do veículos. 
+    (NÃO FOI POSSIVEL INCLUIR, IREMOS TRABALHAR COM OS DADOS DA TABELA PARAMETROS)
 
 - Incluir uma validação para cadastro de modelos e marcas de veículos.
+    (INCLUIDO E FUNCIONANDO)
 
 - Tipo de manutenção será "Mão de Obra", "Peça". (Na descrição incluir os dados do serviço, ou a peça)
+    (INCLUIDO E FUNCIONANDO)
 
 - Incluir dentro da tabela Veiculos (Log de Alteração do cadastro do veículo no banco de dados, e permissão de visualização apenas para o adm do sistema.)
+(PENDENTE)
 
 - Permitir exportar o histórico do veiculo dentro de um periodo de tempo.
+(INCLUIDO E FUNCIONANDO)
 
 - Retirar o botão "Apagar" do logistica.html
+(INCLUIDO E FUNCIONANDO)

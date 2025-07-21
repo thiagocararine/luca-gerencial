@@ -1,4 +1,4 @@
-// settings.js (Completo com Perfis de Acesso e Permissões)
+// settings.js (Versão final e completa com busca de vinculação sob demanda)
 
 document.addEventListener('DOMContentLoaded', () => {
     if (document.querySelector('.tabs')) {
@@ -10,7 +10,8 @@ document.addEventListener('DOMContentLoaded', () => {
 const apiUrlBase = 'http://10.113.0.17:3000/api';
 let parametrosTable, usersTable, perfisTable;
 let currentParamCode = null;
-let todosOsGruposDeDespesa = [];
+// Apenas uma lista para os pais do contexto ATUAL, garantindo que não há mistura.
+let currentParentList = []; 
 let todosOsPerfis = [];
 let actionToConfirm = null;
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
@@ -27,11 +28,8 @@ async function initSettingsPage() {
     document.getElementById('user-name').textContent = getUserName();
     
     setupEventListenersSettings();
-    
-    // Inicializa as tabelas vazias
     setupParametrosTable(); 
     
-    // Verifica se o utilizador tem permissão para ver as abas de admin
     if (privilegedAccessProfiles.includes(getUserProfile())) {
         document.getElementById('user-tab-btn').style.display = 'inline-block';
         document.querySelector('button[data-tab="perfis"]').style.display = 'inline-block';
@@ -42,7 +40,6 @@ async function initSettingsPage() {
     }
     
     await popularSeletorDeCodigos();
-    await preCarregarGruposDeDespesa();
     loadCurrentLogo();
     setupSidebar();
 }
@@ -64,7 +61,6 @@ function setupEventListenersSettings() {
             const activeContent = document.getElementById(`${tab}-content`);
             if (activeContent) activeContent.classList.remove('hidden');
 
-            // Carrega os dados das tabelas quando a aba é clicada
             if(tab === 'usuarios' && usersTable) usersTable.setData();
             if(tab === 'perfis' && perfisTable) perfisTable.setData();
         }
@@ -137,7 +133,6 @@ async function openUserSettingsModal(userData) {
         perfilSelect.appendChild(option);
     });
     
-    // Lógica para as checkboxes de permissões dos módulos
     const permissionsContainer = document.getElementById('user-modal-permissions');
     permissionsContainer.innerHTML = 'A carregar permissões...';
     
@@ -146,8 +141,8 @@ async function openUserSettingsModal(userData) {
         if (!response.ok) throw new Error('Falha ao buscar permissões');
         const userPermissions = await response.json();
         
-        const allModules = ['Lançamentos', 'Logística', 'Configurações']; // Módulos do sistema
-        permissionsContainer.innerHTML = ''; // Limpa o contentor
+        const allModules = ['Lançamentos', 'Logística', 'Configurações'];
+        permissionsContainer.innerHTML = ''; 
         
         allModules.forEach(moduleName => {
             const permission = userPermissions.find(p => p.nome_modulo === moduleName);
@@ -185,7 +180,6 @@ async function handleSaveUserSettings() {
     }
     
     try {
-        // Atualiza os dados principais do utilizador
         const userResponse = await fetch(`${apiUrlBase}/users/${userId}/manage`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -194,7 +188,6 @@ async function handleSaveUserSettings() {
 
         if (!userResponse.ok) return handleApiError(userResponse);
 
-        // Atualiza as permissões do perfil
         const permissionsPayload = [];
         const permissionsContainer = document.getElementById('user-modal-permissions');
         permissionsContainer.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
@@ -343,20 +336,35 @@ async function popularSeletorDeCodigos() {
     }
 }
 
-async function preCarregarGruposDeDespesa() {
-    try {
-        const response = await fetch(`${apiUrlBase}/parametros?cod=Grupo Despesa`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (response.status >= 400) return handleApiError(response);
-        todosOsGruposDeDespesa = await response.json();
-        const selectVinculacao = document.getElementById('param-vinculacao');
+async function loadAndPopulateVinculacao(codParametroPai) {
+    const selectVinculacao = document.getElementById('param-vinculacao');
+    currentParentList = [];
+    selectVinculacao.innerHTML = '<option value="">-- A carregar... --</option>';
+    
+    if (!codParametroPai) {
         selectVinculacao.innerHTML = '<option value="">-- Nenhum --</option>';
-        todosOsGruposDeDespesa.forEach(grupo => {
-            const option = document.createElement('option');
-            option.value = grupo.KEY_PARAMETRO || grupo.ID;
-            option.textContent = grupo.NOME_PARAMETRO;
-            selectVinculacao.appendChild(option);
+        return;
+    }
+
+    try {
+        const response = await fetch(`${apiUrlBase}/parametros?cod=${codParametroPai}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error(`Falha ao carregar ${codParametroPai}`);
+        
+        currentParentList = await response.json();
+        
+        selectVinculacao.innerHTML = '<option value="">-- Nenhum --</option>';
+        currentParentList.forEach(item => {
+            if (item.KEY_VINCULACAO) {
+                const option = document.createElement('option');
+                option.value = item.KEY_VINCULACAO;
+                option.textContent = item.NOME_PARAMETRO;
+                selectVinculacao.appendChild(option);
+            }
         });
-    } catch (error) { console.error(error); }
+    } catch (error) {
+        console.error(error);
+        selectVinculacao.innerHTML = '<option value="">-- Erro --</option>';
+    }
 }
 
 function setupParametrosTable() {
@@ -367,12 +375,15 @@ function setupParametrosTable() {
             { title: "ID", field: "ID", width: 60 },
             { title: "Nome", field: "NOME_PARAMETRO", minWidth: 200 },
             { title: "Key", field: "KEY_PARAMETRO", hozAlign: "center", width: 80 },
-            { title: "Vínculo", field: "KEY_VINCULACAO", hozAlign: "left", formatter: (cell) => {
-                const key = cell.getValue();
-                if (!key) return "";
-                const grupo = todosOsGruposDeDespesa.find(g => g.KEY_PARAMETRO == key || g.ID == key);
-                return grupo ? grupo.NOME_PARAMETRO : `<span style="color:red;">Inválido</span>`;
-            }},
+            { 
+                title: "Vínculo", field: "KEY_VINCULACAO", hozAlign: "left",
+                formatter: (cell) => {
+                    const key = cell.getValue();
+                    if (!key) return "";
+                    const pai = currentParentList.find(p => p.KEY_VINCULACAO == key);
+                    return pai ? pai.NOME_PARAMETRO : `<span style="color:red;">Inválido</span>`;
+                }
+            },
             {
                 title: "Ações", hozAlign: "center", width: 180,
                 formatter: () => `<button class="edit-btn">Editar</button><button class="delete-btn ml-2">Apagar</button>`,
@@ -389,19 +400,36 @@ function setupParametrosTable() {
     });
 }
 
-function handleParamCodeChange(e) {
+async function handleParamCodeChange(e) {
     currentParamCode = e.target.value;
     const paramForm = document.getElementById('param-form');
     const vinculacaoGroup = document.getElementById('vinculacao-group');
     resetParamForm();
+    parametrosTable.clearData();
+
     if (currentParamCode) {
         paramForm.style.display = 'grid';
+        
+        let tipoPai = null;
+        if (currentParamCode === 'Tipo Despesa') {
+            tipoPai = 'Grupo Despesa';
+        } else if (currentParamCode === 'Modelo - Veículo') {
+            tipoPai = 'Marca - Veículo';
+        }
+
+        if (tipoPai) {
+            await loadAndPopulateVinculacao(tipoPai);
+            vinculacaoGroup.style.display = 'block';
+        } else {
+            currentParentList = [];
+            vinculacaoGroup.style.display = 'none';
+        }
+        
         const url = `${apiUrlBase}/parametros?cod=${encodeURIComponent(currentParamCode)}`;
         parametrosTable.setData(url, {}, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        vinculacaoGroup.style.display = currentParamCode === 'Tipo Despesa' ? 'block' : 'none';
+
     } else {
         paramForm.style.display = 'none';
-        parametrosTable.clearData();
     }
 }
 
@@ -412,7 +440,7 @@ function preencherFormularioParaEdicaoParam(data) {
     document.getElementById('param-cod').readOnly = true;
     document.getElementById('param-nome').value = data.NOME_PARAMETRO;
     document.getElementById('param-key').value = data.KEY_PARAMETRO;
-    document.getElementById('param-vinculacao').value = data.KEY_VINCULACAO || "";
+    document.getElementById('param-vinculacao').value = data.KEY_VINCULACAO || ""; 
     document.getElementById('cancel-edit-param-btn').style.display = 'inline-block';
     document.querySelector('#param-form button[type="submit"]').textContent = "Salvar Alterações";
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
@@ -435,7 +463,7 @@ function handleParamFormSubmit(e) {
         cod_parametro: document.getElementById('param-cod').value,
         nome_parametro: document.getElementById('param-nome').value,
         key_parametro: document.getElementById('param-key').value || null,
-        key_vinculacao: document.getElementById('param-vinculacao').value || null,
+        key_vinculacao: document.getElementById('param-vinculacao').value || null, 
     };
     if (!body.cod_parametro || !body.nome_parametro) {
         alert('Tipo e Nome do Parâmetro são obrigatórios.');
@@ -457,7 +485,7 @@ async function executeSaveParam(id, body) {
         if (response.status >= 400) return handleApiError(response);
         alert(`Parâmetro ${id ? 'atualizado' : 'criado'} com sucesso!`);
         resetParamForm();
-        parametrosTable.setData();
+        parametrosTable.setData(); 
     } catch (error) {
         alert(`Falha ao salvar o parâmetro: ${error.message}`);
     }
