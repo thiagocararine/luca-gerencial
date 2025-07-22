@@ -819,7 +819,7 @@ apiRouter.get('/veiculos/:id/manutencoes', authenticateToken, async (req, res) =
             FROM veiculo_manutencoes vm
             LEFT JOIN cad_user u ON vm.id_user_lanc = u.ID
             LEFT JOIN fornecedores f ON vm.id_fornecedor = f.id
-            WHERE vm.id_veiculo = ?
+            WHERE vm.id_veiculo = ? AND vm.status = 'Ativo'
             ORDER BY vm.data_manutencao DESC`;
         const [manutencoes] = await connection.execute(sql, [id]);
         await connection.end();
@@ -942,6 +942,7 @@ apiRouter.get('/custos-frota', authenticateToken, async (req, res) => {
             FROM custos_frota cf
             LEFT JOIN fornecedores f ON cf.id_fornecedor = f.id
             LEFT JOIN cad_user u ON cf.id_user_lanc = u.ID
+            WHERE cf.status = 'Ativo'
             ORDER BY cf.data_custo DESC`;
         const [custos] = await connection.execute(sql);
         await connection.end();
@@ -950,6 +951,86 @@ apiRouter.get('/custos-frota', authenticateToken, async (req, res) => {
         console.error("Erro ao buscar custos de frota:", error);
         if (connection) await connection.end();
         res.status(500).json({ error: 'Erro ao buscar custos de frota.' });
+    }
+});
+
+// NOVA ROTA: Buscar as últimas manutenções individuais (custos diretos)
+apiRouter.get('/manutencoes/recentes', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            SELECT 
+                vm.id,
+                vm.data_manutencao as data_custo,
+                vm.descricao,
+                vm.custo,
+                v.placa,
+                v.modelo,
+                f.razao_social as nome_fornecedor,
+                u.nome_user as nome_utilizador
+            FROM veiculo_manutencoes vm
+            JOIN veiculos v ON vm.id_veiculo = v.id
+            LEFT JOIN fornecedores f ON vm.id_fornecedor = f.id
+            LEFT JOIN cad_user u ON vm.id_user_lanc = u.ID
+            WHERE vm.status = 'Ativo'
+            ORDER BY vm.data_manutencao DESC
+            LIMIT 50`; // Limita aos últimos 50 para performance
+        const [custos] = await connection.execute(sql);
+        await connection.end();
+        res.json(custos);
+    } catch (error) {
+        console.error("Erro ao buscar custos individuais recentes:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro ao buscar custos individuais.' });
+    }
+});
+
+// NOVA ROTA: Exclusão lógica para manutenções individuais
+apiRouter.put('/manutencoes/:id/excluir', authenticateToken, authorizeAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { userId, nome: nomeUsuario } = req.user;
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            UPDATE veiculo_manutencoes 
+            SET status = 'Excluída', excluido_por_id = ?, excluido_por_nome = ?, data_exclusao = NOW()
+            WHERE id = ?`;
+        const [result] = await connection.execute(sql, [userId, `${userId} - ${nomeUsuario}`, id]);
+        await connection.end();
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Lançamento de manutenção não encontrado.' });
+        }
+        res.json({ message: 'Lançamento de manutenção excluído com sucesso.' });
+    } catch (error) {
+        console.error("Erro ao excluir manutenção:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro ao excluir o lançamento.' });
+    }
+});
+
+// NOVA ROTA: Exclusão lógica para custos gerais de frota
+apiRouter.put('/custos-frota/:id/excluir', authenticateToken, authorizeAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { userId, nome: nomeUsuario } = req.user;
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            UPDATE custos_frota 
+            SET status = 'Excluída', excluido_por_id = ?, excluido_por_nome = ?, data_exclusao = NOW()
+            WHERE id = ?`;
+        const [result] = await connection.execute(sql, [userId, `${userId} - ${nomeUsuario}`, id]);
+        await connection.end();
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Custo de frota não encontrado.' });
+        }
+        res.json({ message: 'Custo de frota excluído com sucesso.' });
+    } catch (error) {
+        console.error("Erro ao excluir custo de frota:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro ao excluir o custo.' });
     }
 });
 

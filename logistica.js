@@ -1,4 +1,4 @@
-// logistica.js (Completo com funcionalidade de Exportar Relatório de Manutenção)
+// logistica.js (Completo com Abas de Custos, Exclusão Lógica e Exportação de Manutenção)
 
 document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
@@ -10,8 +10,9 @@ let dbMarcas = [];
 let dbModelos = [];
 let currentVehicleId = null; 
 let vehicleToDeleteId = null;
-let maintenanceExportDatepicker = null; // Datepicker para o novo modal
-let LOGO_BASE64 = null; // Para armazenar a logo da empresa
+let maintenanceExportDatepicker = null;
+let LOGO_BASE64 = null;
+let costToDelete = { id: null, type: null }; // Para a exclusão de custos
 
 /**
  * Função principal que inicializa a página de logística.
@@ -32,16 +33,17 @@ async function initLogisticaPage() {
     }
 
     setupEventListeners();
-    setupMaintenanceExportModal(); // Inicializa o novo datepicker
+    setupMaintenanceExportModal();
     
     await Promise.all([
         populateFilialSelects(),
         loadMarcasAndModelosFromDB(),
-        loadCurrentLogo() // Carrega a logo para os relatórios
+        loadCurrentLogo()
     ]);
 
     await loadVehicles();
     await loadFleetCosts();
+    await loadRecentIndividualCosts();
 }
 
 /**
@@ -53,19 +55,23 @@ function setupEventListeners() {
     document.getElementById('add-fleet-cost-button')?.addEventListener('click', openFleetCostModal);
     document.getElementById('filter-button').addEventListener('click', applyFilters);
     document.getElementById('clear-filter-button').addEventListener('click', clearFilters);
+
     const vehicleModal = document.getElementById('vehicle-modal');
     vehicleModal.querySelector('#close-vehicle-modal-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
     vehicleModal.querySelector('#cancel-vehicle-form-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
     vehicleModal.querySelector('#vehicle-form').addEventListener('submit', handleVehicleFormSubmit);
     vehicleModal.querySelector('#has-placa-checkbox').addEventListener('change', handleHasPlacaChange);
     vehicleModal.querySelector('#vehicle-marca').addEventListener('input', handleMarcaChange); 
+    
     const placaInput = vehicleModal.querySelector('#vehicle-placa');
     placaInput.addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase(); validatePlaca(e.target.value); });
     const renavamInput = vehicleModal.querySelector('#vehicle-renavam');
     renavamInput.addEventListener('input', (e) => { e.target.value = e.target.value.replace(/\D/g, ''); validateRenavam(e.target.value); });
+
     const deleteModal = document.getElementById('confirm-delete-modal');
     deleteModal.querySelector('#cancel-delete-btn').addEventListener('click', () => deleteModal.classList.add('hidden'));
     deleteModal.querySelector('#confirm-delete-btn').addEventListener('click', () => { if (vehicleToDeleteId) deleteVehicle(vehicleToDeleteId); });
+
     const detailsModal = document.getElementById('details-modal');
     detailsModal.querySelector('#close-details-modal-btn').addEventListener('click', () => detailsModal.classList.add('hidden'));
     detailsModal.querySelector('#details-tabs').addEventListener('click', (e) => { if (e.target.matches('.tab-button')) { switchTab(e.target.dataset.tab, currentVehicleId); } });
@@ -86,18 +92,194 @@ function setupEventListeners() {
     maintenanceModal.querySelector('#lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('maintenance'));
     maintenanceModal.querySelector('#maintenance-despesa-interna-btn').addEventListener('click', () => useInternalExpense('maintenance'));
     maintenanceModal.querySelector('#maintenance-form').addEventListener('submit', handleMaintenanceFormSubmit);
+
     const fleetCostModal = document.getElementById('fleet-cost-modal');
     fleetCostModal.querySelector('#close-fleet-cost-modal-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
     fleetCostModal.querySelector('#cancel-fleet-cost-form-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
     fleetCostModal.querySelector('#fleet-cost-lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('fleet-cost'));
     fleetCostModal.querySelector('#fleet-cost-despesa-interna-btn').addEventListener('click', () => useInternalExpense('fleet-cost'));
     fleetCostModal.querySelector('#fleet-cost-form').addEventListener('submit', handleFleetCostFormSubmit);
+
     document.getElementById('content-area').addEventListener('click', handleContentClick);
     window.addEventListener('resize', () => renderContent(allVehicles));
 
     document.getElementById('close-maintenance-export-modal-btn').addEventListener('click', () => document.getElementById('maintenance-export-modal').classList.add('hidden'));
     document.getElementById('generate-maintenance-pdf-btn').addEventListener('click', exportMaintenanceReportPDF);
+
+    document.getElementById('costs-tabs').addEventListener('click', (e) => {
+        if (e.target.matches('.tab-button')) {
+            switchCostTab(e.target.dataset.costTab);
+        }
+    });
+
+    const deleteCostModal = document.getElementById('confirm-delete-cost-modal');
+    deleteCostModal.querySelector('#cancel-delete-cost-btn').addEventListener('click', () => deleteCostModal.classList.add('hidden'));
+    deleteCostModal.querySelector('#confirm-delete-cost-btn').addEventListener('click', () => {
+        if (costToDelete.id && costToDelete.type) {
+            executeDeleteCost(costToDelete.id, costToDelete.type);
+        }
+    });
+
+    document.getElementById('costs-tab-content-gerais').addEventListener('click', handleDeleteCostClick);
+    document.getElementById('costs-tab-content-individuais').addEventListener('click', handleDeleteCostClick);
 }
+
+// --- LÓGICA DAS ABAS DE CUSTOS ---
+
+function switchCostTab(tabName) {
+    document.querySelectorAll('.cost-tab-content').forEach(content => content.classList.remove('active'));
+    document.querySelectorAll('#costs-tabs .tab-button').forEach(button => button.classList.remove('active'));
+
+    document.getElementById(`costs-tab-content-${tabName}`).classList.add('active');
+    document.querySelector(`#costs-tabs .tab-button[data-cost-tab="${tabName}"]`).classList.add('active');
+}
+
+async function loadFleetCosts() {
+    const container = document.getElementById('costs-tab-content-gerais');
+    container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
+    try {
+        const response = await fetch(`${apiUrlBase}/custos-frota`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao buscar custos gerais.');
+        const custos = await response.json();
+        
+        if (custos.length === 0) {
+            container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo geral registado.</p>';
+            return;
+        }
+
+        const table = createCostTable('gerais');
+        const tbody = table.querySelector('tbody');
+        custos.forEach(c => {
+            const tr = tbody.insertRow();
+            tr.innerHTML = `
+                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+                <td class="px-4 py-2">${c.descricao}</td>
+                <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
+                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
+                <td class="px-4 py-2 text-center">
+                    <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="geral" data-cost-desc="${c.descricao}">
+                        <span data-feather="trash-2" class="w-4 h-4"></span>
+                    </button>
+                </td>
+            `;
+        });
+        container.innerHTML = '';
+        container.appendChild(table);
+        feather.replace();
+    } catch (error) {
+        container.innerHTML = `<p class="text-center p-4 text-red-500">${error.message}</p>`;
+    }
+}
+
+async function loadRecentIndividualCosts() {
+    const container = document.getElementById('costs-tab-content-individuais');
+    container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
+    try {
+        const response = await fetch(`${apiUrlBase}/manutencoes/recentes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao buscar custos individuais.');
+        const custos = await response.json();
+        
+        if (custos.length === 0) {
+            container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo individual registado.</p>';
+            return;
+        }
+
+        const table = createCostTable('individuais');
+        const tbody = table.querySelector('tbody');
+        custos.forEach(c => {
+            const tr = tbody.insertRow();
+            tr.innerHTML = `
+                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+                <td class="px-4 py-2">${c.modelo} (${c.placa})</td>
+                <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
+                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
+                <td class="px-4 py-2 text-center">
+                    <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="individual" data-cost-desc="${c.descricao || `Manutenção em ${c.modelo}`}">
+                        <span data-feather="trash-2" class="w-4 h-4"></span>
+                    </button>
+                </td>
+            `;
+        });
+        container.innerHTML = '';
+        container.appendChild(table);
+        feather.replace();
+    } catch (error) {
+        container.innerHTML = `<p class="text-center p-4 text-red-500">${error.message}</p>`;
+    }
+}
+
+function createCostTable(type) {
+    const table = document.createElement('table');
+    table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+    const descriptionHeader = type === 'gerais' ? 'Descrição' : 'Veículo';
+    table.innerHTML = `
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">${descriptionHeader}</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Fornecedor</th>
+                <th class="px-4 py-2 text-right font-medium text-gray-500">Custo</th>
+                <th class="px-4 py-2 text-center font-medium text-gray-500">Ações</th>
+            </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
+    return table;
+}
+
+function handleDeleteCostClick(event) {
+    const button = event.target.closest('button[data-cost-id]');
+    if (!button) return;
+
+    const id = button.dataset.costId;
+    const type = button.dataset.costType;
+    const description = button.dataset.costDesc;
+    
+    openDeleteCostConfirmModal(id, type, description);
+}
+
+function openDeleteCostConfirmModal(id, type, description) {
+    costToDelete = { id, type };
+    document.getElementById('delete-cost-info').textContent = description;
+    document.getElementById('confirm-delete-cost-modal').classList.remove('hidden');
+    feather.replace();
+}
+
+async function executeDeleteCost(id, type) {
+    const modal = document.getElementById('confirm-delete-cost-modal');
+    const confirmBtn = modal.querySelector('#confirm-delete-cost-btn');
+    confirmBtn.disabled = true;
+
+    let url = '';
+    if (type === 'geral') {
+        url = `${apiUrlBase}/custos-frota/${id}/excluir`;
+    } else if (type === 'individual') {
+        url = `${apiUrlBase}/manutencoes/${id}/excluir`;
+    } else {
+        return;
+    }
+
+    try {
+        const response = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error('Falha ao excluir o lançamento.');
+        
+        alert('Lançamento excluído com sucesso!');
+        modal.classList.add('hidden');
+        
+        await loadFleetCosts();
+        await loadRecentIndividualCosts();
+
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        confirmBtn.disabled = false;
+        costToDelete = { id: null, type: null };
+    }
+}
+
+// --- LÓGICA DE EXPORTAÇÃO E GESTÃO DE VEÍCULOS ---
 
 function setupMaintenanceExportModal() {
     maintenanceExportDatepicker = new Litepicker({
@@ -149,10 +331,8 @@ async function exportMaintenanceReportPDF() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
 
-        // Cabeçalho com a logo
         if (LOGO_BASE64) {
             try {
-                // Adiciona a imagem com largura de 25mm e altura calculada automaticamente
                 doc.addImage(LOGO_BASE64, 'PNG', 14, 15, 25, 0);
             } catch (e) {
                 console.error("A logo carregada é inválida e não será adicionada ao PDF.", e);
@@ -164,7 +344,6 @@ async function exportMaintenanceReportPDF() {
         doc.text(`Veículo: ${vehicle.modelo} - ${vehicle.placa}`, 14, 35);
         doc.text(`Período: ${startDate.toLocaleDateString('pt-BR')} a ${endDate.toLocaleDateString('pt-BR')}`, 14, 40);
 
-        // Tabela de Lançamentos
         const body = manutençõesFiltradas.map(m => [
             new Date(m.data_manutencao).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
             m.tipo_manutencao,
@@ -179,14 +358,12 @@ async function exportMaintenanceReportPDF() {
             startY: 50,
             theme: 'grid',
             headStyles: { fillColor: [41, 128, 185] },
-            // Estilos para evitar quebra de linha
             columnStyles: {
-                2: { cellWidth: 45, overflow: 'ellipsize' }, // Fornecedor
-                3: { cellWidth: 'auto', overflow: 'ellipsize' }, // Descrição
+                2: { cellWidth: 45, overflow: 'ellipsize' },
+                3: { cellWidth: 'auto', overflow: 'ellipsize' },
             }
         });
 
-        // Calcula os totais por tipo
         const totaisPorTipo = manutençõesFiltradas.reduce((acc, m) => {
             const tipo = m.tipo_manutencao || 'Não especificado';
             const custo = parseFloat(m.custo) || 0;
@@ -196,14 +373,12 @@ async function exportMaintenanceReportPDF() {
         
         const totalGeral = Object.values(totaisPorTipo).reduce((sum, value) => sum + value, 0);
 
-        // Cria o corpo da tabela de resumo
         const summaryBody = Object.entries(totaisPorTipo).map(([tipo, total]) => {
-            return [`${tipo}`, total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })];
+            return [tipo, total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })];
         });
 
-        // Adiciona a tabela de resumo
         doc.autoTable({
-            head: [['Resumo por Tipo', 'Custo Total']],
+            head: [['Tipo de Manutenção', 'Custo Total']],
             body: summaryBody,
             startY: doc.autoTable.previous.finalY + 10,
             theme: 'striped',
@@ -293,9 +468,6 @@ async function loadVehicles() {
     }
 }
 
-/**
- * Aplica os filtros selecionados à lista de veículos.
- */
 function applyFilters() {
     const searchTerm = document.getElementById('filter-search').value.toLowerCase();
     const filial = document.getElementById('filter-filial').value;
@@ -309,12 +481,13 @@ function applyFilters() {
         return searchMatch && filialMatch;
     });
 
-    // Filtro de status com a nova lógica
     if (status) {
-        // Se um status específico for selecionado, filtra por ele
-        filteredVehicles = filteredVehicles.filter(v => v.status === status);
+        if (status === "Ativo / Manutenção") {
+             filteredVehicles = filteredVehicles.filter(v => v.status === 'Ativo' || v.status === 'Em Manutenção');
+        } else {
+            filteredVehicles = filteredVehicles.filter(v => v.status === status);
+        }
     } else {
-        // Se for "Todos" (valor ""), mostra Ativo e Em Manutenção por padrão
         filteredVehicles = filteredVehicles.filter(v => v.status === 'Ativo' || v.status === 'Em Manutenção');
     }
 
@@ -682,7 +855,7 @@ async function handleFleetCostFormSubmit(event) {
 }
 
 async function loadFleetCosts() {
-    const container = document.getElementById('fleet-costs-history-container');
+    const container = document.getElementById('costs-tab-content-gerais');
     container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
     try {
         const response = await fetch(`${apiUrlBase}/custos-frota`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
@@ -692,18 +865,7 @@ async function loadFleetCosts() {
             container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo geral registado.</p>';
             return;
         }
-        const table = document.createElement('table');
-        table.className = 'min-w-full divide-y divide-gray-200 text-sm';
-        table.innerHTML = `
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
-                    <th class="px-4 py-2 text-left font-medium text-gray-500">Descrição</th>
-                    <th class="px-4 py-2 text-left font-medium text-gray-500">Fornecedor</th>
-                    <th class="px-4 py-2 text-right font-medium text-gray-500">Custo Total</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
+        const table = createCostTable('gerais');
         const tbody = table.querySelector('tbody');
         custos.forEach(c => {
             const tr = tbody.insertRow();
@@ -711,68 +873,116 @@ async function loadFleetCosts() {
                 <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
                 <td class="px-4 py-2">${c.descricao}</td>
                 <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
-                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>`;
+                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
+                <td class="px-4 py-2 text-center">
+                    <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="geral" data-cost-desc="${c.descricao}">
+                        <span data-feather="trash-2" class="w-4 h-4"></span>
+                    </button>
+                </td>`;
         });
         container.innerHTML = '';
         container.appendChild(table);
+        feather.replace();
     } catch (error) {
-        container.innerHTML = '<p class="text-center p-4 text-red-500">Erro ao carregar custos.</p>';
-        console.error(error);
+        container.innerHTML = `<p class="text-center p-4 text-red-500">${error.message}</p>`;
     }
 }
 
-function useInternalExpense(context) {
-    const cnpjInput = document.getElementById(`${context}-cnpj`);
-    cnpjInput.value = '00.000.000/0000-00';
-    lookupCnpj(context);
+async function loadRecentIndividualCosts() {
+    const container = document.getElementById('costs-tab-content-individuais');
+    container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
+    try {
+        const response = await fetch(`${apiUrlBase}/manutencoes/recentes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao buscar custos individuais.');
+        const custos = await response.json();
+        if (custos.length === 0) {
+            container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo individual registado.</p>';
+            return;
+        }
+        const table = createCostTable('individuais');
+        const tbody = table.querySelector('tbody');
+        custos.forEach(c => {
+            const tr = tbody.insertRow();
+            tr.innerHTML = `
+                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+                <td class="px-4 py-2">${c.modelo} (${c.placa})</td>
+                <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
+                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
+                <td class="px-4 py-2 text-center">
+                    <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="individual" data-cost-desc="${c.descricao || `Manutenção em ${c.modelo}`}">
+                        <span data-feather="trash-2" class="w-4 h-4"></span>
+                    </button>
+                </td>`;
+        });
+        container.innerHTML = '';
+        container.appendChild(table);
+        feather.replace();
+    } catch (error) {
+        container.innerHTML = `<p class="text-center p-4 text-red-500">${error.message}</p>`;
+    }
 }
 
-async function lookupCnpj(context) {
-    const cnpj = document.getElementById(`${context}-cnpj`).value.replace(/\D/g, '');
-    const loader = document.getElementById(`${context}-cnpj-loader`);
-    const razaoSocialInput = document.getElementById(`${context}-razao-social`);
-    const fornecedorIdInput = document.getElementById(`${context}-fornecedor-id`);
-    if (cnpj.length !== 14 && cnpj !== '00000000000000') {
-        alert('Por favor, insira um CNPJ válido com 14 dígitos.');
+function createCostTable(type) {
+    const table = document.createElement('table');
+    table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+    const descriptionHeader = type === 'gerais' ? 'Descrição' : 'Veículo';
+    table.innerHTML = `
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">${descriptionHeader}</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Fornecedor</th>
+                <th class="px-4 py-2 text-right font-medium text-gray-500">Custo</th>
+                <th class="px-4 py-2 text-center font-medium text-gray-500">Ações</th>
+            </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
+    return table;
+}
+
+function handleDeleteCostClick(event) {
+    const button = event.target.closest('button[data-cost-id]');
+    if (!button) return;
+    const id = button.dataset.costId;
+    const type = button.dataset.costType;
+    const description = button.dataset.costDesc;
+    openDeleteCostConfirmModal(id, type, description);
+}
+
+function openDeleteCostConfirmModal(id, type, description) {
+    costToDelete = { id, type };
+    document.getElementById('delete-cost-info').textContent = description;
+    document.getElementById('confirm-delete-cost-modal').classList.remove('hidden');
+    feather.replace();
+}
+
+async function executeDeleteCost(id, type) {
+    const modal = document.getElementById('confirm-delete-cost-modal');
+    const confirmBtn = modal.querySelector('#confirm-delete-cost-btn');
+    confirmBtn.disabled = true;
+    let url = '';
+    if (type === 'geral') {
+        url = `${apiUrlBase}/custos-frota/${id}/excluir`;
+    } else if (type === 'individual') {
+        url = `${apiUrlBase}/manutencoes/${id}/excluir`;
+    } else {
         return;
     }
-    loader.style.display = 'block';
-    razaoSocialInput.value = '';
-    fornecedorIdInput.value = '';
     try {
-        let fornecedorData;
-        if (cnpj === '00000000000000') {
-            fornecedorData = { cnpj, razao_social: 'Despesa Interna' };
-        } else {
-            const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
-            if (!response.ok) throw new Error('CNPJ não encontrado ou inválido.');
-            const data = await response.json();
-            fornecedorData = {
-                cnpj: data.cnpj,
-                razao_social: data.razao_social,
-                nome_fantasia: data.nome_fantasia,
-                logradouro: data.logradouro,
-                numero: data.numero,
-                bairro: data.bairro,
-                municipio: data.municipio,
-                uf: data.uf,
-                cep: data.cep
-            };
-        }
-        const nossoDbResponse = await fetch(`${apiUrlBase}/fornecedores/cnpj`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-            body: JSON.stringify(fornecedorData)
+        const response = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${getToken()}` }
         });
-        if (!nossoDbResponse.ok) throw new Error('Erro ao registar fornecedor no sistema.');
-        const fornecedor = await nossoDbResponse.json();
-        razaoSocialInput.value = fornecedor.razao_social;
-        fornecedorIdInput.value = fornecedor.id;
+        if (!response.ok) throw new Error('Falha ao excluir o lançamento.');
+        alert('Lançamento excluído com sucesso!');
+        modal.classList.add('hidden');
+        await loadFleetCosts();
+        await loadRecentIndividualCosts();
     } catch (error) {
-        alert(error.message);
-        razaoSocialInput.value = 'Falha na consulta.';
+        alert(`Erro: ${error.message}`);
     } finally {
-        loader.style.display = 'none';
+        confirmBtn.disabled = false;
+        costToDelete = { id: null, type: null };
     }
 }
 
