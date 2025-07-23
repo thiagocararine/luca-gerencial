@@ -44,6 +44,9 @@ async function initLogisticaPage() {
     await loadVehicles();
     await loadFleetCosts();
     await loadRecentIndividualCosts();
+
+    // Garante que o estado inicial das abas de custo está correto
+    switchCostTab('gerais');
 }
 
 /**
@@ -126,12 +129,30 @@ function setupEventListeners() {
 
 // --- LÓGICA DAS ABAS DE CUSTOS ---
 
+// CORRIGIDO: Esta função agora manipula diretamente a visibilidade dos elementos.
 function switchCostTab(tabName) {
-    document.querySelectorAll('.cost-tab-content').forEach(content => content.classList.remove('active'));
-    document.querySelectorAll('#costs-tabs .tab-button').forEach(button => button.classList.remove('active'));
+    // Esconde todos os conteúdos de abas de custo
+    document.querySelectorAll('.cost-tab-content').forEach(content => {
+        content.classList.remove('active');
+        content.style.display = 'none'; // Garante que está escondido
+    });
+    // Desativa todos os botões de abas de custo
+    document.querySelectorAll('#costs-tabs .tab-button').forEach(button => {
+        button.classList.remove('active');
+    });
 
-    document.getElementById(`costs-tab-content-${tabName}`).classList.add('active');
-    document.querySelector(`#costs-tabs .tab-button[data-cost-tab="${tabName}"]`).classList.add('active');
+    // Mostra o conteúdo da aba selecionada
+    const activeContent = document.getElementById(`costs-tab-content-${tabName}`);
+    if (activeContent) {
+        activeContent.classList.add('active');
+        activeContent.style.display = 'block'; // Garante que está visível
+    }
+    
+    // Ativa o botão da aba selecionada
+    const activeButton = document.querySelector(`#costs-tabs .tab-button[data-cost-tab="${tabName}"]`);
+    if(activeButton) {
+        activeButton.classList.add('active');
+    }
 }
 
 async function loadFleetCosts() {
