@@ -734,6 +734,46 @@ apiRouter.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, re
     }
 });
 
+// ROTA PARA BUSCAR TODOS OS VEÍCULOS (A ROTA QUE ESTAVA EM FALTA)
+apiRouter.get('/veiculos', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        
+        // A query faz um JOIN com a tabela de parâmetros para já trazer o nome da filial,
+        // o que é útil para a exibição na tabela do frontend.
+        const sql = `
+            SELECT 
+                v.*, 
+                p.NOME_PARAMETRO as nome_filial 
+            FROM 
+                veiculos v
+            LEFT JOIN 
+                parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
+            ORDER BY 
+                v.modelo ASC`;
+
+        const [vehicles] = await connection.execute(sql);
+        await connection.end();
+        
+        // Adiciona um URL de foto principal para cada veículo, se existir
+        // O frontend espera por `foto_principal`
+        const vehiclesWithPhotoUrl = vehicles.map(vehicle => ({
+            ...vehicle,
+            foto_principal: vehicle.foto_principal 
+                ? `${req.protocol}://${req.get('host')}/uploads/veiculos/${vehicle.id}/fotos/${vehicle.foto_principal}` 
+                : null
+        }));
+
+        res.json(vehiclesWithPhotoUrl);
+
+    } catch (error) {
+        console.error("Erro ao buscar veículos:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro ao buscar a lista de veículos.' });
+    }
+});
+
 apiRouter.get('/veiculos/:id/logs', authenticateToken, authorizeAdmin, async (req, res) => {
     const { id } = req.params;
     let connection;
