@@ -1,4 +1,4 @@
-// index.js (Backend Completo com Lógica de Upload de Ficheiros para Veículos)
+// index.js (Backend Completo com todas as funcionalidades e correções)
 console.log("--- O SERVIDOR FOI REINICIADO COM A VERSÃO MAIS RECENTE DO CÓDIGO ---");
 
 // 1. Importação das bibliotecas
