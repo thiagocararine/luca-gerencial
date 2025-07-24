@@ -7,7 +7,7 @@ const mysql = require('mysql2/promise');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const fs = require('fs').promises;
+const fs =require('fs').promises;
 const path = require('path');
 const multer = require('multer');
 const fetch = require('node-fetch');
@@ -36,30 +36,43 @@ app.use(express.json({ limit: '10mb' }));
 // Serve a pasta de uploads como estática para que o frontend possa aceder aos ficheiros
 app.use('/uploads', express.static(UPLOADS_BASE_PATH));
 
+// Função para sanitizar nomes de ficheiros e diretórios
+const sanitizeForPath = (str) => String(str || '').replace(/[^a-zA-Z0-9-]/g, '_');
+
 // Configuração do Multer para armazenamento de ficheiros de veículos
 const vehicleStorage = multer.diskStorage({
     destination: async (req, file, cb) => {
         const vehicleId = req.params.id;
-        const isPhoto = file.mimetype.startsWith('image/');
-        const subfolder = isPhoto ? 'fotos' : 'documentos';
-        const destPath = path.join(UPLOADS_BASE_PATH, 'veiculos', vehicleId, subfolder);
-
+        let connection;
         try {
+            // É necessário buscar a placa para construir o caminho do diretório correto
+            connection = await mysql.createConnection(dbConfig);
+            const [rows] = await connection.execute('SELECT placa FROM veiculos WHERE id = ?', [vehicleId]);
+            if (rows.length === 0) {
+                return cb(new Error(`Veículo com ID ${vehicleId} não encontrado.`));
+            }
+            const placaSanitizada = sanitizeForPath(rows[0].placa);
+            
+            const isPhoto = file.mimetype.startsWith('image/');
+            const subfolder = isPhoto ? 'fotos' : 'documentos';
+            const destPath = path.join(UPLOADS_BASE_PATH, 'veiculos', placaSanitizada, subfolder);
+
             await fs.mkdir(destPath, { recursive: true });
             cb(null, destPath);
         } catch (err) {
-            console.error("Erro ao criar diretório de upload:", err);
+            console.error("Erro no destino do Multer:", err);
             cb(err);
+        } finally {
+            if (connection) await connection.end();
         }
     },
     filename: (req, file, cb) => {
+        // Salva com um nome temporário único para evitar conflitos. Será renomeado depois.
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
         const extension = path.extname(file.originalname);
-        const baseName = path.basename(file.originalname, extension).replace(/[^a-zA-Z0-9]/g, '_');
-        cb(null, `${baseName}-${uniqueSuffix}${extension}`);
+        cb(null, `temp-${uniqueSuffix}${extension}`);
     }
 });
-// O frontend envia o ficheiro com o nome 'ficheiro'
 const vehicleUpload = multer({ storage: vehicleStorage }).single('ficheiro');
 
 
@@ -680,8 +693,9 @@ apiRouter.get('/veiculos', authenticateToken, async (req, res) => {
         const [vehicles] = await connection.execute(sql);
         
         const vehiclesWithPhotoUrl = vehicles.map(vehicle => {
+             const placaSanitizada = sanitizeForPath(vehicle.placa);
              const photoPath = vehicle.foto_principal 
-                ? `uploads/veiculos/${vehicle.id}/fotos/${vehicle.foto_principal}` 
+                ? `uploads/veiculos/${placaSanitizada}/fotos/${vehicle.foto_principal}` 
                 : null;
             return {
                 ...vehicle,
@@ -699,7 +713,7 @@ apiRouter.get('/veiculos', authenticateToken, async (req, res) => {
     }
 });
 
-// ROTA PARA CRIAR UM NOVO VEÍCULO (COM CRIAÇÃO DE DIRETÓRIOS)
+// ROTA PARA CRIAR UM NOVO VEÍCULO (COM CRIAÇÃO DE DIRETÓRIO PELA PLACA)
 apiRouter.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) => {
     const { placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status } = req.body;
 
@@ -727,11 +741,12 @@ apiRouter.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) 
         const [result] = await connection.execute(sql, params);
         const newVehicleId = result.insertId;
 
-        console.log(`[INFO] A criar diretórios para o novo veículo ID: ${newVehicleId}`);
-        const photosDir = path.join(UPLOADS_BASE_PATH, 'veiculos', String(newVehicleId), 'fotos');
-        const docsDir = path.join(UPLOADS_BASE_PATH, 'veiculos', String(newVehicleId), 'documentos');
-        await fs.mkdir(photosDir, { recursive: true });
-        await fs.mkdir(docsDir, { recursive: true });
+        // ** ALTERADO: Cria diretório com base na PLACA **
+        const placaSanitizada = sanitizeForPath(placa);
+        console.log(`[INFO] A criar diretórios para o novo veículo: ${placaSanitizada}`);
+        const vehicleDir = path.join(UPLOADS_BASE_PATH, 'veiculos', placaSanitizada);
+        await fs.mkdir(path.join(vehicleDir, 'fotos'), { recursive: true });
+        await fs.mkdir(path.join(vehicleDir, 'documentos'), { recursive: true });
         
         await connection.commit();
         
@@ -823,7 +838,7 @@ apiRouter.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, re
     }
 });
 
-// **NOVA ROTA**: ROTA PARA UPLOAD DE FICHEIROS (FOTOS E DOCUMENTOS)
+// **ROTA DE UPLOAD ALTERADA**: Renomeia o ficheiro com o formato desejado
 apiRouter.post('/veiculos/:id/upload', authenticateToken, authorizeAdmin, (req, res) => {
     vehicleUpload(req, res, async (err) => {
         if (err) {
@@ -835,35 +850,50 @@ apiRouter.post('/veiculos/:id/upload', authenticateToken, authorizeAdmin, (req, 
         }
 
         const { id } = req.params;
-        const { descricao, data_validade } = req.body;
+        const { descricao } = req.body;
         const isPhoto = req.file.mimetype.startsWith('image/');
         
         let connection;
         try {
             connection = await mysql.createConnection(dbConfig);
-            const filename = req.file.filename;
+            
+            const [vehicleRows] = await connection.execute('SELECT placa, modelo, ano_modelo FROM veiculos WHERE id = ?', [id]);
+            if (vehicleRows.length === 0) {
+                await fs.unlink(req.file.path); 
+                return res.status(404).json({ error: 'Veículo não encontrado.' });
+            }
+            const vehicle = vehicleRows[0];
+
+            const placa = sanitizeForPath(vehicle.placa);
+            const modelo = sanitizeForPath(vehicle.modelo);
+            const ano = vehicle.ano_modelo || new Date().getFullYear();
+            const desc = sanitizeForPath(descricao);
+            const extension = path.extname(req.file.originalname);
+            const newFilename = `${placa}_${modelo}_${ano}_${desc}${extension}`;
+            
+            const newPath = path.join(path.dirname(req.file.path), newFilename);
+            await fs.rename(req.file.path, newPath);
 
             if (isPhoto) {
-                // Adaptação para usar `caminho_foto`
                 const fotoSql = 'INSERT INTO veiculo_fotos (id_veiculo, descricao, caminho_foto) VALUES (?, ?, ?)';
-                await connection.execute(fotoSql, [id, descricao, filename]);
+                await connection.execute(fotoSql, [id, descricao, newFilename]);
                 
                 const updatePrincipalSql = 'UPDATE veiculos SET foto_principal = ? WHERE id = ?';
-                await connection.execute(updatePrincipalSql, [filename, id]);
-
+                await connection.execute(updatePrincipalSql, [newFilename, id]);
             } else {
-                // Adaptação para usar `caminho_arquivo` e `nome_documento`
+                const { data_validade } = req.body;
                 const docSql = 'INSERT INTO veiculo_documentos (id_veiculo, nome_documento, data_validade, caminho_arquivo) VALUES (?, ?, ?, ?)';
-                await connection.execute(docSql, [id, descricao, data_validade || null, filename]);
+                await connection.execute(docSql, [id, descricao, data_validade || null, newFilename]);
             }
 
             res.status(201).json({
-                message: 'Ficheiro carregado com sucesso!',
-                fileName: filename
+                message: 'Ficheiro carregado e renomeado com sucesso!',
+                fileName: newFilename
             });
 
         } catch (dbError) {
-            console.error("Erro de base de dados no upload:", dbError);
+            await fs.unlink(req.file.path).catch(e => console.error("Falha ao limpar o ficheiro temporário:", e));
+            console.error("Erro de base de dados ou ficheiro no upload:", dbError);
             res.status(500).json({ error: 'Erro ao salvar as informações do ficheiro.' });
         } finally {
             if (connection) await connection.end();
@@ -871,19 +901,24 @@ apiRouter.post('/veiculos/:id/upload', authenticateToken, authorizeAdmin, (req, 
     });
 });
 
-// **NOVA ROTA**: ROTA PARA BUSCAR AS FOTOS DE UM VEÍCULO
+// **ROTA ALTERADA**: Busca fotos considerando o diretório pela placa
 apiRouter.get('/veiculos/:id/fotos', authenticateToken, async (req, res) => {
     const { id } = req.params;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        // Adaptação para selecionar `caminho_foto`
+        
+        const [vehicleRows] = await connection.execute('SELECT placa FROM veiculos WHERE id = ?', [id]);
+        if (vehicleRows.length === 0) {
+            return res.status(404).json({ error: 'Veículo não encontrado.' });
+        }
+        const placaSanitizada = sanitizeForPath(vehicleRows[0].placa);
+
         const [fotos] = await connection.execute('SELECT id, id_veiculo, descricao, caminho_foto FROM veiculo_fotos WHERE id_veiculo = ?', [id]);
         
         const fotosComUrl = fotos.map(foto => ({
             ...foto,
-            // O frontend espera `caminho_foto` com o caminho relativo
-            caminho_foto: `uploads/veiculos/${id}/fotos/${foto.caminho_foto}`
+            caminho_foto: `uploads/veiculos/${placaSanitizada}/fotos/${foto.caminho_foto}`
         }));
 
         res.json(fotosComUrl);
@@ -895,19 +930,24 @@ apiRouter.get('/veiculos/:id/fotos', authenticateToken, async (req, res) => {
     }
 });
 
-// **NOVA ROTA**: ROTA PARA BUSCAR OS DOCUMENTOS DE UM VEÍCULO
+// **ROTA ALTERADA**: Busca documentos considerando o diretório pela placa
 apiRouter.get('/veiculos/:id/documentos', authenticateToken, async (req, res) => {
     const { id } = req.params;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        // Adaptação para selecionar `caminho_arquivo`
+        
+        const [vehicleRows] = await connection.execute('SELECT placa FROM veiculos WHERE id = ?', [id]);
+        if (vehicleRows.length === 0) {
+            return res.status(404).json({ error: 'Veículo não encontrado.' });
+        }
+        const placaSanitizada = sanitizeForPath(vehicleRows[0].placa);
+
         const [documentos] = await connection.execute('SELECT id, id_veiculo, nome_documento, data_validade, caminho_arquivo FROM veiculo_documentos WHERE id_veiculo = ?', [id]);
         
         const documentosComUrl = documentos.map(doc => ({
             ...doc,
-            // O frontend espera `caminho_arquivo` com o caminho relativo
-            caminho_arquivo: `uploads/veiculos/${id}/documentos/${doc.caminho_arquivo}`
+            caminho_arquivo: `uploads/veiculos/${placaSanitizada}/documentos/${doc.caminho_arquivo}`
         }));
 
         res.json(documentosComUrl);
