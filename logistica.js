@@ -1,4 +1,4 @@
-// logistica.js (Completo com Abas de Custos, Exclusão Lógica e Seleção de Filial por Checkbox)
+// logistica.js (Completo com todas as funcionalidades, incluindo upload de ficheiros)
 
 document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
@@ -124,9 +124,189 @@ function setupEventListeners() {
 
     document.getElementById('costs-tab-content-gerais').addEventListener('click', handleDeleteCostClick);
     document.getElementById('costs-tab-content-individuais').addEventListener('click', handleDeleteCostClick);
+
+    // Listeners para a aba de FOTOS
+    document.getElementById('photos-tab-content').addEventListener('change', handlePhotoInputChange);
+    document.getElementById('photos-tab-content').addEventListener('click', handlePhotoUploadClick);
+
+    // Listener para a aba de DOCUMENTOS
+    document.getElementById('document-upload-form').addEventListener('submit', handleDocumentUploadSubmit);
 }
 
-// --- LÓGICA DAS ABAS DE CUSTOS ---
+// --- LÓGICA DE FOTOS E DOCUMENTOS ---
+
+async function switchTab(tabName, vehicleId) {
+    document.querySelectorAll('#details-modal .tab-content').forEach(content => content.classList.remove('active'));
+    document.querySelectorAll('#details-tabs .tab-button').forEach(button => button.classList.remove('active'));
+
+    document.getElementById(`${tabName}-tab-content`).classList.add('active');
+    document.querySelector(`#details-tabs .tab-button[data-tab="${tabName}"]`).classList.add('active');
+    
+    if (tabName === 'details') {
+        const vehicle = allVehicles.find(v => v.id === vehicleId);
+        renderDetailsTab(vehicle);
+    } else if (tabName === 'photos') {
+        await fetchAndDisplayPhotos(vehicleId);
+    } else if (tabName === 'documents') {
+        await fetchAndDisplayDocuments(vehicleId);
+    } else if (tabName === 'maintenance') {
+        await fetchAndDisplayMaintenanceHistory(vehicleId);
+    } else if (tabName === 'logs') {
+        await fetchAndDisplayChangeLogs(vehicleId);
+    }
+}
+
+async function fetchAndDisplayPhotos(vehicleId) {
+    const photoTypes = ['frente', 'traseira', 'lateral-direita', 'lateral-esquerda', 'painel'];
+    // Reset all previews to placeholder
+    photoTypes.forEach(type => {
+        const preview = document.getElementById(`photo-preview-${type}`);
+        preview.src = `https://placehold.co/300x200/e2e8f0/4a5568?text=${type.replace('-', ' ')}`;
+    });
+
+    try {
+        const response = await fetch(`${apiUrlBase}/veiculos/${vehicleId}/fotos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao buscar fotos.');
+        const fotos = await response.json();
+
+        fotos.forEach(foto => {
+            const typeKey = foto.descricao.toLowerCase().replace(' ', '-');
+            const preview = document.getElementById(`photo-preview-${typeKey}`);
+            if (preview) {
+                // Constrói o URL completo para a imagem
+                preview.src = `${apiUrlBase.replace('/api', '')}/${foto.caminho_foto}`;
+            }
+        });
+    } catch (error) {
+        console.error("Erro ao carregar fotos:", error);
+    }
+}
+
+function handlePhotoInputChange(event) {
+    if (event.target.type !== 'file' || !event.target.id.startsWith('photo-input-')) return;
+    
+    const file = event.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        const type = event.target.id.replace('photo-input-', '');
+        const preview = document.getElementById(`photo-preview-${type}`);
+        reader.onload = (e) => {
+            preview.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function handlePhotoUploadClick(event) {
+    const button = event.target.closest('.upload-photo-btn');
+    if (!button) return;
+    
+    const photoType = button.dataset.photoType;
+    const typeKey = photoType.toLowerCase().replace(' ', '-');
+    const fileInput = document.getElementById(`photo-input-${typeKey}`);
+    const file = fileInput.files[0];
+
+    if (!file) {
+        alert(`Por favor, selecione um ficheiro para a foto: ${photoType}`);
+        return;
+    }
+    
+    uploadFile(currentVehicleId, file, photoType);
+}
+
+async function fetchAndDisplayDocuments(vehicleId) {
+    const container = document.getElementById('document-list-container');
+    container.innerHTML = '<p>A carregar documentos...</p>';
+    try {
+        const response = await fetch(`${apiUrlBase}/veiculos/${vehicleId}/documentos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao buscar documentos.');
+        const documentos = await response.json();
+
+        if (documentos.length === 0) {
+            container.innerHTML = '<p class="text-center text-gray-500">Nenhum documento registado.</p>';
+            return;
+        }
+
+        const table = document.createElement('table');
+        table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+        table.innerHTML = `
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Documento</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Validade</th>
+                    <th class="px-4 py-2 text-center font-medium text-gray-500">Ações</th>
+                </tr>
+            </thead>
+            <tbody></tbody>`;
+        const tbody = table.querySelector('tbody');
+        documentos.forEach(doc => {
+            const tr = tbody.insertRow();
+            tr.innerHTML = `
+                <td class="px-4 py-2">${doc.nome_documento}</td>
+                <td class="px-4 py-2">${doc.data_validade ? new Date(doc.data_validade).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A'}</td>
+                <td class="px-4 py-2 text-center">
+                    <a href="${apiUrlBase.replace('/api', '')}/${doc.caminho_arquivo}" target="_blank" class="text-indigo-600 hover:underline">Ver</a>
+                </td>
+            `;
+        });
+        container.innerHTML = '';
+        container.appendChild(table);
+    } catch (error) {
+        container.innerHTML = `<p class="text-red-500">${error.message}</p>`;
+    }
+}
+
+async function handleDocumentUploadSubmit(event) {
+    event.preventDefault();
+    const form = event.target;
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+
+    const nome = document.getElementById('document-name').value;
+    const validade = document.getElementById('document-expiry-date').value;
+    const file = document.getElementById('document-file').files[0];
+
+    if (!file) {
+        alert("Por favor, selecione um ficheiro.");
+        button.disabled = false;
+        return;
+    }
+
+    await uploadFile(currentVehicleId, file, nome, validade);
+    form.reset();
+    button.disabled = false;
+}
+
+async function uploadFile(vehicleId, file, description, expiryDate = null) {
+    const formData = new FormData();
+    formData.append('ficheiro', file);
+    formData.append('descricao', description);
+    if (expiryDate) {
+        formData.append('data_validade', expiryDate);
+    }
+
+    try {
+        const response = await fetch(`${apiUrlBase}/veiculos/${vehicleId}/upload`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${getToken()}` },
+            body: formData
+        });
+        if (!response.ok) throw new Error('Falha no upload.');
+        
+        alert('Ficheiro enviado com sucesso!');
+        // Recarrega os dados da aba atual
+        const activeTab = document.querySelector('#details-tabs .tab-button.active').dataset.tab;
+        if (activeTab === 'photos') {
+            await fetchAndDisplayPhotos(vehicleId);
+        } else if (activeTab === 'documents') {
+            await fetchAndDisplayDocuments(vehicleId);
+        }
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    }
+}
+
+// --- RESTANTE DO CÓDIGO ---
 
 function switchCostTab(tabName) {
     document.querySelectorAll('.cost-tab-content').forEach(content => {
@@ -293,8 +473,6 @@ async function executeDeleteCost(id, type) {
         costToDelete = { id: null, type: null };
     }
 }
-
-// --- LÓGICA DE EXPORTAÇÃO E GESTÃO DE VEÍCULOS ---
 
 function setupMaintenanceExportModal() {
     maintenanceExportDatepicker = new Litepicker({
@@ -540,7 +718,7 @@ function renderVehicleCards(vehicles, container) {
         const card = document.createElement('div');
         card.className = 'vehicle-item bg-white rounded-lg shadow-md overflow-hidden cursor-pointer transform hover:-translate-y-1 transition-transform duration-200';
         card.dataset.id = vehicle.id; 
-        const photoUrl = vehicle.foto_principal || 'https://placehold.co/400x250/e2e8f0/4a5568?text=Sem+Foto';
+        const photoUrl = vehicle.foto_principal ? `${apiUrlBase.replace('/api', '')}/${vehicle.foto_principal}` : 'https://placehold.co/400x250/e2e8f0/4a5568?text=Sem+Foto';
         const statusInfo = getStatusInfo(vehicle.status);
         card.innerHTML = `
             <div class="relative">
@@ -634,13 +812,17 @@ function openDetailsModal(vehicle) {
 }
 
 async function switchTab(tabName, vehicleId) {
-    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-    document.querySelectorAll('.tab-button').forEach(button => button.classList.remove('active'));
+    document.querySelectorAll('#details-modal .tab-content').forEach(content => content.classList.remove('active'));
+    document.querySelectorAll('#details-tabs .tab-button').forEach(button => button.classList.remove('active'));
     document.getElementById(`${tabName}-tab-content`).classList.add('active');
-    document.querySelector(`.tab-button[data-tab="${tabName}"]`).classList.add('active');
+    document.querySelector(`#details-tabs .tab-button[data-tab="${tabName}"]`).classList.add('active');
     if (tabName === 'details') {
         const vehicle = allVehicles.find(v => v.id === vehicleId);
         renderDetailsTab(vehicle);
+    } else if (tabName === 'photos') {
+        await fetchAndDisplayPhotos(vehicleId);
+    } else if (tabName === 'documents') {
+        await fetchAndDisplayDocuments(vehicleId);
     } else if (tabName === 'maintenance') {
         await fetchAndDisplayMaintenanceHistory(vehicleId);
     } else if (tabName === 'logs') {

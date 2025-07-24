@@ -62,7 +62,6 @@
         .tab-content.active {
             display: block;
         }
-        /* Estilo para o container dos checkboxes */
         .checkbox-container {
             max-height: 120px;
             overflow-y: auto;
@@ -157,7 +156,6 @@
             <div id="content-area" class="bg-white rounded-lg shadow overflow-hidden"></div>
             <p id="no-data-message" class="text-center p-8 text-gray-500 hidden">Nenhum veículo encontrado.</p>
 
-            <!-- SEÇÃO DE HISTÓRICO DE CUSTOS COM ABAS -->
             <div class="mt-8">
                 <h3 class="text-xl font-bold text-gray-800 mb-2">Histórico de Custos Recentes</h3>
                 <div class="border-b border-gray-200">
@@ -177,7 +175,7 @@
 
 <!-- Modal de Gestão Completo -->
 <div id="details-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
-    <div class="relative mx-auto w-full max-w-4xl shadow-lg rounded-md bg-white">
+    <div class="relative mx-auto w-full max-w-5xl shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between p-4 border-b">
             <h3 id="details-modal-title" class="text-xl font-semibold text-gray-900">Gestão do Veículo</h3>
             <button id="close-details-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center">
@@ -188,13 +186,80 @@
             <div class="border-b border-gray-200">
                 <nav id="details-tabs" class="-mb-px flex space-x-6" aria-label="Tabs">
                     <button class="tab-button active" data-tab="details">Detalhes</button>
-                    <button class="tab-button" data-tab="maintenance">Manutenções</button>
+                    <button class="tab-button" data-tab="photos">Fotos</button>
                     <button class="tab-button" data-tab="documents">Documentos</button>
+                    <button class="tab-button" data-tab="maintenance">Manutenções</button>
                     <button class="tab-button" data-tab="logs" id="logs-tab-button">Log de Alterações</button>
                 </nav>
             </div>
-            <div class="py-4 max-h-[60vh] overflow-y-auto">
+            <div class="py-4 max-h-[65vh] overflow-y-auto">
                 <div id="details-tab-content" class="tab-content active"></div>
+                
+                <!-- ABA DE FOTOS -->
+                <div id="photos-tab-content" class="tab-content">
+                    <h4 class="text-lg font-semibold mb-4">Fotos do Veículo</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+                        <!-- Foto da Frente -->
+                        <div class="photo-upload-container border rounded-lg p-4 text-center">
+                            <p class="font-semibold mb-2">Frente</p>
+                            <img id="photo-preview-frente" src="https://placehold.co/300x200/e2e8f0/4a5568?text=Frente" class="w-full h-32 object-cover rounded-md mb-2 bg-gray-200">
+                            <input type="file" id="photo-input-frente" class="hidden" accept="image/*">
+                            <button onclick="document.getElementById('photo-input-frente').click()" class="action-btn bg-gray-500 hover:bg-gray-600 text-sm w-full mb-2">Selecionar</button>
+                            <button data-photo-type="Frente" class="upload-photo-btn action-btn bg-indigo-600 hover:bg-indigo-700 text-sm w-full">Enviar</button>
+                        </div>
+                        <!-- Outras fotos seguem o mesmo padrão -->
+                        <div class="photo-upload-container border rounded-lg p-4 text-center">
+                            <p class="font-semibold mb-2">Traseira</p>
+                            <img id="photo-preview-traseira" src="https://placehold.co/300x200/e2e8f0/4a5568?text=Traseira" class="w-full h-32 object-cover rounded-md mb-2 bg-gray-200">
+                            <input type="file" id="photo-input-traseira" class="hidden" accept="image/*">
+                            <button onclick="document.getElementById('photo-input-traseira').click()" class="action-btn bg-gray-500 hover:bg-gray-600 text-sm w-full mb-2">Selecionar</button>
+                            <button data-photo-type="Traseira" class="upload-photo-btn action-btn bg-indigo-600 hover:bg-indigo-700 text-sm w-full">Enviar</button>
+                        </div>
+                        <div class="photo-upload-container border rounded-lg p-4 text-center">
+                            <p class="font-semibold mb-2">Lateral Direita</p>
+                            <img id="photo-preview-lateral-direita" src="https://placehold.co/300x200/e2e8f0/4a5568?text=Lat.+Direita" class="w-full h-32 object-cover rounded-md mb-2 bg-gray-200">
+                            <input type="file" id="photo-input-lateral-direita" class="hidden" accept="image/*">
+                            <button onclick="document.getElementById('photo-input-lateral-direita').click()" class="action-btn bg-gray-500 hover:bg-gray-600 text-sm w-full mb-2">Selecionar</button>
+                            <button data-photo-type="Lateral Direita" class="upload-photo-btn action-btn bg-indigo-600 hover:bg-indigo-700 text-sm w-full">Enviar</button>
+                        </div>
+                        <div class="photo-upload-container border rounded-lg p-4 text-center">
+                            <p class="font-semibold mb-2">Lateral Esquerda</p>
+                            <img id="photo-preview-lateral-esquerda" src="https://placehold.co/300x200/e2e8f0/4a5568?text=Lat.+Esquerda" class="w-full h-32 object-cover rounded-md mb-2 bg-gray-200">
+                            <input type="file" id="photo-input-lateral-esquerda" class="hidden" accept="image/*">
+                            <button onclick="document.getElementById('photo-input-lateral-esquerda').click()" class="action-btn bg-gray-500 hover:bg-gray-600 text-sm w-full mb-2">Selecionar</button>
+                            <button data-photo-type="Lateral Esquerda" class="upload-photo-btn action-btn bg-indigo-600 hover:bg-indigo-700 text-sm w-full">Enviar</button>
+                        </div>
+                        <div class="photo-upload-container border rounded-lg p-4 text-center">
+                            <p class="font-semibold mb-2">Painel</p>
+                            <img id="photo-preview-painel" src="https://placehold.co/300x200/e2e8f0/4a5568?text=Painel" class="w-full h-32 object-cover rounded-md mb-2 bg-gray-200">
+                            <input type="file" id="photo-input-painel" class="hidden" accept="image/*">
+                            <button onclick="document.getElementById('photo-input-painel').click()" class="action-btn bg-gray-500 hover:bg-gray-600 text-sm w-full mb-2">Selecionar</button>
+                            <button data-photo-type="Painel" class="upload-photo-btn action-btn bg-indigo-600 hover:bg-indigo-700 text-sm w-full">Enviar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ABA DE DOCUMENTOS -->
+                <div id="documents-tab-content" class="tab-content">
+                    <h4 class="text-lg font-semibold mb-4">Documentos do Veículo</h4>
+                    <form id="document-upload-form" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-lg mb-6">
+                        <div>
+                            <label for="document-name" class="block text-sm font-medium">Nome do Documento</label>
+                            <input type="text" id="document-name" required class="form-input mt-1 w-full" placeholder="Ex: IPVA 2025">
+                        </div>
+                        <div>
+                            <label for="document-expiry-date" class="block text-sm font-medium">Data de Validade</label>
+                            <input type="date" id="document-expiry-date" class="form-input mt-1 w-full">
+                        </div>
+                        <div>
+                            <label for="document-file" class="block text-sm font-medium">Ficheiro</label>
+                            <input type="file" id="document-file" required class="mt-1 w-full text-sm">
+                        </div>
+                        <button type="submit" class="action-btn bg-indigo-600 hover:bg-indigo-700 h-10">Enviar Documento</button>
+                    </form>
+                    <div id="document-list-container"></div>
+                </div>
+
                 <div id="maintenance-tab-content" class="tab-content">
                     <div class="flex justify-between items-center mb-4">
                         <h4 class="text-lg font-semibold">Histórico de Manutenções</h4>
@@ -208,10 +273,6 @@
                         </div>
                     </div>
                     <div id="maintenance-history-container" class="overflow-x-auto"></div>
-                </div>
-                <div id="documents-tab-content" class="tab-content">
-                     <h4 class="text-lg font-semibold mb-4">Documentos do Veículo</h4>
-                    <p class="text-center text-gray-500">Funcionalidade a ser implementada.</p>
                 </div>
                 <div id="logs-tab-content" class="tab-content">
                     <h4 class="text-lg font-semibold mb-4">Histórico de Alterações do Veículo</h4>
@@ -474,7 +535,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
-<script src="logistica.js?v=2.0.1" defer></script>
+<script src="logistica.js?v=2.1.0" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
