@@ -774,6 +774,53 @@ apiRouter.get('/veiculos', authenticateToken, async (req, res) => {
     }
 });
 
+// ROTA PARA CRIAR UM NOVO VEÍCULO (A ROTA QUE ESTAVA EM FALTA)
+apiRouter.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) => {
+    // Extrai os dados do corpo da requisição
+    const { 
+        placa, marca, modelo, ano_fabricacao, ano_modelo, 
+        renavam, chassi, id_filial, status 
+    } = req.body;
+
+    // Validação básica dos campos obrigatórios
+    if (!placa || !marca || !modelo || !id_filial || !status) {
+        return res.status(400).json({ error: 'Placa, marca, modelo, filial e status são obrigatórios.' });
+    }
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        
+        const sql = `
+            INSERT INTO veiculos 
+            (placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            
+        const params = [
+            placa, marca, modelo, 
+            ano_fabricacao || null, ano_modelo || null, 
+            renavam || null, chassi || null, 
+            id_filial, status
+        ];
+
+        const [result] = await connection.execute(sql, params);
+        await connection.end();
+        
+        res.status(201).json({ message: 'Veículo adicionado com sucesso!', vehicleId: result.insertId });
+
+    } catch (error) {
+        if (connection) await connection.end();
+        console.error("Erro ao adicionar veículo:", error);
+
+        // Trata erros de duplicidade (ex: placa, renavam ou chassi já existem)
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ error: 'Erro: Placa, RENAVAM ou Chassi já pertencem a outro veículo.' });
+        }
+        
+        res.status(500).json({ error: 'Erro interno ao adicionar o veículo.' });
+    }
+});
+
 apiRouter.get('/veiculos/:id/logs', authenticateToken, authorizeAdmin, async (req, res) => {
     const { id } = req.params;
     let connection;
