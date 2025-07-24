@@ -1,4 +1,4 @@
-// logistica.js (Completo com Abas de Custos, Exclusão Lógica e Exportação de Manutenção)
+// logistica.js (Completo com Abas de Custos, Exclusão Lógica e Seleção de Filial por Checkbox)
 
 document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
@@ -12,7 +12,7 @@ let currentVehicleId = null;
 let vehicleToDeleteId = null;
 let maintenanceExportDatepicker = null;
 let LOGO_BASE64 = null;
-let costToDelete = { id: null, type: null }; // Para a exclusão de custos
+let costToDelete = { id: null, type: null };
 
 /**
  * Função principal que inicializa a página de logística.
@@ -45,7 +45,6 @@ async function initLogisticaPage() {
     await loadFleetCosts();
     await loadRecentIndividualCosts();
 
-    // Garante que o estado inicial das abas de custo está correto
     switchCostTab('gerais');
 }
 
@@ -129,26 +128,21 @@ function setupEventListeners() {
 
 // --- LÓGICA DAS ABAS DE CUSTOS ---
 
-// CORRIGIDO: Esta função agora manipula diretamente a visibilidade dos elementos.
 function switchCostTab(tabName) {
-    // Esconde todos os conteúdos de abas de custo
     document.querySelectorAll('.cost-tab-content').forEach(content => {
         content.classList.remove('active');
-        content.style.display = 'none'; // Garante que está escondido
+        content.style.display = 'none';
     });
-    // Desativa todos os botões de abas de custo
     document.querySelectorAll('#costs-tabs .tab-button').forEach(button => {
         button.classList.remove('active');
     });
 
-    // Mostra o conteúdo da aba selecionada
     const activeContent = document.getElementById(`costs-tab-content-${tabName}`);
     if (activeContent) {
         activeContent.classList.add('active');
-        activeContent.style.display = 'block'; // Garante que está visível
+        activeContent.style.display = 'block';
     }
     
-    // Ativa o botão da aba selecionada
     const activeButton = document.querySelector(`#costs-tabs .tab-button[data-cost-tab="${tabName}"]`);
     if(activeButton) {
         activeButton.classList.add('active');
@@ -832,6 +826,8 @@ function openFleetCostModal() {
     modal.querySelector('form').reset();
     document.getElementById('fleet-cost-fornecedor-id').value = '';
     document.getElementById('fleet-cost-date').value = new Date().toISOString().split('T')[0];
+    // Limpa os checkboxes ao abrir o modal
+    document.querySelectorAll('#fleet-cost-filiais-checkboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
     modal.classList.remove('hidden');
     feather.replace();
 }
@@ -840,7 +836,11 @@ async function handleFleetCostFormSubmit(event) {
     event.preventDefault();
     const saveBtn = document.getElementById('save-fleet-cost-btn');
     saveBtn.disabled = true;
-    const selectedFiliais = Array.from(document.getElementById('fleet-cost-filiais').selectedOptions).map(opt => opt.value);
+    
+    // Lógica atualizada para ler os checkboxes
+    const selectedFiliais = Array.from(document.querySelectorAll('#fleet-cost-filiais-checkboxes input[type="checkbox"]:checked'))
+                                .map(cb => cb.value);
+
     const costData = {
         descricao: document.getElementById('fleet-cost-description').value,
         custo: document.getElementById('fleet-cost-value').value,
@@ -1119,8 +1119,44 @@ async function deleteVehicle(id) {
 async function populateFilialSelects() {
     await populateSelectWithOptions(`${apiUrlBase}/parametros?cod=Unidades`, 'filter-filial', 'ID', 'NOME_PARAMETRO', 'Todas as Filiais');
     await populateSelectWithOptions(`${apiUrlBase}/parametros?cod=Unidades`, 'vehicle-filial', 'ID', 'NOME_PARAMETRO', '-- Selecione a Filial --');
-    await populateSelectWithOptions(`${apiUrlBase}/parametros?cod=Unidades`, 'fleet-cost-filiais', 'ID', 'NOME_PARAMETRO', '');
+    // ATUALIZADO: Chama a nova função para popular os checkboxes
+    await populateCheckboxes(`${apiUrlBase}/parametros?cod=Unidades`, 'fleet-cost-filiais-checkboxes', 'ID', 'NOME_PARAMETRO');
 }
+
+// NOVA FUNÇÃO: Popula um container com checkboxes
+async function populateCheckboxes(url, containerId, valueKey, textKey) {
+    const container = document.getElementById(containerId);
+    try {
+        const response = await fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error(`Falha ao carregar dados para ${containerId}.`);
+        
+        const items = await response.json();
+        container.innerHTML = ''; // Limpa o container
+        items.forEach(item => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'flex items-center';
+
+            const checkbox = document.createElement('input');
+            checkbox.id = `filial-cb-${item[valueKey]}`;
+            checkbox.type = 'checkbox';
+            checkbox.value = item[valueKey];
+            checkbox.className = 'h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500';
+
+            const label = document.createElement('label');
+            label.htmlFor = `filial-cb-${item[valueKey]}`;
+            label.textContent = item[textKey];
+            label.className = 'ml-2 block text-sm text-gray-900';
+
+            wrapper.appendChild(checkbox);
+            wrapper.appendChild(label);
+            container.appendChild(wrapper);
+        });
+    } catch (error) {
+        container.innerHTML = `<p class="text-red-500 text-xs">${error.message}</p>`;
+        console.error(error);
+    }
+}
+
 
 function handleHasPlacaChange() {
     const hasPlacaCheckbox = document.getElementById('has-placa-checkbox');

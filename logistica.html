@@ -62,8 +62,14 @@
         .tab-content.active {
             display: block;
         }
-        .multi-select {
-            height: 120px;
+        /* Estilo para o container dos checkboxes */
+        .checkbox-container {
+            max-height: 120px;
+            overflow-y: auto;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            padding: 0.5rem;
+            background-color: #f9fafb;
         }
     </style>
 </head>
@@ -151,7 +157,6 @@
             <div id="content-area" class="bg-white rounded-lg shadow overflow-hidden"></div>
             <p id="no-data-message" class="text-center p-8 text-gray-500 hidden">Nenhum veículo encontrado.</p>
 
-            <!-- SEÇÃO DE HISTÓRICO DE CUSTOS COM ABAS -->
             <div class="mt-8">
                 <h3 class="text-xl font-bold text-gray-800 mb-2">Histórico de Custos Recentes</h3>
                 <div class="border-b border-gray-200">
@@ -256,7 +261,6 @@
                 <div>
                     <label for="maintenance-type" class="block font-medium">Tipo</label>
                     <select id="maintenance-type" required class="form-input mt-1 block w-full rounded-md border-gray-300">
-                        <!-- As opções serão preenchidas dinamicamente pelo JavaScript -->
                     </select>
                 </div>
                 <div class="md:col-span-3">
@@ -340,9 +344,12 @@
                     <label for="fleet-cost-value" class="block font-medium">Custo Total (R$)</label>
                     <input type="number" step="0.01" id="fleet-cost-value" required placeholder="5000.00" class="form-input mt-1 block w-full">
                 </div>
+                <!-- ALTERADO para um div que conterá os checkboxes -->
                 <div class="md:col-span-2">
-                    <label for="fleet-cost-filiais" class="block font-medium">Ratear entre as Filiais (selecione uma ou mais)</label>
-                    <select id="fleet-cost-filiais" multiple required class="form-input multi-select mt-1 block w-full"></select>
+                    <label for="fleet-cost-filiais-checkboxes" class="block font-medium">Ratear entre as Filiais</label>
+                    <div id="fleet-cost-filiais-checkboxes" class="checkbox-container mt-1 space-y-2">
+                        <!-- Checkboxes serão inseridos aqui pelo JavaScript -->
+                    </div>
                 </div>
             </div>
             <div class="border-t pt-4">
@@ -466,7 +473,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
-<script src="logistica.js?v=2.0.0" defer></script>
+<script src="logistica.js?v=2.0.1" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
