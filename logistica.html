@@ -70,12 +70,28 @@
             padding: 0.5rem;
             background-color: #f9fafb;
         }
+        /* Estilo para o visualizador de imagem */
+        #image-viewer-modal .viewer-content {
+            max-width: 90vw;
+            max-height: 90vh;
+        }
+        /* Classe para os botões de ícone sobrepostos */
+        .icon-action-btn {
+            background: none;
+            border: none;
+            padding: 0;
+            color: white;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .icon-action-btn:hover {
+            color: #a5b4fc; /* Indigo 300 */
+        }
     </style>
 </head>
 <body class="h-full">
 
 <div class="flex h-full">
-    <!-- Overlay e Sidebar -->
     <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
     <nav id="sidebar" class="fixed inset-y-0 left-0 bg-white shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
         <div class="flex flex-col h-full">
@@ -100,7 +116,6 @@
         </div>
     </nav>
 
-    <!-- Conteúdo Principal -->
     <div class="flex-1 flex flex-col">
         <header class="bg-white shadow-sm border-b h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
             <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900"><span data-feather="menu"></span></button>
@@ -113,7 +128,10 @@
         <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
                 <h2 class="text-2xl font-bold text-gray-900">Gestão de Frota</h2>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button id="add-vehicle-cost-button" class="action-btn bg-green-600 hover:bg-green-700 flex items-center gap-2">
+                        <span data-feather="tool"></span>Lançar Despesa de Veículo
+                    </button>
                     <button id="add-fleet-cost-button" class="action-btn bg-teal-600 hover:bg-teal-700 flex items-center gap-2">
                         <span data-feather="trending-up"></span>Lançar Custo de Frota
                     </button>
@@ -173,7 +191,6 @@
     </div>
 </div>
 
-<!-- Modal de Gestão Completo -->
 <div id="details-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
     <div class="relative mx-auto w-full max-w-5xl shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between p-4 border-b">
@@ -195,51 +212,107 @@
             <div class="py-4 max-h-[65vh] overflow-y-auto">
                 <div id="details-tab-content" class="tab-content active"></div>
                 
-                <!-- ABA DE FOTOS -->
                 <div id="photos-tab-content" class="tab-content">
                     <h4 class="text-lg font-semibold mb-4">Fotos do Veículo</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
-                        <!-- Foto da Frente -->
-                        <div class="photo-upload-container border rounded-lg p-4 text-center">
-                            <p class="font-semibold mb-2">Frente</p>
-                            <img id="photo-preview-frente" src="https://placehold.co/300x200/e2e8f0/4a5568?text=Frente" class="w-full h-32 object-cover rounded-md mb-2 bg-gray-200">
-                            <input type="file" id="photo-input-frente" class="hidden" accept="image/*">
-                            <button onclick="document.getElementById('photo-input-frente').click()" class="action-btn bg-gray-500 hover:bg-gray-600 text-sm w-full mb-2">Selecionar</button>
-                            <button data-photo-type="Frente" class="upload-photo-btn action-btn bg-indigo-600 hover:bg-indigo-700 text-sm w-full">Enviar</button>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                        
+                        <div class="photo-upload-container border rounded-lg p-2 text-center flex flex-col">
+                            <p class="font-semibold mb-2 text-sm">Frente</p>
+                            <div class="relative flex-grow group cursor-pointer">
+                                <img id="photo-preview-frente" src="https://placehold.co/300x200/e2e8f0/4a5568?text=Frente" class="w-full h-32 object-cover rounded-md bg-gray-200">
+                                <input type="file" id="photo-input-frente" class="hidden" accept="image/*">
+                                <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-300 flex items-center justify-center gap-4">
+                                    <button onclick="document.getElementById('photo-input-frente').click()" class="icon-action-btn opacity-0 group-hover:opacity-100" title="Selecionar Ficheiro">
+                                        <span data-feather="upload-cloud" class="w-6 h-6"></span>
+                                    </button>
+                                    <button data-photo-type="frente" class="capture-photo-btn icon-action-btn opacity-0 group-hover:opacity-100" title="Capturar com Câmara">
+                                        <span data-feather="camera" class="w-6 h-6"></span>
+                                    </button>
+                                    <button data-photo-type="Frente" class="upload-photo-btn icon-action-btn opacity-0 group-hover:opacity-100" title="Enviar Foto">
+                                        <span data-feather="send" class="w-6 h-6"></span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <!-- Outras fotos seguem o mesmo padrão -->
-                        <div class="photo-upload-container border rounded-lg p-4 text-center">
-                            <p class="font-semibold mb-2">Traseira</p>
-                            <img id="photo-preview-traseira" src="https://placehold.co/300x200/e2e8f0/4a5568?text=Traseira" class="w-full h-32 object-cover rounded-md mb-2 bg-gray-200">
-                            <input type="file" id="photo-input-traseira" class="hidden" accept="image/*">
-                            <button onclick="document.getElementById('photo-input-traseira').click()" class="action-btn bg-gray-500 hover:bg-gray-600 text-sm w-full mb-2">Selecionar</button>
-                            <button data-photo-type="Traseira" class="upload-photo-btn action-btn bg-indigo-600 hover:bg-indigo-700 text-sm w-full">Enviar</button>
+
+                        <div class="photo-upload-container border rounded-lg p-2 text-center flex flex-col">
+                            <p class="font-semibold mb-2 text-sm">Traseira</p>
+                            <div class="relative flex-grow group cursor-pointer">
+                                <img id="photo-preview-traseira" src="https://placehold.co/300x200/e2e8f0/4a5568?text=Traseira" class="w-full h-32 object-cover rounded-md bg-gray-200">
+                                <input type="file" id="photo-input-traseira" class="hidden" accept="image/*">
+                                <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-300 flex items-center justify-center gap-4">
+                                    <button onclick="document.getElementById('photo-input-traseira').click()" class="icon-action-btn opacity-0 group-hover:opacity-100" title="Selecionar Ficheiro">
+                                        <span data-feather="upload-cloud" class="w-6 h-6"></span>
+                                    </button>
+                                    <button data-photo-type="traseira" class="capture-photo-btn icon-action-btn opacity-0 group-hover:opacity-100" title="Capturar com Câmara">
+                                        <span data-feather="camera" class="w-6 h-6"></span>
+                                    </button>
+                                    <button data-photo-type="Traseira" class="upload-photo-btn icon-action-btn opacity-0 group-hover:opacity-100" title="Enviar Foto">
+                                        <span data-feather="send" class="w-6 h-6"></span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <div class="photo-upload-container border rounded-lg p-4 text-center">
-                            <p class="font-semibold mb-2">Lateral Direita</p>
-                            <img id="photo-preview-lateral-direita" src="https://placehold.co/300x200/e2e8f0/4a5568?text=Lat.+Direita" class="w-full h-32 object-cover rounded-md mb-2 bg-gray-200">
-                            <input type="file" id="photo-input-lateral-direita" class="hidden" accept="image/*">
-                            <button onclick="document.getElementById('photo-input-lateral-direita').click()" class="action-btn bg-gray-500 hover:bg-gray-600 text-sm w-full mb-2">Selecionar</button>
-                            <button data-photo-type="Lateral Direita" class="upload-photo-btn action-btn bg-indigo-600 hover:bg-indigo-700 text-sm w-full">Enviar</button>
+
+                        <div class="photo-upload-container border rounded-lg p-2 text-center flex flex-col">
+                            <p class="font-semibold mb-2 text-sm">Lateral Direita</p>
+                            <div class="relative flex-grow group cursor-pointer">
+                                <img id="photo-preview-lateral-direita" src="https://placehold.co/300x200/e2e8f0/4a5568?text=Lat. Direita" class="w-full h-32 object-cover rounded-md bg-gray-200">
+                                <input type="file" id="photo-input-lateral-direita" class="hidden" accept="image/*">
+                                <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-300 flex items-center justify-center gap-4">
+                                    <button onclick="document.getElementById('photo-input-lateral-direita').click()" class="icon-action-btn opacity-0 group-hover:opacity-100" title="Selecionar Ficheiro">
+                                        <span data-feather="upload-cloud" class="w-6 h-6"></span>
+                                    </button>
+                                    <button data-photo-type="lateral-direita" class="capture-photo-btn icon-action-btn opacity-0 group-hover:opacity-100" title="Capturar com Câmara">
+                                        <span data-feather="camera" class="w-6 h-6"></span>
+                                    </button>
+                                    <button data-photo-type="Lateral Direita" class="upload-photo-btn icon-action-btn opacity-0 group-hover:opacity-100" title="Enviar Foto">
+                                        <span data-feather="send" class="w-6 h-6"></span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <div class="photo-upload-container border rounded-lg p-4 text-center">
-                            <p class="font-semibold mb-2">Lateral Esquerda</p>
-                            <img id="photo-preview-lateral-esquerda" src="https://placehold.co/300x200/e2e8f0/4a5568?text=Lat.+Esquerda" class="w-full h-32 object-cover rounded-md mb-2 bg-gray-200">
-                            <input type="file" id="photo-input-lateral-esquerda" class="hidden" accept="image/*">
-                            <button onclick="document.getElementById('photo-input-lateral-esquerda').click()" class="action-btn bg-gray-500 hover:bg-gray-600 text-sm w-full mb-2">Selecionar</button>
-                            <button data-photo-type="Lateral Esquerda" class="upload-photo-btn action-btn bg-indigo-600 hover:bg-indigo-700 text-sm w-full">Enviar</button>
+
+                        <div class="photo-upload-container border rounded-lg p-2 text-center flex flex-col">
+                            <p class="font-semibold mb-2 text-sm">Lateral Esquerda</p>
+                            <div class="relative flex-grow group cursor-pointer">
+                                <img id="photo-preview-lateral-esquerda" src="https://placehold.co/300x200/e2e8f0/4a5568?text=Lat. Esquerda" class="w-full h-32 object-cover rounded-md bg-gray-200">
+                                <input type="file" id="photo-input-lateral-esquerda" class="hidden" accept="image/*">
+                                <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-300 flex items-center justify-center gap-4">
+                                    <button onclick="document.getElementById('photo-input-lateral-esquerda').click()" class="icon-action-btn opacity-0 group-hover:opacity-100" title="Selecionar Ficheiro">
+                                        <span data-feather="upload-cloud" class="w-6 h-6"></span>
+                                    </button>
+                                    <button data-photo-type="lateral-esquerda" class="capture-photo-btn icon-action-btn opacity-0 group-hover:opacity-100" title="Capturar com Câmara">
+                                        <span data-feather="camera" class="w-6 h-6"></span>
+                                    </button>
+                                    <button data-photo-type="Lateral Esquerda" class="upload-photo-btn icon-action-btn opacity-0 group-hover:opacity-100" title="Enviar Foto">
+                                        <span data-feather="send" class="w-6 h-6"></span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <div class="photo-upload-container border rounded-lg p-4 text-center">
-                            <p class="font-semibold mb-2">Painel</p>
-                            <img id="photo-preview-painel" src="https://placehold.co/300x200/e2e8f0/4a5568?text=Painel" class="w-full h-32 object-cover rounded-md mb-2 bg-gray-200">
-                            <input type="file" id="photo-input-painel" class="hidden" accept="image/*">
-                            <button onclick="document.getElementById('photo-input-painel').click()" class="action-btn bg-gray-500 hover:bg-gray-600 text-sm w-full mb-2">Selecionar</button>
-                            <button data-photo-type="Painel" class="upload-photo-btn action-btn bg-indigo-600 hover:bg-indigo-700 text-sm w-full">Enviar</button>
+
+                        <div class="photo-upload-container border rounded-lg p-2 text-center flex flex-col">
+                            <p class="font-semibold mb-2 text-sm">Painel</p>
+                            <div class="relative flex-grow group cursor-pointer">
+                                <img id="photo-preview-painel" src="https://placehold.co/300x200/e2e8f0/4a5568?text=Painel" class="w-full h-32 object-cover rounded-md bg-gray-200">
+                                <input type="file" id="photo-input-painel" class="hidden" accept="image/*">
+                                <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-300 flex items-center justify-center gap-4">
+                                    <button onclick="document.getElementById('photo-input-painel').click()" class="icon-action-btn opacity-0 group-hover:opacity-100" title="Selecionar Ficheiro">
+                                        <span data-feather="upload-cloud" class="w-6 h-6"></span>
+                                    </button>
+                                    <button data-photo-type="painel" class="capture-photo-btn icon-action-btn opacity-0 group-hover:opacity-100" title="Capturar com Câmara">
+                                        <span data-feather="camera" class="w-6 h-6"></span>
+                                    </button>
+                                    <button data-photo-type="Painel" class="upload-photo-btn icon-action-btn opacity-0 group-hover:opacity-100" title="Enviar Foto">
+                                        <span data-feather="send" class="w-6 h-6"></span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- ABA DE DOCUMENTOS -->
                 <div id="documents-tab-content" class="tab-content">
                     <h4 class="text-lg font-semibold mb-4">Documentos do Veículo</h4>
                     <form id="document-upload-form" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-lg mb-6">
@@ -283,7 +356,109 @@
     </div>
 </div>
 
-<!-- MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE CUSTO -->
+<div id="vehicle-cost-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
+    <div class="relative mx-auto border w-full max-w-2xl shadow-lg rounded-md bg-white">
+        <div class="flex items-start justify-between p-4 border-b">
+            <h3 class="text-xl font-semibold">Adicionar Despesa ao Veículo</h3>
+            <button id="close-vehicle-cost-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center">
+                <span data-feather="x"></span>
+            </button>
+        </div>
+        <form id="vehicle-cost-form" class="p-6">
+            <input type="hidden" id="vehicle-cost-fornecedor-id">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-6">
+                <div class="md:col-span-3">
+                    <label for="vehicle-cost-vehicle-select" class="block font-medium">Veículo</label>
+                    <select id="vehicle-cost-vehicle-select" required class="form-input mt-1 block w-full rounded-md border-gray-300"></select>
+                </div>
+                <div>
+                    <label for="vehicle-cost-date" class="block font-medium">Data</label>
+                    <input type="date" id="vehicle-cost-date" required class="form-input mt-1 block w-full rounded-md border-gray-300">
+                </div>
+                <div>
+                    <label for="vehicle-cost-value" class="block font-medium">Custo (R$)</label>
+                    <input type="number" step="0.01" id="vehicle-cost-value" required placeholder="150.00" class="form-input mt-1 block w-full rounded-md border-gray-300">
+                </div>
+                <div>
+                    <label for="vehicle-cost-type" class="block font-medium">Tipo</label>
+                    <select id="vehicle-cost-type" required class="form-input mt-1 block w-full rounded-md border-gray-300">
+                    </select>
+                </div>
+                <div class="md:col-span-3">
+                    <label for="vehicle-cost-description" class="block font-medium">Descrição</label>
+                    <textarea id="vehicle-cost-description" rows="2" class="form-input mt-1 block w-full rounded-md border-gray-300" placeholder="Ex: Troca de óleo e filtros..."></textarea>
+                </div>
+            </div>
+            <div class="border-t pt-4">
+                 <h4 class="text-lg font-medium text-gray-800 mb-2">Fornecedor</h4>
+                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div class="md:col-span-1">
+                        <label for="vehicle-cost-cnpj" class="block font-medium">CNPJ</label>
+                        <div class="flex">
+                            <input type="text" id="vehicle-cost-cnpj" class="form-input mt-1 block w-full rounded-l-md" placeholder="Digite o CNPJ">
+                            <button type="button" id="vehicle-cost-lookup-cnpj-btn" class="bg-indigo-600 text-white p-2 mt-1 rounded-r-md hover:bg-indigo-700">
+                                <span data-feather="search" class="w-4 h-4"></span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="vehicle-cost-razao-social" class="block font-medium">Razão Social</label>
+                        <input type="text" id="vehicle-cost-razao-social" required class="form-input mt-1 block w-full bg-gray-200" readonly>
+                    </div>
+                 </div>
+                 <div class="mt-2 text-right">
+                     <button type="button" id="vehicle-cost-despesa-interna-btn" class="text-sm text-indigo-600 hover:underline">É uma despesa interna?</button>
+                 </div>
+            </div>
+            <div class="flex justify-end items-center pt-6 border-t mt-6 gap-4">
+                <button type="button" id="cancel-vehicle-cost-form-btn" class="action-btn bg-gray-500 hover:bg-gray-600">Cancelar</button>
+                <button type="submit" id="save-vehicle-cost-btn" class="action-btn bg-green-600 hover:bg-green-700">Salvar Despesa</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="photo-capture-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-75 z-[80] flex items-center justify-center p-4">
+    <div class="relative mx-auto border w-full max-w-2xl shadow-lg rounded-md bg-white">
+        <div class="flex items-start justify-between p-4 border-b">
+            <h3 class="text-xl font-semibold">Capturar Foto</h3>
+            <button id="close-capture-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center">
+                <span data-feather="x"></span>
+            </button>
+        </div>
+        <div class="p-4 text-center">
+            <video id="camera-stream" autoplay playsinline class="w-full max-h-[60vh] bg-gray-900 rounded-md"></video>
+            <canvas id="photo-canvas" class="hidden"></canvas>
+            <p id="camera-error" class="text-red-500 my-2 hidden"></p>
+        </div>
+        <div class="flex justify-center items-center p-4 border-t gap-4">
+            <button id="take-photo-btn" class="action-btn bg-blue-600 hover:bg-blue-700 flex items-center gap-2"><span data-feather="camera"></span>Tirar Foto</button>
+            <button id="use-photo-btn" class="action-btn bg-green-600 hover:bg-green-700 hidden flex items-center gap-2"><span data-feather="check"></span>Usar Foto</button>
+            <button id="retake-photo-btn" class="action-btn bg-gray-500 hover:bg-gray-600 hidden flex items-center gap-2"><span data-feather="refresh-cw"></span>Tirar Novamente</button>
+        </div>
+    </div>
+</div>
+
+<div id="image-viewer-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-80 z-[90] flex items-center justify-center p-4" onclick="this.classList.add('hidden')">
+    <button class="absolute top-4 right-4 text-white text-3xl font-bold">&times;</button>
+    <img id="viewer-image" src="" alt="Visualização da imagem" class="viewer-content object-contain" onclick="event.stopPropagation()">
+</div>
+
+<div id="confirm-delete-document-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-[70] flex items-center justify-center p-4">
+    <div class="relative mx-auto p-6 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <div class="text-center">
+            <span data-feather="alert-triangle" class="mx-auto mb-4 w-12 h-12 text-red-500"></span>
+            <h3 class="text-lg font-medium text-gray-900">Excluir Documento</h3>
+            <p class="mt-2 text-sm text-gray-500">Tem a certeza de que quer excluir este documento? Esta ação não pode ser desfeita.</p>
+            <p id="delete-document-info" class="mt-2 text-sm font-bold text-gray-700"></p>
+        </div>
+        <div class="mt-6 flex justify-center gap-4">
+            <button id="cancel-delete-document-btn" class="action-btn bg-gray-200 hover:bg-gray-300 text-gray-800">Cancelar</button>
+            <button id="confirm-delete-document-btn" class="action-btn bg-red-600 hover:bg-red-700">Confirmar Exclusão</button>
+        </div>
+    </div>
+</div>
+
 <div id="confirm-delete-cost-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-[70] flex items-center justify-center p-4">
     <div class="relative mx-auto p-6 border w-full max-w-md shadow-lg rounded-md bg-white">
         <div class="text-center">
@@ -299,7 +474,6 @@
     </div>
 </div>
 
-<!-- Modal para Adicionar/Editar Manutenção -->
 <div id="maintenance-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
     <div class="relative mx-auto border w-full max-w-2xl shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between p-4 border-b">
@@ -360,7 +534,6 @@
     </div>
 </div>
 
-<!-- NOVO MODAL DE EXPORTAÇÃO DE MANUTENÇÃO -->
 <div id="maintenance-export-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
     <div class="relative mx-auto border w-full max-w-md shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between p-4 border-b">
@@ -382,7 +555,6 @@
 </div>
 
 
-<!-- Modal para Adicionar Custo de Frota (Rateio) -->
 <div id="fleet-cost-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
     <div class="relative mx-auto border w-full max-w-3xl shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between p-4 border-b">
@@ -406,11 +578,9 @@
                     <label for="fleet-cost-value" class="block font-medium">Custo Total (R$)</label>
                     <input type="number" step="0.01" id="fleet-cost-value" required placeholder="5000.00" class="form-input mt-1 block w-full">
                 </div>
-                <!-- ALTERADO para um div que conterá os checkboxes -->
                 <div class="md:col-span-2">
                     <label for="fleet-cost-filiais-checkboxes" class="block font-medium">Ratear entre as Filiais</label>
                     <div id="fleet-cost-filiais-checkboxes" class="checkbox-container mt-1 space-y-2">
-                        <!-- Checkboxes serão inseridos aqui pelo JavaScript -->
                     </div>
                 </div>
             </div>
@@ -444,7 +614,6 @@
     </div>
 </div>
 
-<!-- Modal para Adicionar/Editar Veículo -->
 <div id="vehicle-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
     <div class="relative mx-auto p-6 border w-full max-w-3xl shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between pb-4 border-b">
@@ -515,7 +684,6 @@
     </div>
 </div>
 
-<!-- Modal de Confirmação de Exclusão -->
 <div id="confirm-delete-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex items-center justify-center">
     <div class="relative mx-auto p-6 border w-full max-w-md shadow-lg rounded-md bg-white">
         <div class="text-center">
@@ -535,10 +703,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
-<script src="logistica.js?v=2.1.0" defer></script>
+<script src="logistica.js?v=2.4.0" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
+        // Lógica da Sidebar
         const sidebar = document.getElementById('sidebar');
         const desktopToggleButton = document.getElementById('sidebar-toggle');
         const mobileMenuButton = document.getElementById('mobile-menu-button');

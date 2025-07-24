@@ -73,7 +73,11 @@ const vehicleStorage = multer.diskStorage({
         cb(null, `temp-${uniqueSuffix}${extension}`);
     }
 });
-const vehicleUpload = multer({ storage: vehicleStorage }).single('ficheiro');
+// ATUALIZAÇÃO: Adicionado limite de tamanho de ficheiro (3MB)
+const vehicleUpload = multer({ 
+    storage: vehicleStorage,
+    limits: { fileSize: 3 * 1024 * 1024 } // 3MB
+}).single('ficheiro');
 
 
 // 4. Configuração da Base de Dados
@@ -674,7 +678,7 @@ apiRouter.get('/config/logo', authenticateToken, async (req, res) => {
 
 // --- ROTAS DE LOGÍSTICA ---
 
-// ROTA PARA BUSCAR TODOS OS VEÍCULOS
+// ATUALIZAÇÃO: ROTA PARA BUSCAR TODOS OS VEÍCULOS COM A FOTO FRONTAL
 apiRouter.get('/veiculos', authenticateToken, async (req, res) => {
     let connection;
     try {
@@ -682,7 +686,8 @@ apiRouter.get('/veiculos', authenticateToken, async (req, res) => {
         const sql = `
             SELECT 
                 v.*, 
-                p.NOME_PARAMETRO as nome_filial 
+                p.NOME_PARAMETRO as nome_filial,
+                (SELECT vf.caminho_foto FROM veiculo_fotos vf WHERE vf.id_veiculo = v.id AND vf.descricao = 'Frente' LIMIT 1) as foto_frente
             FROM 
                 veiculos v
             LEFT JOIN 
@@ -694,12 +699,18 @@ apiRouter.get('/veiculos', authenticateToken, async (req, res) => {
         
         const vehiclesWithPhotoUrl = vehicles.map(vehicle => {
              const placaSanitizada = sanitizeForPath(vehicle.placa);
-             const photoPath = vehicle.foto_principal 
+             // Mantém a foto principal e adiciona a foto da frente
+             const fotoPrincipalPath = vehicle.foto_principal 
                 ? `uploads/veiculos/${placaSanitizada}/fotos/${vehicle.foto_principal}` 
                 : null;
+             const fotoFrentePath = vehicle.foto_frente
+                ? `uploads/veiculos/${placaSanitizada}/fotos/${vehicle.foto_frente}`
+                : null;
+
             return {
                 ...vehicle,
-                foto_principal: photoPath
+                foto_principal: fotoPrincipalPath,
+                foto_frente: fotoFrentePath // Novo campo
             };
         });
 
@@ -741,7 +752,6 @@ apiRouter.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) 
         const [result] = await connection.execute(sql, params);
         const newVehicleId = result.insertId;
 
-        // ** ALTERADO: Cria diretório com base na PLACA **
         const placaSanitizada = sanitizeForPath(placa);
         console.log(`[INFO] A criar diretórios para o novo veículo: ${placaSanitizada}`);
         const vehicleDir = path.join(UPLOADS_BASE_PATH, 'veiculos', placaSanitizada);
@@ -838,10 +848,12 @@ apiRouter.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, re
     }
 });
 
-// **ROTA DE UPLOAD ALTERADA**: Renomeia o ficheiro com o formato desejado
+// ROTA DE UPLOAD
 apiRouter.post('/veiculos/:id/upload', authenticateToken, authorizeAdmin, (req, res) => {
     vehicleUpload(req, res, async (err) => {
-        if (err) {
+        if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(413).json({ error: "Erro: O ficheiro excede o limite de 3MB." });
+        } else if (err) {
             console.error("Erro do Multer:", err);
             return res.status(500).json({ error: "Ocorreu um erro durante o upload." });
         }
@@ -854,6 +866,8 @@ apiRouter.post('/veiculos/:id/upload', authenticateToken, authorizeAdmin, (req, 
         const isPhoto = req.file.mimetype.startsWith('image/');
         
         let connection;
+        let newPath;
+
         try {
             connection = await mysql.createConnection(dbConfig);
             
@@ -871,28 +885,35 @@ apiRouter.post('/veiculos/:id/upload', authenticateToken, authorizeAdmin, (req, 
             const extension = path.extname(req.file.originalname);
             const newFilename = `${placa}_${modelo}_${ano}_${desc}${extension}`;
             
-            const newPath = path.join(path.dirname(req.file.path), newFilename);
+            newPath = path.join(path.dirname(req.file.path), newFilename);
             await fs.rename(req.file.path, newPath);
 
             if (isPhoto) {
                 const fotoSql = 'INSERT INTO veiculo_fotos (id_veiculo, descricao, caminho_foto) VALUES (?, ?, ?)';
                 await connection.execute(fotoSql, [id, descricao, newFilename]);
                 
-                const updatePrincipalSql = 'UPDATE veiculos SET foto_principal = ? WHERE id = ?';
-                await connection.execute(updatePrincipalSql, [newFilename, id]);
+                // Se for a foto da frente, atualiza o campo `foto_principal`
+                if (descricao.toLowerCase() === 'frente') {
+                    const updatePrincipalSql = 'UPDATE veiculos SET foto_principal = ? WHERE id = ?';
+                    await connection.execute(updatePrincipalSql, [newFilename, id]);
+                }
             } else {
+                // ATUALIZAÇÃO: Salva data de inclusão e status
                 const { data_validade } = req.body;
-                const docSql = 'INSERT INTO veiculo_documentos (id_veiculo, nome_documento, data_validade, caminho_arquivo) VALUES (?, ?, ?, ?)';
-                await connection.execute(docSql, [id, descricao, data_validade || null, newFilename]);
+                const docSql = 'INSERT INTO veiculo_documentos (id_veiculo, nome_documento, data_validade, caminho_arquivo, data_inclusao, status) VALUES (?, ?, ?, ?, NOW(), ?)';
+                await connection.execute(docSql, [id, descricao, data_validade || null, newFilename, 'Ativo']);
             }
 
             res.status(201).json({
-                message: 'Ficheiro carregado e renomeado com sucesso!',
+                message: 'Ficheiro carregado com sucesso!',
                 fileName: newFilename
             });
 
         } catch (dbError) {
-            await fs.unlink(req.file.path).catch(e => console.error("Falha ao limpar o ficheiro temporário:", e));
+            const pathToClean = newPath || (req.file && req.file.path);
+            if (pathToClean) {
+                await fs.unlink(pathToClean).catch(e => console.error("Falha ao limpar o ficheiro após erro:", e));
+            }
             console.error("Erro de base de dados ou ficheiro no upload:", dbError);
             res.status(500).json({ error: 'Erro ao salvar as informações do ficheiro.' });
         } finally {
@@ -901,7 +922,7 @@ apiRouter.post('/veiculos/:id/upload', authenticateToken, authorizeAdmin, (req, 
     });
 });
 
-// **ROTA ALTERADA**: Busca fotos considerando o diretório pela placa
+// ROTA ALTERADA: Busca fotos considerando o diretório pela placa
 apiRouter.get('/veiculos/:id/fotos', authenticateToken, async (req, res) => {
     const { id } = req.params;
     let connection;
@@ -930,7 +951,7 @@ apiRouter.get('/veiculos/:id/fotos', authenticateToken, async (req, res) => {
     }
 });
 
-// **ROTA ALTERADA**: Busca documentos considerando o diretório pela placa
+// ROTA ALTERADA: Busca documentos ativos considerando o diretório pela placa
 apiRouter.get('/veiculos/:id/documentos', authenticateToken, async (req, res) => {
     const { id } = req.params;
     let connection;
@@ -943,7 +964,8 @@ apiRouter.get('/veiculos/:id/documentos', authenticateToken, async (req, res) =>
         }
         const placaSanitizada = sanitizeForPath(vehicleRows[0].placa);
 
-        const [documentos] = await connection.execute('SELECT id, id_veiculo, nome_documento, data_validade, caminho_arquivo FROM veiculo_documentos WHERE id_veiculo = ?', [id]);
+        // ATUALIZAÇÃO: Busca apenas documentos com status 'Ativo'
+        const [documentos] = await connection.execute("SELECT id, id_veiculo, nome_documento, data_validade, caminho_arquivo, data_inclusao FROM veiculo_documentos WHERE id_veiculo = ? AND status = 'Ativo' ORDER BY data_inclusao DESC", [id]);
         
         const documentosComUrl = documentos.map(doc => ({
             ...doc,
@@ -958,6 +980,31 @@ apiRouter.get('/veiculos/:id/documentos', authenticateToken, async (req, res) =>
         if (connection) await connection.end();
     }
 });
+
+// NOVA ROTA: Marcar um documento como excluído (soft delete)
+apiRouter.put('/documentos/:docId/excluir', authenticateToken, authorizeAdmin, async (req, res) => {
+    const { docId } = req.params;
+    const { userId } = req.user;
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = "UPDATE veiculo_documentos SET status = 'Excluido', excluido_por_id = ?, data_exclusao = NOW() WHERE id = ?";
+        const [result] = await connection.execute(sql, [userId, docId]);
+        
+        await connection.end();
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Documento não encontrado.' });
+        }
+        
+        res.json({ message: 'Documento marcado como excluído com sucesso.' });
+    } catch (error) {
+        console.error("Erro ao excluir documento:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro interno ao excluir o documento.' });
+    }
+});
+
 
 // ROTA PARA BUSCAR LOGS DE UM VEÍCULO
 apiRouter.get('/veiculos/:id/logs', authenticateToken, authorizeAdmin, async (req, res) => {
@@ -979,13 +1026,13 @@ apiRouter.get('/veiculos/:id/logs', authenticateToken, authorizeAdmin, async (re
     }
 });
 
-// ROTA PARA APAGAR UM VEÍCULO
+// ROTA PARA APAGAR UM VEÍCULO (COM CORREÇÃO)
 apiRouter.delete('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) => {
     const { id } = req.params;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        await connection.execute('DELETE FROM veiculos WHERE id = ?', [id]);
+        const [result] = await connection.execute('DELETE FROM veiculos WHERE id = ?', [id]);
         await connection.end();
 
         if (result.affectedRows === 0) {

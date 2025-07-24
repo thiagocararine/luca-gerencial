@@ -13,6 +13,13 @@ let vehicleToDeleteId = null;
 let maintenanceExportDatepicker = null;
 let LOGO_BASE64 = null;
 let costToDelete = { id: null, type: null };
+// NOVAS VARIÁVEIS GLOBAIS
+let documentToDelete = { id: null, name: null };
+let photoCaptureState = {
+    stream: null,
+    targetInputId: null,
+    targetPreviewId: null
+};
 
 /**
  * Função principal que inicializa a página de logística.
@@ -26,10 +33,13 @@ async function initLogisticaPage() {
     document.getElementById('user-name').textContent = getUserName();
     
     const userProfile = getUserProfile();
-    if (!privilegedAccessProfiles.includes(userProfile)) {
+    const isPrivileged = privilegedAccessProfiles.includes(userProfile);
+
+    if (!isPrivileged) {
         document.getElementById('add-vehicle-button').style.display = 'none';
         document.getElementById('add-fleet-cost-button').style.display = 'none';
         document.getElementById('filial-filter-container').style.display = 'none';
+        document.getElementById('add-vehicle-cost-button').style.display = 'none';
     }
 
     setupEventListeners();
@@ -127,13 +137,87 @@ function setupEventListeners() {
 
     // Listeners para a aba de FOTOS
     document.getElementById('photos-tab-content').addEventListener('change', handlePhotoInputChange);
-    document.getElementById('photos-tab-content').addEventListener('click', handlePhotoUploadClick);
+    // ATUALIZAÇÃO: Listener único e mais inteligente para a área de fotos
+    document.getElementById('photos-tab-content').addEventListener('click', handlePhotoAreaClick);
 
     // Listener para a aba de DOCUMENTOS
     document.getElementById('document-upload-form').addEventListener('submit', handleDocumentUploadSubmit);
+    document.getElementById('document-list-container').addEventListener('click', handleDeleteDocumentClick);
+    
+    // Listeners para o MODAL de despesa de veículo
+    document.getElementById('add-vehicle-cost-button')?.addEventListener('click', openVehicleCostModal);
+    const vehicleCostModal = document.getElementById('vehicle-cost-modal');
+    vehicleCostModal.querySelector('#close-vehicle-cost-modal-btn').addEventListener('click', () => vehicleCostModal.classList.add('hidden'));
+    vehicleCostModal.querySelector('#cancel-vehicle-cost-form-btn').addEventListener('click', () => vehicleCostModal.classList.add('hidden'));
+    vehicleCostModal.querySelector('#vehicle-cost-form').addEventListener('submit', handleVehicleCostFormSubmit);
+    vehicleCostModal.querySelector('#vehicle-cost-lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('vehicle-cost'));
+    vehicleCostModal.querySelector('#vehicle-cost-despesa-interna-btn').addEventListener('click', () => useInternalExpense('vehicle-cost'));
+
+    // Listeners para o MODAL de exclusão de documento
+    const deleteDocModal = document.getElementById('confirm-delete-document-modal');
+    deleteDocModal.querySelector('#cancel-delete-document-btn').addEventListener('click', () => deleteDocModal.classList.add('hidden'));
+    deleteDocModal.querySelector('#confirm-delete-document-btn').addEventListener('click', executeDeleteDocument);
+
+    // Listeners para o MODAL de captura de foto
+    const captureModal = document.getElementById('photo-capture-modal');
+    captureModal.querySelector('#close-capture-modal-btn').addEventListener('click', closeCaptureModal);
+    captureModal.querySelector('#take-photo-btn').addEventListener('click', takePhoto);
+    captureModal.querySelector('#use-photo-btn').addEventListener('click', useCapturedPhoto);
+    captureModal.querySelector('#retake-photo-btn').addEventListener('click', retakePhoto);
 }
 
+
 // --- LÓGICA DE FOTOS E DOCUMENTOS ---
+
+/**
+ * ATUALIZADO: Gere todos os cliques dentro da área de uma foto.
+ * Decide se abre o visualizador ou se aciona um botão de ação.
+ */
+function handlePhotoAreaClick(event) {
+    const target = event.target;
+    const button = target.closest('button');
+
+    // Caso 1: Um dos botões de ícone foi clicado.
+    if (button) {
+        event.stopPropagation(); // Impede que o clique se propague para o container da foto
+        const photoTypeRaw = button.dataset.photoType; 
+        
+        // Ação: Capturar com a câmara
+        if (button.classList.contains('capture-photo-btn') && photoTypeRaw) {
+            const photoType = photoTypeRaw.toLowerCase().replace(/ /g, '-');
+            openCaptureModal(`photo-input-${photoType}`, `photo-preview-${photoType}`);
+            return;
+        }
+        
+        // Ação: Enviar a foto selecionada/capturada
+        if (button.classList.contains('upload-photo-btn') && photoTypeRaw) {
+            const photoType = photoTypeRaw; // Mantém a capitalização para a descrição (ex: "Frente")
+            const typeKey = photoType.toLowerCase().replace(/ /g, '-');
+            const fileInput = document.getElementById(`photo-input-${typeKey}`);
+            const file = fileInput.files[0];
+
+            if (!file) {
+                alert(`Por favor, selecione ou capture um ficheiro para a foto: ${photoType}`);
+                return;
+            }
+            uploadFile(currentVehicleId, file, photoType, null, 'photo');
+            return;
+        }
+        
+        // Ação: Selecionar ficheiro (já tratada com `onclick` no HTML, mas garantimos que não faz mais nada)
+        return;
+    }
+    
+    // Caso 2: Clicado na área da imagem (mas não num botão) para visualização.
+    const photoContainer = target.closest('.group');
+    if (photoContainer) {
+        const previewImg = photoContainer.querySelector('img[id^="photo-preview-"]');
+        if (previewImg && !previewImg.src.includes('placehold.co')) {
+            openImageViewer(previewImg.src);
+        }
+    }
+}
+
 
 async function switchTab(tabName, vehicleId) {
     document.querySelectorAll('#details-modal .tab-content').forEach(content => content.classList.remove('active'));
@@ -142,6 +226,9 @@ async function switchTab(tabName, vehicleId) {
     document.getElementById(`${tabName}-tab-content`).classList.add('active');
     document.querySelector(`#details-tabs .tab-button[data-tab="${tabName}"]`).classList.add('active');
     
+    // Atualiza os ícones sempre que uma aba é trocada para garantir a renderização
+    feather.replace();
+
     if (tabName === 'details') {
         const vehicle = allVehicles.find(v => v.id === vehicleId);
         renderDetailsTab(vehicle);
@@ -173,10 +260,11 @@ async function fetchAndDisplayPhotos(vehicleId) {
             const typeKey = foto.descricao.toLowerCase().replace(' ', '-');
             const preview = document.getElementById(`photo-preview-${typeKey}`);
             if (preview) {
-                // Constrói o URL completo para a imagem
                 preview.src = `${apiUrlBase.replace('/api', '')}/${foto.caminho_foto}`;
             }
         });
+        // Garante que os ícones sobrepostos sejam renderizados
+        feather.replace();
     } catch (error) {
         console.error("Erro ao carregar fotos:", error);
     }
@@ -187,6 +275,12 @@ function handlePhotoInputChange(event) {
     
     const file = event.target.files[0];
     if (file) {
+        if (file.size > 3 * 1024 * 1024) {
+            alert('Erro: O ficheiro é maior que 3MB. Por favor, selecione uma imagem menor.');
+            event.target.value = ''; 
+            return;
+        }
+
         const reader = new FileReader();
         const type = event.target.id.replace('photo-input-', '');
         const preview = document.getElementById(`photo-preview-${type}`);
@@ -195,23 +289,6 @@ function handlePhotoInputChange(event) {
         };
         reader.readAsDataURL(file);
     }
-}
-
-function handlePhotoUploadClick(event) {
-    const button = event.target.closest('.upload-photo-btn');
-    if (!button) return;
-    
-    const photoType = button.dataset.photoType;
-    const typeKey = photoType.toLowerCase().replace(' ', '-');
-    const fileInput = document.getElementById(`photo-input-${typeKey}`);
-    const file = fileInput.files[0];
-
-    if (!file) {
-        alert(`Por favor, selecione um ficheiro para a foto: ${photoType}`);
-        return;
-    }
-    
-    uploadFile(currentVehicleId, file, photoType);
 }
 
 async function fetchAndDisplayDocuments(vehicleId) {
@@ -233,19 +310,23 @@ async function fetchAndDisplayDocuments(vehicleId) {
             <thead class="bg-gray-50">
                 <tr>
                     <th class="px-4 py-2 text-left font-medium text-gray-500">Documento</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Data Inclusão</th>
                     <th class="px-4 py-2 text-left font-medium text-gray-500">Validade</th>
                     <th class="px-4 py-2 text-center font-medium text-gray-500">Ações</th>
                 </tr>
             </thead>
             <tbody></tbody>`;
         const tbody = table.querySelector('tbody');
+        const isPrivileged = privilegedAccessProfiles.includes(getUserProfile());
         documentos.forEach(doc => {
             const tr = tbody.insertRow();
             tr.innerHTML = `
                 <td class="px-4 py-2">${doc.nome_documento}</td>
+                <td class="px-4 py-2">${new Date(doc.data_inclusao).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
                 <td class="px-4 py-2">${doc.data_validade ? new Date(doc.data_validade).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A'}</td>
-                <td class="px-4 py-2 text-center">
+                <td class="px-4 py-2 text-center space-x-2">
                     <a href="${apiUrlBase.replace('/api', '')}/${doc.caminho_arquivo}" target="_blank" class="text-indigo-600 hover:underline">Ver</a>
+                    ${isPrivileged ? `<button data-doc-id="${doc.id}" data-doc-name="${doc.nome_documento}" class="delete-doc-btn text-red-500 hover:text-red-700">Excluir</button>` : ''}
                 </td>
             `;
         });
@@ -271,13 +352,19 @@ async function handleDocumentUploadSubmit(event) {
         button.disabled = false;
         return;
     }
+    
+    if (file.size > 3 * 1024 * 1024) {
+        alert('Erro: O ficheiro é maior que 3MB. Por favor, selecione um ficheiro menor.');
+        button.disabled = false;
+        return;
+    }
 
-    await uploadFile(currentVehicleId, file, nome, validade);
+    await uploadFile(currentVehicleId, file, nome, validade, 'document');
     form.reset();
     button.disabled = false;
 }
 
-async function uploadFile(vehicleId, file, description, expiryDate = null) {
+async function uploadFile(vehicleId, file, description, expiryDate = null, type = 'photo') {
     const formData = new FormData();
     formData.append('ficheiro', file);
     formData.append('descricao', description);
@@ -291,14 +378,15 @@ async function uploadFile(vehicleId, file, description, expiryDate = null) {
             headers: { 'Authorization': `Bearer ${getToken()}` },
             body: formData
         });
-        if (!response.ok) throw new Error('Falha no upload.');
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Falha no upload.' }));
+            throw new Error(errorData.error);
+        }
         
         alert('Ficheiro enviado com sucesso!');
-        // Recarrega os dados da aba atual
-        const activeTab = document.querySelector('#details-tabs .tab-button.active').dataset.tab;
-        if (activeTab === 'photos') {
+        if (type === 'photo') {
             await fetchAndDisplayPhotos(vehicleId);
-        } else if (activeTab === 'documents') {
+        } else if (type === 'document') {
             await fetchAndDisplayDocuments(vehicleId);
         }
     } catch (error) {
@@ -306,7 +394,155 @@ async function uploadFile(vehicleId, file, description, expiryDate = null) {
     }
 }
 
-// --- RESTANTE DO CÓDIGO ---
+
+// --- LÓGICA DE EXCLUSÃO DE DOCUMENTOS ---
+
+function handleDeleteDocumentClick(event) {
+    const button = event.target.closest('.delete-doc-btn');
+    if (!button) return;
+
+    const docId = button.dataset.docId;
+    const docName = button.dataset.docName;
+    
+    openDeleteDocumentConfirmModal(docId, docName);
+}
+
+function openDeleteDocumentConfirmModal(id, name) {
+    documentToDelete = { id, name };
+    document.getElementById('delete-document-info').textContent = name;
+    document.getElementById('confirm-delete-document-modal').classList.remove('hidden');
+    feather.replace();
+}
+
+async function executeDeleteDocument() {
+    const { id } = documentToDelete;
+    if (!id) return;
+
+    const modal = document.getElementById('confirm-delete-document-modal');
+    const confirmBtn = modal.querySelector('#confirm-delete-document-btn');
+    confirmBtn.disabled = true;
+
+    try {
+        const response = await fetch(`${apiUrlBase}/documentos/${id}/excluir`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${getToken()}` },
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Falha ao excluir o documento.');
+        }
+
+        alert('Documento excluído com sucesso!');
+        modal.classList.add('hidden');
+        await fetchAndDisplayDocuments(currentVehicleId);
+
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        confirmBtn.disabled = false;
+        documentToDelete = { id: null, name: null };
+    }
+}
+
+
+// --- LÓGICA DE CAPTURA DE FOTO E VISUALIZADOR ---
+
+async function openCaptureModal(targetInputId, targetPreviewId) {
+    const modal = document.getElementById('photo-capture-modal');
+    const video = document.getElementById('camera-stream');
+    const errorMsg = document.getElementById('camera-error');
+    
+    photoCaptureState.targetInputId = targetInputId;
+    photoCaptureState.targetPreviewId = targetPreviewId;
+    
+    errorMsg.classList.add('hidden');
+    modal.classList.remove('hidden');
+    feather.replace();
+
+    try {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            photoCaptureState.stream = stream;
+            video.srcObject = stream;
+            retakePhoto();
+        } else {
+            throw new Error('A API de multimédia não é suportada neste navegador.');
+        }
+    } catch (err) {
+        errorMsg.textContent = `Erro ao aceder à câmara: ${err.message}`;
+        errorMsg.classList.remove('hidden');
+        document.getElementById('take-photo-btn').classList.add('hidden');
+        console.error("Erro na câmara:", err);
+    }
+}
+
+function closeCaptureModal() {
+    if (photoCaptureState.stream) {
+        photoCaptureState.stream.getTracks().forEach(track => track.stop());
+    }
+    photoCaptureState = { stream: null, targetInputId: null, targetPreviewId: null };
+    document.getElementById('photo-capture-modal').classList.add('hidden');
+}
+
+function takePhoto() {
+    const video = document.getElementById('camera-stream');
+    const canvas = document.getElementById('photo-canvas');
+    const context = canvas.getContext('2d');
+    
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    video.classList.add('hidden');
+    canvas.classList.remove('hidden');
+    
+    document.getElementById('take-photo-btn').classList.add('hidden');
+    document.getElementById('use-photo-btn').classList.remove('hidden');
+    document.getElementById('retake-photo-btn').classList.remove('hidden');
+}
+
+function retakePhoto() {
+    document.getElementById('camera-stream').classList.remove('hidden');
+    document.getElementById('photo-canvas').classList.add('hidden');
+    document.getElementById('take-photo-btn').classList.remove('hidden');
+    document.getElementById('use-photo-btn').classList.add('hidden');
+    document.getElementById('retake-photo-btn').classList.add('hidden');
+}
+
+function useCapturedPhoto() {
+    const canvas = document.getElementById('photo-canvas');
+    const preview = document.getElementById(photoCaptureState.targetPreviewId);
+    
+    canvas.toBlob(blob => {
+        if (blob.size > 3 * 1024 * 1024) {
+            alert('Erro: A foto capturada é maior que 3MB. Tente novamente com uma resolução menor, se possível.');
+            retakePhoto();
+            return;
+        }
+
+        const dataUrl = canvas.toDataURL('image/jpeg');
+        preview.src = dataUrl;
+
+        const dataTransfer = new DataTransfer();
+        const file = new File([blob], "captured-photo.jpg", { type: "image/jpeg" });
+        dataTransfer.items.add(file);
+        
+        const input = document.getElementById(photoCaptureState.targetInputId);
+        input.files = dataTransfer.files;
+
+        closeCaptureModal();
+    }, 'image/jpeg', 0.9);
+}
+
+function openImageViewer(src) {
+    document.getElementById('viewer-image').src = src;
+    document.getElementById('image-viewer-modal').classList.remove('hidden');
+}
+
+
+// --- RESTANTE DAS FUNÇÕES (sem alterações) ---
+// (inclui toda a lógica de custos, modais de veículo, filtros, etc.)
 
 function switchCostTab(tabName) {
     document.querySelectorAll('.cost-tab-content').forEach(content => {
@@ -718,7 +954,13 @@ function renderVehicleCards(vehicles, container) {
         const card = document.createElement('div');
         card.className = 'vehicle-item bg-white rounded-lg shadow-md overflow-hidden cursor-pointer transform hover:-translate-y-1 transition-transform duration-200';
         card.dataset.id = vehicle.id; 
-        const photoUrl = vehicle.foto_principal ? `${apiUrlBase.replace('/api', '')}/${vehicle.foto_principal}` : 'https://placehold.co/400x250/e2e8f0/4a5568?text=Sem+Foto';
+        
+        const photoUrl = vehicle.foto_frente 
+            ? `${apiUrlBase.replace('/api', '')}/${vehicle.foto_frente}` 
+            : (vehicle.foto_principal 
+                ? `${apiUrlBase.replace('/api', '')}/${vehicle.foto_principal}`
+                : 'https://placehold.co/400x250/e2e8f0/4a5568?text=Sem+Foto');
+        
         const statusInfo = getStatusInfo(vehicle.status);
         card.innerHTML = `
             <div class="relative">
@@ -809,25 +1051,6 @@ function openDetailsModal(vehicle) {
     modal.classList.remove('hidden');
     switchTab('details', vehicle.id); 
     feather.replace();
-}
-
-async function switchTab(tabName, vehicleId) {
-    document.querySelectorAll('#details-modal .tab-content').forEach(content => content.classList.remove('active'));
-    document.querySelectorAll('#details-tabs .tab-button').forEach(button => button.classList.remove('active'));
-    document.getElementById(`${tabName}-tab-content`).classList.add('active');
-    document.querySelector(`#details-tabs .tab-button[data-tab="${tabName}"]`).classList.add('active');
-    if (tabName === 'details') {
-        const vehicle = allVehicles.find(v => v.id === vehicleId);
-        renderDetailsTab(vehicle);
-    } else if (tabName === 'photos') {
-        await fetchAndDisplayPhotos(vehicleId);
-    } else if (tabName === 'documents') {
-        await fetchAndDisplayDocuments(vehicleId);
-    } else if (tabName === 'maintenance') {
-        await fetchAndDisplayMaintenanceHistory(vehicleId);
-    } else if (tabName === 'logs') {
-        await fetchAndDisplayChangeLogs(vehicleId);
-    }
 }
 
 function renderDetailsTab(vehicle) {
@@ -928,8 +1151,8 @@ async function fetchAndDisplayChangeLogs(vehicleId) {
     }
 }
 
-async function populateMaintenanceTypes() {
-    const selectElement = document.getElementById('maintenance-type');
+async function populateMaintenanceTypes(selectElementId = 'maintenance-type') {
+    const selectElement = document.getElementById(selectElementId);
     selectElement.innerHTML = '<option value="">A carregar...</option>';
     try {
         const response = await fetch(`${apiUrlBase}/parametros?cod=Tipo - Manutenção`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
@@ -996,6 +1219,7 @@ async function handleMaintenanceFormSubmit(event) {
         document.getElementById('maintenance-modal').classList.add('hidden');
         alert('Manutenção registada com sucesso!');
         await fetchAndDisplayMaintenanceHistory(maintenanceData.id_veiculo);
+        await loadRecentIndividualCosts();
     } catch (error) {
         alert(`Erro: ${error.message}`);
     } finally {
@@ -1003,12 +1227,79 @@ async function handleMaintenanceFormSubmit(event) {
     }
 }
 
+function openVehicleCostModal() {
+    const modal = document.getElementById('vehicle-cost-modal');
+    const form = modal.querySelector('form');
+    form.reset();
+    
+    document.getElementById('vehicle-cost-fornecedor-id').value = '';
+    document.getElementById('vehicle-cost-date').value = new Date().toISOString().split('T')[0];
+    
+    const select = document.getElementById('vehicle-cost-vehicle-select');
+    select.innerHTML = '<option value="">-- Selecione um Veículo --</option>';
+    allVehicles
+        .filter(v => v.status === 'Ativo' || v.status === 'Em Manutenção')
+        .sort((a, b) => a.modelo.localeCompare(b.modelo))
+        .forEach(v => {
+            const option = document.createElement('option');
+            option.value = v.id;
+            option.textContent = `${v.modelo} - ${v.placa}`;
+            select.appendChild(option);
+        });
+        
+    populateMaintenanceTypes('vehicle-cost-type'); 
+    
+    modal.classList.remove('hidden');
+    feather.replace();
+}
+
+async function handleVehicleCostFormSubmit(event) {
+    event.preventDefault();
+    const saveBtn = document.getElementById('save-vehicle-cost-btn');
+    saveBtn.disabled = true;
+
+    const costData = {
+        id_veiculo: document.getElementById('vehicle-cost-vehicle-select').value,
+        data_manutencao: document.getElementById('vehicle-cost-date').value,
+        custo: document.getElementById('vehicle-cost-value').value,
+        tipo_manutencao: document.getElementById('vehicle-cost-type').value,
+        descricao: document.getElementById('vehicle-cost-description').value,
+        id_fornecedor: document.getElementById('vehicle-cost-fornecedor-id').value,
+    };
+    
+    if (!costData.id_veiculo) { alert('Por favor, selecione um veículo.'); saveBtn.disabled = false; return; }
+    if (!costData.id_fornecedor) { alert('Por favor, associe um fornecedor ou marque como despesa interna.'); saveBtn.disabled = false; return; }
+    if (!costData.tipo_manutencao) { alert('Por favor, selecione um tipo de despesa.'); saveBtn.disabled = false; return; }
+    
+    try {
+        const response = await fetch(`${apiUrlBase}/veiculos/${costData.id_veiculo}/manutencoes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify(costData)
+        });
+        if (!response.ok) throw new Error('Falha ao salvar a despesa do veículo.');
+        
+        document.getElementById('vehicle-cost-modal').classList.add('hidden');
+        alert('Despesa do veículo registada com sucesso!');
+        await loadRecentIndividualCosts();
+        
+        if (costData.tipo_manutencao.toLowerCase().includes('manutenção')) {
+            await loadVehicles();
+        }
+
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        saveBtn.disabled = false;
+    }
+}
+
+
 function openFleetCostModal() {
     const modal = document.getElementById('fleet-cost-modal');
     modal.querySelector('form').reset();
     document.getElementById('fleet-cost-fornecedor-id').value = '';
     document.getElementById('fleet-cost-date').value = new Date().toISOString().split('T')[0];
-    // Limpa os checkboxes ao abrir o modal
     document.querySelectorAll('#fleet-cost-filiais-checkboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
     modal.classList.remove('hidden');
     feather.replace();
@@ -1019,7 +1310,6 @@ async function handleFleetCostFormSubmit(event) {
     const saveBtn = document.getElementById('save-fleet-cost-btn');
     saveBtn.disabled = true;
     
-    // Lógica atualizada para ler os checkboxes
     const selectedFiliais = Array.from(document.querySelectorAll('#fleet-cost-filiais-checkboxes input[type="checkbox"]:checked'))
                                 .map(cb => cb.value);
 
@@ -1054,138 +1344,6 @@ async function handleFleetCostFormSubmit(event) {
         alert(`Erro: ${error.message}`);
     } finally {
         saveBtn.disabled = false;
-    }
-}
-
-async function loadFleetCosts() {
-    const container = document.getElementById('costs-tab-content-gerais');
-    container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
-    try {
-        const response = await fetch(`${apiUrlBase}/custos-frota`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!response.ok) throw new Error('Falha ao buscar custos.');
-        const custos = await response.json();
-        if (custos.length === 0) {
-            container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo geral registado.</p>';
-            return;
-        }
-        const table = createCostTable('gerais');
-        const tbody = table.querySelector('tbody');
-        custos.forEach(c => {
-            const tr = tbody.insertRow();
-            tr.innerHTML = `
-                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
-                <td class="px-4 py-2">${c.descricao}</td>
-                <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
-                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
-                <td class="px-4 py-2 text-center">
-                    <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="geral" data-cost-desc="${c.descricao}">
-                        <span data-feather="trash-2" class="w-4 h-4"></span>
-                    </button>
-                </td>`;
-        });
-        container.innerHTML = '';
-        container.appendChild(table);
-        feather.replace();
-    } catch (error) {
-        container.innerHTML = `<p class="text-center p-4 text-red-500">${error.message}</p>`;
-    }
-}
-
-async function loadRecentIndividualCosts() {
-    const container = document.getElementById('costs-tab-content-individuais');
-    container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
-    try {
-        const response = await fetch(`${apiUrlBase}/manutencoes/recentes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!response.ok) throw new Error('Falha ao buscar custos individuais.');
-        const custos = await response.json();
-        if (custos.length === 0) {
-            container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo individual registado.</p>';
-            return;
-        }
-        const table = createCostTable('individuais');
-        const tbody = table.querySelector('tbody');
-        custos.forEach(c => {
-            const tr = tbody.insertRow();
-            tr.innerHTML = `
-                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
-                <td class="px-4 py-2">${c.modelo} (${c.placa})</td>
-                <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
-                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
-                <td class="px-4 py-2 text-center">
-                    <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="individual" data-cost-desc="${c.descricao || `Manutenção em ${c.modelo}`}">
-                        <span data-feather="trash-2" class="w-4 h-4"></span>
-                    </button>
-                </td>`;
-        });
-        container.innerHTML = '';
-        container.appendChild(table);
-        feather.replace();
-    } catch (error) {
-        container.innerHTML = `<p class="text-center p-4 text-red-500">${error.message}</p>`;
-    }
-}
-
-function createCostTable(type) {
-    const table = document.createElement('table');
-    table.className = 'min-w-full divide-y divide-gray-200 text-sm';
-    const descriptionHeader = type === 'gerais' ? 'Descrição' : 'Veículo';
-    table.innerHTML = `
-        <thead class="bg-gray-50">
-            <tr>
-                <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
-                <th class="px-4 py-2 text-left font-medium text-gray-500">${descriptionHeader}</th>
-                <th class="px-4 py-2 text-left font-medium text-gray-500">Fornecedor</th>
-                <th class="px-4 py-2 text-right font-medium text-gray-500">Custo</th>
-                <th class="px-4 py-2 text-center font-medium text-gray-500">Ações</th>
-            </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
-    return table;
-}
-
-function handleDeleteCostClick(event) {
-    const button = event.target.closest('button[data-cost-id]');
-    if (!button) return;
-    const id = button.dataset.costId;
-    const type = button.dataset.costType;
-    const description = button.dataset.costDesc;
-    openDeleteCostConfirmModal(id, type, description);
-}
-
-function openDeleteCostConfirmModal(id, type, description) {
-    costToDelete = { id, type };
-    document.getElementById('delete-cost-info').textContent = description;
-    document.getElementById('confirm-delete-cost-modal').classList.remove('hidden');
-    feather.replace();
-}
-
-async function executeDeleteCost(id, type) {
-    const modal = document.getElementById('confirm-delete-cost-modal');
-    const confirmBtn = modal.querySelector('#confirm-delete-cost-btn');
-    confirmBtn.disabled = true;
-    let url = '';
-    if (type === 'geral') {
-        url = `${apiUrlBase}/custos-frota/${id}/excluir`;
-    } else if (type === 'individual') {
-        url = `${apiUrlBase}/manutencoes/${id}/excluir`;
-    } else {
-        return;
-    }
-    try {
-        const response = await fetch(url, {
-            method: 'PUT',
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
-        if (!response.ok) throw new Error('Falha ao excluir o lançamento.');
-        alert('Lançamento excluído com sucesso!');
-        modal.classList.add('hidden');
-        await loadFleetCosts();
-        await loadRecentIndividualCosts();
-    } catch (error) {
-        alert(`Erro: ${error.message}`);
-    } finally {
-        confirmBtn.disabled = false;
-        costToDelete = { id: null, type: null };
     }
 }
 
@@ -1301,11 +1459,9 @@ async function deleteVehicle(id) {
 async function populateFilialSelects() {
     await populateSelectWithOptions(`${apiUrlBase}/parametros?cod=Unidades`, 'filter-filial', 'ID', 'NOME_PARAMETRO', 'Todas as Filiais');
     await populateSelectWithOptions(`${apiUrlBase}/parametros?cod=Unidades`, 'vehicle-filial', 'ID', 'NOME_PARAMETRO', '-- Selecione a Filial --');
-    // ATUALIZADO: Chama a nova função para popular os checkboxes
     await populateCheckboxes(`${apiUrlBase}/parametros?cod=Unidades`, 'fleet-cost-filiais-checkboxes', 'ID', 'NOME_PARAMETRO');
 }
 
-// NOVA FUNÇÃO: Popula um container com checkboxes
 async function populateCheckboxes(url, containerId, valueKey, textKey) {
     const container = document.getElementById(containerId);
     try {
@@ -1313,7 +1469,7 @@ async function populateCheckboxes(url, containerId, valueKey, textKey) {
         if (!response.ok) throw new Error(`Falha ao carregar dados para ${containerId}.`);
         
         const items = await response.json();
-        container.innerHTML = ''; // Limpa o container
+        container.innerHTML = ''; 
         items.forEach(item => {
             const wrapper = document.createElement('div');
             wrapper.className = 'flex items-center';
@@ -1427,3 +1583,55 @@ function getUserData() { const token = getToken(); if (!token) return null; try 
 function getUserName() { return getUserData()?.nome || 'Utilizador'; }
 function getUserProfile() { return getUserData()?.perfil || null; }
 function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html'; }
+
+async function lookupCnpj(modalType) {
+    const cnpjInput = document.getElementById(`${modalType}-cnpj`);
+    const razaoSocialInput = document.getElementById(`${modalType}-razao-social`);
+    const fornecedorIdInput = document.getElementById(`${modalType}-fornecedor-id`);
+    
+    const cnpj = cnpjInput.value.replace(/\D/g, '');
+    if (cnpj.length !== 14) {
+        alert('Por favor, digite um CNPJ válido com 14 dígitos.');
+        return;
+    }
+
+    try {
+        const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+        if (!response.ok) throw new Error('CNPJ não encontrado na API externa.');
+        
+        const data = await response.json();
+
+        const fornecedorResponse = await fetch(`${apiUrlBase}/fornecedores/cnpj`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify({
+                cnpj: data.cnpj,
+                razao_social: data.razao_social,
+                nome_fantasia: data.nome_fantasia,
+                logradouro: data.logradouro,
+                numero: data.numero,
+                bairro: data.bairro,
+                municipio: data.municipio,
+                uf: data.uf,
+                cep: data.cep
+            })
+        });
+
+        if (!fornecedorResponse.ok) throw new Error('Falha ao registar ou buscar fornecedor no sistema.');
+        const fornecedor = await fornecedorResponse.json();
+        
+        razaoSocialInput.value = fornecedor.razao_social;
+        fornecedorIdInput.value = fornecedor.id;
+
+    } catch (error) {
+        alert(`Erro ao consultar CNPJ: ${error.message}`);
+        razaoSocialInput.value = '';
+        fornecedorIdInput.value = '';
+    }
+}
+
+function useInternalExpense(modalType) {
+    document.getElementById(`${modalType}-cnpj`).value = 'N/A';
+    document.getElementById(`${modalType}-razao-social`).value = 'DESPESA INTERNA';
+    document.getElementById(`${modalType}-fornecedor-id`).value = '0'; 
+}

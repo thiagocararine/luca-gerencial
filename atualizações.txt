@@ -15,3 +15,6 @@
 
 - Retirar o botão "Apagar" do logistica.html
 (INCLUIDO E FUNCIONANDO)
+
+- Botão para incluir custo viculo, indicando o veiculo que será direcionado na despesa.
+
