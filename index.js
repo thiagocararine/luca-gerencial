@@ -1,4 +1,4 @@
-// index.js (Backend Completo com Perfis de Acesso, Permissões e Logística)
+// index.js (Backend Completo com Lógica de Upload de Ficheiros para Veículos)
 console.log("--- O SERVIDOR FOI REINICIADO COM A VERSÃO MAIS RECENTE DO CÓDIGO ---");
 
 // 1. Importação das bibliotecas
@@ -10,7 +10,7 @@ const bcrypt = require('bcryptjs');
 const fs = require('fs').promises;
 const path = require('path');
 const multer = require('multer');
-const fetch = require('node-fetch'); // Necessário para chamadas de API externas
+const fetch = require('node-fetch');
 require('dotenv').config();
 
 // 2. Configurações da Aplicação
@@ -21,6 +21,11 @@ const apiRouter = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 const privilegedAccessProfiles = ["Administrador", "Financeiro"]; 
 
+// Define o caminho base para os uploads a partir do .env, com um fallback local
+const UPLOADS_BASE_PATH = process.env.UPLOADS_BASE_PATH || path.join(__dirname, 'uploads');
+console.log(`[INFO] Diretório de uploads configurado para: ${UPLOADS_BASE_PATH}`);
+
+
 if (!JWT_SECRET || !process.env.DB_HOST) {
     console.error("ERRO CRÍTICO: As variáveis de ambiente da base de dados ou JWT_SECRET não estão definidas no arquivo .env");
     process.exit(1);
@@ -29,7 +34,8 @@ if (!JWT_SECRET || !process.env.DB_HOST) {
 // 3. Middlewares e Configurações Globais do Express
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '10mb' }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Serve a pasta de uploads como estática para que o frontend possa aceder aos ficheiros
+app.use('/uploads', express.static(UPLOADS_BASE_PATH));
 
 // Configuração do Multer para armazenamento de ficheiros de veículos
 const vehicleStorage = multer.diskStorage({
@@ -55,6 +61,7 @@ const vehicleStorage = multer.diskStorage({
     }
 });
 const vehicleUpload = multer({ storage: vehicleStorage });
+
 
 // 4. Configuração da Base de Dados
 const dbConfig = {
@@ -459,7 +466,7 @@ apiRouter.get('/parametros', async (req, res) => {
     if (!cod) return res.status(400).json({ error: 'O "cod_parametro" é obrigatório.' });
     try {
         const connection = await mysql.createConnection(dbConfig);
-        const [rows] = await connection.execute('SELECT ID, NOME_PARAMETRO, KEY_PARAMETRO, KEY_VINCULACAO FROM parametro WHERE COD_PARAMETRO = ? ORDER BY NOME_PARAMETRO ASC', [cod]);
+        const [rows] = await connection.execute('SELECT ID, NOME_PARAMETRO, KEY_PARAMETRO, KEY_VINCULACAO, COD_PARAMETRO FROM parametro WHERE COD_PARAMETRO = ? ORDER BY NOME_PARAMETRO ASC', [cod]);
         await connection.end();
         res.json(rows);
     } catch (error) {
@@ -631,11 +638,10 @@ apiRouter.put('/perfis/:id/permissoes', authenticateToken, authorizeAdmin, async
 });
 
 // --- ROTA DE CONFIGURAÇÃO DA LOGO ---
-const logoConfigPath = path.join(__dirname, 'config_logo.json');
 apiRouter.post('/config/logo', authenticateToken, authorizeAdmin, async (req, res) => {
     try {
         const { logoBase64 } = req.body;
-        await fs.writeFile(logoConfigPath, JSON.stringify({ logoBase64 }));
+        await fs.writeFile(path.join(__dirname, 'config_logo.json'), JSON.stringify({ logoBase64 }));
         res.json({ message: 'Logo salva com sucesso.' });
     } catch (error) {
         res.status(500).json({ error: 'Erro ao salvar a logo.' });
@@ -643,7 +649,7 @@ apiRouter.post('/config/logo', authenticateToken, authorizeAdmin, async (req, re
 });
 apiRouter.get('/config/logo', authenticateToken, async (req, res) => {
      try {
-        const data = await fs.readFile(logoConfigPath, 'utf8');
+        const data = await fs.readFile(path.join(__dirname, 'config_logo.json'), 'utf8');
         res.json(JSON.parse(data));
     } catch (error) {
         if (error.code === 'ENOENT') {
@@ -653,159 +659,14 @@ apiRouter.get('/config/logo', authenticateToken, async (req, res) => {
     }
 });
 
-// --- ROTAS PARA O MÓDULO DE LOGÍSTICA ---
+// --- ROTAS DE LOGÍSTICA (continuação) ---
 
-// Rota de Exemplo para Upload
-apiRouter.post('/upload', authenticateToken, upload.single('documento_veiculo'), (req, res) => {
-    if (!req.file) {
-        return res.status(400).send('Nenhum ficheiro enviado.');
-    }
-    res.json({ filePath: `/${req.file.path.replace(/\\/g, '/')}` });
-});
-
-// GET: Buscar todos os veículos (MODIFICADO para incluir foto principal)
-apiRouter.get('/veiculos', authenticateToken, async (req, res) => {
-    let connection;
-    try {
-        connection = await mysql.createConnection(dbConfig);
-        const sql = `
-            SELECT 
-                v.*, 
-                p.NOME_PARAMETRO as nome_filial,
-                vf.caminho_foto as foto_principal
-            FROM veiculos v
-            LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
-            LEFT JOIN veiculo_fotos vf ON v.id = vf.id_veiculo AND vf.descricao = 'Frente'
-            ORDER BY v.modelo, v.placa`;
-        const [veiculos] = await connection.execute(sql);
-        await connection.end();
-        res.json(veiculos);
-    } catch (error) {
-        console.error("Erro ao buscar veículos:", error);
-        if (connection) await connection.end();
-        res.status(500).json({ error: 'Erro ao buscar veículos.' });
-    }
-});
-
-// NOVA ROTA: Upload de ficheiros (fotos ou documentos) para um veículo
-apiRouter.post('/veiculos/:id/upload', authenticateToken, authorizeAdmin, vehicleUpload.single('ficheiro'), async (req, res) => {
-    const { id: id_veiculo } = req.params;
-    const { descricao, data_validade } = req.body;
-
-    if (!req.file) {
-        return res.status(400).json({ error: 'Nenhum ficheiro enviado.' });
-    }
-    if (!descricao) {
-        return res.status(400).json({ error: 'A descrição do ficheiro é obrigatória.' });
-    }
-
-    const isPhoto = req.file.mimetype.startsWith('image/');
-    // Converte o caminho para um caminho relativo que o frontend possa usar
-    const relativePath = path.join('uploads', 'veiculos', id_veiculo, isPhoto ? 'fotos' : 'documentos', req.file.filename).replace(/\\/g, '/');
-
-    let connection;
-    try {
-        connection = await mysql.createConnection(dbConfig);
-        
-        if (isPhoto) {
-            const [existing] = await connection.execute('SELECT id FROM veiculo_fotos WHERE id_veiculo = ? AND descricao = ?', [id_veiculo, descricao]);
-            if (existing.length > 0) {
-                const sql = 'UPDATE veiculo_fotos SET caminho_foto = ? WHERE id = ?';
-                await connection.execute(sql, [relativePath, existing[0].id]);
-            } else {
-                const sql = 'INSERT INTO veiculo_fotos (id_veiculo, caminho_foto, descricao) VALUES (?, ?, ?)';
-                await connection.execute(sql, [id_veiculo, relativePath, descricao]);
-            }
-        } else {
-            const sql = 'INSERT INTO veiculo_documentos (id_veiculo, nome_documento, caminho_arquivo, data_validade) VALUES (?, ?, ?, ?)';
-            await connection.execute(sql, [id_veiculo, descricao, relativePath, data_validade || null]);
-        }
-        
-        await connection.end();
-        res.status(201).json({ message: 'Ficheiro enviado com sucesso!', filePath: relativePath });
-
-    } catch (error) {
-        console.error("Erro ao fazer upload do ficheiro:", error);
-        if (connection) await connection.end();
-        res.status(500).json({ error: 'Erro interno ao processar o upload.' });
-    }
-});
-
-// NOVA ROTA: Buscar todas as fotos de um veículo
-apiRouter.get('/veiculos/:id/fotos', authenticateToken, async (req, res) => {
+apiRouter.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) => {
     const { id } = req.params;
-    let connection;
-    try {
-        connection = await mysql.createConnection(dbConfig);
-        const [fotos] = await connection.execute('SELECT * FROM veiculo_fotos WHERE id_veiculo = ?', [id]);
-        await connection.end();
-        res.json(fotos);
-    } catch (error) {
-        if (connection) await connection.end();
-        res.status(500).json({ error: 'Erro ao buscar fotos.' });
-    }
-});
+    const { userId, nome: nomeUsuario } = req.user;
+    const vehicleData = req.body;
 
-// NOVA ROTA: Buscar todos os documentos de um veículo
-apiRouter.get('/veiculos/:id/documentos', authenticateToken, async (req, res) => {
-    const { id } = req.params;
-    let connection;
-    try {
-        connection = await mysql.createConnection(dbConfig);
-        const [documentos] = await connection.execute('SELECT * FROM veiculo_documentos WHERE id_veiculo = ?', [id]);
-        await connection.end();
-        res.json(documentos);
-    } catch (error) {
-        if (connection) await connection.end();
-        res.status(500).json({ error: 'Erro ao buscar documentos.' });
-    }
-});
-
-// GET: Buscar marcas únicas de veículos da FIPE
-apiRouter.get('/fipe/marcas', authenticateToken, async (req, res) => {
-    try {
-        const response = await fetch('https://brasilapi.com.br/api/fipe/marcas/v1/carros');
-        if (!response.ok) {
-            throw new Error('Falha ao buscar dados da BrasilAPI');
-        }
-        const marcas = await response.json();
-        res.json(marcas);
-    } catch (error) {
-        console.error("Erro ao buscar marcas FIPE:", error);
-        res.status(500).json({ error: 'Erro ao buscar marcas de veículos.' });
-    }
-});
-
-// GET: Buscar modelos de uma marca específica da FIPE
-apiRouter.get('/fipe/modelos/:marcaCodigo', authenticateToken, async (req, res) => {
-    const { marcaCodigo } = req.params;
-    if (!marcaCodigo || marcaCodigo === 'undefined') {
-        return res.status(400).json({ error: 'Código da marca é inválido.' });
-    }
-    try {
-        const responseTabelas = await fetch('https://brasilapi.com.br/api/fipe/tabelas/v1');
-        if (!responseTabelas.ok) throw new Error('Falha ao buscar tabelas FIPE.');
-        const tabelas = await responseTabelas.json();
-        const codigoTabela = tabelas[0].codigo;
-
-        const responsePrecos = await fetch(`https://brasilapi.com.br/api/fipe/preco/v1/${codigoTabela}?marcaCodigo=${marcaCodigo}`);
-        if (!responsePrecos.ok) throw new Error('Falha ao buscar preços para a marca.');
-        
-        const precos = await responsePrecos.json();
-        const modelos = [...new Set(precos.map(item => item.modelo))].map(modelo => ({ nome: modelo }));
-
-        res.json({ modelos: modelos });
-    } catch (error) {
-        console.error(`Erro ao buscar modelos para a marca ${marcaCodigo}:`, error);
-        res.status(500).json({ error: 'Erro ao buscar modelos de veículos.' });
-    }
-});
-
-// POST: Adicionar um novo veículo (MODIFICADO para criar diretórios no caminho correto)
-apiRouter.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) => {
-    const { placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status } = req.body;
-    
-    if (!placa || !marca || !modelo || !id_filial || !status) {
+    if (!vehicleData.placa || !vehicleData.marca || !vehicleData.modelo || !vehicleData.id_filial || !vehicleData.status) {
         return res.status(400).json({ error: 'Placa, marca, modelo, filial e status são obrigatórios.' });
     }
 
@@ -814,71 +675,84 @@ apiRouter.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) 
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
 
-        const sql = `
-            INSERT INTO veiculos (placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-        
-        const [result] = await connection.execute(sql, [placa, marca, modelo, ano_fabricacao || null, ano_modelo || null, renavam || null, chassi || null, id_filial, status]);
-        
-        const newVehicleId = result.insertId;
-
-        // Cria os diretórios usando o novo caminho base
-        const baseDir = path.join(UPLOADS_BASE_PATH, 'veiculos', String(newVehicleId));
-        await fs.mkdir(path.join(baseDir, 'fotos'), { recursive: true });
-        await fs.mkdir(path.join(baseDir, 'documentos'), { recursive: true });
-
-        await connection.commit();
-        res.status(201).json({ message: 'Veículo adicionado com sucesso!', newVehicleId });
-
-    } catch (error) {
-        if (connection) await connection.rollback();
-        console.error("Erro ao adicionar veículo:", error);
-        if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({ error: 'Erro: Placa, RENAVAM ou Chassi já registado.' });
+        const [currentVehicleRows] = await connection.execute('SELECT * FROM veiculos WHERE id = ?', [id]);
+        if (currentVehicleRows.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ message: 'Veículo não encontrado.' });
         }
-        res.status(500).json({ error: 'Erro interno ao adicionar o veículo.' });
-    } finally {
-        if (connection) await connection.end();
-    }
-});
+        const currentVehicle = currentVehicleRows[0];
 
-// PUT: Atualizar um veículo existente
-apiRouter.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) => {
-    const { id } = req.params;
-    const { placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status } = req.body;
+        const logs = [];
+        const camposParaComparar = ['placa', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'renavam', 'chassi', 'id_filial', 'status'];
+        
+        for (const campo of camposParaComparar) {
+            const valorAntigo = currentVehicle[campo] || '';
+            const valorNovo = vehicleData[campo] || '';
+            
+            if (String(valorAntigo) !== String(valorNovo)) {
+                logs.push([
+                    id,
+                    campo,
+                    String(valorAntigo),
+                    String(valorNovo),
+                    userId,
+                    nomeUsuario
+                ]);
+            }
+        }
 
-    if (!placa || !marca || !modelo || !id_filial || !status) {
-        return res.status(400).json({ error: 'Placa, marca, modelo, filial e status são obrigatórios.' });
-    }
+        if (logs.length > 0) {
+            const logSql = 'INSERT INTO veiculos_logs (id_veiculo, campo_alterado, valor_antigo, valor_novo, alterado_por_id, alterado_por_nome) VALUES ?';
+            await connection.query(logSql, [logs]);
+        }
 
-    let connection;
-    try {
-        connection = await mysql.createConnection(dbConfig);
-        const sql = `
+        const updateSql = `
             UPDATE veiculos SET 
             placa = ?, marca = ?, modelo = ?, ano_fabricacao = ?, ano_modelo = ?, 
             renavam = ?, chassi = ?, id_filial = ?, status = ? 
             WHERE id = ?`;
         
-        const [result] = await connection.execute(sql, [placa, marca, modelo, ano_fabricacao || null, ano_modelo || null, renavam || null, chassi || null, id_filial, status, id]);
+        await connection.execute(updateSql, [
+            vehicleData.placa, vehicleData.marca, vehicleData.modelo, 
+            vehicleData.ano_fabricacao || null, vehicleData.ano_modelo || null, 
+            vehicleData.renavam || null, vehicleData.chassi || null, 
+            vehicleData.id_filial, vehicleData.status, id
+        ]);
         
-        await connection.end();
-
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Veículo não encontrado.' });
-        }
+        await connection.commit();
         res.json({ message: 'Veículo atualizado com sucesso!' });
+
     } catch (error) {
+        if (connection) await connection.rollback();
         console.error("Erro ao atualizar veículo:", error);
-        if (connection) await connection.end();
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(409).json({ error: 'Erro: Placa, RENAVAM ou Chassi já pertencem a outro veículo.' });
         }
         res.status(500).json({ error: 'Erro interno ao atualizar o veículo.' });
+    } finally {
+        if (connection) await connection.end();
     }
 });
 
-// DELETE: Apagar um veículo
+apiRouter.get('/veiculos/:id/logs', authenticateToken, authorizeAdmin, async (req, res) => {
+    const { id } = req.params;
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            SELECT * FROM veiculos_logs 
+            WHERE id_veiculo = ? 
+            ORDER BY data_alteracao DESC`;
+        const [logs] = await connection.execute(sql, [id]);
+        await connection.end();
+        res.json(logs);
+    } catch (error) {
+        console.error("Erro ao buscar logs do veículo:", error);
+        if (connection) await connection.end();
+        res.status(500).json({ error: 'Erro ao buscar o histórico de alterações.' });
+    }
+});
+
 apiRouter.delete('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) => {
     const { id } = req.params;
     let connection;
@@ -901,7 +775,6 @@ apiRouter.delete('/veiculos/:id', authenticateToken, authorizeAdmin, async (req,
     }
 });
 
-// Rota para buscar manutenções de um veículo
 apiRouter.get('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
     const { id } = req.params;
     let connection;
@@ -924,7 +797,6 @@ apiRouter.get('/veiculos/:id/manutencoes', authenticateToken, async (req, res) =
     }
 });
 
-// Rota para adicionar uma manutenção
 apiRouter.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
     const { id: id_veiculo } = req.params;
     const { data_manutencao, descricao, custo, tipo_manutencao, id_fornecedor } = req.body;
@@ -938,8 +810,8 @@ apiRouter.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) 
     try {
         connection = await mysql.createConnection(dbConfig);
         const sql = `
-            INSERT INTO veiculo_manutencoes (id_veiculo, data_manutencao, descricao, custo, tipo_manutencao, id_user_lanc, id_fornecedor)
-            VALUES (?, ?, ?, ?, ?, ?, ?)`;
+            INSERT INTO veiculo_manutencoes (id_veiculo, data_manutencao, descricao, custo, tipo_manutencao, id_user_lanc, id_fornecedor, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
         await connection.execute(sql, [id_veiculo, data_manutencao, descricao, custo, tipo_manutencao, userId, id_fornecedor]);
         await connection.end();
         res.status(201).json({ message: 'Manutenção registada com sucesso!' });
@@ -950,7 +822,6 @@ apiRouter.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) 
     }
 });
 
-// Rota para buscar ou criar um fornecedor pelo CNPJ
 apiRouter.post('/fornecedores/cnpj', authenticateToken, async (req, res) => {
     const { cnpj, razao_social, nome_fantasia, ...outrosDados } = req.body;
     if (!cnpj) return res.status(400).json({ error: 'CNPJ é obrigatório.' });
@@ -1002,7 +873,6 @@ apiRouter.post('/fornecedores/cnpj', authenticateToken, async (req, res) => {
     }
 });
 
-// Rota para CUSTOS GERAIS DA FROTA (RATEIO)
 apiRouter.post('/custos-frota', authenticateToken, authorizeAdmin, async (req, res) => {
     const { descricao, custo, data_custo, id_fornecedor, filiais_rateio } = req.body;
     const { userId } = req.user;
@@ -1013,8 +883,8 @@ apiRouter.post('/custos-frota', authenticateToken, authorizeAdmin, async (req, r
     try {
         connection = await mysql.createConnection(dbConfig);
         const sql = `
-            INSERT INTO custos_frota (descricao, custo, data_custo, id_fornecedor, filiais_rateio, id_user_lanc)
-            VALUES (?, ?, ?, ?, ?, ?)`;
+            INSERT INTO custos_frota (descricao, custo, data_custo, id_fornecedor, filiais_rateio, id_user_lanc, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'Ativo')`;
         const filiaisJson = JSON.stringify(filiais_rateio);
         await connection.execute(sql, [descricao, custo, data_custo, id_fornecedor, filiaisJson, userId]);
         await connection.end();
@@ -1047,7 +917,6 @@ apiRouter.get('/custos-frota', authenticateToken, async (req, res) => {
     }
 });
 
-// NOVA ROTA: Buscar as últimas manutenções individuais (custos diretos)
 apiRouter.get('/manutencoes/recentes', authenticateToken, async (req, res) => {
     let connection;
     try {
@@ -1068,7 +937,7 @@ apiRouter.get('/manutencoes/recentes', authenticateToken, async (req, res) => {
             LEFT JOIN cad_user u ON vm.id_user_lanc = u.ID
             WHERE vm.status = 'Ativo'
             ORDER BY vm.data_manutencao DESC
-            LIMIT 50`; // Limita aos últimos 50 para performance
+            LIMIT 50`;
         const [custos] = await connection.execute(sql);
         await connection.end();
         res.json(custos);
@@ -1079,7 +948,6 @@ apiRouter.get('/manutencoes/recentes', authenticateToken, async (req, res) => {
     }
 });
 
-// NOVA ROTA: Exclusão lógica para manutenções individuais
 apiRouter.put('/manutencoes/:id/excluir', authenticateToken, authorizeAdmin, async (req, res) => {
     const { id } = req.params;
     const { userId, nome: nomeUsuario } = req.user;
@@ -1103,7 +971,6 @@ apiRouter.put('/manutencoes/:id/excluir', authenticateToken, authorizeAdmin, asy
     }
 });
 
-// NOVA ROTA: Exclusão lógica para custos gerais de frota
 apiRouter.put('/custos-frota/:id/excluir', authenticateToken, authorizeAdmin, async (req, res) => {
     const { id } = req.params;
     const { userId, nome: nomeUsuario } = req.user;
