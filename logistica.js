@@ -565,6 +565,10 @@ function switchCostTab(tabName) {
     }
 }
 
+// =================================================================
+// ALTERAÇÃO #2 - INÍCIO
+// A função loadFleetCosts foi atualizada para exibir a nova coluna 'Filial'.
+// =================================================================
 async function loadFleetCosts() {
     const container = document.getElementById('costs-tab-content-gerais');
     container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
@@ -582,9 +586,11 @@ async function loadFleetCosts() {
         const tbody = table.querySelector('tbody');
         custos.forEach(c => {
             const tr = tbody.insertRow();
+            // O campo c.filiais_rateio agora contém o nome da filial
             tr.innerHTML = `
                 <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
                 <td class="px-4 py-2">${c.descricao}</td>
+                <td class="px-4 py-2">${c.filiais_rateio || 'N/A'}</td>
                 <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
                 <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
                 <td class="px-4 py-2 text-center">
@@ -639,23 +645,40 @@ async function loadRecentIndividualCosts() {
     }
 }
 
+// =================================================================
+// ALTERAÇÃO #1 - INÍCIO
+// A função createCostTable foi refeita para gerar os cabeçalhos da 
+// tabela de custos dinamicamente, adicionando a coluna 'Filial' 
+// apenas para a visualização de custos gerais.
+// =================================================================
 function createCostTable(type) {
     const table = document.createElement('table');
     table.className = 'min-w-full divide-y divide-gray-200 text-sm';
-    const descriptionHeader = type === 'gerais' ? 'Descrição' : 'Veículo';
+    
+    let headers = [];
+    if (type === 'gerais') {
+        headers = ['Data', 'Descrição', 'Filial', 'Fornecedor', 'Custo', 'Ações'];
+    } else { // 'individuais'
+        headers = ['Data', 'Veículo', 'Fornecedor', 'Custo', 'Ações'];
+    }
+
+    const headerHtml = headers.map(h => {
+        let alignClass = 'text-left';
+        if (h === 'Custo') alignClass = 'text-right';
+        if (h === 'Ações') alignClass = 'text-center';
+        return `<th class="px-4 py-2 ${alignClass} font-medium text-gray-500">${h}</th>`;
+    }).join('');
+
     table.innerHTML = `
         <thead class="bg-gray-50">
-            <tr>
-                <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
-                <th class="px-4 py-2 text-left font-medium text-gray-500">${descriptionHeader}</th>
-                <th class="px-4 py-2 text-left font-medium text-gray-500">Fornecedor</th>
-                <th class="px-4 py-2 text-right font-medium text-gray-500">Custo</th>
-                <th class="px-4 py-2 text-center font-medium text-gray-500">Ações</th>
-            </tr>
+            <tr>${headerHtml}</tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
     return table;
 }
+// =================================================================
+// ALTERAÇÃO #1 - FIM
+// =================================================================
 
 function handleDeleteCostClick(event) {
     const button = event.target.closest('button[data-cost-id]');
