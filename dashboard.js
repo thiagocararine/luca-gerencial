@@ -3,7 +3,9 @@
 document.addEventListener('DOMContentLoaded', initDashboardPage);
 
 // --- Constantes e Variáveis de Estado Globais ---
+//const apiUrlBase = 'http://localhost:3000/api';
 const apiUrlBase = 'http://10.113.0.17:3000/api';
+//const apiUrlBase = '/api';
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 let myChart = null; 
 let dashboardDatepicker = null; 
@@ -104,7 +106,8 @@ async function loadDashboardData() {
     }
 
     try {
-        const response = await fetch(`${apiUrlBase}/auth/dashboard-summary?${params.toString()}`, {
+        // A rota de dashboard-summary está correta, não precisa de alteração
+        const response = await fetch(`${apiUrlBase}/dashboard/dashboard-summary?${params.toString()}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -150,7 +153,6 @@ function updateDashboardUI(data) {
     accessDeniedMessage.classList.add('hidden');
     
     if (data.dashboardType === 'Caixa/Loja' || data.dashboardType === 'Todos') {
-        // **ATUALIZAÇÃO:** Garante que o valor é sempre um número antes de formatar.
         const totalDespesasValue = parseFloat(data.totalDespesas);
         const totalDespesas = !isNaN(totalDespesasValue) ? totalDespesasValue : 0;
 
@@ -172,6 +174,7 @@ function updateDashboardUI(data) {
         renderChart(data.despesasPorGrupo || []);
     }
 }
+
 
 function renderChart(despesasPorGrupo) {
     const ctx = document.getElementById('despesas-por-grupo-chart')?.getContext('2d');
@@ -220,7 +223,8 @@ function renderChart(despesasPorGrupo) {
 
 async function popularSelect(selectElement, codParametro, token, placeholderText) {
     try {
-        const response = await fetch(`${apiUrlBase}/auth/parametros?cod=${codParametro}`, { 
+        // CORREÇÃO FINAL: A rota de parâmetros para utilizadores autenticados deve estar em '/settings'
+        const response = await fetch(`${apiUrlBase}/settings/parametros?cod=${codParametro}`, { 
             headers: { 'Authorization': `Bearer ${token}` } 
         });
         if (!response.ok) throw new Error('Falha na resposta da API');

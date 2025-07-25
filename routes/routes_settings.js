@@ -22,7 +22,8 @@ router.get('/parametros/codes', authenticateToken, async (req, res) => {
     }
 });
 
-router.get('/parametros', async (req, res) => {
+// CORREÇÃO: Adicionado 'authenticateToken' para proteger a rota de parâmetros
+router.get('/parametros', authenticateToken, async (req, res) => {
     const { cod } = req.query;
     if (!cod) return res.status(400).json({ error: 'O "cod_parametro" é obrigatório.' });
     let connection;

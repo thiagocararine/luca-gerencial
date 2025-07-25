@@ -6,87 +6,93 @@ const mysql = require('mysql2/promise');
 const { authenticateToken } = require('../middlewares');
 const dbConfig = require('../dbConfig');
 
-const privilegedAccessProfiles = ["Administrador", "Financeiro"];
+/**
+ * @route   GET /api/dashboard/dashboard-summary
+ * @desc    Busca dados resumidos para o dashboard.
+ * @access  Private
+ */
+router.get('/dashboard-summary', authenticateToken, async (req, res) => {
+    const { dataInicio, dataFim, filial, grupo } = req.query;
+    const { perfil, unidade } = req.user; // Dados do token JWT
 
-// GET /api/dashboard/summary
-router.get('/summary', authenticateToken, async (req, res) => {
-    const { perfil, unidade: unidadeUsuario } = req.user;
-    const canViewAllFiliais = privilegedAccessProfiles.includes(perfil);
-    
+    const privilegedAccessProfiles = ["Administrador", "Financeiro"];
+    const isPrivileged = privilegedAccessProfiles.includes(perfil);
+
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
 
-        const [perfilResult] = await connection.execute(
-            'SELECT dashboard_type FROM perfis_acesso WHERE nome_perfil = ?',
-            [perfil]
-        );
-        
-        const dashboardType = (perfilResult[0] && perfilResult[0].dashboard_type) || 'Nenhum';
+        const summary = {
+            dashboardType: req.user.dashboard || 'Nenhum',
+            totalDespesas: 0,
+            lancamentosNoPeriodo: 0,
+            despesasCanceladas: 0,
+            utilizadoresPendentes: 0,
+            despesasPorGrupo: []
+        };
 
-        if (dashboardType === 'Nenhum') {
-            return res.json({ dashboardType: 'Nenhum' });
+        // --- Constrói a cláusula WHERE dinamicamente ---
+        let conditions = [];
+        const params = [];
+
+        if (dataInicio) {
+            conditions.push("dsp_datadesp >= ?");
+            params.push(dataInicio);
         }
-
-        const { dataInicio, dataFim, filial, grupo } = req.query;
-        let baseConditions = [];
-        let queryParams = [];
-
-        if (canViewAllFiliais) {
-            if (filial) {
-                baseConditions.push('dsp_filial = ?');
-                queryParams.push(filial);
-            }
-        } else {
-            baseConditions.push('dsp_filial = ?');
-            queryParams.push(unidadeUsuario);
+        if (dataFim) {
+            conditions.push("dsp_datadesp <= ?");
+            params.push(dataFim);
         }
-        
-        if (dataInicio && dataFim) {
-            baseConditions.push('dsp_datadesp BETWEEN ? AND ?');
-            queryParams.push(dataInicio, dataFim);
-        } else {
-            baseConditions.push('MONTH(dsp_datadesp) = MONTH(CURDATE()) AND YEAR(dsp_datadesp) = YEAR(CURDATE())');
+        if (isPrivileged && filial) {
+            conditions.push("dsp_filial = ?");
+            params.push(filial);
+        } else if (!isPrivileged) {
+            // Se o utilizador não for privilegiado, força o filtro para a sua própria filial
+            conditions.push("dsp_filial = ?");
+            params.push(unidade);
         }
-
         if (grupo) {
-            baseConditions.push('dsp_grupo = ?');
-            queryParams.push(grupo);
-        }
-        
-        const whereClause = baseConditions.length > 0 ? `WHERE ${baseConditions.join(' AND ')}` : '';
-        const whereClauseWithStatus = (status) => ` ${whereClause ? whereClause + ' AND' : 'WHERE'} dsp_status = ${status} `;
-        
-        let responsePayload = { dashboardType };
-
-        if (dashboardType === 'Caixa/Loja' || dashboardType === 'Todos') {
-            const queries = {
-                totalDespesas: `SELECT SUM(dsp_valordsp) as total FROM despesa_caixa ${whereClauseWithStatus(1)}`,
-                lancamentosNoPeriodo: `SELECT COUNT(*) as count FROM despesa_caixa ${whereClause}`,
-                despesasCanceladas: `SELECT COUNT(*) as count FROM despesa_caixa ${whereClauseWithStatus(2)}`,
-                despesasPorGrupo: `SELECT dsp_grupo, SUM(dsp_valordsp) as total FROM despesa_caixa ${whereClauseWithStatus(1)} GROUP BY dsp_grupo ORDER BY total DESC LIMIT 7`,
-            };
-            const [totalDespesasResult] = await connection.execute(queries.totalDespesas, queryParams);
-            const [lancamentosResult] = await connection.execute(queries.lancamentosNoPeriodo, queryParams);
-            const [despesasCanceladasResult] = await connection.execute(queries.despesasCanceladas, queryParams);
-            const [despesasPorGrupoResult] = await connection.execute(queries.despesasPorGrupo, queryParams);
-            
-            responsePayload.totalDespesas = totalDespesasResult[0].total || 0;
-            responsePayload.lancamentosNoPeriodo = lancamentosResult[0].count || 0;
-            responsePayload.despesasCanceladas = despesasCanceladasResult[0].count || 0;
-            responsePayload.despesasPorGrupo = despesasPorGrupoResult;
+            conditions.push("dsp_grupo = ?");
+            params.push(grupo);
         }
 
-        if(canViewAllFiliais) {
-            const [utilizadoresPendentesResult] = await connection.execute(`SELECT COUNT(*) as count FROM cad_user WHERE status_user = 'Pendente'`);
-            responsePayload.utilizadoresPendentes = utilizadoresPendentesResult[0].count || 0;
-        }
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-        return res.json(responsePayload);
+        // --- Queries ---
+        const totalDespesasQuery = `SELECT SUM(dsp_valordsp) as total FROM despesa_caixa ${whereClause.replace('WHERE', 'WHERE dsp_status = 1 AND') || 'WHERE dsp_status = 1'}`;
+        const lancamentosQuery = `SELECT COUNT(ID) as count FROM despesa_caixa ${whereClause}`;
+        const canceladasQuery = `SELECT COUNT(ID) as count FROM despesa_caixa ${whereClause.replace('WHERE', 'WHERE dsp_status = 2 AND') || 'WHERE dsp_status = 2'}`;
+        const pendentesQuery = `SELECT COUNT(ID) as count FROM cade_user WHERE status_user = 'Pendente'`;
+        const porGrupoQuery = `SELECT dsp_grupo, SUM(dsp_valordsp) as total FROM despesa_caixa ${whereClause.replace('WHERE', 'WHERE dsp_status = 1 AND') || 'WHERE dsp_status = 1'} GROUP BY dsp_grupo ORDER BY total DESC`;
+
+        // Executa as queries em paralelo
+        const [
+            [totalResult],
+            [lancamentosResult],
+            [canceladasResult],
+            [pendentesResult],
+            porGrupoResult
+        ] = await Promise.all([
+            connection.execute(totalDespesasQuery, params),
+            connection.execute(lancamentosQuery, params),
+            connection.execute(canceladasQuery, params),
+            isPrivileged ? connection.execute(pendentesQuery) : Promise.resolve([[]]),
+            connection.execute(porGrupoQuery, params)
+        ]);
+
+        summary.totalDespesas = totalResult[0]?.total || 0;
+        summary.lancamentosNoPeriodo = lancamentosResult[0]?.count || 0;
+        summary.despesasCanceladas = canceladasResult[0]?.count || 0;
+        if (isPrivileged) {
+            summary.utilizadoresPendentes = pendentesResult[0]?.count || 0;
+        }
+        summary.despesasPorGrupo = porGrupoResult[0];
+
+        res.json(summary);
 
     } catch (error) {
         console.error("Erro ao buscar dados do dashboard:", error);
-        res.status(500).json({ error: "Erro ao buscar dados para o dashboard." });
+        res.status(500).json({ error: 'Erro interno ao buscar dados do dashboard.' });
     } finally {
         if (connection) await connection.end();
     }
