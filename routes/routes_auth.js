@@ -8,6 +8,32 @@ const jwt = require('jsonwebtoken');
 const { authenticateToken, authorizeAdmin } = require('../middlewares');
 const dbConfig = require('../dbConfig'); // Assumindo que a config do DB foi extraída
 
+// =================================================================
+// NOVA ROTA PÚBLICA PARA BUSCAR PARÂMETROS
+// =================================================================
+// Esta rota é pública (não tem 'authenticateToken') para que a página de registo possa acedê-la.
+router.get('/parametros', async (req, res) => {
+    const { cod } = req.query;
+    if (!cod) {
+        return res.status(400).json({ error: 'O código do parâmetro é obrigatório.' });
+    }
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const [parametros] = await connection.execute(
+            "SELECT ID, NOME_PARAMETRO, KEY_PARAMETRO, KEY_VINCULACAO FROM parametro WHERE cod_parametro = ? ORDER BY NOME_PARAMETRO", 
+            [cod]
+        );
+        res.json(parametros);
+    } catch (error) {
+        console.error("Erro ao buscar parâmetros públicos:", error);
+        res.status(500).json({ error: 'Erro interno do servidor ao buscar parâmetros.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+
 // --- ROTAS DE AUTENTICAÇÃO E UTILIZADORES ---
 
 // POST /api/auth/login
