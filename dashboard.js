@@ -224,8 +224,7 @@ function renderChart(despesasPorGrupo) {
 
 async function popularSelect(selectElement, codParametro, token, placeholderText) {
     try {
-        // CORREÇÃO: A rota de parâmetros está em '/logistica'
-        const response = await fetch(`${apiUrlBase}/logistica/parametros?cod=${codParametro}`, { 
+        const response = await fetch(`${apiUrlBase}/auth/parametros?cod=${codParametro}`, { 
             headers: { 'Authorization': `Bearer ${token}` } 
         });
         if (!response.ok) throw new Error('Falha na resposta da API');
