@@ -93,7 +93,8 @@ function setupUsersTable() {
     usersTable = new Tabulator("#users-table", {
         layout: "fitColumns",
         placeholder: "A carregar utilizadores...",
-        ajaxURL: `${apiUrlBase}/users`,
+        // CORREÇÃO: Adicionado o prefixo '/settings'
+        ajaxURL: `${apiUrlBase}/settings/users`,
         ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
         columns: [
             { title: "ID", field: "ID", width: 60 },
@@ -137,7 +138,8 @@ async function openUserSettingsModal(userData) {
     permissionsContainer.innerHTML = 'A carregar permissões...';
     
     try {
-        const response = await fetch(`${apiUrlBase}/auth/perfis/${userData.id_perfil}/permissoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        // CORREÇÃO: Rota de permissões movida para '/settings' para consistência
+        const response = await fetch(`${apiUrlBase}/settings/perfis/${userData.id_perfil}/permissoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar permissões');
         const userPermissions = await response.json();
         
@@ -180,7 +182,8 @@ async function handleSaveUserSettings() {
     }
     
     try {
-        const userResponse = await fetch(`${apiUrlBase}/users/${userId}/manage`, {
+        // CORREÇÃO: Adicionado o prefixo '/settings'
+        const userResponse = await fetch(`${apiUrlBase}/settings/users/${userId}/manage`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify(payload)
@@ -197,7 +200,8 @@ async function handleSaveUserSettings() {
             });
         });
 
-        const permissionsResponse = await fetch(`${apiUrlBase}/perfis/${newProfileId}/permissoes`, {
+        // CORREÇÃO: Rota de permissões movida para '/settings' para consistência
+        const permissionsResponse = await fetch(`${apiUrlBase}/settings/perfis/${newProfileId}/permissoes`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify(permissionsPayload)
@@ -217,7 +221,8 @@ async function handleSaveUserSettings() {
 // --- GESTÃO DE PERFIS DE ACESSO ---
 async function preCarregarPerfisDeAcesso() {
     try {
-        const response = await fetch(`${apiUrlBase}/perfis-acesso`, { headers: { 'Authorization': `Bearer ${getToken()}` }});
+        // CORREÇÃO: Adicionado o prefixo '/settings'
+        const response = await fetch(`${apiUrlBase}/settings/perfis-acesso`, { headers: { 'Authorization': `Bearer ${getToken()}` }});
         if (response.status >= 400) return handleApiError(response);
         todosOsPerfis = await response.json();
     } catch (error) { 
@@ -230,7 +235,8 @@ function setupPerfisTable() {
     perfisTable = new Tabulator("#perfis-table", {
         layout: "fitColumns",
         placeholder: "A carregar perfis...",
-        ajaxURL: `${apiUrlBase}/perfis-acesso`,
+        // CORREÇÃO: Adicionado o prefixo '/settings'
+        ajaxURL: `${apiUrlBase}/settings/perfis-acesso`,
         ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
         columns: [
             { title: "ID", field: "id", width: 60 },
@@ -281,7 +287,8 @@ async function handlePerfilFormSubmit(e) {
         return;
     }
     
-    const url = id ? `${apiUrlBase}/perfis-acesso/${id}` : `${apiUrlBase}/perfis-acesso`;
+    // CORREÇÃO: Adicionado o prefixo '/settings'
+    const url = id ? `${apiUrlBase}/settings/perfis-acesso/${id}` : `${apiUrlBase}/settings/perfis-acesso`;
     const method = id ? 'PUT' : 'POST';
     
     try {
@@ -302,14 +309,15 @@ async function handlePerfilFormSubmit(e) {
 
 async function handleDeletePerfil(id) {
     try {
-       const response = await fetch(`${apiUrlBase}/perfis-acesso/${id}`, {
-           method: 'DELETE',
-           headers: { 'Authorization': `Bearer ${getToken()}` }
-       });
-       if (response.status >= 400) return handleApiError(response);
-       alert(`Perfil ID ${id} apagado com sucesso!`);
-       perfisTable.replaceData();
-       await preCarregarPerfisDeAcesso();
+       // CORREÇÃO: Adicionado o prefixo '/settings'
+       const response = await fetch(`${apiUrlBase}/settings/perfis-acesso/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (response.status >= 400) return handleApiError(response);
+        alert(`Perfil ID ${id} apagado com sucesso!`);
+        perfisTable.replaceData();
+        await preCarregarPerfisDeAcesso();
    } catch (error) {
        alert('Falha ao apagar o perfil.');
    }
@@ -320,7 +328,8 @@ async function popularSeletorDeCodigos() {
     const token = getToken();
     if (!token) return logout();
     try {
-        const response = await fetch(`${apiUrlBase}/parametros/codes`, { headers: { 'Authorization': `Bearer ${token}` } });
+        // CORREÇÃO: Adicionado o prefixo '/logistica'
+        const response = await fetch(`${apiUrlBase}/logistica/parametros/codes`, { headers: { 'Authorization': `Bearer ${token}` } });
         if (response.status >= 400) return handleApiError(response);
         const codigos = await response.json();
         const select = document.getElementById('select-param-code');
@@ -347,7 +356,8 @@ async function loadAndPopulateVinculacao(codParametroPai) {
     }
 
     try {
-        const response = await fetch(`${apiUrlBase}/parametros?cod=${codParametroPai}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        // CORREÇÃO: Adicionado o prefixo '/logistica'
+        const response = await fetch(`${apiUrlBase}/logistica/parametros?cod=${codParametroPai}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error(`Falha ao carregar ${codParametroPai}`);
         
         currentParentList = await response.json();
@@ -425,7 +435,8 @@ async function handleParamCodeChange(e) {
             vinculacaoGroup.style.display = 'none';
         }
         
-        const url = `${apiUrlBase}/parametros?cod=${encodeURIComponent(currentParamCode)}`;
+        // CORREÇÃO: Adicionado o prefixo '/logistica'
+        const url = `${apiUrlBase}/logistica/parametros?cod=${encodeURIComponent(currentParamCode)}`;
         parametrosTable.setData(url, {}, { headers: { 'Authorization': `Bearer ${getToken()}` } });
 
     } else {
@@ -474,7 +485,8 @@ function handleParamFormSubmit(e) {
 }
 
 async function executeSaveParam(id, body) {
-    const url = id ? `${apiUrlBase}/parametros/${id}` : `${apiUrlBase}/parametros`;
+    // CORREÇÃO: Adicionado o prefixo '/logistica'
+    const url = id ? `${apiUrlBase}/logistica/parametros/${id}` : `${apiUrlBase}/logistica/parametros`;
     const method = id ? 'PUT' : 'POST';
     try {
         const response = await fetch(url, {
@@ -493,7 +505,8 @@ async function executeSaveParam(id, body) {
 
 async function handleDeleteParam(id) {
      try {
-        const response = await fetch(`${apiUrlBase}/parametros/${id}`, {
+        // CORREÇÃO: Adicionado o prefixo '/logistica'
+        const response = await fetch(`${apiUrlBase}/logistica/parametros/${id}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
@@ -525,7 +538,8 @@ async function saveLogo() {
         return;
     }
     try {
-        const response = await fetch(`${apiUrlBase}/config/logo`, {
+        // CORREÇÃO: Adicionado o prefixo '/settings'
+        const response = await fetch(`${apiUrlBase}/settings/config/logo`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify({ logoBase64: preview.src })
@@ -539,7 +553,8 @@ async function saveLogo() {
 
 async function loadCurrentLogo() {
     try {
-        const response = await fetch(`${apiUrlBase}/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        // CORREÇÃO: Adicionado o prefixo '/settings'
+        const response = await fetch(`${apiUrlBase}/settings/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (response.status >= 400) return handleApiError(response);
         const data = await response.json();
         if (data.logoBase64) {

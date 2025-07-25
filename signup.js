@@ -39,8 +39,8 @@ async function popularSelects() {
  */
 async function popularSelect(selectElement, codParametro, placeholderText) {
     try {
-        // Esta chamada é pública e não precisa de token de autorização
-        const response = await fetch(`${apiUrlBase}/auth/parametros?cod=${codParametro}`);
+        // ALTERAÇÃO APLICADA AQUI: O prefixo foi corrigido de '/auth' para '/logistica'
+        const response = await fetch(`${apiUrlBase}/logistica/parametros?cod=${codParametro}`);
         
         if (!response.ok) {
             throw new Error(`Falha ao buscar ${codParametro}. Status: ${response.status}`);
@@ -89,7 +89,8 @@ async function handleSignupSubmit(event) {
     }
 
     try {
-        const response = await fetch(`${apiUrlBase}/signup`, {
+        // ALTERAÇÃO APLICADA AQUI: Adicionado o prefixo '/auth' para a rota de registo
+        const response = await fetch(`${apiUrlBase}/auth/signup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)

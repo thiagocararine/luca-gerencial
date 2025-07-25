@@ -106,7 +106,8 @@ async function loadDashboardData() {
     }
 
     try {
-        const response = await fetch(`${apiUrlBase}/dashboard-summary?${params.toString()}`, {
+        // CORREÇÃO: Adicionado o prefixo '/dashboard'
+        const response = await fetch(`${apiUrlBase}/dashboard/dashboard-summary?${params.toString()}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -223,7 +224,8 @@ function renderChart(despesasPorGrupo) {
 
 async function popularSelect(selectElement, codParametro, token, placeholderText) {
     try {
-        const response = await fetch(`${apiUrlBase}/parametros?cod=${codParametro}`, { 
+        // CORREÇÃO: A rota de parâmetros está em '/logistica'
+        const response = await fetch(`${apiUrlBase}/logistica/parametros?cod=${codParametro}`, { 
             headers: { 'Authorization': `Bearer ${token}` } 
         });
         if (!response.ok) throw new Error('Falha na resposta da API');

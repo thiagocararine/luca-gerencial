@@ -92,7 +92,8 @@ async function generateReport() {
 
     resultsArea.innerHTML = '<p class="text-center text-gray-500 pt-16">A gerar relatório...</p>';
 
-    let apiUrl = `${apiUrlBase}/relatorios/${reportType}?`;
+    // CORREÇÃO: Adicionado o prefixo '/logistica' para as rotas de relatório
+    let apiUrl = `${apiUrlBase}/logistica/relatorios/${reportType}?`;
     if (filialId) apiUrl += `filial=${filialId}&`;
     if (status && !document.getElementById('filter-status').disabled) apiUrl += `status=${status}&`;
     if (startDate && !document.getElementById('filter-date-range').disabled) apiUrl += `dataInicio=${startDate.toISOString().slice(0, 10)}&`;
@@ -277,7 +278,8 @@ function renderVehicleListReport(data, container) {
 async function populateFilialSelect() {
     const selectElement = document.getElementById('filter-filial');
     try {
-        const response = await fetch(`${apiUrlBase}/parametros?cod=Unidades`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('lucaUserToken')}` } });
+        // CORREÇÃO: A rota de parâmetros está em '/logistica'
+        const response = await fetch(`${apiUrlBase}/logistica/parametros?cod=Unidades`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('lucaUserToken')}` } });
         if (!response.ok) throw new Error('Falha ao carregar filiais.');
         const items = await response.json();
         

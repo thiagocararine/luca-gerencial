@@ -8,11 +8,9 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- Constantes e Variáveis de Estado Globais ---
-//const apiUrlBase = 'http://10.113.0.17:3000/api'; // Aponta para o endereço completo do backend
 const apiUrlBase = 'http://10.113.0.17:3000/api';
-//const apiUrlBase = '/api';
 const despesasApiUrl = `${apiUrlBase}/despesas`;
-const parametrosApiUrl = `${apiUrlBase}/parametros`;
+// A rota de parâmetros foi corrigida nas funções que a utilizam.
 const privilegedRoles = ["Analista de Sistema", "Supervisor (a)", "Financeiro", "Diretor"];
 let todosOsGrupos = [];
 let despesasNaPagina = [];
@@ -575,5 +573,4 @@ function handleApiError(response, isExport = false) {
              const tabelaDespesasBody = document.getElementById('tabela-despesas')?.querySelector('tbody');
              if(tabelaDespesasBody) tabelaDespesasBody.innerHTML = `<tr><td colspan="10" style="text-align:center; color:red;">Ocorreu um erro na API.</td></tr>`;
         }
-    }
-}
+    }}
