@@ -107,7 +107,7 @@ async function loadDashboardData() {
 
     try {
         // A rota de dashboard-summary está correta, não precisa de alteração
-        const response = await fetch(`${apiUrlBase}/dashboard/dashboard-summary?${params.toString()}`, {
+        const response = await fetch(`${apiUrlBase}/auth/dashboard/dashboard-summary?${params.toString()}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
