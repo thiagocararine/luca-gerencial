@@ -107,7 +107,7 @@ async function loadDashboardData() {
 
     try {
         // CORREÇÃO: Adicionado o prefixo '/dashboard'
-        const response = await fetch(`${apiUrlBase}/dashboard/dashboard-summary?${params.toString()}`, {
+        const response = await fetch(`${apiUrlBase}/auth/dashboard/dashboard-summary?${params.toString()}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
