@@ -1652,5 +1652,5 @@ async function lookupCnpj(modalType) {
 function useInternalExpense(modalType) {
     document.getElementById(`${modalType}-cnpj`).value = 'N/A';
     document.getElementById(`${modalType}-razao-social`).value = 'DESPESA INTERNA';
-    document.getElementById(`${modalType}-fornecedor-id`).value = '0';
+    document.getElementById(`${modalType}-fornecedor-id`).value = '0'; 
 }

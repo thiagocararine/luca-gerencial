@@ -39,8 +39,7 @@ async function popularSelects() {
  */
 async function popularSelect(selectElement, codParametro, placeholderText) {
     try {
-        // ALTERAÇÃO APLICADA AQUI: O prefixo foi corrigido de '/auth' para '/logistica'
-        const response = await fetch(`${apiUrlBase}/logistica/parametros?cod=${codParametro}`);
+        const response = await fetch(`${apiUrlBase}/parametros?cod=${codParametro}`);
         
         if (!response.ok) {
             throw new Error(`Falha ao buscar ${codParametro}. Status: ${response.status}`);
