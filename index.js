@@ -1269,6 +1269,187 @@ apiRouter.put('/custos-frota/:id/excluir', authenticateToken, authorizeAdmin, as
     }
 });
 
+// --- NOVAS ROTAS PARA RELATÓRIOS DE LOGÍSTICA ---
+
+// RELATÓRIO 4: Lista de Veículos
+apiRouter.get('/relatorios/listaVeiculos', authenticateToken, async (req, res) => {
+    const { filial, status } = req.query;
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        let conditions = [];
+        const params = [];
+
+        if (filial) {
+            conditions.push('v.id_filial = ?');
+            params.push(filial);
+        }
+        if (status) {
+            conditions.push('v.status = ?');
+            params.push(status);
+        }
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+        const sql = `
+            SELECT v.*, p.NOME_PARAMETRO as nome_filial
+            FROM veiculos v
+            LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
+            ${whereClause}
+            ORDER BY p.NOME_PARAMETRO, v.modelo`;
+        
+        const [data] = await connection.execute(sql, params);
+        res.json(data);
+    } catch (error) {
+        console.error("Erro ao gerar relatório de lista de veículos:", error);
+        res.status(500).json({ error: 'Erro ao gerar relatório.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// RELATÓRIO 3: Custos Diretos de Veículos
+apiRouter.get('/relatorios/custoDireto', authenticateToken, async (req, res) => {
+    const { filial, dataInicio, dataFim } = req.query;
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        let conditions = ["vm.status = 'Ativo'"];
+        const params = [];
+
+        if (filial) { conditions.push('v.id_filial = ?'); params.push(filial); }
+        if (dataInicio) { conditions.push('vm.data_manutencao >= ?'); params.push(dataInicio); }
+        if (dataFim) { conditions.push('vm.data_manutencao <= ?'); params.push(dataFim); }
+
+        const whereClause = `WHERE ${conditions.join(' AND ')}`;
+        const sql = `
+            SELECT 
+                p.NOME_PARAMETRO as filial_nome,
+                'Custo Direto' as tipo_custo,
+                CONCAT(v.modelo, ' (', v.placa, ')') as descricao,
+                vm.custo as valor
+            FROM veiculo_manutencoes vm
+            JOIN veiculos v ON vm.id_veiculo = v.id
+            LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
+            ${whereClause}
+            ORDER BY p.NOME_PARAMETRO, vm.data_manutencao`;
+        
+        const [data] = await connection.execute(sql, params);
+        res.json(data);
+    } catch (error) {
+        console.error("Erro ao gerar relatório de custos diretos:", error);
+        res.status(500).json({ error: 'Erro ao gerar relatório.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// RELATÓRIO 2: Custos de Frota (Rateado)
+apiRouter.get('/relatorios/custoRateado', authenticateToken, async (req, res) => {
+    const { filial, dataInicio, dataFim } = req.query;
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        let conditions = ["cf.status = 'Ativo'"];
+        const params = [];
+
+        if (filial) { 
+            // JSON_CONTAINS verifica se o ID da filial está no array JSON `filiais_rateio`
+            conditions.push("JSON_CONTAINS(cf.filiais_rateio, ?, '$')");
+            params.push(`"${filial}"`); // O valor precisa estar entre aspas para a busca no JSON
+        }
+        if (dataInicio) { conditions.push('cf.data_custo >= ?'); params.push(dataInicio); }
+        if (dataFim) { conditions.push('cf.data_custo <= ?'); params.push(dataFim); }
+        
+        const whereClause = `WHERE ${conditions.join(' AND ')}`;
+        const sql = `
+            SELECT 
+                p.NOME_PARAMETRO as filial_nome,
+                'Custo Rateado' as tipo_custo,
+                cf.descricao,
+                -- Divide o custo total pelo número de filiais no rateio
+                cf.custo / JSON_LENGTH(cf.filiais_rateio) as valor
+            FROM custos_frota cf
+            -- Este JOIN complexo busca o nome da filial com base no ID presente no JSON
+            JOIN parametro p ON JSON_CONTAINS(cf.filiais_rateio, CAST(p.ID as JSON), '$')
+            ${whereClause}
+            ORDER BY p.NOME_PARAMETRO, cf.data_custo`;
+        
+        const [data] = await connection.execute(sql, params);
+        // Se uma filial específica foi selecionada, todos os resultados já são para ela.
+        // Se não, precisamos filtrar no código para mostrar apenas a linha da filial correta.
+        const finalData = filial ? data.filter(d => d.filial_nome === data[0].filial_nome) : data;
+
+        res.json(finalData);
+    } catch (error) {
+        console.error("Erro ao gerar relatório de custos rateados:", error);
+        res.status(500).json({ error: 'Erro ao gerar relatório.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+
+// RELATÓRIO 1: Custo Total por Filial (Combinação dos relatórios 2 e 3)
+apiRouter.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) => {
+    const { filial, dataInicio, dataFim } = req.query;
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const params = [];
+        if (filial) params.push(filial);
+        if (dataInicio) params.push(dataInicio);
+        if (dataFim) params.push(dataFim);
+        if (filial) params.push(`"${filial}"`);
+        if (dataInicio) params.push(dataInicio);
+        if (dataFim) params.push(dataFim);
+
+        // Cláusulas WHERE dinâmicas
+        let whereCustoDireto = "WHERE vm.status = 'Ativo'";
+        if (filial) whereCustoDireto += " AND v.id_filial = ?";
+        if (dataInicio) whereCustoDireto += " AND vm.data_manutencao >= ?";
+        if (dataFim) whereCustoDireto += " AND vm.data_manutencao <= ?";
+
+        let whereCustoRateado = "WHERE cf.status = 'Ativo'";
+        if (filial) whereCustoRateado += " AND JSON_CONTAINS(cf.filiais_rateio, ?, '$')";
+        if (dataInicio) whereCustoRateado += " AND cf.data_custo >= ?";
+        if (dataFim) whereCustoRateado += " AND cf.data_custo <= ?";
+
+        const sql = `
+            -- CUSTOS DIRETOS
+            SELECT 
+                p.NOME_PARAMETRO as filial_nome,
+                'Custo Direto' as tipo_custo,
+                CONCAT(v.modelo, ' (', v.placa, ')') as descricao,
+                vm.custo as valor
+            FROM veiculo_manutencoes vm
+            JOIN veiculos v ON vm.id_veiculo = v.id
+            LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
+            ${whereCustoDireto}
+            
+            UNION ALL
+
+            -- CUSTOS RATEADOS
+            SELECT 
+                p.NOME_PARAMETRO as filial_nome,
+                'Custo Rateado' as tipo_custo,
+                cf.descricao,
+                cf.custo / JSON_LENGTH(cf.filiais_rateio) as valor
+            FROM custos_frota cf
+            JOIN parametro p ON JSON_CONTAINS(cf.filiais_rateio, CAST(p.ID as JSON), '$')
+            ${whereCustoRateado}
+
+            ORDER BY filial_nome, tipo_custo, descricao`;
+
+        const [data] = await connection.execute(sql, params);
+        res.json(data);
+    } catch (error) {
+        console.error("Erro ao gerar relatório de custo total:", error);
+        res.status(500).json({ error: 'Erro ao gerar relatório.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
 // Usamos o prefixo /api para todas as rotas do router
 app.use('/api', apiRouter);
 
