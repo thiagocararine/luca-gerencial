@@ -104,7 +104,7 @@ async function loadDashboardData() {
     }
 
     try {
-        const response = await fetch(`${apiUrlBase}/dashboard-summary?${params.toString()}`, {
+        const response = await fetch(`${apiUrlBase}/auth/dashboard-summary?${params.toString()}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
