@@ -3,9 +3,7 @@
 document.addEventListener('DOMContentLoaded', initDashboardPage);
 
 // --- Constantes e Variáveis de Estado Globais ---
-//const apiUrlBase = 'http://localhost:3000/api';
 const apiUrlBase = 'http://10.113.0.17:3000/api';
-//const apiUrlBase = '/api';
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 let myChart = null; 
 let dashboardDatepicker = null; 
@@ -106,8 +104,7 @@ async function loadDashboardData() {
     }
 
     try {
-        // CORREÇÃO: Adicionado o prefixo '/dashboard'
-        const response = await fetch(`${apiUrlBase}/auth/dashboard/dashboard-summary?${params.toString()}`, {
+        const response = await fetch(`${apiUrlBase}/dashboard-summary?${params.toString()}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -175,7 +172,6 @@ function updateDashboardUI(data) {
         renderChart(data.despesasPorGrupo || []);
     }
 }
-
 
 function renderChart(despesasPorGrupo) {
     const ctx = document.getElementById('despesas-por-grupo-chart')?.getContext('2d');
