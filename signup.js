@@ -6,11 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // IMPORTANTE: Para o seu ambiente de desenvolvimento, este endereço deve ser o completo.
-// Quando for para o servidor de produção, mudaremos isto para um caminho relativo ('/api').
-// const apiUrlBase = 'http://localhost:3000/api';
 const apiUrlBase = 'http://10.113.0.17:3000/api';
-//const apiUrlBase = '/api';
-
 
 /**
  * Função principal que inicializa a página de registo.
@@ -39,6 +35,7 @@ async function popularSelects() {
  */
 async function popularSelect(selectElement, codParametro, placeholderText) {
     try {
+        // CORREÇÃO APLICADA: A rota para buscar parâmetros públicos de registo deve estar no módulo de autenticação.
         const response = await fetch(`${apiUrlBase}/auth/parametros?cod=${codParametro}`);
         
         if (!response.ok) {
@@ -88,7 +85,7 @@ async function handleSignupSubmit(event) {
     }
 
     try {
-        // ALTERAÇÃO APLICADA AQUI: Adicionado o prefixo '/auth' para a rota de registo
+        // A rota de registo já está correta, apontando para /auth/signup
         const response = await fetch(`${apiUrlBase}/auth/signup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
