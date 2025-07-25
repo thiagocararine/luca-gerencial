@@ -553,7 +553,7 @@ async function setupInicial() {
 
 async function loadCurrentLogo() {
     try {
-        const response = await fetch(`${apiUrlBase}/auth/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const response = await fetch(`${apiUrlBase}/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (response.status >= 400) return handleApiError(response);
         const data = await response.json();
         if (data.logoBase64) {
