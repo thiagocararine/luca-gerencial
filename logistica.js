@@ -252,7 +252,7 @@ async function fetchAndDisplayPhotos(vehicleId) {
     });
 
     try {
-        const response = await fetch(`${apiUrlBase}/veiculos/${vehicleId}/fotos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const response = await fetch(`${apiUrlBase}/auth/veiculos/${vehicleId}/fotos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar fotos.');
         const fotos = await response.json();
 
@@ -295,7 +295,7 @@ async function fetchAndDisplayDocuments(vehicleId) {
     const container = document.getElementById('document-list-container');
     container.innerHTML = '<p>A carregar documentos...</p>';
     try {
-        const response = await fetch(`${apiUrlBase}/veiculos/${vehicleId}/documentos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const response = await fetch(`${apiUrlBase}/auth/veiculos/${vehicleId}/documentos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar documentos.');
         const documentos = await response.json();
 
@@ -373,7 +373,7 @@ async function uploadFile(vehicleId, file, description, expiryDate = null, type 
     }
 
     try {
-        const response = await fetch(`${apiUrlBase}/veiculos/${vehicleId}/upload`, {
+        const response = await fetch(`${apiUrlBase}/auth/veiculos/${vehicleId}/upload`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${getToken()}` },
             body: formData
@@ -423,7 +423,7 @@ async function executeDeleteDocument() {
     confirmBtn.disabled = true;
 
     try {
-        const response = await fetch(`${apiUrlBase}/documentos/${id}/excluir`, {
+        const response = await fetch(`${apiUrlBase}/auth/documentos/${id}/excluir`, {
             method: 'PUT',
             headers: { 'Authorization': `Bearer ${getToken()}` },
         });
@@ -573,7 +573,7 @@ async function loadFleetCosts() {
     const container = document.getElementById('costs-tab-content-gerais');
     container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
     try {
-        const response = await fetch(`${apiUrlBase}/custos-frota`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const response = await fetch(`${apiUrlBase}/auth/custos-frota`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar custos gerais.');
         const custos = await response.json();
         
@@ -612,7 +612,7 @@ async function loadRecentIndividualCosts() {
     const container = document.getElementById('costs-tab-content-individuais');
     container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
     try {
-        const response = await fetch(`${apiUrlBase}/manutencoes/recentes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const response = await fetch(`${apiUrlBase}/auth/manutencoes/recentes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar custos individuais.');
         const custos = await response.json();
         
@@ -766,7 +766,7 @@ async function exportMaintenanceReportPDF() {
             return;
         }
 
-        const response = await fetch(`${apiUrlBase}/veiculos/${currentVehicleId}/manutencoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const response = await fetch(`${apiUrlBase}/auth/veiculos/${currentVehicleId}/manutencoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar dados de manutenção.');
         const allManutencoes = await response.json();
 
@@ -851,7 +851,7 @@ async function exportMaintenanceReportPDF() {
 
 async function loadCurrentLogo() {
     try {
-        const response = await fetch(`${apiUrlBase}/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const response = await fetch(`${apiUrlBase}/auth/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) return;
         const data = await response.json();
         if (data.logoBase64) {
@@ -910,7 +910,7 @@ async function loadVehicles() {
     const contentArea = document.getElementById('content-area');
     contentArea.innerHTML = '<p class="text-center p-8 text-gray-500">A carregar veículos...</p>';
     try {
-        const response = await fetch(`${apiUrlBase}/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const response = await fetch(`${apiUrlBase}/auth/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error(`Falha ao buscar veículos: ${response.statusText}`);
         allVehicles = await response.json();
         applyFilters();
@@ -1095,7 +1095,7 @@ async function fetchAndDisplayMaintenanceHistory(vehicleId) {
     const container = document.getElementById('maintenance-history-container');
     container.innerHTML = '<p class="text-center text-gray-500">A carregar histórico...</p>';
     try {
-        const response = await fetch(`${apiUrlBase}/veiculos/${vehicleId}/manutencoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const response = await fetch(`${apiUrlBase}/auth/veiculos/${vehicleId}/manutencoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar histórico.');
         const manutenções = await response.json();
         if (manutenções.length === 0) {
@@ -1135,7 +1135,7 @@ async function fetchAndDisplayChangeLogs(vehicleId) {
     const container = document.getElementById('logs-history-container');
     container.innerHTML = '<p class="text-center text-gray-500">A carregar histórico de alterações...</p>';
     try {
-        const response = await fetch(`${apiUrlBase}/veiculos/${vehicleId}/logs`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const response = await fetch(`${apiUrlBase}/auth/veiculos/${vehicleId}/logs`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar o log de alterações.');
         const logs = await response.json();
         if (logs.length === 0) {
@@ -1178,7 +1178,7 @@ async function populateMaintenanceTypes(selectElementId = 'maintenance-type') {
     const selectElement = document.getElementById(selectElementId);
     selectElement.innerHTML = '<option value="">A carregar...</option>';
     try {
-        const response = await fetch(`${apiUrlBase}/parametros?cod=Tipo - Manutenção`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const response = await fetch(`${apiUrlBase}/auth/parametros?cod=Tipo - Manutenção`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao carregar tipos de manutenção.');
         const items = await response.json();
         if (items.length === 0) {
@@ -1233,7 +1233,7 @@ async function handleMaintenanceFormSubmit(event) {
         return;
     }
     try {
-        const response = await fetch(`${apiUrlBase}/veiculos/${maintenanceData.id_veiculo}/manutencoes`, {
+        const response = await fetch(`${apiUrlBase}/auth/veiculos/${maintenanceData.id_veiculo}/manutencoes`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify(maintenanceData)
@@ -1295,7 +1295,7 @@ async function handleVehicleCostFormSubmit(event) {
     if (!costData.tipo_manutencao) { alert('Por favor, selecione um tipo de despesa.'); saveBtn.disabled = false; return; }
     
     try {
-        const response = await fetch(`${apiUrlBase}/veiculos/${costData.id_veiculo}/manutencoes`, {
+        const response = await fetch(`${apiUrlBase}/auth/veiculos/${costData.id_veiculo}/manutencoes`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify(costData)
@@ -1354,7 +1354,7 @@ async function handleFleetCostFormSubmit(event) {
         return;
     }
     try {
-        const response = await fetch(`${apiUrlBase}/custos-frota`, {
+        const response = await fetch(`${apiUrlBase}/auth/custos-frota`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify(costData)
@@ -1463,7 +1463,7 @@ async function deleteVehicle(id) {
     const confirmBtn = document.getElementById('confirm-delete-btn');
     confirmBtn.disabled = true;
     try {
-        const response = await fetch(`${apiUrlBase}/veiculos/${id}`, {
+        const response = await fetch(`${apiUrlBase}/auth/veiculos/${id}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
@@ -1624,7 +1624,7 @@ async function lookupCnpj(modalType) {
         
         const data = await response.json();
 
-        const fornecedorResponse = await fetch(`${apiUrlBase}/fornecedores/cnpj`, {
+        const fornecedorResponse = await fetch(`${apiUrlBase}/auth/fornecedores/cnpj`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify({

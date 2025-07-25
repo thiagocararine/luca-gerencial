@@ -40,7 +40,7 @@ async function popularSelects() {
 async function popularSelect(selectElement, codParametro, placeholderText) {
     try {
         // Esta chamada é pública e não precisa de token de autorização
-        const response = await fetch(`${apiUrlBase}/parametros?cod=${codParametro}`);
+        const response = await fetch(`${apiUrlBase}/auth/parametros?cod=${codParametro}`);
         
         if (!response.ok) {
             throw new Error(`Falha ao buscar ${codParametro}. Status: ${response.status}`);

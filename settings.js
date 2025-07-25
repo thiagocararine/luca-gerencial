@@ -137,7 +137,7 @@ async function openUserSettingsModal(userData) {
     permissionsContainer.innerHTML = 'A carregar permissões...';
     
     try {
-        const response = await fetch(`${apiUrlBase}/perfis/${userData.id_perfil}/permissoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const response = await fetch(`${apiUrlBase}/auth/perfis/${userData.id_perfil}/permissoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar permissões');
         const userPermissions = await response.json();
         

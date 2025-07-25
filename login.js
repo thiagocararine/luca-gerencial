@@ -36,8 +36,8 @@ async function handleLoginSubmit(event) {
     }
 
     try {
-        // Usa a variável correta `apiUrlBase`
-        const response = await fetch(`${apiUrlBase}/login`, {
+        // ALTERAÇÃO APLICADA AQUI: Adicionado o prefixo '/auth'
+        const response = await fetch(`${apiUrlBase}/auth/login`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
