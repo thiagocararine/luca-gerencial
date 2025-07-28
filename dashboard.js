@@ -106,7 +106,7 @@ async function loadDashboardData() {
     }
 
     try {
-        // CORREÇÃO APLICADA: A rota de dashboard-summary deve usar o prefixo '/dashboard/'
+        // A rota de dashboard-summary está correta, não precisa de alteração
         const response = await fetch(`${apiUrlBase}/dashboard/dashboard-summary?${params.toString()}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -223,7 +223,7 @@ function renderChart(despesasPorGrupo) {
 
 async function popularSelect(selectElement, codParametro, token, placeholderText) {
     try {
-        // A rota de parâmetros para utilizadores autenticados deve estar em '/settings'
+        // CORREÇÃO FINAL: A rota de parâmetros para utilizadores autenticados deve estar em '/settings'
         const response = await fetch(`${apiUrlBase}/settings/parametros?cod=${codParametro}`, { 
             headers: { 'Authorization': `Bearer ${token}` } 
         });
