@@ -571,6 +571,11 @@ router.get('/custos-frota', authenticateToken, async (req, res) => {
             WHERE cf.status = 'Ativo'
             ORDER BY cf.data_custo DESC`;
         const [custos] = await connection.execute(sql);
+
+        // **NOVO LOG DE DEPURAÇÃO**
+        // Vamos imprimir o primeiro resultado para ver se 'nome_filial' está correto.
+        console.log("Resultado da consulta de custos de frota:", JSON.stringify(custos[0], null, 2));
+
         res.json(custos);
     } catch (error) {
         console.error("Erro detalhado ao buscar custos de frota:", error);
