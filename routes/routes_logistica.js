@@ -573,7 +573,7 @@ router.get('/custos-frota', authenticateToken, async (req, res) => {
         const [custos] = await connection.execute(sql);
         res.json(custos);
     } catch (error) {
-        console.error("Erro ao buscar custos de frota:", error);
+        console.error("Erro detalhado ao buscar custos de frota:", error);
         res.status(500).json({ error: 'Erro ao buscar custos de frota.' });
     } finally {
         if (connection) await connection.end();
