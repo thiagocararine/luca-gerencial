@@ -3,9 +3,7 @@
 document.addEventListener('DOMContentLoaded', initDashboardPage);
 
 // --- Constantes e Variáveis de Estado Globais ---
-//const apiUrlBase = 'http://localhost:3000/api';
 const apiUrlBase = 'http://10.113.0.17:3000/api';
-//const apiUrlBase = '/api';
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 let myChart = null; 
 let dashboardDatepicker = null; 

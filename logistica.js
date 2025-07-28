@@ -13,7 +13,6 @@ let vehicleToDeleteId = null;
 let maintenanceExportDatepicker = null;
 let LOGO_BASE64 = null;
 let costToDelete = { id: null, type: null };
-// NOVAS VARIÁVEIS GLOBAIS
 let documentToDelete = { id: null, name: null };
 let photoCaptureState = {
     stream: null,
@@ -135,15 +134,12 @@ function setupEventListeners() {
     document.getElementById('costs-tab-content-gerais').addEventListener('click', handleDeleteCostClick);
     document.getElementById('costs-tab-content-individuais').addEventListener('click', handleDeleteCostClick);
 
-    // Listeners para a aba de FOTOS
     document.getElementById('photos-tab-content').addEventListener('change', handlePhotoInputChange);
     document.getElementById('photos-tab-content').addEventListener('click', handlePhotoAreaClick);
 
-    // Listener para a aba de DOCUMENTOS
     document.getElementById('document-upload-form').addEventListener('submit', handleDocumentUploadSubmit);
     document.getElementById('document-list-container').addEventListener('click', handleDeleteDocumentClick);
     
-    // Listeners para o MODAL de despesa de veículo
     document.getElementById('add-vehicle-cost-button')?.addEventListener('click', openVehicleCostModal);
     const vehicleCostModal = document.getElementById('vehicle-cost-modal');
     vehicleCostModal.querySelector('#close-vehicle-cost-modal-btn').addEventListener('click', () => vehicleCostModal.classList.add('hidden'));
@@ -152,12 +148,10 @@ function setupEventListeners() {
     vehicleCostModal.querySelector('#vehicle-cost-lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('vehicle-cost'));
     vehicleCostModal.querySelector('#vehicle-cost-despesa-interna-btn').addEventListener('click', () => useInternalExpense('vehicle-cost'));
 
-    // Listeners para o MODAL de exclusão de documento
     const deleteDocModal = document.getElementById('confirm-delete-document-modal');
     deleteDocModal.querySelector('#cancel-delete-document-btn').addEventListener('click', () => deleteDocModal.classList.add('hidden'));
     deleteDocModal.querySelector('#confirm-delete-document-btn').addEventListener('click', executeDeleteDocument);
 
-    // Listeners para o MODAL de captura de foto
     const captureModal = document.getElementById('photo-capture-modal');
     captureModal.querySelector('#close-capture-modal-btn').addEventListener('click', closeCaptureModal);
     captureModal.querySelector('#take-photo-btn').addEventListener('click', takePhoto);
@@ -239,7 +233,6 @@ async function fetchAndDisplayPhotos(vehicleId) {
     });
 
     try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
         const response = await fetch(`${apiUrlBase}/logistica/veiculos/${vehicleId}/fotos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar fotos.');
         const fotos = await response.json();
@@ -282,7 +275,6 @@ async function fetchAndDisplayDocuments(vehicleId) {
     const container = document.getElementById('document-list-container');
     container.innerHTML = '<p>A carregar documentos...</p>';
     try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
         const response = await fetch(`${apiUrlBase}/logistica/veiculos/${vehicleId}/documentos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar documentos.');
         const documentos = await response.json();
@@ -361,7 +353,6 @@ async function uploadFile(vehicleId, file, description, expiryDate = null, type 
     }
 
     try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
         const response = await fetch(`${apiUrlBase}/logistica/veiculos/${vehicleId}/upload`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${getToken()}` },
@@ -412,7 +403,6 @@ async function executeDeleteDocument() {
     confirmBtn.disabled = true;
 
     try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
         const response = await fetch(`${apiUrlBase}/logistica/documentos/${id}/excluir`, {
             method: 'PUT',
             headers: { 'Authorization': `Bearer ${getToken()}` },
@@ -558,7 +548,6 @@ async function loadFleetCosts() {
     const container = document.getElementById('costs-tab-content-gerais');
     container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
     try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
         const response = await fetch(`${apiUrlBase}/logistica/custos-frota`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar custos gerais.');
         const custos = await response.json();
@@ -597,7 +586,6 @@ async function loadRecentIndividualCosts() {
     const container = document.getElementById('costs-tab-content-individuais');
     container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
     try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
         const response = await fetch(`${apiUrlBase}/logistica/manutencoes/recentes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar custos individuais.');
         const custos = await response.json();
@@ -681,7 +669,6 @@ async function executeDeleteCost(id, type) {
     confirmBtn.disabled = true;
 
     let url = '';
-    // CORREÇÃO: Adicionado o prefixo '/logistica'
     if (type === 'geral') {
         url = `${apiUrlBase}/logistica/custos-frota/${id}/excluir`;
     } else if (type === 'individual') {
@@ -746,7 +733,6 @@ async function exportMaintenanceReportPDF() {
             return;
         }
 
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
         const response = await fetch(`${apiUrlBase}/logistica/veiculos/${currentVehicleId}/manutencoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar dados de manutenção.');
         const allManutencoes = await response.json();
@@ -833,7 +819,6 @@ async function exportMaintenanceReportPDF() {
 
 async function loadCurrentLogo() {
     try {
-        // CORREÇÃO: A rota de config está em '/settings'
         const response = await fetch(`${apiUrlBase}/settings/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) return;
         const data = await response.json();
@@ -848,10 +833,9 @@ async function loadCurrentLogo() {
 async function loadMarcasAndModelosFromDB() {
     const datalistMarcas = document.getElementById('marcas-list');
     try {
-        // CORREÇÃO: A rota de parâmetros está em '/logistica'
         const [marcasResponse, modelosResponse] = await Promise.all([
-            fetch(`${apiUrlBase}/logistica/parametros?cod=Marca - Veículo`, { headers: { 'Authorization': `Bearer ${getToken()}` } }),
-            fetch(`${apiUrlBase}/logistica/parametros?cod=Modelo - Veículo`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
+            fetch(`${apiUrlBase}/settings/parametros?cod=Marca - Veículo`, { headers: { 'Authorization': `Bearer ${getToken()}` } }),
+            fetch(`${apiUrlBase}/settings/parametros?cod=Modelo - Veículo`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
         ]);
         if (!marcasResponse.ok || !modelosResponse.ok) throw new Error('Falha ao carregar parâmetros de veículos.');
         dbMarcas = await marcasResponse.json();
@@ -894,7 +878,6 @@ async function loadVehicles() {
     const contentArea = document.getElementById('content-area');
     contentArea.innerHTML = '<p class="text-center p-8 text-gray-500">A carregar veículos...</p>';
     try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
         const response = await fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error(`Falha ao buscar veículos: ${response.statusText}`);
         allVehicles = await response.json();
@@ -1080,7 +1063,6 @@ async function fetchAndDisplayMaintenanceHistory(vehicleId) {
     const container = document.getElementById('maintenance-history-container');
     container.innerHTML = '<p class="text-center text-gray-500">A carregar histórico...</p>';
     try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
         const response = await fetch(`${apiUrlBase}/logistica/veiculos/${vehicleId}/manutencoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar histórico.');
         const manutenções = await response.json();
@@ -1121,7 +1103,6 @@ async function fetchAndDisplayChangeLogs(vehicleId) {
     const container = document.getElementById('logs-history-container');
     container.innerHTML = '<p class="text-center text-gray-500">A carregar histórico de alterações...</p>';
     try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
         const response = await fetch(`${apiUrlBase}/logistica/veiculos/${vehicleId}/logs`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar o log de alterações.');
         const logs = await response.json();
@@ -1165,8 +1146,7 @@ async function populateMaintenanceTypes(selectElementId = 'maintenance-type') {
     const selectElement = document.getElementById(selectElementId);
     selectElement.innerHTML = '<option value="">A carregar...</option>';
     try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
-        const response = await fetch(`${apiUrlBase}/logistica/parametros?cod=Tipo - Manutenção`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const response = await fetch(`${apiUrlBase}/settings/parametros?cod=Tipo - Manutenção`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao carregar tipos de manutenção.');
         const items = await response.json();
         if (items.length === 0) {
@@ -1221,7 +1201,6 @@ async function handleMaintenanceFormSubmit(event) {
         return;
     }
     try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
         const response = await fetch(`${apiUrlBase}/logistica/veiculos/${maintenanceData.id_veiculo}/manutencoes`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -1284,7 +1263,6 @@ async function handleVehicleCostFormSubmit(event) {
     if (!costData.tipo_manutencao) { alert('Por favor, selecione um tipo de despesa.'); saveBtn.disabled = false; return; }
     
     try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
         const response = await fetch(`${apiUrlBase}/logistica/veiculos/${costData.id_veiculo}/manutencoes`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -1344,7 +1322,6 @@ async function handleFleetCostFormSubmit(event) {
         return;
     }
     try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
         const response = await fetch(`${apiUrlBase}/logistica/custos-frota`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -1421,7 +1398,6 @@ async function handleVehicleFormSubmit(event) {
         status: document.getElementById('vehicle-status').value,
     };
     const method = id ? 'PUT' : 'POST';
-    // CORREÇÃO: Adicionado o prefixo '/logistica'
     const url = id ? `${apiUrlBase}/logistica/veiculos/${id}` : `${apiUrlBase}/logistica/veiculos`;
     try {
         const response = await fetch(url, {
@@ -1455,7 +1431,6 @@ async function deleteVehicle(id) {
     const confirmBtn = document.getElementById('confirm-delete-btn');
     confirmBtn.disabled = true;
     try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
         const response = await fetch(`${apiUrlBase}/logistica/veiculos/${id}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${getToken()}` }
@@ -1473,8 +1448,7 @@ async function deleteVehicle(id) {
 }
 
 async function populateFilialSelects() {
-    // CORREÇÃO: Adicionado o prefixo '/logistica' na URL base para as funções
-    const url = `${apiUrlBase}/logistica/parametros?cod=Unidades`;
+    const url = `${apiUrlBase}/settings/parametros?cod=Unidades`;
     await populateSelectWithOptions(url, 'filter-filial', 'ID', 'NOME_PARAMETRO', 'Todas as Filiais');
     await populateSelectWithOptions(url, 'vehicle-filial', 'ID', 'NOME_PARAMETRO', '-- Selecione a Filial --');
     await populateCheckboxes(url, 'fleet-cost-filiais-checkboxes', 'ID', 'NOME_PARAMETRO');
@@ -1619,7 +1593,6 @@ async function lookupCnpj(modalType) {
         
         const data = await response.json();
 
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
         const fornecedorResponse = await fetch(`${apiUrlBase}/logistica/fornecedores/cnpj`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },

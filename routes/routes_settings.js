@@ -22,7 +22,7 @@ router.get('/parametros/codes', authenticateToken, async (req, res) => {
     }
 });
 
-// CORREÇÃO: Adicionado 'authenticateToken' para proteger a rota de parâmetros
+// CORREÇÃO: Adicionado 'authenticateToken' para proteger a rota de parâmetros para utilizadores logados.
 router.get('/parametros', authenticateToken, async (req, res) => {
     const { cod } = req.query;
     if (!cod) return res.status(400).json({ error: 'O "cod_parametro" é obrigatório.' });
@@ -215,7 +215,6 @@ router.put('/perfis/:id/permissoes', authenticateToken, authorizeAdmin, async (r
 router.post('/config/logo', authenticateToken, authorizeAdmin, async (req, res) => {
     try {
         const { logoBase64 } = req.body;
-        // __dirname aponta para o diretório atual (routes), então subimos um nível
         await fs.writeFile(path.join(__dirname, '..', 'config_logo.json'), JSON.stringify({ logoBase64 }));
         res.json({ message: 'Logo salva com sucesso.' });
     } catch (error) {
