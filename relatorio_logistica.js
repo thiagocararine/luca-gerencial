@@ -1,4 +1,4 @@
-// relatorio_logistica.js
+// relatorio_logistica.js (Corrigido)
 
 document.addEventListener('DOMContentLoaded', initRelatoriosPage);
 
@@ -92,7 +92,7 @@ async function generateReport() {
 
     resultsArea.innerHTML = '<p class="text-center text-gray-500 pt-16">A gerar relatório...</p>';
 
-    // CORREÇÃO: Adicionado o prefixo '/logistica' para as rotas de relatório
+    // Esta rota está correta, pois aponta para /logistica/relatorios
     let apiUrl = `${apiUrlBase}/logistica/relatorios/${reportType}?`;
     if (filialId) apiUrl += `filial=${filialId}&`;
     if (status && !document.getElementById('filter-status').disabled) apiUrl += `status=${status}&`;
@@ -278,8 +278,8 @@ function renderVehicleListReport(data, container) {
 async function populateFilialSelect() {
     const selectElement = document.getElementById('filter-filial');
     try {
-        // CORREÇÃO: A rota de parâmetros está em '/logistica'
-        const response = await fetch(`${apiUrlBase}/logistica/parametros?cod=Unidades`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('lucaUserToken')}` } });
+        // CORREÇÃO: A rota de parâmetros deve apontar para '/settings', não '/logistica'
+        const response = await fetch(`${apiUrlBase}/settings/parametros?cod=Unidades`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('lucaUserToken')}` } });
         if (!response.ok) throw new Error('Falha ao carregar filiais.');
         const items = await response.json();
         
