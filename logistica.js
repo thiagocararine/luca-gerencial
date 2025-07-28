@@ -562,6 +562,7 @@ async function loadFleetCosts() {
         custos.forEach(c => {
             const tr = tbody.insertRow();
             tr.innerHTML = `
+                <td class="px-4 py-2 font-mono text-xs">${c.sequencial_rateio || 'N/A'}</td>
                 <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
                 <td class="px-4 py-2">${c.descricao}</td>
                 <td class="px-4 py-2">${c.filiais_rateio || 'N/A'}</td>
@@ -625,7 +626,7 @@ function createCostTable(type) {
     
     let headers = [];
     if (type === 'gerais') {
-        headers = ['Data', 'Descrição', 'Filial', 'Fornecedor', 'Custo', 'Ações'];
+        headers = ['Sequencial', 'Data', 'Descrição', 'Filial', 'Fornecedor', 'Custo', 'Ações'];
     } else { // 'individuais'
         headers = ['Data', 'Veículo', 'Fornecedor', 'Custo', 'Ações'];
     }

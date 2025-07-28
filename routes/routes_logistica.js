@@ -515,7 +515,6 @@ router.post('/custos-frota', authenticateToken, authorizeAdmin, async (req, res)
     const { descricao, custo, data_custo, id_fornecedor, filiais_rateio } = req.body;
     const { userId } = req.user;
 
-    // Validação dos dados recebidos
     if (!descricao || !custo || !data_custo || id_fornecedor == null || !filiais_rateio || !Array.isArray(filiais_rateio) || filiais_rateio.length === 0) {
         return res.status(400).json({ error: 'Dados inválidos. Todos os campos são obrigatórios e pelo menos uma filial deve ser selecionada para o rateio.' });
     }
@@ -525,20 +524,22 @@ router.post('/custos-frota', authenticateToken, authorizeAdmin, async (req, res)
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
 
+        // **NOVO**: Gerar um código sequencial único para este grupo de rateio
+        const sequencial = `CF-${Date.now()}`; // Usando timestamp para garantir unicidade
+
         const custoTotal = parseFloat(custo);
         const numeroDeFiliais = filiais_rateio.length;
         const valorRateado = (custoTotal / numeroDeFiliais).toFixed(2);
 
-        // Query SQL correta, que insere o ID da filial na nova coluna 'id_filial'
+        // AJUSTE: A query agora inclui a nova coluna 'sequencial_rateio'
         const sqlInsert = `
             INSERT INTO custos_frota 
-            (descricao, custo, data_custo, id_fornecedor, id_filial, id_user_lanc, status)
-            VALUES (?, ?, ?, ?, ?, ?, 'Ativo')`;
+            (descricao, custo, data_custo, id_fornecedor, id_filial, sequencial_rateio, id_user_lanc, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
 
-        // Loop para inserir uma linha para cada filial selecionada, usando o ID
         for (const id_filial of filiais_rateio) {
-            // Os parâmetros agora correspondem à query SQL, passando o id_filial
-            await connection.execute(sqlInsert, [descricao, valorRateado, data_custo, id_fornecedor, id_filial, userId]);
+            // AJUSTE: Passando o 'sequencial' para a query
+            await connection.execute(sqlInsert, [descricao, valorRateado, data_custo, id_fornecedor, id_filial, sequencial, userId]);
         }
         
         await connection.commit();
@@ -546,7 +547,6 @@ router.post('/custos-frota', authenticateToken, authorizeAdmin, async (req, res)
 
     } catch (error) {
         if (connection) await connection.rollback();
-        // Log do erro no console do servidor para depuração
         console.error("Erro ao adicionar e ratear custo de frota:", error);
         res.status(500).json({ error: `Erro interno ao adicionar custo de frota: ${error.message}` });
     } finally {
@@ -564,21 +564,25 @@ router.get('/custos-frota', authenticateToken, async (req, res) => {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
+        // AJUSTE: A consulta agora faz o JOIN com a tabela 'parametro' usando o 'id_filial'
+        // para buscar o nome correto da filial.
         const sql = `
             SELECT 
                 cf.id,
                 cf.descricao,
                 cf.custo,
                 cf.data_custo,
-                cf.filiais_rateio, -- Este campo agora contém o nome da filial
+                p.NOME_PARAMETRO as nome_filial, -- Buscando o nome da filial da tabela de parâmetros
                 CASE 
                     WHEN cf.id_fornecedor = 0 THEN 'DESPESA INTERNA'
                     ELSE f.razao_social 
                 END as nome_fornecedor,
                 u.nome_user as nome_utilizador
             FROM custos_frota cf
+            -- O JOIN agora é feito pelo ID, de forma correta e segura
+            LEFT JOIN parametro p ON cf.id_filial = p.ID 
             LEFT JOIN fornecedores f ON cf.id_fornecedor = f.id
-            LEFT JOIN cad_user u ON cf.id_user_lanc = u.ID
+            LEFT JOIN cade_user u ON cf.id_user_lanc = u.ID
             WHERE cf.status = 'Ativo'
             ORDER BY cf.data_custo DESC`;
         const [custos] = await connection.execute(sql);
