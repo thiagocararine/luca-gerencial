@@ -45,7 +45,7 @@ router.post('/login', async (req, res) => {
         connection = await mysql.createConnection(dbConfig);
         const cleanedIdentifier = identifier.replace(/[.\-]/g, '');
         const loginQuery = `
-            SELECT u.*, p.nome_perfil as perfil_acesso 
+            SELECT u.*, p.nome_perfil as perfil_acesso, p.dashboard_type 
             FROM cad_user u
             LEFT JOIN perfis_acesso p ON u.id_perfil = p.id
             WHERE u.email_user = ? OR REPLACE(REPLACE(u.cpf_user, '.', ''), '-', '') = ?`;
@@ -73,7 +73,8 @@ router.post('/login', async (req, res) => {
             cargo: user.cargo_user, 
             unidade: user.unidade_user, 
             departamento: user.depart_user,
-            perfil: user.perfil_acesso
+            perfil: user.perfil_acesso,
+            dashboard: user.dashboard_type
         };
         const accessToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8h' });
         res.json({ message: 'Login bem-sucedido!', accessToken });
