@@ -406,7 +406,7 @@ router.get('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
         const sql = `
             SELECT vm.*, u.nome_user as nome_utilizador, f.razao_social as nome_fornecedor
             FROM veiculo_manutencoes vm
-            LEFT JOIN cade_user u ON vm.id_user_lanc = u.ID
+            LEFT JOIN cad_user u ON vm.id_user_lanc = u.ID
             LEFT JOIN fornecedores f ON vm.id_fornecedor = f.id
             WHERE vm.id_veiculo = ? AND vm.status = 'Ativo'
             ORDER BY vm.data_manutencao DESC`;
@@ -567,7 +567,7 @@ router.get('/custos-frota', authenticateToken, async (req, res) => {
             FROM custos_frota cf
             LEFT JOIN parametro p ON cf.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
             LEFT JOIN fornecedores f ON cf.id_fornecedor = f.id
-            LEFT JOIN cade_user u ON cf.id_user_lanc = u.ID
+            LEFT JOIN cad_user u ON cf.id_user_lanc = u.ID
             WHERE cf.status = 'Ativo'
             ORDER BY cf.data_custo DESC`;
         const [custos] = await connection.execute(sql);
@@ -591,7 +591,7 @@ router.get('/manutencoes/recentes', authenticateToken, async (req, res) => {
             FROM veiculo_manutencoes vm
             JOIN veiculos v ON vm.id_veiculo = v.id
             LEFT JOIN fornecedores f ON vm.id_fornecedor = f.id
-            LEFT JOIN cade_user u ON vm.id_user_lanc = u.ID
+            LEFT JOIN cad_user u ON vm.id_user_lanc = u.ID
             WHERE vm.status = 'Ativo'
             ORDER BY vm.data_manutencao DESC
             LIMIT 50`;
