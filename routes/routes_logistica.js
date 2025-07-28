@@ -564,23 +564,21 @@ router.get('/custos-frota', authenticateToken, async (req, res) => {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        // AJUSTE: A consulta agora faz o JOIN com a tabela 'parametro' usando o 'id_filial'
-        // para buscar o nome correto da filial.
         const sql = `
             SELECT 
                 cf.id,
                 cf.descricao,
                 cf.custo,
                 cf.data_custo,
-                p.NOME_PARAMETRO as nome_filial, -- Buscando o nome da filial da tabela de parâmetros
+                cf.sequencial_rateio,
+                p.NOME_PARAMETRO as nome_filial,
                 CASE 
                     WHEN cf.id_fornecedor = 0 THEN 'DESPESA INTERNA'
                     ELSE f.razao_social 
                 END as nome_fornecedor,
                 u.nome_user as nome_utilizador
             FROM custos_frota cf
-            -- O JOIN agora é feito pelo ID, de forma correta e segura
-            LEFT JOIN parametro p ON cf.id_filial = p.ID 
+            LEFT JOIN parametro p ON cf.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
             LEFT JOIN fornecedores f ON cf.id_fornecedor = f.id
             LEFT JOIN cade_user u ON cf.id_user_lanc = u.ID
             WHERE cf.status = 'Ativo'
