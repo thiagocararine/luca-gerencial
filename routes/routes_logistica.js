@@ -551,32 +551,24 @@ router.get('/custos-frota', authenticateToken, async (req, res) => {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
+        // Esta é uma consulta de teste para vermos os dados brutos do JOIN
         const sql = `
             SELECT 
                 cf.id,
-                cf.descricao,
-                cf.custo,
-                cf.data_custo,
-                cf.sequencial_rateio,
+                cf.id_filial,                 -- O ID que está em custos_frota
+                p.ID as parametro_id,         -- O ID que ele encontrou em parametro
                 p.NOME_PARAMETRO as nome_filial,
-                CASE 
-                    WHEN cf.id_fornecedor = 0 THEN 'DESPESA INTERNA'
-                    ELSE f.razao_social 
-                END as nome_fornecedor,
-                u.nome_user as nome_utilizador
+                p.COD_PARAMETRO as parametro_cod -- O código do parâmetro encontrado
             FROM custos_frota cf
-            -- A CONDIÇÃO DO FILTRO FOI MOVIDA PARA DENTRO DO 'ON'
-            LEFT JOIN parametro p ON cf.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
-            LEFT JOIN fornecedores f ON cf.id_fornecedor = f.id
-            LEFT JOIN cad_user u ON cf.id_user_lanc = u.ID
-            -- O 'WHERE' AGORA FILTRA APENAS A TABELA PRINCIPAL 'custos_frota'
+            LEFT JOIN parametro p ON cf.id_filial = p.ID
             WHERE cf.status = 'Ativo'
-            ORDER BY cf.data_custo DESC`;
+            ORDER BY cf.id DESC`;
+            
         const [custos] = await connection.execute(sql);
-        res.json(custos);
+        res.json(custos); // Enviaremos este resultado de depuração para o frontend
     } catch (error) {
-        console.error("Erro ao buscar custos de frota:", error);
-        res.status(500).json({ error: 'Erro ao buscar custos de frota.' });
+        console.error("Erro ao buscar custos de frota para diagnóstico:", error);
+        res.status(500).json({ error: 'Erro ao buscar custos de frota para diagnóstico.' });
     } finally {
         if (connection) await connection.end();
     }
