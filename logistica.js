@@ -565,7 +565,7 @@ async function loadFleetCosts() {
                 <td class="px-4 py-2 font-mono text-xs">${c.sequencial_rateio || 'N/A'}</td>
                 <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
                 <td class="px-4 py-2">${c.descricao}</td>
-                <td class="px-4 py-2">${c.filiais_rateio || 'N/A'}</td>
+                <td class="px-4 py-2">${c.nome_filial || 'N/A'}</td>
                 <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
                 <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
                 <td class="px-4 py-2 text-center">
