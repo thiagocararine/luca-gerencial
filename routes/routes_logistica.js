@@ -565,9 +565,11 @@ router.get('/custos-frota', authenticateToken, async (req, res) => {
                 END as nome_fornecedor,
                 u.nome_user as nome_utilizador
             FROM custos_frota cf
+            -- A CONDIÇÃO DO FILTRO FOI MOVIDA PARA DENTRO DO 'ON'
             LEFT JOIN parametro p ON cf.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
             LEFT JOIN fornecedores f ON cf.id_fornecedor = f.id
             LEFT JOIN cad_user u ON cf.id_user_lanc = u.ID
+            -- O 'WHERE' AGORA FILTRA APENAS A TABELA PRINCIPAL 'custos_frota'
             WHERE cf.status = 'Ativo'
             ORDER BY cf.data_custo DESC`;
         const [custos] = await connection.execute(sql);
