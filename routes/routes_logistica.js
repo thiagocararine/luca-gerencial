@@ -509,12 +509,15 @@ router.post('/fornecedores/cnpj', authenticateToken, async (req, res) => {
 // =================================================================
 // ALTERAÇÃO #1 - INÍCIO: Rota POST /custos-frota modificada
 // =================================================================
+// Substitua a rota POST /custos-frota inteira por este bloco de código
+
 router.post('/custos-frota', authenticateToken, authorizeAdmin, async (req, res) => {
     const { descricao, custo, data_custo, id_fornecedor, filiais_rateio } = req.body;
-    const { userId } = req.user; // Assumindo que o middleware adiciona 'userId'
+    const { userId } = req.user;
 
+    // Validação dos dados recebidos
     if (!descricao || !custo || !data_custo || id_fornecedor == null || !filiais_rateio || !Array.isArray(filiais_rateio) || filiais_rateio.length === 0) {
-        return res.status(400).json({ error: 'Dados inválidos. Todos os campos são obrigatórios e pelo menos uma filial deve ser selecionada.' });
+        return res.status(400).json({ error: 'Dados inválidos. Todos os campos são obrigatórios e pelo menos uma filial deve ser selecionada para o rateio.' });
     }
 
     let connection;
@@ -526,28 +529,24 @@ router.post('/custos-frota', authenticateToken, authorizeAdmin, async (req, res)
         const numeroDeFiliais = filiais_rateio.length;
         const valorRateado = (custoTotal / numeroDeFiliais).toFixed(2);
 
+        // Query SQL correta, que insere o ID da filial na nova coluna 'id_filial'
         const sqlInsert = `
             INSERT INTO custos_frota 
             (descricao, custo, data_custo, id_fornecedor, id_filial, id_user_lanc, status)
             VALUES (?, ?, ?, ?, ?, ?, 'Ativo')`;
-            
-        const sqlSelectFilial = "SELECT NOME_PARAMETRO FROM parametro WHERE ID = ? AND COD_PARAMETRO = 'Unidades'";
 
+        // Loop para inserir uma linha para cada filial selecionada, usando o ID
         for (const id_filial of filiais_rateio) {
-            /** const [filialRows] = await connection.execute(sqlSelectFilial, [id_filial]);
-            if (filialRows.length === 0) {
-                throw new Error(`Filial com ID ${id_filial} não encontrada.`);
-            }
-            const nomeFilial = filialRows[0].NOME_PARAMETRO; */
-
-            // Salva o NOME da filial diretamente no campo filiais_rateio
-            await connection.execute(sqlInsert, [descricao, valorRateado, data_custo, id_fornecedor, nomeFilial, userId]);
+            // Os parâmetros agora correspondem à query SQL, passando o id_filial
+            await connection.execute(sqlInsert, [descricao, valorRateado, data_custo, id_fornecedor, id_filial, userId]);
         }
         
         await connection.commit();
         res.status(201).json({ message: 'Custo de frota registado e rateado com sucesso!' });
+
     } catch (error) {
         if (connection) await connection.rollback();
+        // Log do erro no console do servidor para depuração
         console.error("Erro ao adicionar e ratear custo de frota:", error);
         res.status(500).json({ error: `Erro interno ao adicionar custo de frota: ${error.message}` });
     } finally {
