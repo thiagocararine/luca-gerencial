@@ -551,24 +551,30 @@ router.get('/custos-frota', authenticateToken, async (req, res) => {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        // Esta é uma consulta de teste para vermos os dados brutos do JOIN
         const sql = `
             SELECT 
                 cf.id,
-                cf.id_filial,                 -- O ID que está em custos_frota
-                p.ID as parametro_id,         -- O ID que ele encontrou em parametro
+                cf.descricao,
+                cf.custo,
+                cf.data_custo,
+                cf.sequencial_rateio,
                 p.NOME_PARAMETRO as nome_filial,
-                p.COD_PARAMETRO as parametro_cod -- O código do parâmetro encontrado
+                CASE 
+                    WHEN cf.id_fornecedor = 0 THEN 'DESPESA INTERNA'
+                    ELSE f.razao_social 
+                END as nome_fornecedor,
+                u.nome_user as nome_utilizador
             FROM custos_frota cf
-            LEFT JOIN parametro p ON cf.id_filial = p.ID
+            LEFT JOIN parametro p ON cf.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
+            LEFT JOIN fornecedores f ON cf.id_fornecedor = f.id
+            LEFT JOIN cad_user u ON cf.id_user_lanc = u.ID
             WHERE cf.status = 'Ativo'
-            ORDER BY cf.id DESC`;
-            
+            ORDER BY cf.data_custo DESC`;
         const [custos] = await connection.execute(sql);
-        res.json(custos); // Enviaremos este resultado de depuração para o frontend
+        res.json(custos);
     } catch (error) {
-        console.error("Erro ao buscar custos de frota para diagnóstico:", error);
-        res.status(500).json({ error: 'Erro ao buscar custos de frota para diagnóstico.' });
+        console.error("Erro ao buscar custos de frota:", error);
+        res.status(500).json({ error: 'Erro ao buscar custos de frota.' });
     } finally {
         if (connection) await connection.end();
     }
