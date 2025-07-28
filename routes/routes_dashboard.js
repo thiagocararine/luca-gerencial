@@ -62,7 +62,7 @@ router.get('/dashboard-summary', authenticateToken, async (req, res) => {
         const totalDespesasQuery = `SELECT SUM(dsp_valordsp) as total FROM despesa_caixa ${whereClause.replace('WHERE', 'WHERE dsp_status = 1 AND') || 'WHERE dsp_status = 1'}`;
         const lancamentosQuery = `SELECT COUNT(ID) as count FROM despesa_caixa ${whereClause}`;
         const canceladasQuery = `SELECT COUNT(ID) as count FROM despesa_caixa ${whereClause.replace('WHERE', 'WHERE dsp_status = 2 AND') || 'WHERE dsp_status = 2'}`;
-        const pendentesQuery = `SELECT COUNT(ID) as count FROM cade_user WHERE status_user = 'Pendente'`;
+        const pendentesQuery = `SELECT COUNT(ID) as count FROM cad_user WHERE status_user = 'Pendente'`;
         const porGrupoQuery = `SELECT dsp_grupo, SUM(dsp_valordsp) as total FROM despesa_caixa ${whereClause.replace('WHERE', 'WHERE dsp_status = 1 AND') || 'WHERE dsp_status = 1'} GROUP BY dsp_grupo ORDER BY total DESC`;
 
         // Executa as queries em paralelo
