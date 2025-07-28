@@ -9,8 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // --- Constantes e Variáveis de Estado Globais ---
 const apiUrlBase = 'http://10.113.0.17:3000/api';
-const despesasApiUrl = `${apiUrlBase}/despesas`;
-// A rota de parâmetros foi corrigida nas funções que a utilizam.
+const despesasApiUrl = `${apiUrlBase}/despesas`; // Esta rota está correta
 const privilegedRoles = ["Analista de Sistema", "Supervisor (a)", "Financeiro", "Diretor"];
 let todosOsGrupos = [];
 let despesasNaPagina = [];
@@ -506,7 +505,8 @@ function logout() {
 
 async function popularSelect(selectElement, codParametro, token, placeholderText) {
     try {
-        const response = await fetch(`${parametrosApiUrl}?cod=${codParametro}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        // CORREÇÃO: A rota de parâmetros para utilizadores autenticados deve estar em '/settings'
+        const response = await fetch(`${apiUrlBase}/settings/parametros?cod=${codParametro}`, { headers: { 'Authorization': `Bearer ${token}` } });
         if (response.status >= 400) return handleApiError(response);
         const data = await response.json();
         selectElement.innerHTML = `<option value="">${placeholderText}</option>`;
@@ -553,7 +553,8 @@ async function setupInicial() {
 
 async function loadCurrentLogo() {
     try {
-        const response = await fetch(`${apiUrlBase}/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        // CORREÇÃO: A rota de config está em '/settings'
+        const response = await fetch(`${apiUrlBase}/settings/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (response.status >= 400) return handleApiError(response);
         const data = await response.json();
         if (data.logoBase64) {
@@ -573,4 +574,5 @@ function handleApiError(response, isExport = false) {
              const tabelaDespesasBody = document.getElementById('tabela-despesas')?.querySelector('tbody');
              if(tabelaDespesasBody) tabelaDespesasBody.innerHTML = `<tr><td colspan="10" style="text-align:center; color:red;">Ocorreu um erro na API.</td></tr>`;
         }
-    }}
+    }
+}
