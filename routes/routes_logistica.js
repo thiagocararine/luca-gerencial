@@ -528,17 +528,17 @@ router.post('/custos-frota', authenticateToken, authorizeAdmin, async (req, res)
 
         const sqlInsert = `
             INSERT INTO custos_frota 
-            (descricao, custo, data_custo, id_fornecedor, filiais_rateio, id_user_lanc, status)
+            (descricao, custo, data_custo, id_fornecedor, id_filial, id_user_lanc, status)
             VALUES (?, ?, ?, ?, ?, ?, 'Ativo')`;
             
         const sqlSelectFilial = "SELECT NOME_PARAMETRO FROM parametro WHERE ID = ? AND COD_PARAMETRO = 'Unidades'";
 
         for (const id_filial of filiais_rateio) {
-            const [filialRows] = await connection.execute(sqlSelectFilial, [id_filial]);
+            /** const [filialRows] = await connection.execute(sqlSelectFilial, [id_filial]);
             if (filialRows.length === 0) {
                 throw new Error(`Filial com ID ${id_filial} não encontrada.`);
             }
-            const nomeFilial = filialRows[0].NOME_PARAMETRO;
+            const nomeFilial = filialRows[0].NOME_PARAMETRO; */
 
             // Salva o NOME da filial diretamente no campo filiais_rateio
             await connection.execute(sqlInsert, [descricao, valorRateado, data_custo, id_fornecedor, nomeFilial, userId]);
@@ -782,11 +782,14 @@ router.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) =
 
         const sqlRateado = `
             SELECT 
-                cf.filiais_rateio as filial_nome, p.ID as filial_id, 'Despesa Rateada' as tipo_custo,
+                p.NOME_PARAMETRO as filial_nome, 
+                p.ID as filial_id, 
+                'Despesa Rateada' as tipo_custo,
                 cf.descricao,
                 cf.custo as valor
             FROM custos_frota cf
-            JOIN parametro p ON cf.filiais_rateio = p.NOME_PARAMETRO AND p.COD_PARAMETRO = 'Unidades'
+            -- AJUSTE: A junção agora é feita pelo ID, de forma segura e correta.
+            JOIN parametro p ON cf.id_filial = p.ID
             ${whereCustoRateado}`;
 
         const [dataDireto] = await connection.execute(sqlDireto, paramsDireto);
