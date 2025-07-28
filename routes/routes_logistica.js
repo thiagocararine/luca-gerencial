@@ -1,4 +1,4 @@
-// routes/routes_logistica.js
+// routes/routes_logistica.js (VERSÃO COMPLETA E FINAL)
 
 const express = require('express');
 const router = express.Router();
@@ -12,7 +12,6 @@ const dbConfig = require('../dbConfig');
 // --- CONFIGURAÇÃO DO MULTER E HELPERS ---
 
 const UPLOADS_BASE_PATH = process.env.UPLOADS_BASE_PATH || path.join(__dirname, '..', 'uploads');
-
 const sanitizeForPath = (str) => String(str || '').replace(/[^a-zA-Z0-9-]/g, '_');
 
 const vehicleStorage = multer.diskStorage({
@@ -407,7 +406,7 @@ router.get('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
         const sql = `
             SELECT vm.*, u.nome_user as nome_utilizador, f.razao_social as nome_fornecedor
             FROM veiculo_manutencoes vm
-            LEFT JOIN cad_user u ON vm.id_user_lanc = u.ID
+            LEFT JOIN cade_user u ON vm.id_user_lanc = u.ID
             LEFT JOIN fornecedores f ON vm.id_fornecedor = f.id
             WHERE vm.id_veiculo = ? AND vm.status = 'Ativo'
             ORDER BY vm.data_manutencao DESC`;
@@ -507,16 +506,15 @@ router.post('/fornecedores/cnpj', authenticateToken, async (req, res) => {
 });
 
 // =================================================================
-// ALTERAÇÃO #1 - INÍCIO: Rota POST /custos-frota modificada
+// SEÇÃO DE CUSTOS DE FROTA (COM TODAS AS CORREÇÕES)
 // =================================================================
-// Substitua a rota POST /custos-frota inteira por este bloco de código
 
 router.post('/custos-frota', authenticateToken, authorizeAdmin, async (req, res) => {
     const { descricao, custo, data_custo, id_fornecedor, filiais_rateio } = req.body;
     const { userId } = req.user;
 
     if (!descricao || !custo || !data_custo || id_fornecedor == null || !filiais_rateio || !Array.isArray(filiais_rateio) || filiais_rateio.length === 0) {
-        return res.status(400).json({ error: 'Dados inválidos. Todos os campos são obrigatórios e pelo menos uma filial deve ser selecionada para o rateio.' });
+        return res.status(400).json({ error: 'Dados inválidos. Todos os campos são obrigatórios e pelo menos uma filial deve ser selecionada.' });
     }
 
     let connection;
@@ -524,27 +522,22 @@ router.post('/custos-frota', authenticateToken, authorizeAdmin, async (req, res)
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
 
-        // **NOVO**: Gerar um código sequencial único para este grupo de rateio
-        const sequencial = `CF-${Date.now()}`; // Usando timestamp para garantir unicidade
-
+        const sequencial = `CF-${Date.now()}`;
         const custoTotal = parseFloat(custo);
         const numeroDeFiliais = filiais_rateio.length;
         const valorRateado = (custoTotal / numeroDeFiliais).toFixed(2);
 
-        // AJUSTE: A query agora inclui a nova coluna 'sequencial_rateio'
         const sqlInsert = `
             INSERT INTO custos_frota 
             (descricao, custo, data_custo, id_fornecedor, id_filial, sequencial_rateio, id_user_lanc, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
 
         for (const id_filial of filiais_rateio) {
-            // AJUSTE: Passando o 'sequencial' para a query
             await connection.execute(sqlInsert, [descricao, valorRateado, data_custo, id_fornecedor, id_filial, sequencial, userId]);
         }
         
         await connection.commit();
         res.status(201).json({ message: 'Custo de frota registado e rateado com sucesso!' });
-
     } catch (error) {
         if (connection) await connection.rollback();
         console.error("Erro ao adicionar e ratear custo de frota:", error);
@@ -553,13 +546,7 @@ router.post('/custos-frota', authenticateToken, authorizeAdmin, async (req, res)
         if (connection) await connection.end();
     }
 });
-// =================================================================
-// ALTERAÇÃO #1 - FIM
-// =================================================================
 
-// =================================================================
-// ALTERAÇÃO #2 - INÍCIO: Rota GET /custos-frota ajustada
-// =================================================================
 router.get('/custos-frota', authenticateToken, async (req, res) => {
     let connection;
     try {
@@ -592,10 +579,6 @@ router.get('/custos-frota', authenticateToken, async (req, res) => {
         if (connection) await connection.end();
     }
 });
-// =================================================================
-// ALTERAÇÃO #2 - FIM
-// =================================================================
-
 
 router.get('/manutencoes/recentes', authenticateToken, async (req, res) => {
     let connection;
@@ -608,7 +591,7 @@ router.get('/manutencoes/recentes', authenticateToken, async (req, res) => {
             FROM veiculo_manutencoes vm
             JOIN veiculos v ON vm.id_veiculo = v.id
             LEFT JOIN fornecedores f ON vm.id_fornecedor = f.id
-            LEFT JOIN cad_user u ON vm.id_user_lanc = u.ID
+            LEFT JOIN cade_user u ON vm.id_user_lanc = u.ID
             WHERE vm.status = 'Ativo'
             ORDER BY vm.data_manutencao DESC
             LIMIT 50`;
@@ -711,9 +694,6 @@ router.get('/relatorios/custoDireto', authenticateToken, async (req, res) => {
     }
 });
 
-// =================================================================
-// ALTERAÇÃO #3 - INÍCIO: Rota de Relatório de Custo Rateado ajustada
-// =================================================================
 router.get('/relatorios/custoRateado', authenticateToken, async (req, res) => {
     const { filial, dataInicio, dataFim } = req.query;
     let connection;
@@ -724,24 +704,22 @@ router.get('/relatorios/custoRateado', authenticateToken, async (req, res) => {
 
         if (dataInicio) { conditions.push('cf.data_custo >= ?'); params.push(dataInicio); }
         if (dataFim) { conditions.push('cf.data_custo <= ?'); params.push(dataFim); }
-        if (filial) { conditions.push('p.ID = ?'); params.push(filial); }
+        if (filial) { conditions.push('cf.id_filial = ?'); params.push(filial); }
         
         const whereClause = `WHERE ${conditions.join(' AND ')}`;
         const sql = `
             SELECT 
-                cf.filiais_rateio as filial_nome,
+                p.NOME_PARAMETRO as filial_nome,
                 p.ID as filial_id,
                 'Despesa Rateada' as tipo_custo,
                 cf.descricao,
                 cf.custo as valor
             FROM custos_frota cf
-            -- A junção agora é feita pelo nome da filial
-            JOIN parametro p ON cf.filiais_rateio = p.NOME_PARAMETRO AND p.COD_PARAMETRO = 'Unidades'
+            LEFT JOIN parametro p ON cf.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
             ${whereClause}
-            ORDER BY cf.filiais_rateio, cf.data_custo`;
+            ORDER BY p.NOME_PARAMETRO, cf.data_custo`;
         
         const [data] = await connection.execute(sql, params);
-        
         res.json(data);
     } catch (error) {
         console.error("Erro ao gerar relatório de custo rateado:", error);
@@ -751,8 +729,6 @@ router.get('/relatorios/custoRateado', authenticateToken, async (req, res) => {
     }
 });
 
-
-// RELATÓRIO 1: Despesa Total por Filial
 router.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) => {
     const { filial, dataInicio, dataFim } = req.query;
     let connection;
@@ -769,8 +745,7 @@ router.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) =
         let whereCustoRateado = "WHERE cf.status = 'Ativo'";
         if (dataInicio) { whereCustoRateado += " AND cf.data_custo >= ?"; paramsRateado.push(dataInicio); }
         if (dataFim) { whereCustoRateado += " AND cf.data_custo <= ?"; paramsRateado.push(dataFim); }
-        if (filial) { whereCustoRateado += " AND p.ID = ?"; paramsRateado.push(filial); }
-
+        if (filial) { whereCustoRateado += " AND cf.id_filial = ?"; paramsRateado.push(filial); }
 
         const sqlDireto = `
             SELECT 
@@ -783,20 +758,19 @@ router.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) =
 
         const sqlRateado = `
             SELECT 
-                p.NOME_PARAMETRO as filial_nome, 
-                p.ID as filial_id, 
-                'Despesa Rateada' as tipo_custo,
+                p.NOME_PARAMETRO as filial_nome, p.ID as filial_id, 'Despesa Rateada' as tipo_custo,
                 cf.descricao,
                 cf.custo as valor
             FROM custos_frota cf
-            -- AJUSTE: A junção agora é feita pelo ID, de forma segura e correta.
-            JOIN parametro p ON cf.id_filial = p.ID
+            LEFT JOIN parametro p ON cf.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
             ${whereCustoRateado}`;
 
         const [dataDireto] = await connection.execute(sqlDireto, paramsDireto);
         const [dataRateado] = await connection.execute(sqlRateado, paramsRateado);
 
         let combinedData = [...dataDireto, ...dataRateado];
+
+        combinedData = combinedData.filter(item => item.filial_nome);
         
         combinedData.sort((a, b) => a.filial_nome.localeCompare(b.filial_nome) || a.tipo_custo.localeCompare(b.tipo_custo));
 
@@ -808,9 +782,5 @@ router.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) =
         if (connection) await connection.end();
     }
 });
-// =================================================================
-// ALTERAÇÃO #3 - FIM
-// =================================================================
-
 
 module.exports = router;
