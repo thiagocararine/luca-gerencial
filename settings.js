@@ -1,4 +1,4 @@
-// settings.js (Versão final e completa com busca de vinculação sob demanda)
+// settings.js (Versão corrigida)
 
 document.addEventListener('DOMContentLoaded', () => {
     if (document.querySelector('.tabs')) {
@@ -10,7 +10,6 @@ document.addEventListener('DOMContentLoaded', () => {
 const apiUrlBase = 'http://10.113.0.17:3000/api';
 let parametrosTable, usersTable, perfisTable;
 let currentParamCode = null;
-// Apenas uma lista para os pais do contexto ATUAL, garantindo que não há mistura.
 let currentParentList = []; 
 let todosOsPerfis = [];
 let actionToConfirm = null;
@@ -93,8 +92,8 @@ function setupUsersTable() {
     usersTable = new Tabulator("#users-table", {
         layout: "fitColumns",
         placeholder: "A carregar utilizadores...",
-        // CORREÇÃO: Adicionado o prefixo '/settings'
-        ajaxURL: `${apiUrlBase}/settings/users`,
+        // CORREÇÃO: A rota de utilizadores está em '/auth', não '/settings'
+        ajaxURL: `${apiUrlBase}/auth/users`,
         ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
         columns: [
             { title: "ID", field: "ID", width: 60 },
@@ -138,7 +137,7 @@ async function openUserSettingsModal(userData) {
     permissionsContainer.innerHTML = 'A carregar permissões...';
     
     try {
-        // CORREÇÃO: Rota de permissões movida para '/settings' para consistência
+        // A rota de permissões está correta em '/settings'
         const response = await fetch(`${apiUrlBase}/settings/perfis/${userData.id_perfil}/permissoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar permissões');
         const userPermissions = await response.json();
@@ -182,8 +181,8 @@ async function handleSaveUserSettings() {
     }
     
     try {
-        // CORREÇÃO: Adicionado o prefixo '/settings'
-        const userResponse = await fetch(`${apiUrlBase}/settings/users/${userId}/manage`, {
+        // CORREÇÃO: A rota de gestão de utilizadores está em '/auth', não '/settings'
+        const userResponse = await fetch(`${apiUrlBase}/auth/users/${userId}/manage`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify(payload)
@@ -200,7 +199,7 @@ async function handleSaveUserSettings() {
             });
         });
 
-        // CORREÇÃO: Rota de permissões movida para '/settings' para consistência
+        // A rota de permissões está correta em '/settings'
         const permissionsResponse = await fetch(`${apiUrlBase}/settings/perfis/${newProfileId}/permissoes`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -221,7 +220,7 @@ async function handleSaveUserSettings() {
 // --- GESTÃO DE PERFIS DE ACESSO ---
 async function preCarregarPerfisDeAcesso() {
     try {
-        // CORREÇÃO: Adicionado o prefixo '/settings'
+        // Rota correta
         const response = await fetch(`${apiUrlBase}/settings/perfis-acesso`, { headers: { 'Authorization': `Bearer ${getToken()}` }});
         if (response.status >= 400) return handleApiError(response);
         todosOsPerfis = await response.json();
@@ -235,7 +234,7 @@ function setupPerfisTable() {
     perfisTable = new Tabulator("#perfis-table", {
         layout: "fitColumns",
         placeholder: "A carregar perfis...",
-        // CORREÇÃO: Adicionado o prefixo '/settings'
+        // Rota correta
         ajaxURL: `${apiUrlBase}/settings/perfis-acesso`,
         ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
         columns: [
@@ -287,7 +286,7 @@ async function handlePerfilFormSubmit(e) {
         return;
     }
     
-    // CORREÇÃO: Adicionado o prefixo '/settings'
+    // Rota correta
     const url = id ? `${apiUrlBase}/settings/perfis-acesso/${id}` : `${apiUrlBase}/settings/perfis-acesso`;
     const method = id ? 'PUT' : 'POST';
     
@@ -309,7 +308,7 @@ async function handlePerfilFormSubmit(e) {
 
 async function handleDeletePerfil(id) {
     try {
-       // CORREÇÃO: Adicionado o prefixo '/settings'
+       // Rota correta
        const response = await fetch(`${apiUrlBase}/settings/perfis-acesso/${id}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${getToken()}` }
@@ -328,8 +327,8 @@ async function popularSeletorDeCodigos() {
     const token = getToken();
     if (!token) return logout();
     try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
-        const response = await fetch(`${apiUrlBase}/logistica/parametros/codes`, { headers: { 'Authorization': `Bearer ${token}` } });
+        // CORREÇÃO: A rota de parâmetros está em '/settings', não '/logistica'
+        const response = await fetch(`${apiUrlBase}/settings/parametros/codes`, { headers: { 'Authorization': `Bearer ${token}` } });
         if (response.status >= 400) return handleApiError(response);
         const codigos = await response.json();
         const select = document.getElementById('select-param-code');
@@ -356,8 +355,8 @@ async function loadAndPopulateVinculacao(codParametroPai) {
     }
 
     try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
-        const response = await fetch(`${apiUrlBase}/logistica/parametros?cod=${codParametroPai}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        // CORREÇÃO: A rota de parâmetros está em '/settings', não '/logistica'
+        const response = await fetch(`${apiUrlBase}/settings/parametros?cod=${codParametroPai}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error(`Falha ao carregar ${codParametroPai}`);
         
         currentParentList = await response.json();
@@ -435,8 +434,8 @@ async function handleParamCodeChange(e) {
             vinculacaoGroup.style.display = 'none';
         }
         
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
-        const url = `${apiUrlBase}/logistica/parametros?cod=${encodeURIComponent(currentParamCode)}`;
+        // CORREÇÃO: A rota de parâmetros está em '/settings', não '/logistica'
+        const url = `${apiUrlBase}/settings/parametros?cod=${encodeURIComponent(currentParamCode)}`;
         parametrosTable.setData(url, {}, { headers: { 'Authorization': `Bearer ${getToken()}` } });
 
     } else {
@@ -485,8 +484,8 @@ function handleParamFormSubmit(e) {
 }
 
 async function executeSaveParam(id, body) {
-    // CORREÇÃO: Adicionado o prefixo '/logistica'
-    const url = id ? `${apiUrlBase}/logistica/parametros/${id}` : `${apiUrlBase}/logistica/parametros`;
+    // CORREÇÃO: A rota de parâmetros está em '/settings', não '/logistica'
+    const url = id ? `${apiUrlBase}/settings/parametros/${id}` : `${apiUrlBase}/settings/parametros`;
     const method = id ? 'PUT' : 'POST';
     try {
         const response = await fetch(url, {
@@ -505,8 +504,8 @@ async function executeSaveParam(id, body) {
 
 async function handleDeleteParam(id) {
      try {
-        // CORREÇÃO: Adicionado o prefixo '/logistica'
-        const response = await fetch(`${apiUrlBase}/logistica/parametros/${id}`, {
+        // CORREÇÃO: A rota de parâmetros está em '/settings', não '/logistica'
+        const response = await fetch(`${apiUrlBase}/settings/parametros/${id}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
@@ -538,7 +537,7 @@ async function saveLogo() {
         return;
     }
     try {
-        // CORREÇÃO: Adicionado o prefixo '/settings'
+        // Rota correta
         const response = await fetch(`${apiUrlBase}/settings/config/logo`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -553,7 +552,7 @@ async function saveLogo() {
 
 async function loadCurrentLogo() {
     try {
-        // CORREÇÃO: Adicionado o prefixo '/settings'
+        // Rota correta
         const response = await fetch(`${apiUrlBase}/settings/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (response.status >= 400) return handleApiError(response);
         const data = await response.json();
