@@ -1,4 +1,4 @@
-// routes/routes_logistica.js (VERSÃO COMPLETA E FINAL)
+// routes/routes_logistica.js (COMPLETO E ATUALIZADO)
 
 const express = require('express');
 const router = express.Router();
@@ -74,16 +74,12 @@ router.get('/veiculos', authenticateToken, async (req, res) => {
         
         const vehiclesWithPhotoUrl = vehicles.map(vehicle => {
              const placaSanitizada = sanitizeForPath(vehicle.placa);
-             const fotoPrincipalPath = vehicle.foto_principal 
-                ? `uploads/veiculos/${placaSanitizada}/fotos/${vehicle.foto_principal}` 
-                : null;
              const fotoFrentePath = vehicle.foto_frente
                 ? `uploads/veiculos/${placaSanitizada}/fotos/${vehicle.foto_frente}`
                 : null;
 
             return {
                 ...vehicle,
-                foto_principal: fotoPrincipalPath,
                 foto_frente: fotoFrentePath
             };
         });
@@ -272,12 +268,6 @@ router.post('/veiculos/:id/upload', authenticateToken, authorizeAdmin, (req, res
             if (isPhoto) {
                 const fotoSql = 'INSERT INTO veiculo_fotos (id_veiculo, descricao, caminho_foto) VALUES (?, ?, ?)';
                 await connection.execute(fotoSql, [id, descricao, newFilename]);
-                
-                /* if (descricao.toLowerCase() === 'frente') {
-                    const updatePrincipalSql = 'UPDATE veiculos SET foto_principal = ? WHERE id = ?';
-                    await connection.execute(updatePrincipalSql, [newFilename, id]);
-                } */
-               
             } else {
                 const { data_validade } = req.body;
                 const docSql = 'INSERT INTO veiculo_documentos (id_veiculo, nome_documento, data_validade, caminho_arquivo, data_inclusao, status) VALUES (?, ?, ?, ?, NOW(), ?)';
@@ -572,14 +562,9 @@ router.get('/custos-frota', authenticateToken, async (req, res) => {
             WHERE cf.status = 'Ativo'
             ORDER BY cf.data_custo DESC`;
         const [custos] = await connection.execute(sql);
-
-        // **NOVO LOG DE DEPURAÇÃO**
-        // Vamos imprimir o primeiro resultado para ver se 'nome_filial' está correto.
-        console.log("Resultado da consulta de custos de frota:", JSON.stringify(custos[0], null, 2));
-
         res.json(custos);
     } catch (error) {
-        console.error("Erro detalhado ao buscar custos de frota:", error);
+        console.error("Erro ao buscar custos de frota:", error);
         res.status(500).json({ error: 'Erro ao buscar custos de frota.' });
     } finally {
         if (connection) await connection.end();
@@ -637,12 +622,13 @@ router.put('/custos-frota/:id/excluir', authenticateToken, authorizeAdmin, async
 // --- ROTAS DE RELATÓRIOS ---
 
 router.get('/relatorios/listaVeiculos', authenticateToken, async (req, res) => {
-    const { filial, status } = req.query;
+    const { filial, status, limit } = req.query;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        let conditions = [];
         const params = [];
+        let conditions = [];
+        const pageLimit = parseInt(limit) || 1000;
 
         if (filial) { conditions.push('v.id_filial = ?'); params.push(filial); }
         if (status) { conditions.push('v.status = ?'); params.push(status); }
@@ -653,9 +639,10 @@ router.get('/relatorios/listaVeiculos', authenticateToken, async (req, res) => {
             FROM veiculos v
             LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
             ${whereClause}
-            ORDER BY p.NOME_PARAMETRO, v.modelo`;
+            ORDER BY p.NOME_PARAMETRO, v.modelo
+            LIMIT ?`;
         
-        const [data] = await connection.execute(sql, params);
+        const [data] = await connection.execute(sql, [...params, pageLimit]);
         res.json(data);
     } catch (error) {
         console.error("Erro ao gerar relatório de lista de veículos:", error);
@@ -666,12 +653,13 @@ router.get('/relatorios/listaVeiculos', authenticateToken, async (req, res) => {
 });
 
 router.get('/relatorios/custoDireto', authenticateToken, async (req, res) => {
-    const { filial, dataInicio, dataFim } = req.query;
+    const { filial, dataInicio, dataFim, limit } = req.query;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
         let conditions = ["vm.status = 'Ativo'"];
         const params = [];
+        const pageLimit = parseInt(limit) || 1000;
 
         if (filial) { conditions.push('v.id_filial = ?'); params.push(filial); }
         if (dataInicio) { conditions.push('vm.data_manutencao >= ?'); params.push(dataInicio); }
@@ -688,9 +676,10 @@ router.get('/relatorios/custoDireto', authenticateToken, async (req, res) => {
             LEFT JOIN fornecedores f ON vm.id_fornecedor = f.id
             LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
             ${whereClause}
-            ORDER BY p.NOME_PARAMETRO, vm.data_manutencao`;
+            ORDER BY p.NOME_PARAMETRO, vm.data_manutencao
+            LIMIT ?`;
         
-        const [data] = await connection.execute(sql, params);
+        const [data] = await connection.execute(sql, [...params, pageLimit]);
         res.json(data);
     } catch (error) {
         console.error("Erro ao gerar relatório de despesas diretas:", error);
@@ -701,12 +690,13 @@ router.get('/relatorios/custoDireto', authenticateToken, async (req, res) => {
 });
 
 router.get('/relatorios/custoRateado', authenticateToken, async (req, res) => {
-    const { filial, dataInicio, dataFim } = req.query;
+    const { filial, dataInicio, dataFim, limit } = req.query;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
         let conditions = ["cf.status = 'Ativo'"];
         const params = [];
+        const pageLimit = parseInt(limit) || 1000;
 
         if (dataInicio) { conditions.push('cf.data_custo >= ?'); params.push(dataInicio); }
         if (dataFim) { conditions.push('cf.data_custo <= ?'); params.push(dataFim); }
@@ -715,27 +705,26 @@ router.get('/relatorios/custoRateado', authenticateToken, async (req, res) => {
         const whereClause = `WHERE ${conditions.join(' AND ')}`;
         const sql = `
             SELECT 
-                p.NOME_PARAMETRO as filial_nome,
-                p.ID as filial_id,
-                'Despesa Rateada' as tipo_custo,
-                cf.descricao,
-                cf.custo as valor
+                p.NOME_PARAMETRO as filial_nome, p.ID as filial_id,
+                'Despesa Rateada' as tipo_custo, cf.descricao, cf.custo as valor
             FROM custos_frota cf
             LEFT JOIN parametro p ON cf.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
             ${whereClause}
-            ORDER BY p.NOME_PARAMETRO, cf.data_custo`;
+            ORDER BY p.NOME_PARAMETRO, cf.data_custo
+            LIMIT ?`;
         
-        const [data] = await connection.execute(sql, params);
+        const [data] = await connection.execute(sql, [...params, pageLimit]);
         res.json(data);
     } catch (error) {
         console.error("Erro ao gerar relatório de custo rateado:", error);
-        res.status(500).json({ error: 'Erro interno no servidor ao gerar o relatório.' });
+        res.status(500).json({ error: 'Erro interno no servidor.' });
     } finally {
         if (connection) await connection.end();
     }
 });
 
 router.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) => {
+    // Para simplificar e evitar paginação incorreta, este relatório busca todos os dados
     const { filial, dataInicio, dataFim } = req.query;
     let connection;
     try {
@@ -775,15 +764,50 @@ router.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) =
         const [dataRateado] = await connection.execute(sqlRateado, paramsRateado);
 
         let combinedData = [...dataDireto, ...dataRateado];
-
         combinedData = combinedData.filter(item => item.filial_nome);
-        
         combinedData.sort((a, b) => a.filial_nome.localeCompare(b.filial_nome) || a.tipo_custo.localeCompare(b.tipo_custo));
 
         res.json(combinedData);
     } catch (error) {
         console.error("Erro ao gerar relatório de custo total:", error);
         res.status(500).json({ error: 'Erro interno no servidor ao gerar o relatório.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// NOVA ROTA PARA RELATÓRIO 5
+router.get('/relatorios/despesaVeiculo', authenticateToken, async (req, res) => {
+    const { veiculoId, dataInicio, dataFim, limit } = req.query;
+    if (!veiculoId || !dataInicio || !dataFim) {
+        return res.status(400).json({ error: 'ID do Veículo e período são obrigatórios.' });
+    }
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const pageLimit = parseInt(limit) || 1000;
+        const sql = `
+            SELECT 
+                vm.data_manutencao,
+                vm.tipo_manutencao,
+                vm.descricao,
+                f.razao_social as fornecedor_nome,
+                vm.custo
+            FROM veiculo_manutencoes vm
+            LEFT JOIN fornecedores f ON vm.id_fornecedor = f.id
+            WHERE vm.id_veiculo = ?
+              AND vm.data_manutencao >= ?
+              AND vm.data_manutencao <= ?
+              AND vm.status = 'Ativo'
+            ORDER BY vm.data_manutencao ASC
+            LIMIT ?`;
+        
+        const [data] = await connection.execute(sql, [veiculoId, dataInicio, dataFim, pageLimit]);
+        res.json(data);
+    } catch (error) {
+        console.error("Erro ao gerar relatório de despesa de veículo:", error);
+        res.status(500).json({ error: 'Erro ao gerar relatório.' });
     } finally {
         if (connection) await connection.end();
     }

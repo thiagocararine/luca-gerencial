@@ -42,7 +42,6 @@
 <body class="h-full">
 
 <div class="flex h-full">
-    <!-- Overlay e Sidebar -->
     <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
     <nav id="sidebar" class="fixed inset-y-0 left-0 bg-white shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
         <div class="flex flex-col h-full">
@@ -67,7 +66,6 @@
         </div>
     </nav>
 
-    <!-- Conteúdo Principal -->
     <div class="flex-1 flex flex-col">
         <header class="bg-white shadow-sm border-b h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
             <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900"><span data-feather="menu"></span></button>
@@ -90,12 +88,18 @@
                             <option value="custoRateado">2 - Despesas de Frota (Rateado)</option>
                             <option value="custoDireto">3 - Despesas Diretas de Veículos</option>
                             <option value="listaVeiculos">4 - Lista de Veículos</option>
+                            <option value="despesaVeiculo">5 - Despesa por Veículo</option>
                         </select>
                     </div>
 
                     <div id="filial-filter-container">
                         <label for="filter-filial" class="block text-sm font-medium text-gray-700">Filial</label>
                         <select id="filter-filial" class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm"></select>
+                    </div>
+
+                    <div id="vehicle-filter-container">
+                        <label for="filter-vehicle" class="block text-sm font-medium text-gray-700">Veículo</label>
+                        <select id="filter-vehicle" class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm"></select>
                     </div>
 
                     <div id="date-filter-container">
@@ -121,17 +125,27 @@
                 </div>
             </div>
             
-            <div id="report-results-area" class="bg-white rounded-lg shadow overflow-hidden min-h-[300px] p-4">
-                <p class="text-center text-gray-500 pt-16">Selecione um tipo de relatório e clique em "Gerar" para ver os resultados.</p>
+            <div id="report-results-area" class="bg-white rounded-lg shadow overflow-x-auto min-h-[300px]">
+                <p class="text-center text-gray-500 p-8">Selecione um tipo de relatório e clique em "Gerar" para ver os resultados.</p>
             </div>
             
+            <div id="pagination-controls" class="mt-4 flex justify-end items-center">
+                <label for="filter-limit" class="mr-2 text-sm font-medium text-gray-700">Itens por Página:</label>
+                <select id="filter-limit" class="form-input rounded-md border-gray-300 shadow-sm w-24">
+                    <option value="20">20</option>
+                    <option value="40" selected>40</option>
+                    <option value="60">60</option>
+                    <option value="80">80</option>
+                    <option value="1000">Todos</option>
+                </select>
+            </div>
         </main>
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
-<script src="relatorio_logistica.js?v=1.1.0" defer></script>
+<script src="relatorio_logistica.js?v=1.2.0" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
