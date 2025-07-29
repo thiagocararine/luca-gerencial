@@ -1,4 +1,4 @@
-// despesas.js (versão final baseada no seu arquivo, com as funcionalidades solicitadas)
+// despesas.js (versão final com a função openExportModal corrigida)
 
 document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('tabela-despesas')) {
@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- Constantes e Variáveis de Estado Globais ---
 const apiUrlBase = 'http://10.113.0.17:3000/api';
 const despesasApiUrl = `${apiUrlBase}/despesas`;
-const privilegedRoles = ["Administrador", "Financeiro"]; // Padronizado
+const privilegedRoles = ["Administrador", "Financeiro"];
 let todosOsGrupos = [];
 let despesasNaPagina = [];
 let currentPage = 1;
@@ -17,7 +17,7 @@ let itemsPerPage = 20;
 let despesaIdParaCancelar = null;
 let datepicker = null;
 let exportDatepicker = null;
-let LOGO_BASE64 = null;
+let LOGO_BASE_64 = null;
 
 /**
  * Função principal que inicializa a página.
@@ -92,6 +92,29 @@ function setupEventListeners() {
 }
 
 /**
+ * Abre o modal de exportação. (FUNÇÃO ADICIONADA DE VOLTA)
+ */
+async function openExportModal() {
+    const startDate = datepicker.getStartDate();
+    const endDate = datepicker.getEndDate();
+    if (startDate && endDate) {
+        exportDatepicker.setDateRange(startDate.toJSDate(), endDate.toJSDate());
+    } else {
+        exportDatepicker.clearSelection();
+    }
+    const exportFilialGroup = document.getElementById('export-filial-group');
+    const exportFilialSelect = document.getElementById('export-filial-select');
+    if (privilegedRoles.includes(getUserProfile())) {
+        exportFilialGroup.style.display = 'block';
+        await popularSelect(exportFilialSelect, 'Unidades', getToken(), 'Todas as Filiais');
+        exportFilialSelect.value = document.getElementById('filter-filial').value;
+    } else {
+        exportFilialGroup.style.display = 'none';
+    }
+    document.getElementById('export-pdf-modal').classList.remove('hidden');
+}
+
+/**
  * Carrega e popula os filtros e dados iniciais da página.
  */
 async function setupInicial() {
@@ -100,7 +123,6 @@ async function setupInicial() {
     const filialFilterGroup = document.getElementById('filial-filter-group');
     const modalFilialGroup = document.getElementById('modal-filial-group');
 
-    // AJUSTE: Lógica para OCULTAR o filtro de filial para não privilegiados
     if (privilegedRoles.includes(userProfile)) {
         filialFilterGroup.style.display = 'block';
         modalFilialGroup.style.display = 'block';
@@ -124,6 +146,7 @@ async function setupInicial() {
     await carregarDespesas();
 }
 
+
 /**
  * Lida com o envio do formulário de nova despesa.
  */
@@ -135,7 +158,6 @@ async function handleFormSubmit(event) {
     const userProfile = getUserProfile();
     let filialDaDespesa = null;
 
-    // AJUSTE: Define a filial da despesa com base no perfil do usuário
     if (privilegedRoles.includes(userProfile)) {
         filialDaDespesa = document.getElementById('modal-filial').value;
         if (!filialDaDespesa) {
@@ -190,7 +212,6 @@ function renderTable(despesas) {
         despesas.forEach(despesa => {
             const tr = tabelaDespesasBody.insertRow();
             
-            // Formatação dos dados
             const statusText = despesa.dsp_status === 1 ? 'Efetuado' : 'Cancelado';
             const statusClass = despesa.dsp_status === 1 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
             const dataDespesaFmt = new Date(despesa.dsp_datadesp).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
@@ -198,7 +219,6 @@ function renderTable(despesas) {
             const valorFmt = parseFloat(despesa.dsp_valordsp).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
             const descricao = despesa.dsp_descricao || '';
 
-            // Construção das células usando innerHTML para simplicidade
             tr.innerHTML = `
                 <td class="px-4 py-3">${despesa.dsp_status === 1 ? `<button class="cancel-btn" data-id="${despesa.ID}" title="Cancelar esta despesa">Cancelar</button>` : ''}</td>
                 <td class="px-4 py-3 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}">${statusText}</span></td>
@@ -215,9 +235,9 @@ function renderTable(despesas) {
     }
 }
 
-/**
- * Carrega as despesas da API com base nos filtros atuais e na página.
- */
+
+// --- Funções Auxiliares (mantidas do seu arquivo original ou corrigidas) ---
+
 async function carregarDespesas() {
     const tabelaDespesasBody = document.getElementById('tabela-despesas')?.querySelector('tbody');
     if (!tabelaDespesasBody) return;
@@ -243,7 +263,6 @@ async function carregarDespesas() {
 
     for (const key in filtros) {
         if (filtros[key]) {
-            // Garante que o filtro de filial não seja enviado por um usuário não privilegiado
             if (key === 'filial' && !privilegedRoles.includes(getUserProfile())) continue;
             params.append(key, filtros[key]);
         }
@@ -262,49 +281,6 @@ async function carregarDespesas() {
     } catch (error) {
         tabelaDespesasBody.innerHTML = `<tr><td colspan="10" class="text-center p-8 text-red-500">Falha ao carregar despesas.</td></tr>`;
     }
-}
-
-
-// --- Funções Auxiliares (mantidas do seu arquivo original ou corrigidas) ---
-
-function handleTipoDespesaChange(event) {
-    const grupoDespesaSelect = document.getElementById('modal-grupo-despesa');
-    const selectedOption = event.target.options[event.target.selectedIndex];
-    // A chave para vincular o TIPO ao GRUPO está no dataset da option
-    const keyVinculacao = selectedOption.dataset.keyVinculacao;
-    
-    // A lógica correta é comparar a key_vinculacao do TIPO com a KEY_PARAMETRO do GRUPO
-    const gruposFiltrados = keyVinculacao 
-        ? todosOsGrupos.filter(grupo => grupo.KEY_PARAMETRO == keyVinculacao)
-        : todosOsGrupos;
-
-    grupoDespesaSelect.innerHTML = '<option value="">-- Selecione um Grupo --</option>';
-    gruposFiltrados.forEach(grupo => {
-        const option = document.createElement('option');
-        option.value = grupo.NOME_PARAMETRO;
-        option.textContent = grupo.NOME_PARAMETRO;
-        grupoDespesaSelect.appendChild(option);
-    });
-    grupoDespesaSelect.disabled = false;
-}
-
-function handleFilterTipoChange(event) {
-    const grupoFilterSelect = document.getElementById('filter-grupo');
-    const selectedOption = event.target.options[event.target.selectedIndex];
-    const keyVinculacao = selectedOption.dataset.keyVinculacao;
-
-    // A lógica correta é comparar a key_vinculacao do TIPO com a KEY_PARAMETRO do GRUPO
-    const gruposFiltrados = keyVinculacao
-        ? todosOsGrupos.filter(grupo => grupo.KEY_PARAMETRO == keyVinculacao)
-        : todosOsGrupos;
-
-    grupoFilterSelect.innerHTML = '<option value="">Todos os Grupos</option>';
-    gruposFiltrados.forEach(grupo => {
-        const option = document.createElement('option');
-        option.value = grupo.NOME_PARAMETRO;
-        option.textContent = grupo.NOME_PARAMETRO;
-        grupoFilterSelect.appendChild(option);
-    });
 }
 
 function renderPagination({ totalItems, totalPages, currentPage: page }) {
@@ -329,6 +305,43 @@ function renderPagination({ totalItems, totalPages, currentPage: page }) {
     
     prevBtn.disabled = page <= 1;
     nextBtn.disabled = page >= totalPages;
+}
+
+function handleTipoDespesaChange(event) {
+    const grupoDespesaSelect = document.getElementById('modal-grupo-despesa');
+    const selectedOption = event.target.options[event.target.selectedIndex];
+    const keyVinculacao = selectedOption.dataset.keyVinculacao;
+    
+    const gruposFiltrados = keyVinculacao 
+        ? todosOsGrupos.filter(grupo => grupo.KEY_PARAMETRO == keyVinculacao)
+        : todosOsGrupos;
+
+    grupoDespesaSelect.innerHTML = '<option value="">-- Selecione um Grupo --</option>';
+    gruposFiltrados.forEach(grupo => {
+        const option = document.createElement('option');
+        option.value = grupo.NOME_PARAMETRO;
+        option.textContent = grupo.NOME_PARAMETRO;
+        grupoDespesaSelect.appendChild(option);
+    });
+    grupoDespesaSelect.disabled = false;
+}
+
+function handleFilterTipoChange(event) {
+    const grupoFilterSelect = document.getElementById('filter-grupo');
+    const selectedOption = event.target.options[event.target.selectedIndex];
+    const keyVinculacao = selectedOption.dataset.keyVinculacao;
+
+    const gruposFiltrados = keyVinculacao
+        ? todosOsGrupos.filter(grupo => grupo.KEY_PARAMETRO == keyVinculacao)
+        : todosOsGrupos;
+
+    grupoFilterSelect.innerHTML = '<option value="">Todos os Grupos</option>';
+    gruposFiltrados.forEach(grupo => {
+        const option = document.createElement('option');
+        option.value = grupo.NOME_PARAMETRO;
+        option.textContent = grupo.NOME_PARAMETRO;
+        grupoFilterSelect.appendChild(option);
+    });
 }
 
 function handleTableClick(event) {
@@ -367,9 +380,8 @@ function openCancelConfirmModal(despesa) {
     document.getElementById('confirm-cancel-modal').classList.remove('hidden');
 }
 
+
 async function exportarPDF() {
-    // Esta função foi mantida exatamente como no seu arquivo original,
-    // pois já continha a lógica correta para a totalização em vermelho.
     const btn = document.getElementById('generate-pdf-btn');
     btn.textContent = 'A gerar...';
     btn.disabled = true;
@@ -401,8 +413,8 @@ async function exportarPDF() {
         const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
         
         try {
-            if (LOGO_BASE64 && LOGO_BASE64.startsWith('data:image/')) {
-                doc.addImage(LOGO_BASE64, 'PNG', 14, 15, 20, 0);
+            if (LOGO_BASE_64 && LOGO_BASE_64.startsWith('data:image/')) {
+                doc.addImage(LOGO_BASE_64, 'PNG', 14, 15, 20, 0);
             }
         } catch (e) {
             console.error("A logo carregada é inválida e não será adicionada ao PDF.", e);
@@ -543,7 +555,7 @@ async function loadCurrentLogo() {
         if (response.status >= 400) return handleApiError(response);
         const data = await response.json();
         if (data.logoBase64) {
-            LOGO_BASE64 = data.logoBase64;
+            LOGO_BASE_64 = data.logoBase64;
         }
     } catch (error) {
         console.error("Não foi possível carregar a logo atual:", error);
