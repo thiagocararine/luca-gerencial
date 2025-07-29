@@ -1,4 +1,4 @@
-// despesas.js (versão final com a função openExportModal corrigida)
+// despesas.js (versão final com a correção na lógica de vinculação Tipo -> Grupo)
 
 document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('tabela-despesas')) {
@@ -92,8 +92,54 @@ function setupEventListeners() {
 }
 
 /**
- * Abre o modal de exportação. (FUNÇÃO ADICIONADA DE VOLTA)
+ * CORREÇÃO: Lógica de vinculação ajustada para usar KEY_PARAMETRO.
  */
+function handleTipoDespesaChange(event) {
+    const grupoDespesaSelect = document.getElementById('modal-grupo-despesa');
+    const selectedOption = event.target.options[event.target.selectedIndex];
+    const keyVinculacao = selectedOption.dataset.keyVinculacao;
+
+    const gruposFiltrados = keyVinculacao 
+        ? todosOsGrupos.filter(grupo => grupo.KEY_PARAMETRO == keyVinculacao)
+        : todosOsGrupos;
+
+    grupoDespesaSelect.innerHTML = '<option value="">-- Selecione um Grupo --</option>';
+    gruposFiltrados.forEach(grupo => {
+        const option = document.createElement('option');
+        option.value = grupo.NOME_PARAMETRO;
+        option.textContent = grupo.NOME_PARAMETRO;
+        grupoDespesaSelect.appendChild(option);
+    });
+    grupoDespesaSelect.disabled = false;
+
+    if (gruposFiltrados.length === 1) {
+        grupoDespesaSelect.value = gruposFiltrados[0].NOME_PARAMETRO;
+    }
+}
+
+/**
+ * CORREÇÃO: Lógica de vinculação ajustada para usar KEY_PARAMETRO.
+ */
+function handleFilterTipoChange(event) {
+    const grupoFilterSelect = document.getElementById('filter-grupo');
+    const selectedOption = event.target.options[event.target.selectedIndex];
+    const keyVinculacao = selectedOption.dataset.keyVinculacao;
+
+    const gruposFiltrados = keyVinculacao
+        ? todosOsGrupos.filter(grupo => grupo.KEY_PARAMETRO == keyVinculacao)
+        : todosOsGrupos;
+
+    grupoFilterSelect.innerHTML = '<option value="">Todos os Grupos</option>';
+    gruposFiltrados.forEach(grupo => {
+        const option = document.createElement('option');
+        option.value = grupo.NOME_PARAMETRO;
+        option.textContent = grupo.NOME_PARAMETRO;
+        grupoFilterSelect.appendChild(option);
+    });
+}
+
+// --- Restante do arquivo (sem alterações) ---
+
 async function openExportModal() {
     const startDate = datepicker.getStartDate();
     const endDate = datepicker.getEndDate();
@@ -114,9 +160,6 @@ async function openExportModal() {
     document.getElementById('export-pdf-modal').classList.remove('hidden');
 }
 
-/**
- * Carrega e popula os filtros e dados iniciais da página.
- */
 async function setupInicial() {
     const userProfile = getUserProfile();
     const token = getToken();
@@ -146,10 +189,6 @@ async function setupInicial() {
     await carregarDespesas();
 }
 
-
-/**
- * Lida com o envio do formulário de nova despesa.
- */
 async function handleFormSubmit(event) {
     event.preventDefault();
     const token = getToken();
@@ -197,9 +236,6 @@ async function handleFormSubmit(event) {
     }
 }
 
-/**
- * Renderiza a tabela de despesas com os dados da API.
- */
 function renderTable(despesas) {
     const tabelaDespesasBody = document.getElementById('tabela-despesas')?.querySelector('tbody');
     const noDataMessage = document.getElementById('no-data-message');
@@ -234,9 +270,6 @@ function renderTable(despesas) {
         });
     }
 }
-
-
-// --- Funções Auxiliares (mantidas do seu arquivo original ou corrigidas) ---
 
 async function carregarDespesas() {
     const tabelaDespesasBody = document.getElementById('tabela-despesas')?.querySelector('tbody');
@@ -307,43 +340,6 @@ function renderPagination({ totalItems, totalPages, currentPage: page }) {
     nextBtn.disabled = page >= totalPages;
 }
 
-function handleTipoDespesaChange(event) {
-    const grupoDespesaSelect = document.getElementById('modal-grupo-despesa');
-    const selectedOption = event.target.options[event.target.selectedIndex];
-    const keyVinculacao = selectedOption.dataset.keyVinculacao;
-    
-    const gruposFiltrados = keyVinculacao 
-        ? todosOsGrupos.filter(grupo => grupo.KEY_PARAMETRO == keyVinculacao)
-        : todosOsGrupos;
-
-    grupoDespesaSelect.innerHTML = '<option value="">-- Selecione um Grupo --</option>';
-    gruposFiltrados.forEach(grupo => {
-        const option = document.createElement('option');
-        option.value = grupo.NOME_PARAMETRO;
-        option.textContent = grupo.NOME_PARAMETRO;
-        grupoDespesaSelect.appendChild(option);
-    });
-    grupoDespesaSelect.disabled = false;
-}
-
-function handleFilterTipoChange(event) {
-    const grupoFilterSelect = document.getElementById('filter-grupo');
-    const selectedOption = event.target.options[event.target.selectedIndex];
-    const keyVinculacao = selectedOption.dataset.keyVinculacao;
-
-    const gruposFiltrados = keyVinculacao
-        ? todosOsGrupos.filter(grupo => grupo.KEY_PARAMETRO == keyVinculacao)
-        : todosOsGrupos;
-
-    grupoFilterSelect.innerHTML = '<option value="">Todos os Grupos</option>';
-    gruposFiltrados.forEach(grupo => {
-        const option = document.createElement('option');
-        option.value = grupo.NOME_PARAMETRO;
-        option.textContent = grupo.NOME_PARAMETRO;
-        grupoFilterSelect.appendChild(option);
-    });
-}
-
 function handleTableClick(event) {
     const target = event.target.closest('.cancel-btn');
     if (target) {
@@ -379,7 +375,6 @@ function openCancelConfirmModal(despesa) {
     document.getElementById('cancel-details').innerHTML = detalhesHtml;
     document.getElementById('confirm-cancel-modal').classList.remove('hidden');
 }
-
 
 async function exportarPDF() {
     const btn = document.getElementById('generate-pdf-btn');
@@ -540,7 +535,8 @@ async function popularSelect(selectElement, codParametro, token, placeholderText
             const option = document.createElement('option');
             option.value = param.NOME_PARAMETRO;
             option.textContent = param.NOME_PARAMETRO;
-            if (param.KEY_PARAMETRO) option.dataset.keyVinculacao = param.KEY_PARAMETRO;
+            if (param.KEY_VINCULACAO) option.dataset.keyVinculacao = param.KEY_VINCULACAO;
+            if (param.KEY_PARAMETRO) option.dataset.keyParametro = param.KEY_PARAMETRO;
             selectElement.appendChild(option);
         });
         return data;
