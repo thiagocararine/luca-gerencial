@@ -1,7 +1,6 @@
 // despesas.js (Frontend com Todas as Funcionalidades para a Página de Despesas)
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Garante que o script só seja executado após o carregamento completo do HTML.
     if (document.getElementById('tabela-despesas')) {
         initPage();
     }
@@ -10,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- Constantes e Variáveis de Estado Globais ---
 const apiUrlBase = 'http://10.113.0.17:3000/api';
 const despesasApiUrl = `${apiUrlBase}/despesas`;
-const privilegedRoles = ["Administrador", "Financeiro"]; // Padronizado
+const privilegedRoles = ["Administrador", "Financeiro"];
 let todosOsGrupos = [];
 let despesasNaPagina = [];
 let currentPage = 1;
@@ -93,15 +92,66 @@ function setupEventListeners() {
 }
 
 /**
- * Carrega e popula os filtros e dados iniciais da página.
+ * Filtra e popula o select de Grupo de Despesa com base no Tipo de Despesa selecionado no modal.
+ * @param {Event} event O evento de mudança do select.
  */
+function handleTipoDespesaChange(event) {
+    const grupoDespesaSelect = document.getElementById('modal-grupo-despesa');
+    const selectedOption = event.target.options[event.target.selectedIndex];
+    const keyVinculacao = selectedOption.dataset.keyVinculacao;
+    
+    // CORREÇÃO: Compara key_vinculacao do TIPO com KEY_PARAMETRO do GRUPO
+    const gruposFiltrados = keyVinculacao 
+        ? todosOsGrupos.filter(grupo => grupo.KEY_PARAMETRO == keyVinculacao)
+        : todosOsGrupos;
+
+    grupoDespesaSelect.innerHTML = '<option value="">-- Selecione um Grupo --</option>';
+    gruposFiltrados.forEach(grupo => {
+        const option = document.createElement('option');
+        option.value = grupo.NOME_PARAMETRO;
+        option.textContent = grupo.NOME_PARAMETRO;
+        grupoDespesaSelect.appendChild(option);
+    });
+    grupoDespesaSelect.disabled = false;
+    
+    // Se houver apenas um grupo correspondente, seleciona-o automaticamente.
+    if (gruposFiltrados.length === 1) {
+        grupoDespesaSelect.value = gruposFiltrados[0].NOME_PARAMETRO;
+    }
+}
+
+/**
+ * Filtra e popula o select de Grupo de Despesa com base no Tipo de Despesa selecionado nos filtros.
+ * @param {Event} event O evento de mudança do select.
+ */
+function handleFilterTipoChange(event) {
+    const grupoFilterSelect = document.getElementById('filter-grupo');
+    const selectedOption = event.target.options[event.target.selectedIndex];
+    const keyVinculacao = selectedOption.dataset.keyVinculacao;
+
+    // CORREÇÃO: Compara key_vinculacao do TIPO com KEY_PARAMETRO do GRUPO
+    const gruposFiltrados = keyVinculacao
+        ? todosOsGrupos.filter(grupo => grupo.KEY_PARAMETRO == keyVinculacao)
+        : todosOsGrupos;
+
+    grupoFilterSelect.innerHTML = '<option value="">Todos os Grupos</option>';
+    gruposFiltrados.forEach(grupo => {
+        const option = document.createElement('option');
+        option.value = grupo.NOME_PARAMETRO;
+        option.textContent = grupo.NOME_PARAMETRO;
+        grupoFilterSelect.appendChild(option);
+    });
+}
+
+
+// --- Funções já corrigidas e outras funções auxiliares (sem alterações) ---
+
 async function setupInicial() {
     const userProfile = getUserProfile();
     const token = getToken();
     const filialFilterGroup = document.getElementById('filial-filter-group');
     const modalFilialGroup = document.getElementById('modal-filial-group');
 
-    // Lógica para esconder o filtro de filial para não privilegiados
     if (privilegedRoles.includes(userProfile)) {
         filialFilterGroup.style.display = 'block';
         modalFilialGroup.style.display = 'block';
@@ -125,10 +175,6 @@ async function setupInicial() {
     await carregarDespesas();
 }
 
-
-/**
- * Lida com o envio do formulário de nova despesa.
- */
 async function handleFormSubmit(event) {
     event.preventDefault();
     const token = getToken();
@@ -137,7 +183,6 @@ async function handleFormSubmit(event) {
     const userProfile = getUserProfile();
     let filialDaDespesa = null;
 
-    // Define a filial da despesa com base no perfil do usuário
     if (privilegedRoles.includes(userProfile)) {
         filialDaDespesa = document.getElementById('modal-filial').value;
         if (!filialDaDespesa) {
@@ -177,9 +222,6 @@ async function handleFormSubmit(event) {
     }
 }
 
-/**
- * Renderiza a tabela de despesas com os dados da API.
- */
 function renderTable(despesas) {
     const tabelaDespesasBody = document.getElementById('tabela-despesas')?.querySelector('tbody');
     const noDataMessage = document.getElementById('no-data-message');
@@ -213,144 +255,6 @@ function renderTable(despesas) {
             `;
         });
     }
-}
-
-
-// --- Outras Funções (não precisam de alteração) ---
-
-async function openExportModal() {
-    const startDate = datepicker.getStartDate();
-    const endDate = datepicker.getEndDate();
-    if (startDate && endDate) {
-        exportDatepicker.setDateRange(startDate.toJSDate(), endDate.toJSDate());
-    } else {
-        exportDatepicker.clearSelection();
-    }
-    const exportFilialGroup = document.getElementById('export-filial-group');
-    const exportFilialSelect = document.getElementById('export-filial-select');
-    if (privilegedRoles.includes(getUserProfile())) {
-        exportFilialGroup.style.display = 'block';
-        await popularSelect(exportFilialSelect, 'Unidades', getToken(), 'Todas as Filiais');
-        exportFilialSelect.value = document.getElementById('filter-filial').value;
-    } else {
-        exportFilialGroup.style.display = 'none';
-    }
-    document.getElementById('export-pdf-modal').classList.remove('hidden');
-}
-
-async function exportarPDF() {
-    const btn = document.getElementById('generate-pdf-btn');
-    btn.textContent = 'A gerar...';
-    btn.disabled = true;
-    try {
-        const token = getToken();
-        if (!token) return logout();
-        const params = new URLSearchParams();
-        const startDate = exportDatepicker.getStartDate();
-        const endDate = exportDatepicker.getEndDate();
-        const dataInicio = startDate ? formatDate(startDate.toJSDate()) : '';
-        const dataFim = endDate ? formatDate(endDate.toJSDate()) : '';
-        if (dataInicio) params.append('dataInicio', dataInicio);
-        if (dataFim) params.append('dataFim', dataFim);
-        const filialSelecionada = document.getElementById('export-filial-select').value;
-        if (privilegedRoles.includes(getUserProfile()) && filialSelecionada) {
-            params.append('filial', filialSelecionada);
-        }
-        const statusSelecionado = document.querySelector('input[name="export-status"]:checked').value;
-        params.append('status', statusSelecionado);
-        params.append('export', 'true');
-        const response = await fetch(`${despesasApiUrl}?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token}` } });
-        if (response.status >= 400) return handleApiError(response, true);
-        const despesas = await response.json();
-        if (despesas.length === 0) {
-            alert('Nenhuma despesa encontrada com os filtros atuais para gerar o relatório.');
-            return;
-        }
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-        
-        try {
-            if (LOGO_BASE64 && LOGO_BASE64.startsWith('data:image/')) {
-                doc.addImage(LOGO_BASE64, 'PNG', 14, 15, 20, 0);
-            }
-        } catch (e) {
-            console.error("A logo carregada é inválida e não será adicionada ao PDF.", e);
-        }
-
-        doc.setFontSize(18);
-        doc.text('Relatório de Despesas', doc.internal.pageSize.getWidth() / 2, 22, { align: 'center' });
-        doc.setFontSize(11);
-        const filial = filialSelecionada || getUserFilial() || 'Todas';
-        doc.text(`Filial: ${filial}`, doc.internal.pageSize.getWidth() / 2, 28, { align: 'center' });
-        const periodo = dataInicio ? `Período: ${startDate.format('DD/MM/YYYY')} a ${endDate.format('DD/MM/YYYY')}` : 'Período: Todos';
-        doc.text(periodo, doc.internal.pageSize.getWidth() / 2, 34, { align: 'center' });
-        
-        const body = despesas.map(d => [
-            new Date(d.dsp_datadesp).toLocaleDateString('pt-BR', { timeZone: 'UTC' }),
-            d.dsp_descricao,
-            d.dsp_grupo,
-            d.dsp_tipo,
-            parseFloat(d.dsp_valordsp).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-        ]);
-        
-        doc.autoTable({
-            head: [['Data Desp.', 'Descrição', 'Grupo', 'Tipo', 'Valor']],
-            body: body,
-            startY: 45,
-            theme: 'grid',
-            headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-            styles: { fontSize: 8, cellPadding: 2 },
-            columnStyles: {
-                0: { cellWidth: 22 },
-                1: { cellWidth: 'auto' },
-                2: { cellWidth: 30 },
-                3: { cellWidth: 30 },
-                4: { cellWidth: 25, halign: 'right' }
-            }
-        });
-        
-        const finalY = doc.autoTable.previous.finalY;
-        const totalGeral = despesas.reduce((sum, d) => sum + parseFloat(d.dsp_valordsp), 0);
-        doc.setFontSize(12);
-        doc.setFont(undefined, 'bold');
-        doc.text('Total Geral:', 14, finalY + 10);
-        doc.text(totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), doc.internal.pageSize.getWidth() - 14, finalY + 10, { align: 'right' });
-        
-        const dataStr = new Date().toISOString().slice(0, 10);
-        doc.save(`Relatorio_Despesas_${dataStr}.pdf`);
-    } catch (error) {
-        alert("Ocorreu um erro ao gerar o relatório em PDF.");
-    } finally {
-        btn.textContent = 'Gerar PDF';
-        btn.disabled = false;
-        document.getElementById('export-pdf-modal').classList.add('hidden');
-    }
-}
-
-function closeModal() {
-    const modal = document.getElementById('add-despesa-modal');
-    modal.classList.add('hidden');
-    const form = document.getElementById('form-despesa-modal');
-    form.reset();
-    const grupoSelect = document.getElementById('modal-grupo-despesa');
-    grupoSelect.innerHTML = '<option value="">-- Selecione um Tipo primeiro --</option>';
-    grupoSelect.disabled = true;
-}
-
-function clearFilters() {
-    datepicker.clearSelection();
-    document.getElementById('filter-status').value = '';
-    document.getElementById('filter-tipo').value = '';
-    const grupoSelect = document.getElementById('filter-grupo');
-    grupoSelect.innerHTML = '<option value="">Todos os Grupos</option>';
-    todosOsGrupos.forEach(g => {
-        const option = document.createElement('option');
-        option.value = g.NOME_PARAMETRO;
-        option.textContent = g.NOME_PARAMETRO;
-        grupoSelect.appendChild(option);
-    });
-    if (privilegedRoles.includes(getUserProfile())) document.getElementById('filter-filial').value = '';
-    carregarDespesas();
 }
 
 async function carregarDespesas() {
@@ -422,43 +326,6 @@ function renderPagination({ totalItems, totalPages, currentPage: page }) {
     nextBtn.disabled = page >= totalPages;
 }
 
-function handleTipoDespesaChange(event) {
-    const grupoDespesaSelect = document.getElementById('modal-grupo-despesa');
-    const selectedOption = event.target.options[event.target.selectedIndex];
-    const keyVinculacao = selectedOption.dataset.keyVinculacao;
-    
-    const gruposFiltrados = keyVinculacao 
-        ? todosOsGrupos.filter(grupo => grupo.KEY_PARAMETRO == keyVinculacao)
-        : todosOsGrupos;
-
-    grupoDespesaSelect.innerHTML = '<option value="">-- Selecione um Grupo --</option>';
-    gruposFiltrados.forEach(grupo => {
-        const option = document.createElement('option');
-        option.value = grupo.NOME_PARAMETRO;
-        option.textContent = grupo.NOME_PARAMETRO;
-        grupoDespesaSelect.appendChild(option);
-    });
-    grupoDespesaSelect.disabled = false;
-}
-
-function handleFilterTipoChange(event) {
-    const grupoFilterSelect = document.getElementById('filter-grupo');
-    const selectedOption = event.target.options[event.target.selectedIndex];
-    const keyVinculacao = selectedOption.dataset.keyVinculacao;
-
-    const gruposFiltrados = keyVinculacao
-        ? todosOsGrupos.filter(grupo => grupo.KEY_PARAMETRO == keyVinculacao)
-        : todosOsGrupos;
-
-    grupoFilterSelect.innerHTML = '<option value="">Todos os Grupos</option>';
-    gruposFiltrados.forEach(grupo => {
-        const option = document.createElement('option');
-        option.value = grupo.NOME_PARAMETRO;
-        option.textContent = grupo.NOME_PARAMETRO;
-        grupoFilterSelect.appendChild(option);
-    });
-}
-
 function handleTableClick(event) {
     const target = event.target.closest('.cancel-btn');
     if (target) {
@@ -495,6 +362,167 @@ function openCancelConfirmModal(despesa) {
     document.getElementById('confirm-cancel-modal').classList.remove('hidden');
 }
 
+async function openExportModal() {
+    const startDate = datepicker.getStartDate();
+    const endDate = datepicker.getEndDate();
+    if (startDate && endDate) {
+        exportDatepicker.setDateRange(startDate.toJSDate(), endDate.toJSDate());
+    } else {
+        exportDatepicker.clearSelection();
+    }
+    const exportFilialGroup = document.getElementById('export-filial-group');
+    const exportFilialSelect = document.getElementById('export-filial-select');
+    if (privilegedRoles.includes(getUserProfile())) {
+        exportFilialGroup.style.display = 'block';
+        await popularSelect(exportFilialSelect, 'Unidades', getToken(), 'Todas as Filiais');
+        exportFilialSelect.value = document.getElementById('filter-filial').value;
+    } else {
+        exportFilialGroup.style.display = 'none';
+    }
+    document.getElementById('export-pdf-modal').classList.remove('hidden');
+}
+
+async function exportarPDF() {
+    const btn = document.getElementById('generate-pdf-btn');
+    btn.textContent = 'A gerar...';
+    btn.disabled = true;
+    try {
+        const token = getToken();
+        if (!token) return logout();
+        const params = new URLSearchParams();
+        const startDate = exportDatepicker.getStartDate();
+        const endDate = exportDatepicker.getEndDate();
+        const dataInicio = startDate ? formatDate(startDate.toJSDate()) : '';
+        const dataFim = endDate ? formatDate(endDate.toJSDate()) : '';
+        if (dataInicio) params.append('dataInicio', dataInicio);
+        if (dataFim) params.append('dataFim', dataFim);
+        const filialSelecionada = document.getElementById('export-filial-select').value;
+        if (privilegedRoles.includes(getUserProfile()) && filialSelecionada) {
+            params.append('filial', filialSelecionada);
+        }
+        const statusSelecionado = document.querySelector('input[name="export-status"]:checked').value;
+        params.append('status', statusSelecionado);
+        params.append('export', 'true');
+        const response = await fetch(`${despesasApiUrl}?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (response.status >= 400) return handleApiError(response, true);
+        const despesas = await response.json();
+        if (despesas.length === 0) {
+            alert('Nenhuma despesa encontrada com os filtros atuais para gerar o relatório.');
+            return;
+        }
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+        
+        try {
+            if (LOGO_BASE64 && LOGO_BASE64.startsWith('data:image/')) {
+                doc.addImage(LOGO_BASE64, 'PNG', 14, 15, 20, 0);
+            }
+        } catch (e) {
+            console.error("A logo carregada é inválida e não será adicionada ao PDF.", e);
+        }
+
+        doc.setFontSize(18);
+        doc.text('Relatório de Despesas', doc.internal.pageSize.getWidth() / 2, 22, { align: 'center' });
+        doc.setFontSize(11);
+        const filial = filialSelecionada || getUserFilial() || 'Todas';
+        doc.text(`Filial: ${filial}`, doc.internal.pageSize.getWidth() / 2, 28, { align: 'center' });
+        const periodo = dataInicio ? `Período: ${startDate.format('DD/MM/YYYY')} a ${endDate.format('DD/MM/YYYY')}` : 'Período: Todos';
+        doc.text(periodo, doc.internal.pageSize.getWidth() / 2, 34, { align: 'center' });
+        
+        const despesasPorDia = despesas.reduce((acc, despesa) => {
+            const data = despesa.dsp_datadesp.split('T')[0];
+            if (!acc[data]) { acc[data] = { items: [], total: 0 }; }
+            acc[data].items.push(despesa);
+            acc[data].total += parseFloat(despesa.dsp_valordsp);
+            return acc;
+        }, {});
+
+        const body = [];
+        for (const data of Object.keys(despesasPorDia).sort()) {
+            const diaInfo = despesasPorDia[data];
+            diaInfo.items.forEach(d => {
+                body.push([
+                    new Date(d.dsp_datadesp).toLocaleDateString('pt-BR', { timeZone: 'UTC' }),
+                    d.dsp_descricao,
+                    d.dsp_grupo,
+                    d.dsp_tipo,
+                    parseFloat(d.dsp_valordsp).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                ]);
+            });
+            body.push([
+                { content: `Total do Dia:`, colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } },
+                { content: diaInfo.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), styles: { halign: 'right', fontStyle: 'bold' } }
+            ]);
+        }
+        
+        doc.autoTable({
+            head: [['Data Desp.', 'Descrição', 'Grupo', 'Tipo', 'Valor']],
+            body: body,
+            startY: 45,
+            theme: 'grid',
+            headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+            styles: { fontSize: 8, cellPadding: 2 },
+            columnStyles: {
+                0: { cellWidth: 22 },
+                1: { cellWidth: 'auto' },
+                2: { cellWidth: 30 },
+                3: { cellWidth: 30 },
+                4: { cellWidth: 25, halign: 'right' }
+            },
+            didParseCell: (data) => {
+                if (data.row.raw[0]?.colSpan) {
+                    data.cell.styles.fillColor = '#f8f9fa';
+                    data.cell.styles.textColor = [220, 53, 69];
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.cellPadding = 1.5;
+                    data.cell.styles.fontSize = 7;
+                }
+            },
+        });
+        
+        const finalY = doc.autoTable.previous.finalY;
+        const totalGeral = Object.values(despesasPorDia).reduce((sum, dia) => sum + dia.total, 0);
+        doc.setFontSize(12);
+        doc.setFont(undefined, 'bold');
+        doc.text('Total Geral:', 14, finalY + 10);
+        doc.text(totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), doc.internal.pageSize.getWidth() - 14, finalY + 10, { align: 'right' });
+        
+        const dataStr = new Date().toISOString().slice(0, 10);
+        doc.save(`Relatorio_Despesas_${dataStr}.pdf`);
+    } catch (error) {
+        alert("Ocorreu um erro ao gerar o relatório em PDF.");
+    } finally {
+        btn.textContent = 'Gerar PDF';
+        btn.disabled = false;
+        document.getElementById('export-pdf-modal').classList.add('hidden');
+    }
+}
+
+function closeModal() {
+    const modal = document.getElementById('add-despesa-modal');
+    modal.classList.add('hidden');
+    const form = document.getElementById('form-despesa-modal');
+    form.reset();
+    const grupoSelect = document.getElementById('modal-grupo-despesa');
+    grupoSelect.innerHTML = '<option value="">-- Selecione um Tipo primeiro --</option>';
+    grupoSelect.disabled = true;
+}
+
+function clearFilters() {
+    datepicker.clearSelection();
+    document.getElementById('filter-status').value = '';
+    document.getElementById('filter-tipo').value = '';
+    const grupoSelect = document.getElementById('filter-grupo');
+    grupoSelect.innerHTML = '<option value="">Todos os Grupos</option>';
+    todosOsGrupos.forEach(g => {
+        const option = document.createElement('option');
+        option.value = g.NOME_PARAMETRO;
+        option.textContent = g.NOME_PARAMETRO;
+        grupoSelect.appendChild(option);
+    });
+    if (privilegedRoles.includes(getUserProfile())) document.getElementById('filter-filial').value = '';
+    carregarDespesas();
+}
 
 function formatDate(date) { return date.toISOString().slice(0, 10); }
 function getToken() { return localStorage.getItem('lucaUserToken'); }
