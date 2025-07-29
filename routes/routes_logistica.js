@@ -273,10 +273,11 @@ router.post('/veiculos/:id/upload', authenticateToken, authorizeAdmin, (req, res
                 const fotoSql = 'INSERT INTO veiculo_fotos (id_veiculo, descricao, caminho_foto) VALUES (?, ?, ?)';
                 await connection.execute(fotoSql, [id, descricao, newFilename]);
                 
-                if (descricao.toLowerCase() === 'frente') {
+                /* if (descricao.toLowerCase() === 'frente') {
                     const updatePrincipalSql = 'UPDATE veiculos SET foto_principal = ? WHERE id = ?';
                     await connection.execute(updatePrincipalSql, [newFilename, id]);
-                }
+                } */
+               
             } else {
                 const { data_validade } = req.body;
                 const docSql = 'INSERT INTO veiculo_documentos (id_veiculo, nome_documento, data_validade, caminho_arquivo, data_inclusao, status) VALUES (?, ?, ?, ?, NOW(), ?)';

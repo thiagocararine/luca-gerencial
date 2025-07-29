@@ -440,6 +440,14 @@ async function openCaptureModal(targetInputId, targetPreviewId) {
     modal.classList.remove('hidden');
     feather.replace();
 
+    // Limpa o estado dos botões
+    document.getElementById('take-photo-btn').classList.remove('hidden');
+    document.getElementById('use-photo-btn').classList.add('hidden');
+    document.getElementById('retake-photo-btn').classList.add('hidden');
+    document.getElementById('camera-stream').classList.remove('hidden');
+    document.getElementById('photo-canvas').classList.add('hidden');
+
+
     try {
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
@@ -450,7 +458,8 @@ async function openCaptureModal(targetInputId, targetPreviewId) {
             throw new Error('A API de multimédia não é suportada neste navegador.');
         }
     } catch (err) {
-        errorMsg.textContent = `Erro ao aceder à câmara: ${err.message}`;
+        // Exibe o erro na UI em vez de apenas no console
+        errorMsg.textContent = `Erro ao aceder à câmara: ${err.message}. Verifique as permissões do navegador ou aceda via HTTPS/localhost.`;
         errorMsg.classList.remove('hidden');
         document.getElementById('take-photo-btn').classList.add('hidden');
         console.error("Erro na câmara:", err);

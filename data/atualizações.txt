@@ -17,12 +17,16 @@
 (INCLUIDO E FUNCIONANDO)
 
 - Botão para incluir custo viculo, indicando o veiculo que será direcionado na despesa.
+(INCLUIDO E FUNCIONANDO)
 
 - incluir um botão para marcar para exclusão o arquivo (documento do veiculo), incluir data de validade para data de inclusão e não precisa solicitar, apenas pegue a data de hoje.
+(INCLUIDO E FUNCIONANDO)
 
 - incluir um botão de captura de imagem dentro de fotos, revisar o problema do pop-up com informacao de erro.
+(INCLUIDO E FUNCIONANDO/INVESTIGANDO BUG DE LANCAMENTO DE ALGUMAS FOTOS.)
 
 - Ao clicar na imagem ela se abre para voce, e botão fechar nela também.
+(IMPLEMENTADO)
 
 - Foto de frente do veiculo, deve ser exibida no card da versao mobile.
 
