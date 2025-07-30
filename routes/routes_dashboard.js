@@ -55,19 +55,34 @@ async function getLogisticsSummary(connection, req) {
     if (dataFim) { whereClauseCustos += " AND vm.data_manutencao <= ?"; paramsCustos.push(dataFim); }
     if (filial) { whereClauseCustos += " AND v.id_filial = ?"; paramsCustos.push(filial); }
 
-    // Queries
+    // NOVO: Queries para os KPIs de manutenção
+    const manutencoesVencidasQuery = `SELECT COUNT(*) as total FROM veiculos WHERE data_proxima_manutencao < CURDATE() AND status = 'Ativo'`;
+    const manutencoesAVencerQuery = `SELECT COUNT(*) as total FROM veiculos WHERE data_proxima_manutencao BETWEEN CURDATE() AND LAST_DAY(CURDATE()) AND status = 'Ativo'`;
+
+
+    // Queries existentes
     const veiculosStatusQuery = `SELECT status, COUNT(*) as total FROM veiculos ${whereClauseVeiculos} GROUP BY status`;
     const custoTotalQuery = `SELECT SUM(custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos.replace('vm.status', 'v.status')}`;
     const custoClassificacaoQuery = `SELECT classificacao_custo, SUM(custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos} GROUP BY classificacao_custo`;
     const top5VeiculosQuery = `SELECT CONCAT(v.modelo, ' - ', v.placa) as veiculo, SUM(vm.custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos} GROUP BY vm.id_veiculo ORDER BY total DESC LIMIT 5`;
     const chartVeiculosFilialQuery = `SELECT p.NOME_PARAMETRO as filial, COUNT(v.id) as total FROM veiculos v JOIN parametro p ON v.id_filial = p.ID WHERE v.status IN ('Ativo', 'Em Manutenção') AND p.COD_PARAMETRO = 'Unidades' GROUP BY v.id_filial`;
 
-    const [statusResult, custoTotalResult, custoClassificacaoResult, top5VeiculosResult, veiculosFilialResult] = await Promise.all([
+    const [
+        statusResult,
+        custoTotalResult,
+        custoClassificacaoResult,
+        top5VeiculosResult,
+        veiculosFilialResult,
+        manutencoesVencidasResult, // NOVO
+        manutencoesAVencerResult  // NOVO
+    ] = await Promise.all([
         connection.execute(veiculosStatusQuery, paramsVeiculos),
         connection.execute(custoTotalQuery, paramsCustos),
         connection.execute(custoClassificacaoQuery, paramsCustos),
         connection.execute(top5VeiculosQuery, paramsCustos),
-        connection.execute(chartVeiculosFilialQuery,[])
+        connection.execute(chartVeiculosFilialQuery,[]),
+        connection.execute(manutencoesVencidasQuery), // NOVO
+        connection.execute(manutencoesAVencerQuery)  // NOVO
     ]);
 
     const veiculosAtivos = statusResult[0].find(r => r.status === 'Ativo')?.total || 0;
@@ -79,6 +94,8 @@ async function getLogisticsSummary(connection, req) {
             veiculosEmManutencao: veiculosEmManutencao,
             totalVeiculos: veiculosAtivos + veiculosEmManutencao,
             custoTotalPeriodo: custoTotalResult[0][0]?.total || 0,
+            manutencoesVencidas: manutencoesVencidasResult[0][0]?.total || 0, // NOVO
+            manutencoesAVencer: manutencoesAVencerResult[0][0]?.total || 0    // NOVO
         },
         charts: {
             statusFrota: statusResult[0],

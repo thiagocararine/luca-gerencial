@@ -6,85 +6,42 @@
     <title>Dashboard - Luca Gerencial</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
-    
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css"/>
-    
     <link rel="icon" href="assets/favicon.ico" type="image/x-icon">
-    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-        [data-feather] {
-            width: 1.25rem;
-            height: 1.25rem;
-        }
-        #sidebar.collapsed .sidebar-link {
-            justify-content: center;
-        }
-        #company-logo {
-            max-height: 40px;
-            max-width: 40px;
-            transition: opacity 0.3s ease-in-out;
-        }
-        #sidebar.collapsed #company-logo {
-            opacity: 0;
-        }
+        body { font-family: 'Inter', sans-serif; }
+        [data-feather] { width: 1.25rem; height: 1.25rem; }
+        #sidebar.collapsed .sidebar-link { justify-content: center; }
+        #company-logo { max-height: 40px; max-width: 40px; transition: opacity 0.3s ease-in-out; }
+        #sidebar.collapsed #company-logo { opacity: 0; }
     </style>
 </head>
 <body class="h-full">
 
 <div class="flex h-full">
     <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
-
     <nav id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-white shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
         <div class="flex flex-col h-full">
             <div class="h-16 flex items-center justify-center border-b px-4 gap-2">
                 <img id="company-logo" src="" alt="Logo da Empresa" style="display: none;">
                 <h1 class="text-xl font-bold text-indigo-600 overflow-hidden"><span class="sidebar-text">Luca Gerencial</span></h1>
             </div>
-            
             <div class="flex-grow p-4">
                 <ul class="space-y-2">
-                    <li>
-                        <a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium bg-indigo-50 text-indigo-700" aria-current="page">
-                            <span data-feather="home"></span>
-                            <span class="sidebar-text">Início / Dashboard</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">
-                            <span data-feather="dollar-sign"></span>
-                            <span class="sidebar-text">Lançamentos</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">
-                            <span data-feather="truck"></span>
-                            <span class="sidebar-text">Logística</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">
-                            <span data-feather="settings"></span>
-                            <span class="sidebar-text">Configurações</span>
-                        </a>
-                    </li>
+                    <li><a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium bg-indigo-50 text-indigo-700" aria-current="page"><span data-feather="home"></span><span class="sidebar-text">Início / Dashboard</span></a></li>
+                    <li><a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="dollar-sign"></span><span class="sidebar-text">Lançamentos</span></a></li>
+                    <li><a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="truck"></span><span class="sidebar-text">Logística</span></a></li>
+                    <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
                 </ul>
             </div>
-            
             <div class="p-2 border-t">
                 <button id="sidebar-toggle" class="w-full hidden md:flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none">
-                    <svg id="toggle-icon-collapse" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" />
-                    </svg>
-                    <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 hidden">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" />
-                    </svg>
+                    <svg id="toggle-icon-collapse" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" /></svg>
+                    <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
                 </button>
             </div>
         </div>
@@ -92,9 +49,7 @@
 
     <div class="flex-1 flex flex-col">
         <header class="bg-white shadow-sm border-b h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
-            <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900">
-                <span data-feather="menu"></span>
-            </button>
+            <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900"><span data-feather="menu"></span></button>
             <div class="hidden md:block"></div>
             <div class="flex items-center gap-4 ml-auto">
                 <span class="text-sm text-gray-700">Olá, <strong id="user-name" class="font-medium">Utilizador</strong>!</span>
@@ -174,31 +129,31 @@
                         <h4 class="text-sm font-medium text-gray-500 truncate">Custo Total no Período</h4>
                         <p class="mt-1 text-3xl font-semibold text-gray-900" id="kpi-custo-total-logistica">R$ 0,00</p>
                     </div>
+                    <div id="kpi-manutencoes-vencidas-card" class="bg-white rounded-lg shadow p-5 border-l-4 border-red-600 cursor-pointer hover:bg-red-50 transition-colors duration-200">
+                        <h4 class="text-sm font-medium text-gray-500 truncate">Manutenções Vencidas</h4>
+                        <p class="mt-1 text-3xl font-semibold text-red-600" id="kpi-manutencoes-vencidas">0</p>
+                    </div>
+                    <div id="kpi-manutencoes-a-vencer-card" class="bg-white rounded-lg shadow p-5 border-l-4 border-orange-500 cursor-pointer hover:bg-orange-50 transition-colors duration-200">
+                        <h4 class="text-sm font-medium text-gray-500 truncate">Vencem este Mês</h4>
+                        <p class="mt-1 text-3xl font-semibold text-orange-500" id="kpi-manutencoes-a-vencer">0</p>
+                    </div>
                 </div>
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div class="lg:col-span-1 bg-white rounded-lg shadow p-5">
                         <h4 class="text-lg font-medium text-gray-800">Status da Frota</h4>
-                        <div class="mt-4" style="height: 300px;">
-                            <canvas id="logistica-status-chart"></canvas>
-                        </div>
+                        <div class="mt-4" style="height: 300px;"><canvas id="logistica-status-chart"></canvas></div>
                     </div>
                     <div class="lg:col-span-1 bg-white rounded-lg shadow p-5">
                         <h4 class="text-lg font-medium text-gray-800">Veículos por Filial</h4>
-                        <div class="mt-4" style="height: 300px;">
-                            <canvas id="logistica-filial-chart"></canvas>
-                        </div>
+                        <div class="mt-4" style="height: 300px;"><canvas id="logistica-filial-chart"></canvas></div>
                     </div>
                     <div class="lg:col-span-2 bg-white rounded-lg shadow p-5">
                         <h4 class="text-lg font-medium text-gray-800">Top 5 Veículos por Custo</h4>
-                        <div class="mt-4" style="height: 300px;">
-                            <canvas id="logistica-top-veiculos-chart"></canvas>
-                        </div>
+                        <div class="mt-4" style="height: 300px;"><canvas id="logistica-top-veiculos-chart"></canvas></div>
                     </div>
                     <div class="lg:col-span-2 bg-white rounded-lg shadow p-5">
                         <h4 class="text-lg font-medium text-gray-800">Custos por Classificação</h4>
-                        <div class="mt-4" style="height: 300px;">
-                            <canvas id="logistica-classificacao-chart"></canvas>
-                        </div>
+                        <div class="mt-4" style="height: 300px;"><canvas id="logistica-classificacao-chart"></canvas></div>
                     </div>
                 </div>
             </div>
@@ -211,10 +166,22 @@
     </div>
 </div>
 
+<div id="maintenance-alert-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 hidden flex items-center justify-center p-4">
+    <div class="relative mx-auto p-6 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+        <div class="flex items-start justify-between pb-4 border-b">
+            <h3 id="maintenance-alert-title" class="text-xl font-semibold text-gray-900">Lista de Veículos</h3>
+            <button id="close-maintenance-alert-modal" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center">
+                <span data-feather="x"></span>
+            </button>
+        </div>
+        <div id="maintenance-alert-content" class="py-4 max-h-[60vh] overflow-y-auto"></div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
-<script src="dashboard.js?v=2.0.3" defer></script>
+<script src="dashboard.js?v=2.0.4" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();

@@ -908,4 +908,42 @@ router.get('/dashboard-summary', authenticateToken, async (req, res) => {
     }
 });
 
+router.get('/veiculos/manutencao/vencidas', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            SELECT v.id, v.placa, v.modelo, v.data_proxima_manutencao, p.NOME_PARAMETRO as nome_filial 
+            FROM veiculos v
+            LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
+            WHERE v.data_proxima_manutencao < CURDATE() AND v.status = 'Ativo'
+            ORDER BY v.data_proxima_manutencao ASC`;
+        const [veiculos] = await connection.execute(sql);
+        res.json(veiculos);
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao buscar veículos com manutenção vencida.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+router.get('/veiculos/manutencao/a-vencer', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            SELECT v.id, v.placa, v.modelo, v.data_proxima_manutencao, p.NOME_PARAMETRO as nome_filial 
+            FROM veiculos v
+            LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
+            WHERE v.data_proxima_manutencao BETWEEN CURDATE() AND LAST_DAY(CURDATE()) AND v.status = 'Ativo'
+            ORDER BY v.data_proxima_manutencao ASC`;
+        const [veiculos] = await connection.execute(sql);
+        res.json(veiculos);
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao buscar veículos com manutenção a vencer.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
 module.exports = router;
