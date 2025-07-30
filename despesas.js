@@ -1,4 +1,4 @@
-// despesas.js (versão final com a correção na lógica de vinculação Tipo -> Grupo)
+// despesas.js (lógica de vinculação ajustada conforme a nova regra de negócio)
 
 document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('tabela-despesas')) {
@@ -11,6 +11,7 @@ const apiUrlBase = 'http://10.113.0.17:3000/api';
 const despesasApiUrl = `${apiUrlBase}/despesas`;
 const privilegedRoles = ["Administrador", "Financeiro"];
 let todosOsGrupos = [];
+let todosOsTipos = [];
 let despesasNaPagina = [];
 let currentPage = 1;
 let itemsPerPage = 20;
@@ -40,8 +41,116 @@ async function initPage() {
 }
 
 /**
- * Configura os seletores de data.
+ * Carrega e popula os filtros e dados iniciais da página.
  */
+async function setupInicial() {
+    const userProfile = getUserProfile();
+    const token = getToken();
+    const filialFilterGroup = document.getElementById('filial-filter-group');
+    const modalFilialGroup = document.getElementById('modal-filial-group');
+
+    if (privilegedRoles.includes(userProfile)) {
+        filialFilterGroup.style.display = 'block';
+        modalFilialGroup.style.display = 'block';
+        const filterFilialSelect = document.getElementById('filter-filial');
+        const modalFilialSelect = document.getElementById('modal-filial');
+        await popularSelect(filterFilialSelect, 'Unidades', token, 'Todas as Filiais');
+        await popularSelect(modalFilialSelect, 'Unidades', token, 'Selecione a Filial');
+    } else {
+        filialFilterGroup.style.display = 'none';
+        modalFilialGroup.style.display = 'none';
+    }
+    
+    const tipoDespesaModalSelect = document.getElementById('modal-tipo-despesa');
+    const tipoDespesaFilterSelect = document.getElementById('filter-tipo');
+    const grupoDespesaFilterSelect = document.getElementById('filter-grupo');
+    
+    todosOsTipos = await popularSelect(tipoDespesaModalSelect, 'Tipo Despesa', token, '-- Selecione um Tipo --');
+    await popularSelect(tipoDespesaFilterSelect, 'Tipo Despesa', token, 'Todos os Tipos');
+    todosOsGrupos = await popularSelect(grupoDespesaFilterSelect, 'Grupo Despesa', token, 'Todos os Grupos');
+    
+    await carregarDespesas();
+}
+
+/**
+ * ATUALIZADO: Lógica de vinculação com o comportamento de travar/liberar o campo de Grupo.
+ */
+function handleTipoDespesaChange(event) {
+    const grupoDespesaSelect = document.getElementById('modal-grupo-despesa');
+    const tipoSelecionadoNome = event.target.value;
+
+    // Estado padrão: desabilitado e com placeholder.
+    grupoDespesaSelect.innerHTML = '<option value="">-- Selecione um Tipo primeiro --</option>';
+    grupoDespesaSelect.disabled = true;
+
+    // Caso 1: Se o tipo for "Não Classificado", libera a seleção manual de todos os grupos.
+    if (tipoSelecionadoNome === "Não Classificado") {
+        grupoDespesaSelect.innerHTML = '<option value="">-- Selecione um Grupo --</option>';
+        todosOsGrupos.forEach(grupo => {
+            const option = document.createElement('option');
+            option.value = grupo.NOME_PARAMETRO;
+            option.textContent = grupo.NOME_PARAMETRO;
+            grupoDespesaSelect.appendChild(option);
+        });
+        grupoDespesaSelect.disabled = false; // Habilita o campo
+        return;
+    }
+
+    const tipoSelecionadoObj = todosOsTipos.find(tipo => tipo.NOME_PARAMETRO === tipoSelecionadoNome);
+
+    // Caso 2: Se um tipo específico com vínculo for selecionado.
+    if (tipoSelecionadoObj && tipoSelecionadoObj.KEY_VINCULACAO) {
+        const keyVinculacao = tipoSelecionadoObj.KEY_VINCULACAO;
+        const grupoCorrespondente = todosOsGrupos.find(grupo => grupo.KEY_VINCULACAO == keyVinculacao);
+
+        if (grupoCorrespondente) {
+            // Encontrou o grupo, auto-seleciona e TRAVA o campo.
+            grupoDespesaSelect.innerHTML = '';
+            const option = document.createElement('option');
+            option.value = grupoCorrespondente.NOME_PARAMETRO;
+            option.textContent = grupoCorrespondente.NOME_PARAMETRO;
+            option.selected = true;
+            grupoDespesaSelect.appendChild(option);
+            grupoDespesaSelect.disabled = true; // Desabilita o campo
+        } else {
+            // Caso raro: tipo tem vínculo, mas o grupo não foi encontrado.
+            grupoDespesaSelect.innerHTML = '<option value="">-- Nenhum grupo vinculado --</option>';
+            grupoDespesaSelect.disabled = true;
+        }
+    }
+    // Se nenhum 'if' for satisfeito (ex: o placeholder foi selecionado), o campo permanece desabilitado.
+}
+
+
+/**
+ * Lógica de filtro (mantém o comportamento flexível).
+ */
+function handleFilterTipoChange(event) {
+    const grupoFilterSelect = document.getElementById('filter-grupo');
+    const tipoSelecionadoNome = event.target.value;
+    
+    const tipoSelecionadoObj = todosOsTipos.find(tipo => tipo.NOME_PARAMETRO === tipoSelecionadoNome);
+
+    grupoFilterSelect.innerHTML = '<option value="">Todos os Grupos</option>';
+
+    let gruposParaExibir = todosOsGrupos;
+
+    if (tipoSelecionadoObj && tipoSelecionadoObj.KEY_VINCULACAO) {
+        const keyVinculacao = tipoSelecionadoObj.KEY_VINCULACAO;
+        gruposParaExibir = todosOsGrupos.filter(grupo => grupo.KEY_VINCULACAO == keyVinculacao);
+    }
+    
+    gruposParaExibir.forEach(grupo => {
+        const option = document.createElement('option');
+        option.value = grupo.NOME_PARAMETRO;
+        option.textContent = grupo.NOME_PARAMETRO;
+        grupoFilterSelect.appendChild(option);
+    });
+}
+
+
+// --- Restante do arquivo (sem alterações) ---
+
 function setupDatepickers() {
     const commonOptions = {
         elementEnd: null,
@@ -57,9 +166,6 @@ function setupDatepickers() {
     exportDatepicker = new Litepicker({ element: document.getElementById('export-date-range'), ...commonOptions });
 }
 
-/**
- * Configura todos os event listeners da página.
- */
 function setupEventListeners() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('add-despesa-button')?.addEventListener('click', () => { document.getElementById('add-despesa-modal').classList.remove('hidden'); });
@@ -91,55 +197,6 @@ function setupEventListeners() {
     });
 }
 
-/**
- * CORREÇÃO: Lógica de vinculação ajustada para usar KEY_PARAMETRO.
- */
-function handleTipoDespesaChange(event) {
-    const grupoDespesaSelect = document.getElementById('modal-grupo-despesa');
-    const selectedOption = event.target.options[event.target.selectedIndex];
-    const keyVinculacao = selectedOption.dataset.keyVinculacao;
-
-    const gruposFiltrados = keyVinculacao 
-        ? todosOsGrupos.filter(grupo => grupo.KEY_PARAMETRO == keyVinculacao)
-        : todosOsGrupos;
-
-    grupoDespesaSelect.innerHTML = '<option value="">-- Selecione um Grupo --</option>';
-    gruposFiltrados.forEach(grupo => {
-        const option = document.createElement('option');
-        option.value = grupo.NOME_PARAMETRO;
-        option.textContent = grupo.NOME_PARAMETRO;
-        grupoDespesaSelect.appendChild(option);
-    });
-    grupoDespesaSelect.disabled = false;
-
-    if (gruposFiltrados.length === 1) {
-        grupoDespesaSelect.value = gruposFiltrados[0].NOME_PARAMETRO;
-    }
-}
-
-/**
- * CORREÇÃO: Lógica de vinculação ajustada para usar KEY_PARAMETRO.
- */
-function handleFilterTipoChange(event) {
-    const grupoFilterSelect = document.getElementById('filter-grupo');
-    const selectedOption = event.target.options[event.target.selectedIndex];
-    const keyVinculacao = selectedOption.dataset.keyVinculacao;
-
-    const gruposFiltrados = keyVinculacao
-        ? todosOsGrupos.filter(grupo => grupo.KEY_PARAMETRO == keyVinculacao)
-        : todosOsGrupos;
-
-    grupoFilterSelect.innerHTML = '<option value="">Todos os Grupos</option>';
-    gruposFiltrados.forEach(grupo => {
-        const option = document.createElement('option');
-        option.value = grupo.NOME_PARAMETRO;
-        option.textContent = grupo.NOME_PARAMETRO;
-        grupoFilterSelect.appendChild(option);
-    });
-}
-
-// --- Restante do arquivo (sem alterações) ---
-
 async function openExportModal() {
     const startDate = datepicker.getStartDate();
     const endDate = datepicker.getEndDate();
@@ -158,35 +215,6 @@ async function openExportModal() {
         exportFilialGroup.style.display = 'none';
     }
     document.getElementById('export-pdf-modal').classList.remove('hidden');
-}
-
-async function setupInicial() {
-    const userProfile = getUserProfile();
-    const token = getToken();
-    const filialFilterGroup = document.getElementById('filial-filter-group');
-    const modalFilialGroup = document.getElementById('modal-filial-group');
-
-    if (privilegedRoles.includes(userProfile)) {
-        filialFilterGroup.style.display = 'block';
-        modalFilialGroup.style.display = 'block';
-        const filterFilialSelect = document.getElementById('filter-filial');
-        const modalFilialSelect = document.getElementById('modal-filial');
-        await popularSelect(filterFilialSelect, 'Unidades', token, 'Todas as Filiais');
-        await popularSelect(modalFilialSelect, 'Unidades', token, 'Selecione a Filial');
-    } else {
-        filialFilterGroup.style.display = 'none';
-        modalFilialGroup.style.display = 'none';
-    }
-    
-    const tipoDespesaModalSelect = document.getElementById('modal-tipo-despesa');
-    const tipoDespesaFilterSelect = document.getElementById('filter-tipo');
-    const grupoDespesaFilterSelect = document.getElementById('filter-grupo');
-    
-    await popularSelect(tipoDespesaModalSelect, 'Tipo Despesa', token, '-- Selecione um Tipo --');
-    await popularSelect(tipoDespesaFilterSelect, 'Tipo Despesa', token, 'Todos os Tipos');
-    todosOsGrupos = await popularSelect(grupoDespesaFilterSelect, 'Grupo Despesa', token, 'Todos os Grupos');
-    
-    await carregarDespesas();
 }
 
 async function handleFormSubmit(event) {
