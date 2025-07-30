@@ -423,17 +423,18 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        await connection.beginTransaction(); // Inicia a transação
+        await connection.beginTransaction(); // Inicia a transação para garantir a integridade
 
+        // 1. Insere o registro da manutenção como antes
         const sqlInsert = `
             INSERT INTO veiculo_manutencoes (id_veiculo, data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_user_lanc, id_fornecedor, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
         await connection.execute(sqlInsert, [id_veiculo, data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, userId, id_fornecedor]);
         
-        // NOVO: Atualiza as datas no cadastro do veículo se a manutenção for preventiva
+        // 2. NOVO: Se a manutenção for 'Preventiva', atualiza o cadastro do veículo
         if (classificacao_custo === 'Preventiva') {
             const proximaManutencao = new Date(data_manutencao);
-            proximaManutencao.setMonth(proximaManutencao.getMonth() + 3); // Adiciona 3 meses
+            proximaManutencao.setMonth(proximaManutencao.getMonth() + 3); // Adiciona 3 meses para a próxima
 
             const sqlUpdateVeiculo = `
                 UPDATE veiculos 
@@ -442,7 +443,7 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
             await connection.execute(sqlUpdateVeiculo, [data_manutencao, proximaManutencao, id_veiculo]);
         }
         
-        await connection.commit(); // Confirma as duas operações
+        await connection.commit(); // Confirma as duas operações (INSERT e UPDATE)
         res.status(201).json({ message: 'Manutenção registada com sucesso!' });
 
     } catch (error) {
