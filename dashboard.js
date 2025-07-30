@@ -297,9 +297,9 @@ function gerenciarAcessoModulos() {
     console.log("--- [DEBUG] Permissões encontradas no token:", permissoesDoUsuario);
 
     const mapaModulos = {
-        'Lançamentos': 'despesas.html',
-        'Logística': 'logistica.html',
-        'Configurações': 'settings.html'
+        'lancamentos': 'despesas.html',
+        'logistica': 'logistica.html',
+        'configuracoes': 'settings.html'
     };
 
     for (const [nomeModulo, href] of Object.entries(mapaModulos)) {

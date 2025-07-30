@@ -1,4 +1,4 @@
-// settings.js (Com gestão de permissões dinâmica no modal de usuário)
+// settings.js (Lógica de permissões ajustada para usar chaves simples)
 
 document.addEventListener('DOMContentLoaded', () => {
     if (document.querySelector('.tabs')) {
@@ -15,6 +15,13 @@ let todosOsPerfis = [];
 let actionToConfirm = null;
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 
+// NOVO: Mapeamento central dos módulos com chaves simples para evitar erros de codificação
+const ALL_MODULES = {
+    'lancamentos': 'Lançamentos',
+    'logistica': 'Logística',
+    'configuracoes': 'Configurações'
+};
+
 /**
  * Função principal que inicializa a página de configurações.
  */
@@ -25,7 +32,7 @@ async function initSettingsPage() {
         return;
     }
     document.getElementById('user-name').textContent = getUserName();
-
+    
     gerenciarAcessoModulos();
     
     setupEventListenersSettings();
@@ -42,7 +49,6 @@ async function initSettingsPage() {
     
     await popularSeletorDeCodigos();
     loadCurrentLogo();
-    setupSidebar();
 }
 
 /**
@@ -72,7 +78,6 @@ function setupEventListenersSettings() {
     document.getElementById('cancel-user-settings-btn')?.addEventListener('click', () => userModal.classList.add('hidden'));
     document.getElementById('save-user-settings-btn')?.addEventListener('click', handleSaveUserSettings);
 
-    // NOVO: Event listener para carregar permissões dinamicamente ao trocar o perfil
     document.getElementById('user-modal-perfil')?.addEventListener('change', (event) => {
         const novoPerfilId = event.target.value;
         if (novoPerfilId) {
@@ -100,8 +105,8 @@ function setupEventListenersSettings() {
 // --- GESTÃO DE UTILIZADORES ---
 
 /**
- * NOVO: Função refatorada para carregar e exibir as permissões de um perfil específico.
- * @param {number} profileId O ID do perfil cujas permissões serão carregadas.
+ * Carrega e exibe as permissões de um perfil específico usando as chaves simples.
+ * @param {number} profileId O ID do perfil.
  */
 async function loadPermissionsForProfile(profileId) {
     const permissionsContainer = document.getElementById('user-modal-permissions');
@@ -112,21 +117,20 @@ async function loadPermissionsForProfile(profileId) {
         
         const profilePermissions = await response.json();
         
-        const allModules = ['Lançamentos', 'Logística', 'Configurações'];
         permissionsContainer.innerHTML = '';
         
-        allModules.forEach(moduleName => {
-            const permission = profilePermissions.find(p => p.nome_modulo === moduleName);
+        for (const [moduleKey, moduleName] of Object.entries(ALL_MODULES)) {
+            const permission = profilePermissions.find(p => p.nome_modulo === moduleKey);
             const isAllowed = permission ? permission.permitido : false;
             
             const checkboxWrapper = document.createElement('div');
             checkboxWrapper.className = 'flex items-center';
             checkboxWrapper.innerHTML = `
-                <input id="perm-${moduleName}" name="${moduleName}" type="checkbox" ${isAllowed ? 'checked' : ''} class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                <label for="perm-${moduleName}" class="ml-3 block text-sm text-gray-900">${moduleName}</label>
+                <input id="perm-${moduleKey}" name="${moduleKey}" type="checkbox" ${isAllowed ? 'checked' : ''} class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                <label for="perm-${moduleKey}" class="ml-3 block text-sm text-gray-900">${moduleName}</label>
             `;
             permissionsContainer.appendChild(checkboxWrapper);
-        });
+        }
     } catch (error) {
         console.error("Erro ao carregar permissões do perfil:", error);
         permissionsContainer.innerHTML = '<p class="text-red-500 text-xs">Erro ao carregar permissões.</p>';
@@ -177,14 +181,13 @@ async function openUserSettingsModal(userData) {
         perfilSelect.appendChild(option);
     });
     
-    // ALTERADO: Chama a nova função para carregar as permissões do perfil atual do usuário.
     await loadPermissionsForProfile(userData.id_perfil);
     
     modal.classList.remove('hidden');
 }
 
 /**
- * ALTERADO: Agora salva os dados do usuário E as permissões do perfil.
+ * Salva os dados do usuário E as permissões do perfil usando as chaves simples.
  */
 async function handleSaveUserSettings() {
     const userId = document.getElementById('user-modal-id').value;
@@ -202,7 +205,6 @@ async function handleSaveUserSettings() {
     }
     
     try {
-        // Ação 1: Salvar os dados do usuário (status, senha, perfil).
         const userResponse = await fetch(`${apiUrlBase}/auth/users/${userId}/manage`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -211,12 +213,11 @@ async function handleSaveUserSettings() {
 
         if (!userResponse.ok) return handleApiError(userResponse);
 
-        // Ação 2: Salvar as permissões para o perfil selecionado.
         const permissionsPayload = [];
         const permissionsContainer = document.getElementById('user-modal-permissions');
         permissionsContainer.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
             permissionsPayload.push({
-                nome_modulo: checkbox.name,
+                nome_modulo: checkbox.name, // Salva a chave simples, ex: 'lancamentos'
                 permitido: checkbox.checked
             });
         });
@@ -238,7 +239,7 @@ async function handleSaveUserSettings() {
 }
 
 
-// --- RESTANTE DO ARQUIVO (sem alterações) ---
+// --- GESTÃO DE PERFIS E PARÂMETROS (sem alterações) ---
 
 async function preCarregarPerfisDeAcesso() {
     try {
@@ -378,9 +379,9 @@ async function loadAndPopulateVinculacao(codParametroPai) {
         
         selectVinculacao.innerHTML = '<option value="">-- Nenhum --</option>';
         currentParentList.forEach(item => {
-            if (item.KEY_VINCULACAO) {
+            if (item.KEY_PARAMETRO) { // Corrigido para usar a chave correta para o vínculo
                 const option = document.createElement('option');
-                option.value = item.KEY_VINCULACAO;
+                option.value = item.KEY_PARAMETRO;
                 option.textContent = item.NOME_PARAMETRO;
                 selectVinculacao.appendChild(option);
             }
@@ -404,7 +405,7 @@ function setupParametrosTable() {
                 formatter: (cell) => {
                     const key = cell.getValue();
                     if (!key) return "";
-                    const pai = currentParentList.find(p => p.KEY_VINCULACAO == key);
+                    const pai = currentParentList.find(p => p.KEY_PARAMETRO == key);
                     return pai ? pai.NOME_PARAMETRO : `<span style="color:red;">Inválido</span>`;
                 }
             },
@@ -600,49 +601,21 @@ function handleApiError(response) {
         });
     }
 }
-function setupSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const toggleButton = document.getElementById('sidebar-toggle');
-    if (!sidebar || !toggleButton) return;
-
-    const setSidebarState = (collapsed) => {
-        if (!sidebar) return;
-        sidebar.classList.toggle('collapsed', collapsed);
-        localStorage.setItem('sidebar_collapsed', collapsed);
-    };
-
-    const isCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
-    setSidebarState(isCollapsed);
-
-    toggleButton.addEventListener('click', () => {
-        const currentlyCollapsed = sidebar.classList.contains('collapsed');
-        setSidebarState(!currentlyCollapsed);
-    });
-}
 
 function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) {
-        console.error("Não foi possível obter as permissões do usuário.");
         return;
     }
-
     const permissoesDoUsuario = userData.permissoes;
-
-    // Mapeamento dos nomes dos módulos para os links no HTML
     const mapaModulos = {
-        'Lançamentos': 'despesas.html',
-        'Logística': 'logistica.html',
-        'Configurações': 'settings.html'
+        'lancamentos': 'despesas.html',
+        'logistica': 'logistica.html',
+        'configuracoes': 'settings.html'
     };
-
-    // Itera sobre o mapa de módulos para verificar cada permissão
-    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
-        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
-        
-        // Se a permissão não existe ou não é permitida (permitido=false)
+    for (const [moduleKey, href] of Object.entries(mapaModulos)) {
+        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === moduleKey);
         if (!permissao || !permissao.permitido) {
-            // Encontra o link na barra lateral e esconde o item da lista (o <li> pai)
             const link = document.querySelector(`#sidebar a[href="${href}"]`);
             if (link && link.parentElement) {
                 link.parentElement.style.display = 'none';

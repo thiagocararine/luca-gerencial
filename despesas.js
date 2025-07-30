@@ -637,10 +637,10 @@ function gerenciarAcessoModulos() {
     const permissoesDoUsuario = userData.permissoes;
 
     // Mapeamento dos nomes dos módulos para os links no HTML
-    const mapaModulos = {
-        'Lançamentos': 'despesas.html',
-        'Logística': 'logistica.html',
-        'Configurações': 'settings.html'
+   const mapaModulos = {
+        'lancamentos': 'despesas.html',
+        'logistica': 'logistica.html',
+        'configuracoes': 'settings.html'
     };
 
     // Itera sobre o mapa de módulos para verificar cada permissão
