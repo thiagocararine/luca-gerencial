@@ -119,15 +119,15 @@
                     </div>
                     <button id="dashboard-filter-button" class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 h-fit w-full sm:w-auto">Filtrar</button>
                 </div>
-                </div>
-        
+            </div>
+
             <div id="dashboard-financeiro" class="hidden space-y-6">
                 <div class="flex justify-between items-center">
-                     <h2 class="text-xl font-semibold text-gray-800">Resumo Financeiro</h2>
-                     <div class="flex items-center gap-2">
+                    <h2 class="text-xl font-semibold text-gray-800">Resumo Financeiro</h2>
+                    <div class="flex items-center gap-2">
                         <label for="dashboard-filter-grupo" class="block text-xs font-medium text-gray-600">Grupo de Despesa:</label>
                         <select id="dashboard-filter-grupo" class="block rounded-md border-gray-300 shadow-sm text-sm"></select>
-                     </div>
+                    </div>
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
                     <div class="bg-white rounded-lg shadow p-5 border-l-4 border-blue-500">
@@ -154,7 +154,7 @@
                     </div>
                 </div>
             </div>
-        
+
             <div id="dashboard-logistica" class="hidden space-y-6 mt-6">
                 <h2 class="text-xl font-semibold text-gray-800">Resumo da Frota</h2>
                 <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -175,28 +175,34 @@
                         <p class="mt-1 text-3xl font-semibold text-gray-900" id="kpi-custo-total-logistica">R$ 0,00</p>
                     </div>
                 </div>
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                     <div class="lg:col-span-1 bg-white rounded-lg shadow p-5">
-                         <h4 class="text-lg font-medium text-gray-800">Status da Frota</h4>
-                         <div class="mt-4" style="height: 300px;">
-                             <canvas id="logistica-status-chart"></canvas>
-                         </div>
-                     </div>
-                     <div class="lg:col-span-2 bg-white rounded-lg shadow p-5">
-                         <h4 class="text-lg font-medium text-gray-800">Top 5 Veículos por Custo</h4>
-                         <div class="mt-4" style="height: 300px;">
-                             <canvas id="logistica-top-veiculos-chart"></canvas>
-                         </div>
-                     </div>
-                     <div class="lg:col-span-3 bg-white rounded-lg shadow p-5">
-                         <h4 class="text-lg font-medium text-gray-800">Custos por Classificação</h4>
-                         <div class="mt-4" style="height: 300px;">
-                             <canvas id="logistica-classificacao-chart"></canvas>
-                         </div>
-                     </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="lg:col-span-1 bg-white rounded-lg shadow p-5">
+                        <h4 class="text-lg font-medium text-gray-800">Status da Frota</h4>
+                        <div class="mt-4" style="height: 300px;">
+                            <canvas id="logistica-status-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="lg:col-span-1 bg-white rounded-lg shadow p-5">
+                        <h4 class="text-lg font-medium text-gray-800">Veículos por Filial</h4>
+                        <div class="mt-4" style="height: 300px;">
+                            <canvas id="logistica-filial-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="lg:col-span-2 bg-white rounded-lg shadow p-5">
+                        <h4 class="text-lg font-medium text-gray-800">Top 5 Veículos por Custo</h4>
+                        <div class="mt-4" style="height: 300px;">
+                            <canvas id="logistica-top-veiculos-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="lg:col-span-2 bg-white rounded-lg shadow p-5">
+                        <h4 class="text-lg font-medium text-gray-800">Custos por Classificação</h4>
+                        <div class="mt-4" style="height: 300px;">
+                            <canvas id="logistica-classificacao-chart"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
-        
+
             <div id="dashboard-access-denied" class="hidden text-center p-8 bg-white rounded-lg shadow">
                 <h2 class="text-xl font-semibold text-yellow-600">Acesso ao Dashboard</h2>
                 <p class="mt-2 text-gray-600">O seu perfil não tem permissão para visualizar este dashboard. Contacte um administrador se achar que isto é um erro.</p>
