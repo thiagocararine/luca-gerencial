@@ -1,4 +1,4 @@
-// settings.js (Versão corrigida)
+// settings.js (Com gestão de permissões dinâmica no modal de usuário)
 
 document.addEventListener('DOMContentLoaded', () => {
     if (document.querySelector('.tabs')) {
@@ -70,6 +70,14 @@ function setupEventListenersSettings() {
     document.getElementById('cancel-user-settings-btn')?.addEventListener('click', () => userModal.classList.add('hidden'));
     document.getElementById('save-user-settings-btn')?.addEventListener('click', handleSaveUserSettings);
 
+    // NOVO: Event listener para carregar permissões dinamicamente ao trocar o perfil
+    document.getElementById('user-modal-perfil')?.addEventListener('change', (event) => {
+        const novoPerfilId = event.target.value;
+        if (novoPerfilId) {
+            loadPermissionsForProfile(novoPerfilId);
+        }
+    });
+
     document.getElementById('select-param-code')?.addEventListener('change', handleParamCodeChange);
     document.getElementById('param-form')?.addEventListener('submit', handleParamFormSubmit);
     document.getElementById('cancel-edit-param-btn')?.addEventListener('click', resetParamForm);
@@ -88,11 +96,45 @@ function setupEventListenersSettings() {
 }
 
 // --- GESTÃO DE UTILIZADORES ---
+
+/**
+ * NOVO: Função refatorada para carregar e exibir as permissões de um perfil específico.
+ * @param {number} profileId O ID do perfil cujas permissões serão carregadas.
+ */
+async function loadPermissionsForProfile(profileId) {
+    const permissionsContainer = document.getElementById('user-modal-permissions');
+    permissionsContainer.innerHTML = 'A carregar permissões...';
+    try {
+        const response = await fetch(`${apiUrlBase}/settings/perfis/${profileId}/permissoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao buscar permissões');
+        
+        const profilePermissions = await response.json();
+        
+        const allModules = ['Lançamentos', 'Logística', 'Configurações'];
+        permissionsContainer.innerHTML = '';
+        
+        allModules.forEach(moduleName => {
+            const permission = profilePermissions.find(p => p.nome_modulo === moduleName);
+            const isAllowed = permission ? permission.permitido : false;
+            
+            const checkboxWrapper = document.createElement('div');
+            checkboxWrapper.className = 'flex items-center';
+            checkboxWrapper.innerHTML = `
+                <input id="perm-${moduleName}" name="${moduleName}" type="checkbox" ${isAllowed ? 'checked' : ''} class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                <label for="perm-${moduleName}" class="ml-3 block text-sm text-gray-900">${moduleName}</label>
+            `;
+            permissionsContainer.appendChild(checkboxWrapper);
+        });
+    } catch (error) {
+        console.error("Erro ao carregar permissões do perfil:", error);
+        permissionsContainer.innerHTML = '<p class="text-red-500 text-xs">Erro ao carregar permissões.</p>';
+    }
+}
+
 function setupUsersTable() {
     usersTable = new Tabulator("#users-table", {
         layout: "fitColumns",
         placeholder: "A carregar utilizadores...",
-        // CORREÇÃO: A rota de utilizadores está em '/auth', não '/settings'
         ajaxURL: `${apiUrlBase}/auth/users`,
         ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
         columns: [
@@ -133,63 +175,41 @@ async function openUserSettingsModal(userData) {
         perfilSelect.appendChild(option);
     });
     
-    const permissionsContainer = document.getElementById('user-modal-permissions');
-    permissionsContainer.innerHTML = 'A carregar permissões...';
-    
-    try {
-        // A rota de permissões está correta em '/settings'
-        const response = await fetch(`${apiUrlBase}/settings/perfis/${userData.id_perfil}/permissoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!response.ok) throw new Error('Falha ao buscar permissões');
-        const userPermissions = await response.json();
-        
-        const allModules = ['Lançamentos', 'Logística', 'Configurações'];
-        permissionsContainer.innerHTML = ''; 
-        
-        allModules.forEach(moduleName => {
-            const permission = userPermissions.find(p => p.nome_modulo === moduleName);
-            const isAllowed = permission ? permission.permitido : false;
-            
-            const checkboxWrapper = document.createElement('div');
-            checkboxWrapper.className = 'flex items-center';
-            checkboxWrapper.innerHTML = `
-                <input id="perm-${moduleName}" name="${moduleName}" type="checkbox" ${isAllowed ? 'checked' : ''} class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                <label for="perm-${moduleName}" class="ml-3 block text-sm text-gray-900">${moduleName}</label>
-            `;
-            permissionsContainer.appendChild(checkboxWrapper);
-        });
-    } catch (error) {
-        console.error("Erro ao carregar permissões:", error);
-        permissionsContainer.innerHTML = '<p class="text-red-500 text-xs">Erro ao carregar permissões.</p>';
-    }
+    // ALTERADO: Chama a nova função para carregar as permissões do perfil atual do usuário.
+    await loadPermissionsForProfile(userData.id_perfil);
     
     modal.classList.remove('hidden');
 }
 
+/**
+ * ALTERADO: Agora salva os dados do usuário E as permissões do perfil.
+ */
 async function handleSaveUserSettings() {
     const userId = document.getElementById('user-modal-id').value;
     const newPassword = document.getElementById('user-modal-password').value;
     const newStatus = document.getElementById('user-modal-status').value;
     const newProfileId = document.getElementById('user-modal-perfil').value;
 
-    const payload = {
+    const userPayload = {
         status: newStatus,
         id_perfil: newProfileId,
     };
 
     if (newPassword.trim() !== '') {
-        payload.senha = newPassword.trim();
+        userPayload.senha = newPassword.trim();
     }
     
     try {
-        // CORREÇÃO: A rota de gestão de utilizadores está em '/auth', não '/settings'
+        // Ação 1: Salvar os dados do usuário (status, senha, perfil).
         const userResponse = await fetch(`${apiUrlBase}/auth/users/${userId}/manage`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(userPayload)
         });
 
         if (!userResponse.ok) return handleApiError(userResponse);
 
+        // Ação 2: Salvar as permissões para o perfil selecionado.
         const permissionsPayload = [];
         const permissionsContainer = document.getElementById('user-modal-permissions');
         permissionsContainer.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
@@ -199,7 +219,6 @@ async function handleSaveUserSettings() {
             });
         });
 
-        // A rota de permissões está correta em '/settings'
         const permissionsResponse = await fetch(`${apiUrlBase}/settings/perfis/${newProfileId}/permissoes`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -208,7 +227,7 @@ async function handleSaveUserSettings() {
 
         if (!permissionsResponse.ok) return handleApiError(permissionsResponse);
 
-        alert('Dados do utilizador e permissões atualizados com sucesso!');
+        alert('Dados do utilizador e permissões do perfil atualizados com sucesso!');
         document.getElementById('user-settings-modal').classList.add('hidden');
         usersTable.replaceData(); 
     } catch (error) {
@@ -217,10 +236,10 @@ async function handleSaveUserSettings() {
 }
 
 
-// --- GESTÃO DE PERFIS DE ACESSO ---
+// --- RESTANTE DO ARQUIVO (sem alterações) ---
+
 async function preCarregarPerfisDeAcesso() {
     try {
-        // Rota correta
         const response = await fetch(`${apiUrlBase}/settings/perfis-acesso`, { headers: { 'Authorization': `Bearer ${getToken()}` }});
         if (response.status >= 400) return handleApiError(response);
         todosOsPerfis = await response.json();
@@ -234,7 +253,6 @@ function setupPerfisTable() {
     perfisTable = new Tabulator("#perfis-table", {
         layout: "fitColumns",
         placeholder: "A carregar perfis...",
-        // Rota correta
         ajaxURL: `${apiUrlBase}/settings/perfis-acesso`,
         ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
         columns: [
@@ -286,7 +304,6 @@ async function handlePerfilFormSubmit(e) {
         return;
     }
     
-    // Rota correta
     const url = id ? `${apiUrlBase}/settings/perfis-acesso/${id}` : `${apiUrlBase}/settings/perfis-acesso`;
     const method = id ? 'PUT' : 'POST';
     
@@ -308,7 +325,6 @@ async function handlePerfilFormSubmit(e) {
 
 async function handleDeletePerfil(id) {
     try {
-       // Rota correta
        const response = await fetch(`${apiUrlBase}/settings/perfis-acesso/${id}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${getToken()}` }
@@ -322,12 +338,10 @@ async function handleDeletePerfil(id) {
    }
 }
 
-// --- GESTÃO DE PARÂMETROS ---
 async function popularSeletorDeCodigos() {
     const token = getToken();
     if (!token) return logout();
     try {
-        // CORREÇÃO: A rota de parâmetros está em '/settings', não '/logistica'
         const response = await fetch(`${apiUrlBase}/settings/parametros/codes`, { headers: { 'Authorization': `Bearer ${token}` } });
         if (response.status >= 400) return handleApiError(response);
         const codigos = await response.json();
@@ -355,7 +369,6 @@ async function loadAndPopulateVinculacao(codParametroPai) {
     }
 
     try {
-        // CORREÇÃO: A rota de parâmetros está em '/settings', não '/logistica'
         const response = await fetch(`${apiUrlBase}/settings/parametros?cod=${codParametroPai}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error(`Falha ao carregar ${codParametroPai}`);
         
@@ -434,7 +447,6 @@ async function handleParamCodeChange(e) {
             vinculacaoGroup.style.display = 'none';
         }
         
-        // CORREÇÃO: A rota de parâmetros está em '/settings', não '/logistica'
         const url = `${apiUrlBase}/settings/parametros?cod=${encodeURIComponent(currentParamCode)}`;
         parametrosTable.setData(url, {}, { headers: { 'Authorization': `Bearer ${getToken()}` } });
 
@@ -484,7 +496,6 @@ function handleParamFormSubmit(e) {
 }
 
 async function executeSaveParam(id, body) {
-    // CORREÇÃO: A rota de parâmetros está em '/settings', não '/logistica'
     const url = id ? `${apiUrlBase}/settings/parametros/${id}` : `${apiUrlBase}/settings/parametros`;
     const method = id ? 'PUT' : 'POST';
     try {
@@ -504,7 +515,6 @@ async function executeSaveParam(id, body) {
 
 async function handleDeleteParam(id) {
      try {
-        // CORREÇÃO: A rota de parâmetros está em '/settings', não '/logistica'
         const response = await fetch(`${apiUrlBase}/settings/parametros/${id}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${getToken()}` }
@@ -517,8 +527,6 @@ async function handleDeleteParam(id) {
     }
 }
 
-
-// --- GESTÃO DA LOGO ---
 function previewLogo(event) {
     const file = event.target.files[0];
     if (file && file.type === "image/png") {
@@ -537,7 +545,6 @@ async function saveLogo() {
         return;
     }
     try {
-        // Rota correta
         const response = await fetch(`${apiUrlBase}/settings/config/logo`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -552,7 +559,6 @@ async function saveLogo() {
 
 async function loadCurrentLogo() {
     try {
-        // Rota correta
         const response = await fetch(`${apiUrlBase}/settings/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (response.status >= 400) return handleApiError(response);
         const data = await response.json();
@@ -564,7 +570,6 @@ async function loadCurrentLogo() {
     }
 }
 
-// --- Funções Auxiliares ---
 function openConfirmModal(action, callback, text) {
     const modal = document.getElementById('confirm-action-modal');
     modal.querySelector('#confirm-action-title').textContent = `Confirmar ${action.charAt(0).toUpperCase() + action.slice(1)}`;
@@ -572,6 +577,7 @@ function openConfirmModal(action, callback, text) {
     modal.style.display = 'block';
     actionToConfirm = callback;
 }
+
 function getToken() { return localStorage.getItem('lucaUserToken'); }
 function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
 function getUserName() { return getUserData()?.nome || 'Utilizador'; }
@@ -580,6 +586,7 @@ function logout() {
     localStorage.removeItem('lucaUserToken');
     window.location.href = 'login.html';
 }
+
 function handleApiError(response) {
     if (response.status === 401 || response.status === 403) {
         logout();
