@@ -60,12 +60,14 @@ async function getLogisticsSummary(connection, req) {
     const custoTotalQuery = `SELECT SUM(custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos.replace('vm.status', 'v.status')}`;
     const custoClassificacaoQuery = `SELECT classificacao_custo, SUM(custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos} GROUP BY classificacao_custo`;
     const top5VeiculosQuery = `SELECT CONCAT(v.modelo, ' - ', v.placa) as veiculo, SUM(vm.custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos} GROUP BY vm.id_veiculo ORDER BY total DESC LIMIT 5`;
+    const chartVeiculosFilialQuery = `SELECT p.NOME_PARAMETRO as filial, COUNT(v.id) as total FROM veiculos v JOIN parametro p ON v.id_filial = p.ID WHERE v.status IN ('Ativo', 'Em Manutenção') AND p.COD_PARAMETRO = 'Unidades' GROUP BY v.id_filial`;
 
-    const [statusResult, custoTotalResult, custoClassificacaoResult, top5VeiculosResult] = await Promise.all([
+    const [statusResult, custoTotalResult, custoClassificacaoResult, top5VeiculosResult, veiculosFilialResult] = await Promise.all([
         connection.execute(veiculosStatusQuery, paramsVeiculos),
         connection.execute(custoTotalQuery, paramsCustos),
         connection.execute(custoClassificacaoQuery, paramsCustos),
-        connection.execute(top5VeiculosQuery, paramsCustos)
+        connection.execute(top5VeiculosQuery, paramsCustos),
+        connection.execute(chartVeiculosFilialQuery,[])
     ]);
 
     const veiculosAtivos = statusResult[0].find(r => r.status === 'Ativo')?.total || 0;
@@ -82,6 +84,7 @@ async function getLogisticsSummary(connection, req) {
             statusFrota: statusResult[0],
             custoPorClassificacao: custoClassificacaoResult[0],
             top5VeiculosCusto: top5VeiculosResult[0],
+            veiculosPorFilial: veiculosFilialResult[0],
         }
     };
 }

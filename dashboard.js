@@ -165,11 +165,13 @@ function renderFinancialDashboard(data) {
 }
 
 function renderLogisticsDashboard(data) {
+    // Preenche os KPIs de Logística
     document.getElementById('kpi-total-veiculos').textContent = data.kpis.totalVeiculos || 0;
     document.getElementById('kpi-veiculos-ativos').textContent = data.kpis.veiculosAtivos || 0;
     document.getElementById('kpi-veiculos-manutencao').textContent = data.kpis.veiculosEmManutencao || 0;
     document.getElementById('kpi-custo-total-logistica').textContent = (parseFloat(data.kpis.custoTotalPeriodo) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+    // Renderiza o gráfico de Status da Frota
     const statusData = {
         labels: data.charts.statusFrota.map(d => d.status),
         datasets: [{
@@ -179,6 +181,7 @@ function renderLogisticsDashboard(data) {
     };
     renderChart(statusData, 'logistica-status-chart', 'doughnut');
 
+    // Renderiza o gráfico de Top 5 Veículos
     const topVeiculosData = {
         labels: data.charts.top5VeiculosCusto.map(d => d.veiculo),
         datasets: [{
@@ -187,8 +190,10 @@ function renderLogisticsDashboard(data) {
             backgroundColor: 'rgba(79, 70, 229, 0.7)',
         }]
     };
+    // CORREÇÃO APLICADA AQUI: Passando 'topVeiculosData' em vez de 'data.charts.top5VeiculosCusto'
     renderChart(topVeiculosData, 'logistica-top-veiculos-chart', 'bar', { indexAxis: 'y' });
 
+    // Renderiza o gráfico de Custos por Classificação
     const classificacaoData = {
         labels: data.charts.custoPorClassificacao.map(d => d.classificacao_custo || 'Não Classificado'),
         datasets: [{
@@ -197,6 +202,7 @@ function renderLogisticsDashboard(data) {
         }]
     };
     renderChart(classificacaoData, 'logistica-classificacao-chart', 'pie');
+    renderVeiculosPorFilialChart(data.charts.veiculosPorFilial || []);
 }
 
 function renderChart(chartData, canvasId, type, extraOptions = {}) {
@@ -281,4 +287,16 @@ function gerenciarAcessoModulos() {
             }
         }
     }
+}
+
+function renderVeiculosPorFilialChart(filialData) {
+    const data = {
+        labels: filialData.map(d => d.filial),
+        datasets: [{
+            label: 'Nº de Veículos',
+            data: filialData.map(d => d.total),
+            backgroundColor: 'rgba(219, 39, 119, 0.7)',
+        }]
+    };
+    renderChart(data, 'logistica-filial-chart', 'bar');
 }

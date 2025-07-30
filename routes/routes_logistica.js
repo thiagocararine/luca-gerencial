@@ -413,11 +413,9 @@ router.get('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
 
 router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
     const { id: id_veiculo } = req.params;
-    // Adicionado 'classificacao_custo' à desestruturação do body
     const { data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_fornecedor } = req.body;
     const { userId } = req.user;
 
-    // Adicionada validação para o novo campo
     if (!data_manutencao || !custo || !tipo_manutencao || !classificacao_custo || !id_fornecedor) {
         return res.status(400).json({ error: 'Todos os campos da manutenção são obrigatórios.' });
     }
@@ -425,16 +423,30 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        // Query SQL atualizada para incluir a nova coluna
-        const sql = `
+        await connection.beginTransaction(); // Inicia a transação
+
+        const sqlInsert = `
             INSERT INTO veiculo_manutencoes (id_veiculo, data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_user_lanc, id_fornecedor, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
+        await connection.execute(sqlInsert, [id_veiculo, data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, userId, id_fornecedor]);
         
-        // Parâmetros da query atualizados
-        await connection.execute(sql, [id_veiculo, data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, userId, id_fornecedor]);
+        // NOVO: Atualiza as datas no cadastro do veículo se a manutenção for preventiva
+        if (classificacao_custo === 'Preventiva') {
+            const proximaManutencao = new Date(data_manutencao);
+            proximaManutencao.setMonth(proximaManutencao.getMonth() + 3); // Adiciona 3 meses
+
+            const sqlUpdateVeiculo = `
+                UPDATE veiculos 
+                SET data_ultima_manutencao = ?, data_proxima_manutencao = ? 
+                WHERE id = ?`;
+            await connection.execute(sqlUpdateVeiculo, [data_manutencao, proximaManutencao, id_veiculo]);
+        }
         
+        await connection.commit(); // Confirma as duas operações
         res.status(201).json({ message: 'Manutenção registada com sucesso!' });
+
     } catch (error) {
+        if(connection) await connection.rollback(); // Desfaz tudo em caso de erro
         console.error("Erro ao adicionar manutenção:", error);
         res.status(500).json({ error: 'Erro interno ao adicionar manutenção.' });
     } finally {
