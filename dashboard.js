@@ -284,32 +284,40 @@ function setupSidebar() {
 }
 
 function gerenciarAcessoModulos() {
+    console.log("--- [DEBUG] Iniciando verificação de permissões na página do Dashboard ---");
     const userData = getUserData();
-    if (!userData || !userData.permissoes) {
-        console.error("Não foi possível obter as permissões do usuário.");
+
+    if (!userData || !userData.permissoes || !Array.isArray(userData.permissoes)) {
+        console.error("--- [DEBUG] FALHA: Não encontrou o array de 'permissoes' no token ou ele não é um array. Verifique o login.");
+        console.log("--- [DEBUG] Conteúdo de userData:", userData);
         return;
     }
 
     const permissoesDoUsuario = userData.permissoes;
+    console.log("--- [DEBUG] Permissões encontradas no token:", permissoesDoUsuario);
 
-    // Mapeamento dos nomes dos módulos para os links no HTML
     const mapaModulos = {
         'Lançamentos': 'despesas.html',
         'Logística': 'logistica.html',
         'Configurações': 'settings.html'
     };
 
-    // Itera sobre o mapa de módulos para verificar cada permissão
     for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
+        console.log(`--- [DEBUG] Verificando permissão para o módulo: "${nomeModulo}"`);
         const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
         
-        // Se a permissão não existe ou não é permitida (permitido=false)
         if (!permissao || !permissao.permitido) {
-            // Encontra o link na barra lateral e esconde o item da lista (o <li> pai)
+            console.warn(`--- [DEBUG] Permissão NEGADA para ${nomeModulo}. Tentando esconder o link: a[href="${href}"]`);
             const link = document.querySelector(`#sidebar a[href="${href}"]`);
             if (link && link.parentElement) {
+                console.log(`--- [DEBUG] ELEMENTO ENCONTRADO! Escondendo o <li> pai.`);
                 link.parentElement.style.display = 'none';
+            } else {
+                console.error(`--- [DEBUG] ERRO: Não encontrou o elemento do link para ${nomeModulo} no HTML da página.`);
             }
+        } else {
+            console.log(`--- [DEBUG] Permissão CONCEDIDA para ${nomeModulo}.`);
         }
     }
+    console.log("--- [DEBUG] Verificação de permissões finalizada ---");
 }
