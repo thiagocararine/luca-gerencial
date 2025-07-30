@@ -1,11 +1,11 @@
-// dashboard.js (COMPLETO E ATUALIZADO com múltiplos dashboards e permissões)
+// dashboard.js (Corrigido para inicializar filtros condicionalmente)
 
 document.addEventListener('DOMContentLoaded', initDashboardPage);
 
 // --- Constantes e Variáveis de Estado Globais ---
 const apiUrlBase = 'http://10.113.0.17:3000/api';
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
-let charts = {}; // Objeto para armazenar instâncias dos gráficos
+let charts = {};
 let dashboardDatepicker = null; 
 
 // --- Funções de Inicialização ---
@@ -18,11 +18,10 @@ async function initDashboardPage() {
     
     document.getElementById('user-name').textContent = getUserName();
     
-    // Aplica as permissões na barra lateral assim que a página carrega
     gerenciarAcessoModulos();
-    
     setupDashboardEventListeners();
-    await setupDashboardFilters();
+    
+    // A chamada para setupDashboardFilters foi removida daqui
     
     loadDashboardData();
 }
@@ -32,7 +31,87 @@ function setupDashboardEventListeners() {
     document.getElementById('dashboard-filter-button')?.addEventListener('click', loadDashboardData);
 }
 
-async function setupDashboardFilters() {
+// --- Lógica Principal do Dashboard ---
+async function loadDashboardData() {
+    const token = getToken();
+    if (!token) return logout();
+
+    const params = new URLSearchParams();
+    
+    // A leitura dos filtros agora é feita com segurança
+    if (dashboardDatepicker) {
+        const startDate = dashboardDatepicker.getStartDate()?.toJSDate();
+        const endDate = dashboardDatepicker.getEndDate()?.toJSDate();
+        if (startDate && endDate) {
+            params.append('dataInicio', startDate.toISOString().split('T')[0]);
+            params.append('dataFim', endDate.toISOString().split('T')[0]);
+        }
+    }
+
+    const filialSelect = document.getElementById('dashboard-filter-filial');
+    if (filialSelect && filialSelect.value) {
+        params.append('filial', filialSelect.value);
+    }
+
+    const grupoSelect = document.getElementById('dashboard-filter-grupo');
+    if (grupoSelect && grupoSelect.value) {
+        params.append('grupo', grupoSelect.value);
+    }
+
+    try {
+        const response = await fetch(`${apiUrlBase}/dashboard/dashboard-summary?${params.toString()}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.status >= 401 && response.status <= 403) return logout();
+        if (!response.ok) {
+            throw new Error('Falha ao carregar dados do dashboard.'); 
+        }
+
+        const data = await response.json();
+        await updateDashboardUI(data); // Transformado em async para aguardar a configuração dos filtros
+
+    } catch (error) {
+        console.error("Erro ao carregar dados do dashboard:", error);
+    }
+}
+
+async function updateDashboardUI(data) {
+    const dashFinanceiro = document.getElementById('dashboard-financeiro');
+    const dashLogistica = document.getElementById('dashboard-logistica');
+    const accessDenied = document.getElementById('dashboard-access-denied');
+
+    if(dashFinanceiro) dashFinanceiro.classList.add('hidden');
+    if(dashLogistica) dashLogistica.classList.add('hidden');
+    if(accessDenied) accessDenied.classList.add('hidden');
+
+    switch (data.dashboardType) {
+        case 'Todos':
+        case 'Caixa/Loja':
+            if(dashFinanceiro) {
+                dashFinanceiro.classList.remove('hidden');
+                // Os filtros são configurados aqui, apenas quando necessários
+                await setupFinancialDashboardFilters(); 
+                renderFinancialDashboard(data);
+            }
+            break;
+        case 'Logistica':
+             if(dashLogistica) {
+                dashLogistica.classList.remove('hidden');
+                // Futuramente, podemos ter uma função para configurar os filtros de logística aqui
+                renderLogisticsDashboard(data);
+            }
+            break;
+        default:
+            if(accessDenied) accessDenied.classList.remove('hidden');
+            break;
+    }
+}
+
+async function setupFinancialDashboardFilters() {
+    // Esta função só será chamada se o datepicker ainda não foi inicializado
+    if (dashboardDatepicker) return;
+
     const token = getToken();
     
     dashboardDatepicker = new Litepicker({
@@ -62,78 +141,7 @@ async function setupDashboardFilters() {
 }
 
 
-// --- Lógica Principal do Dashboard ---
-async function loadDashboardData() {
-    const token = getToken();
-    if (!token) return logout();
-
-    const params = new URLSearchParams();
-    const startDate = dashboardDatepicker.getStartDate()?.toJSDate();
-    const endDate = dashboardDatepicker.getEndDate()?.toJSDate();
-    const filial = document.getElementById('dashboard-filter-filial').value;
-    const grupo = document.getElementById('dashboard-filter-grupo').value;
-
-    if (startDate && endDate) {
-        params.append('dataInicio', startDate.toISOString().split('T')[0]);
-        params.append('dataFim', endDate.toISOString().split('T')[0]);
-    }
-    if (filial) {
-        params.append('filial', filial);
-    }
-    if (grupo) {
-        params.append('grupo', grupo);
-    }
-
-    try {
-        const response = await fetch(`${apiUrlBase}/dashboard/dashboard-summary?${params.toString()}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (response.status >= 401 && response.status <= 403) return logout();
-        if (!response.ok) {
-            throw new Error('Falha ao carregar dados do dashboard.'); 
-        }
-
-        const data = await response.json();
-        updateDashboardUI(data);
-
-    } catch (error) {
-        console.error("Erro ao carregar dados do dashboard:", error);
-    }
-}
-
-function updateDashboardUI(data) {
-    const dashFinanceiro = document.getElementById('dashboard-financeiro');
-    const dashLogistica = document.getElementById('dashboard-logistica');
-    const accessDenied = document.getElementById('dashboard-access-denied');
-
-    // Esconde todos os painéis primeiro para garantir um estado limpo
-    if(dashFinanceiro) dashFinanceiro.classList.add('hidden');
-    if(dashLogistica) dashLogistica.classList.add('hidden');
-    if(accessDenied) accessDenied.classList.add('hidden');
-
-    // Decide qual painel mostrar com base no tipo de dashboard do usuário
-    switch (data.dashboardType) {
-        case 'Todos':
-        case 'Caixa/Loja':
-            if(dashFinanceiro) {
-                dashFinanceiro.classList.remove('hidden');
-                renderFinancialDashboard(data);
-            }
-            break;
-        case 'Logistica':
-             if(dashLogistica) {
-                dashLogistica.classList.remove('hidden');
-                renderLogisticsDashboard(data);
-            }
-            break;
-        default:
-            if(accessDenied) accessDenied.classList.remove('hidden');
-            break;
-    }
-}
-
-// --- Funções de Renderização Específicas para cada Dashboard ---
+// --- Funções de Renderização (sem alterações) ---
 
 function renderFinancialDashboard(data) {
     document.getElementById('kpi-total-despesas').textContent = (parseFloat(data.totalDespesas) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -194,9 +202,6 @@ function renderLogisticsDashboard(data) {
     renderChart(classificacaoData, 'logistica-classificacao-chart', 'pie');
 }
 
-/**
- * Função genérica para renderizar qualquer gráfico Chart.js
- */
 function renderChart(chartData, canvasId, type, extraOptions = {}) {
     const ctx = document.getElementById(canvasId)?.getContext('2d');
     if (!ctx) return;
@@ -223,7 +228,7 @@ function renderChart(chartData, canvasId, type, extraOptions = {}) {
     });
 }
 
-// --- Funções Auxiliares de Autenticação, Permissão e População de Selects ---
+// --- Funções Auxiliares (sem alterações) ---
 async function popularSelect(selectElement, codParametro, token, placeholderText) {
     try {
         const response = await fetch(`${apiUrlBase}/settings/parametros?cod=${codParametro}`, { 
