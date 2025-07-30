@@ -819,4 +819,80 @@ router.get('/relatorios/despesaVeiculo', authenticateToken, async (req, res) => 
     }
 });
 
+router.get('/dashboard-summary', authenticateToken, async (req, res) => {
+    const { dataInicio, dataFim, filial } = req.query;
+    let connection;
+
+    try {
+        connection = await mysql.createConnection(dbConfig);
+
+        // Constrói cláusulas WHERE dinâmicas
+        const params = [];
+        let whereClauseVeiculos = "WHERE status IN ('Ativo', 'Em Manutenção')";
+        if (filial) {
+            whereClauseVeiculos += " AND id_filial = ?";
+            params.push(filial);
+        }
+
+        const paramsCustos = [];
+        let whereClauseCustos = "WHERE vm.status = 'Ativo'";
+        if (dataInicio) { whereClauseCustos += " AND vm.data_manutencao >= ?"; paramsCustos.push(dataInicio); }
+        if (dataFim) { whereClauseCustos += " AND vm.data_manutencao <= ?"; paramsCustos.push(dataFim); }
+        if (filial) { whereClauseCustos += " AND v.id_filial = ?"; paramsCustos.push(filial); }
+        
+        const paramsDocs = [new Date(), new Date(new Date().setDate(new Date().getDate() + 30))];
+        let whereClauseDocs = "WHERE d.data_validade BETWEEN ? AND ?";
+        if (filial) { whereClauseDocs += " AND v.id_filial = ?"; paramsDocs.push(filial); }
+
+
+        // Definição das queries
+        const kpiVeiculosQuery = `SELECT COUNT(*) as total, status FROM veiculos ${whereClauseVeiculos} GROUP BY status`;
+        const kpiCustoTotalQuery = `SELECT SUM(custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos.replace('vm.status', 'v.status')}`;
+        const kpiDocsQuery = `SELECT COUNT(*) as total FROM veiculo_documentos d JOIN veiculos v ON d.id_veiculo = v.id ${whereClauseDocs}`;
+        
+        const chartCustoClassificacaoQuery = `SELECT classificacao_custo, SUM(custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos} GROUP BY classificacao_custo`;
+        const chartTop5VeiculosQuery = `SELECT CONCAT(v.modelo, ' - ', v.placa) as veiculo, SUM(vm.custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos} GROUP BY vm.id_veiculo ORDER BY total DESC LIMIT 5`;
+
+        // Execução em paralelo
+        const [
+            veiculosResult,
+            custoTotalResult,
+            docsResult,
+            custoClassificacaoResult,
+            top5VeiculosResult,
+        ] = await Promise.all([
+            connection.execute(kpiVeiculosQuery, params),
+            connection.execute(kpiCustoTotalQuery, paramsCustos.filter(p => p !== undefined)), // Filtra params indefinidos
+            connection.execute(kpiDocsQuery, paramsDocs),
+            connection.execute(chartCustoClassificacaoQuery, paramsCustos),
+            connection.execute(chartTop5VeiculosQuery, paramsCustos)
+        ]);
+
+        // Montagem do objeto de resposta
+        const summary = {
+            kpis: {
+                veiculosAtivos: (veiculosResult[0].find(r => r.status === 'Ativo')?.total || 0),
+                veiculosEmManutencao: (veiculosResult[0].find(r => r.status === 'Em Manutenção')?.total || 0),
+                custoTotalPeriodo: custoTotalResult[0][0]?.total || 0,
+                documentosAVencer: docsResult[0][0]?.total || 0,
+            },
+            charts: {
+                statusFrota: veiculosResult[0],
+                custoPorClassificacao: custoClassificacaoResult[0],
+                top5VeiculosCusto: top5VeiculosResult[0],
+            }
+        };
+        
+        summary.kpis.totalVeiculos = summary.kpis.veiculosAtivos + summary.kpis.veiculosEmManutencao;
+
+        res.json(summary);
+
+    } catch (error) {
+        console.error("Erro ao buscar dados do dashboard de logística:", error);
+        res.status(500).json({ error: 'Erro interno ao buscar dados do dashboard de logística.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
 module.exports = router;

@@ -1,45 +1,24 @@
-// dashboard.js (Atualizado com Perfis de Acesso e Máscara de Moeda)
+// dashboard.js (COMPLETO E ATUALIZADO com múltiplos dashboards e permissões)
 
 document.addEventListener('DOMContentLoaded', initDashboardPage);
 
 // --- Constantes e Variáveis de Estado Globais ---
 const apiUrlBase = 'http://10.113.0.17:3000/api';
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
-let myChart = null; 
+let charts = {}; // Objeto para armazenar instâncias dos gráficos
 let dashboardDatepicker = null; 
-
-// --- Funções de Autenticação (Atualizadas para usar Perfis) ---
-function getToken() { return localStorage.getItem('lucaUserToken'); }
-function getUserData() {
-    const token = getToken();
-    if (!token) {
-        logout(); 
-        return null;
-    }
-    try {
-        return JSON.parse(atob(token.split('.')[1]));
-    } catch (e) {
-        logout();
-        return null;
-    }
-}
-function getUserName() { return getUserData()?.nome || 'Utilizador'; }
-function getUserProfile() { return getUserData()?.perfil || null; }
-function getUserFilial() { return getUserData()?.unidade || null; }
-function logout() {
-    localStorage.removeItem('lucaUserToken');
-    window.location.href = 'login.html';
-}
 
 // --- Funções de Inicialização ---
 async function initDashboardPage() {
-    if (!getToken()) {
+    const token = getToken();
+    if (!token) {
         window.location.href = 'login.html';
         return;
     }
     
     document.getElementById('user-name').textContent = getUserName();
     
+    // Aplica as permissões na barra lateral assim que a página carrega
     gerenciarAcessoModulos();
     
     setupDashboardEventListeners();
@@ -51,7 +30,6 @@ async function initDashboardPage() {
 function setupDashboardEventListeners() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('dashboard-filter-button')?.addEventListener('click', loadDashboardData);
-    setupSidebar();
 }
 
 async function setupDashboardFilters() {
@@ -74,7 +52,8 @@ async function setupDashboardFilters() {
     if (privilegedAccessProfiles.includes(userProfile)) {
         await popularSelect(filialSelect, 'Unidades', token, 'Todas as Filiais');
     } else {
-        filialSelect.innerHTML = `<option value="${getUserFilial()}">${getUserFilial()}</option>`;
+        const userFilial = getUserFilial();
+        filialSelect.innerHTML = `<option value="${userFilial}">${userFilial}</option>`;
         filialSelect.disabled = true;
     }
 
@@ -83,7 +62,7 @@ async function setupDashboardFilters() {
 }
 
 
-// --- Lógica do Dashboard ---
+// --- Lógica Principal do Dashboard ---
 async function loadDashboardData() {
     const token = getToken();
     if (!token) return logout();
@@ -106,12 +85,11 @@ async function loadDashboardData() {
     }
 
     try {
-        // A rota de dashboard-summary está correta, não precisa de alteração
         const response = await fetch(`${apiUrlBase}/dashboard/dashboard-summary?${params.toString()}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        if (response.status === 401 || response.status === 403) return logout();
+        if (response.status >= 401 && response.status <= 403) return logout();
         if (!response.ok) {
             throw new Error('Falha ao carregar dados do dashboard.'); 
         }
@@ -121,114 +99,137 @@ async function loadDashboardData() {
 
     } catch (error) {
         console.error("Erro ao carregar dados do dashboard:", error);
-        const mainContent = document.querySelector('main');
-        if (mainContent) {
-            mainContent.innerHTML = `
-                <div class="text-center p-8 bg-white rounded-lg shadow">
-                    <h2 class="text-xl font-semibold text-red-600">Erro ao Carregar Dashboard</h2>
-                    <p class="mt-2 text-gray-600">Não foi possível carregar os dados. Por favor, tente novamente ou contacte o suporte.</p>
-                    <p class="mt-1 text-xs text-gray-400">Detalhe: ${error.message}</p>
-                </div>
-            `;
-        }
     }
 }
 
 function updateDashboardUI(data) {
-    const dashboardContent = document.getElementById('dashboard-main-content');
-    const accessDeniedMessage = document.getElementById('dashboard-access-denied');
+    const dashFinanceiro = document.getElementById('dashboard-financeiro');
+    const dashLogistica = document.getElementById('dashboard-logistica');
+    const accessDenied = document.getElementById('dashboard-access-denied');
 
-    if (!dashboardContent || !accessDeniedMessage) {
-        console.error("Elementos essenciais do dashboard não foram encontrados no HTML.");
-        return;
-    }
+    // Esconde todos os painéis primeiro para garantir um estado limpo
+    if(dashFinanceiro) dashFinanceiro.classList.add('hidden');
+    if(dashLogistica) dashLogistica.classList.add('hidden');
+    if(accessDenied) accessDenied.classList.add('hidden');
 
-    if (data.dashboardType === 'Nenhum') {
-        dashboardContent.classList.add('hidden');
-        accessDeniedMessage.classList.remove('hidden');
-        return;
-    }
-    
-    dashboardContent.classList.remove('hidden');
-    accessDeniedMessage.classList.add('hidden');
-    
-    if (data.dashboardType === 'Caixa/Loja' || data.dashboardType === 'Todos') {
-        const totalDespesasValue = parseFloat(data.totalDespesas);
-        const totalDespesas = !isNaN(totalDespesasValue) ? totalDespesasValue : 0;
-
-        const lancamentos = data.lancamentosNoPeriodo || 0;
-        const canceladas = data.despesasCanceladas || 0;
-
-        document.getElementById('kpi-total-despesas').textContent = totalDespesas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        document.getElementById('kpi-lancamentos-periodo').textContent = lancamentos;
-        document.getElementById('kpi-despesas-canceladas').textContent = canceladas;
-
-        const userProfile = getUserProfile();
-        if (privilegedAccessProfiles.includes(userProfile) && data.utilizadoresPendentes !== undefined) {
-            document.getElementById('kpi-utilizadores-pendentes-card').style.display = 'block';
-            document.getElementById('kpi-utilizadores-pendentes').textContent = data.utilizadoresPendentes;
-        } else {
-             document.getElementById('kpi-utilizadores-pendentes-card').style.display = 'none';
-        }
-
-        renderChart(data.despesasPorGrupo || []);
+    // Decide qual painel mostrar com base no tipo de dashboard do usuário
+    switch (data.dashboardType) {
+        case 'Todos':
+        case 'Caixa/Loja':
+            if(dashFinanceiro) {
+                dashFinanceiro.classList.remove('hidden');
+                renderFinancialDashboard(data);
+            }
+            break;
+        case 'Logistica':
+             if(dashLogistica) {
+                dashLogistica.classList.remove('hidden');
+                renderLogisticsDashboard(data);
+            }
+            break;
+        default:
+            if(accessDenied) accessDenied.classList.remove('hidden');
+            break;
     }
 }
 
+// --- Funções de Renderização Específicas para cada Dashboard ---
 
-function renderChart(despesasPorGrupo) {
-    const ctx = document.getElementById('despesas-por-grupo-chart')?.getContext('2d');
-    if (!ctx) return;
+function renderFinancialDashboard(data) {
+    document.getElementById('kpi-total-despesas').textContent = (parseFloat(data.totalDespesas) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    document.getElementById('kpi-lancamentos-periodo').textContent = data.lancamentosNoPeriodo || 0;
+    document.getElementById('kpi-despesas-canceladas').textContent = data.despesasCanceladas || 0;
     
-    if (myChart) {
-        myChart.destroy();
+    const pendentesCard = document.getElementById('kpi-utilizadores-pendentes-card');
+    if (privilegedAccessProfiles.includes(getUserProfile()) && data.utilizadoresPendentes !== undefined) {
+        pendentesCard.style.display = 'block';
+        document.getElementById('kpi-utilizadores-pendentes').textContent = data.utilizadoresPendentes;
+    } else {
+         pendentesCard.style.display = 'none';
     }
 
-    const labels = despesasPorGrupo.map(item => item.dsp_grupo || 'Não Agrupado');
-    const data = despesasPorGrupo.map(item => item.total);
+    const chartData = {
+        labels: data.despesasPorGrupo.map(item => item.dsp_grupo),
+        datasets: [{
+            label: 'Total de Despesas (R$)',
+            data: data.despesasPorGrupo.map(item => item.total),
+            backgroundColor: 'rgba(79, 70, 229, 0.7)',
+        }]
+    };
+    renderChart(chartData, 'despesas-por-grupo-chart', 'bar');
+}
 
-    myChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Total de Despesas (R$)',
-                data: data,
-                backgroundColor: 'rgba(79, 70, 229, 0.7)',
-                borderColor: 'rgba(79, 70, 229, 1)',
-                borderWidth: 1,
-                borderRadius: 4
-            }]
-        },
+function renderLogisticsDashboard(data) {
+    document.getElementById('kpi-total-veiculos').textContent = data.kpis.totalVeiculos || 0;
+    document.getElementById('kpi-veiculos-ativos').textContent = data.kpis.veiculosAtivos || 0;
+    document.getElementById('kpi-veiculos-manutencao').textContent = data.kpis.veiculosEmManutencao || 0;
+    document.getElementById('kpi-custo-total-logistica').textContent = (parseFloat(data.kpis.custoTotalPeriodo) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    const statusData = {
+        labels: data.charts.statusFrota.map(d => d.status),
+        datasets: [{
+            data: data.charts.statusFrota.map(d => d.total),
+            backgroundColor: ['rgba(22, 163, 74, 0.8)', 'rgba(234, 179, 8, 0.8)'],
+        }]
+    };
+    renderChart(statusData, 'logistica-status-chart', 'doughnut');
+
+    const topVeiculosData = {
+        labels: data.charts.top5VeiculosCusto.map(d => d.veiculo),
+        datasets: [{
+            label: 'Custo Total',
+            data: data.charts.top5VeiculosCusto.map(d => d.total),
+            backgroundColor: 'rgba(79, 70, 229, 0.7)',
+        }]
+    };
+    renderChart(topVeiculosData, 'logistica-top-veiculos-chart', 'bar', { indexAxis: 'y' });
+
+    const classificacaoData = {
+        labels: data.charts.custoPorClassificacao.map(d => d.classificacao_custo || 'Não Classificado'),
+        datasets: [{
+            data: data.charts.custoPorClassificacao.map(d => d.total),
+            backgroundColor: ['rgba(34, 197, 94, 0.8)', 'rgba(239, 68, 68, 0.8)', 'rgba(59, 130, 246, 0.8)'],
+        }]
+    };
+    renderChart(classificacaoData, 'logistica-classificacao-chart', 'pie');
+}
+
+/**
+ * Função genérica para renderizar qualquer gráfico Chart.js
+ */
+function renderChart(chartData, canvasId, type, extraOptions = {}) {
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+    if (charts[canvasId]) charts[canvasId].destroy();
+
+    charts[canvasId] = new Chart(ctx, {
+        type: type,
+        data: chartData,
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: {
-                y: { 
-                    beginAtZero: true,
-                    ticks: { callback: (value) => 'R$ ' + value.toLocaleString('pt-BR') }
-                }
-            },
             plugins: {
-                legend: { display: false },
+                legend: {
+                    display: type === 'pie' || type === 'doughnut'
+                },
                 tooltip: {
                     callbacks: {
-                        label: (context) => `Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y)}`
+                        label: (context) => `Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y || context.parsed)}`
                     }
                 }
-            }
+            },
+            ...extraOptions
         }
     });
 }
 
+// --- Funções Auxiliares de Autenticação, Permissão e População de Selects ---
 async function popularSelect(selectElement, codParametro, token, placeholderText) {
     try {
-        // CORREÇÃO FINAL: A rota de parâmetros para utilizadores autenticados deve estar em '/settings'
         const response = await fetch(`${apiUrlBase}/settings/parametros?cod=${codParametro}`, { 
             headers: { 'Authorization': `Bearer ${token}` } 
         });
         if (!response.ok) throw new Error('Falha na resposta da API');
-        
         const data = await response.json();
         
         selectElement.innerHTML = `<option value="">${placeholderText}</option>`;
@@ -244,80 +245,38 @@ async function popularSelect(selectElement, codParametro, token, placeholderText
     }
 }
 
-function setupSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const toggleButton = document.getElementById('sidebar-toggle');
-    if (!sidebar || !toggleButton) return;
-
-    const sidebarTexts = document.querySelectorAll('.sidebar-text');
-    const iconCollapse = document.getElementById('toggle-icon-collapse');
-    const iconExpand = document.getElementById('toggle-icon-expand');
-    const companyLogo = document.getElementById('company-logo');
-
-    const loadCompanyLogo = () => {
-        const logoBase64 = localStorage.getItem('company_logo');
-        if (logoBase64) {
-            companyLogo.src = logoBase64;
-            companyLogo.style.display = 'block';
-        }
-    };
-    
-    loadCompanyLogo();
-
-    const setSidebarState = (collapsed) => {
-        sidebar.classList.toggle('w-64', !collapsed);
-        sidebar.classList.toggle('w-20', collapsed);
-        sidebar.classList.toggle('collapsed', collapsed);
-        sidebarTexts.forEach(text => text.classList.toggle('hidden', collapsed));
-        iconCollapse.classList.toggle('hidden', collapsed);
-        iconExpand.classList.toggle('hidden', !collapsed);
-        localStorage.setItem('sidebar_collapsed', collapsed);
-    };
-
-    const isCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
-    setSidebarState(isCollapsed);
-
-    toggleButton.addEventListener('click', () => {
-        const currentlyCollapsed = sidebar.classList.contains('collapsed');
-        setSidebarState(!currentlyCollapsed);
-    });
+function getToken() { return localStorage.getItem('lucaUserToken'); }
+function getUserData() {
+    const token = getToken();
+    if (!token) return null;
+    try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; }
+}
+function getUserName() { return getUserData()?.nome || 'Utilizador'; }
+function getUserProfile() { return getUserData()?.perfil || null; }
+function getUserFilial() { return getUserData()?.unidade || null; }
+function logout() {
+    localStorage.removeItem('lucaUserToken');
+    window.location.href = 'login.html';
 }
 
 function gerenciarAcessoModulos() {
-    console.log("--- [DEBUG] Iniciando verificação de permissões na página do Dashboard ---");
     const userData = getUserData();
-
-    if (!userData || !userData.permissoes || !Array.isArray(userData.permissoes)) {
-        console.error("--- [DEBUG] FALHA: Não encontrou o array de 'permissoes' no token ou ele não é um array. Verifique o login.");
-        console.log("--- [DEBUG] Conteúdo de userData:", userData);
+    if (!userData || !userData.permissoes) {
         return;
     }
-
     const permissoesDoUsuario = userData.permissoes;
-    console.log("--- [DEBUG] Permissões encontradas no token:", permissoesDoUsuario);
-
     const mapaModulos = {
         'lancamentos': 'despesas.html',
         'logistica': 'logistica.html',
         'configuracoes': 'settings.html'
     };
-
-    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
-        console.log(`--- [DEBUG] Verificando permissão para o módulo: "${nomeModulo}"`);
-        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
-        
+    for (const [moduleKey, href] of Object.entries(mapaModulos)) {
+        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === moduleKey);
         if (!permissao || !permissao.permitido) {
-            console.warn(`--- [DEBUG] Permissão NEGADA para ${nomeModulo}. Tentando esconder o link: a[href="${href}"]`);
             const link = document.querySelector(`#sidebar a[href="${href}"]`);
             if (link && link.parentElement) {
-                console.log(`--- [DEBUG] ELEMENTO ENCONTRADO! Escondendo o <li> pai.`);
                 link.parentElement.style.display = 'none';
-            } else {
-                console.error(`--- [DEBUG] ERRO: Não encontrou o elemento do link para ${nomeModulo} no HTML da página.`);
             }
-        } else {
-            console.log(`--- [DEBUG] Permissão CONCEDIDA para ${nomeModulo}.`);
         }
     }
-    console.log("--- [DEBUG] Verificação de permissões finalizada ---");
 }
