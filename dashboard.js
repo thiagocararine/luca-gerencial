@@ -1,12 +1,14 @@
-// dashboard.js (COMPLETO E FINAL com KPIs clicáveis e correção do gráfico de barras)
+// dashboard.js (COMPLETO E FINAL com correção nos tooltips dos gráficos)
 
 document.addEventListener('DOMContentLoaded', initDashboardPage);
 
+// --- Constantes e Variáveis de Estado Globais ---
 const apiUrlBase = 'http://10.113.0.17:3000/api';
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 let charts = {};
 let dashboardDatepicker = null; 
 
+// --- Funções de Inicialização ---
 async function initDashboardPage() {
     const token = getToken();
     if (!token) {
@@ -24,7 +26,7 @@ function setupDashboardEventListeners() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('dashboard-filter-button')?.addEventListener('click', loadDashboardData);
     const grupoSelect = document.getElementById('dashboard-filter-grupo');
-    if (grupoSelect) {
+    if(grupoSelect) {
         grupoSelect.addEventListener('change', loadDashboardData);
     }
     document.getElementById('kpi-manutencoes-vencidas-card')?.addEventListener('click', () => openMaintenanceAlertModal('vencidas'));
@@ -55,6 +57,7 @@ async function setupSharedDashboardFilters() {
     }
 }
 
+// --- Lógica Principal do Dashboard ---
 async function loadDashboardData() {
     const token = getToken();
     if (!token) return logout();
@@ -114,6 +117,8 @@ async function updateDashboardUI(data) {
     }
 }
 
+// --- Funções de Renderização Específicas para cada Dashboard ---
+
 function renderFinancialDashboard(data) {
     document.getElementById('kpi-total-despesas').textContent = (parseFloat(data.totalDespesas) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     document.getElementById('kpi-lancamentos-periodo').textContent = data.lancamentosNoPeriodo || 0;
@@ -133,7 +138,7 @@ function renderFinancialDashboard(data) {
             backgroundColor: 'rgba(79, 70, 229, 0.7)',
         }]
     };
-    renderChart(chartData, 'despesas-por-grupo-chart', 'bar');
+    renderChart(chartData, 'despesas-por-grupo-chart', 'bar', {}, currencyTooltipCallback);
 }
 
 function renderLogisticsDashboard(data) {
@@ -148,19 +153,19 @@ function renderLogisticsDashboard(data) {
         labels: data.charts.statusFrota.map(d => d.status),
         datasets: [{ data: data.charts.statusFrota.map(d => d.total), backgroundColor: ['rgba(22, 163, 74, 0.8)', 'rgba(234, 179, 8, 0.8)'] }]
     };
-    renderChart(statusData, 'logistica-status-chart', 'doughnut');
+    renderChart(statusData, 'logistica-status-chart', 'doughnut', {}, quantityTooltipCallback);
 
     const topVeiculosData = {
         labels: data.charts.top5VeiculosCusto.map(d => d.veiculo),
         datasets: [{ label: 'Custo Total', data: data.charts.top5VeiculosCusto.map(d => d.total), backgroundColor: 'rgba(79, 70, 229, 0.7)' }]
     };
-    renderChart(topVeiculosData, 'logistica-top-veiculos-chart', 'bar', { indexAxis: 'y' });
+    renderChart(topVeiculosData, 'logistica-top-veiculos-chart', 'bar', { indexAxis: 'y' }, currencyTooltipCallback);
 
     const classificacaoData = {
         labels: data.charts.custoPorClassificacao.map(d => d.classificacao_custo || 'Não Classificado'),
         datasets: [{ data: data.charts.custoPorClassificacao.map(d => d.total), backgroundColor: ['rgba(34, 197, 94, 0.8)', 'rgba(239, 68, 68, 0.8)', 'rgba(59, 130, 246, 0.8)'] }]
     };
-    renderChart(classificacaoData, 'logistica-classificacao-chart', 'pie');
+    renderChart(classificacaoData, 'logistica-classificacao-chart', 'pie', {}, currencyTooltipCallback);
     
     renderVeiculosPorFilialChart(data.charts.veiculosPorFilial || []);
 }
@@ -170,9 +175,48 @@ function renderVeiculosPorFilialChart(filialData) {
         labels: filialData.map(d => d.filial),
         datasets: [{ label: 'Nº de Veículos', data: filialData.map(d => d.total), backgroundColor: 'rgba(219, 39, 119, 0.7)' }]
     };
-    renderChart(data, 'logistica-filial-chart', 'bar');
+    renderChart(data, 'logistica-filial-chart', 'bar', {}, quantityTooltipCallback);
 }
 
+// --- Funções de Geração de Gráfico e Callbacks de Tooltip ---
+
+// Funções de callback para os tooltips dos gráficos
+const currencyTooltipCallback = (context) => `Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y || context.parsed)}`;
+const quantityTooltipCallback = (context) => `Quantidade: ${context.parsed.y || context.parsed}`;
+
+/**
+ * Função genérica para renderizar qualquer gráfico Chart.js
+ * @param {object} chartData - O objeto de dados no formato do Chart.js.
+ * @param {string} canvasId - O ID do elemento canvas.
+ * @param {string} type - O tipo de gráfico (ex: 'bar', 'pie').
+ * @param {object} extraOptions - Opções adicionais para o gráfico.
+ * @param {function} tooltipCallback - A função para formatar o tooltip.
+ */
+function renderChart(chartData, canvasId, type, extraOptions = {}, tooltipCallback = currencyTooltipCallback) {
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+    if (charts[canvasId]) charts[canvasId].destroy();
+    charts[canvasId] = new Chart(ctx, {
+        type: type,
+        data: chartData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: type === 'pie' || type === 'doughnut' },
+                tooltip: {
+                    callbacks: {
+                        label: tooltipCallback
+                    }
+                }
+            },
+            ...extraOptions
+        }
+    });
+}
+
+
+// --- Funções Auxiliares ---
 async function openMaintenanceAlertModal(type) {
     const modal = document.getElementById('maintenance-alert-modal');
     const title = document.getElementById('maintenance-alert-title');
@@ -220,30 +264,6 @@ async function openMaintenanceAlertModal(type) {
         content.innerHTML = `<p class="text-center text-red-500">${error.message}</p>`;
     }
 }
-
-function renderChart(chartData, canvasId, type, extraOptions = {}) {
-    const ctx = document.getElementById(canvasId)?.getContext('2d');
-    if (!ctx) return;
-    if (charts[canvasId]) charts[canvasId].destroy();
-    charts[canvasId] = new Chart(ctx, {
-        type: type,
-        data: chartData,
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: type === 'pie' || type === 'doughnut' },
-                tooltip: {
-                    callbacks: {
-                        label: (context) => `Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y || context.parsed)}`
-                    }
-                }
-            },
-            ...extraOptions
-        }
-    });
-}
-
 async function popularSelect(selectElement, codParametro, token, placeholderText) {
     try {
         const response = await fetch(`${apiUrlBase}/settings/parametros?cod=${codParametro}`, { 
@@ -263,7 +283,6 @@ async function popularSelect(selectElement, codParametro, token, placeholderText
         selectElement.innerHTML = `<option value="">Erro ao carregar</option>`;
     }
 }
-
 function getToken() { return localStorage.getItem('lucaUserToken'); }
 function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
 function getUserName() { return getUserData()?.nome || 'Utilizador'; }
