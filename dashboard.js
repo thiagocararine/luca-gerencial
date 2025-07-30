@@ -180,18 +180,9 @@ function renderVeiculosPorFilialChart(filialData) {
 
 // --- Funções de Geração de Gráfico e Callbacks de Tooltip ---
 
-// Funções de callback para os tooltips dos gráficos
-const currencyTooltipCallback = (context) => `Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y || context.parsed)}`;
+const currencyTooltipCallback = (context) => `Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.x || context.parsed.y || context.parsed)}`;
 const quantityTooltipCallback = (context) => `Quantidade: ${context.parsed.y || context.parsed}`;
 
-/**
- * Função genérica para renderizar qualquer gráfico Chart.js
- * @param {object} chartData - O objeto de dados no formato do Chart.js.
- * @param {string} canvasId - O ID do elemento canvas.
- * @param {string} type - O tipo de gráfico (ex: 'bar', 'pie').
- * @param {object} extraOptions - Opções adicionais para o gráfico.
- * @param {function} tooltipCallback - A função para formatar o tooltip.
- */
 function renderChart(chartData, canvasId, type, extraOptions = {}, tooltipCallback = currencyTooltipCallback) {
     const ctx = document.getElementById(canvasId)?.getContext('2d');
     if (!ctx) return;
@@ -214,7 +205,6 @@ function renderChart(chartData, canvasId, type, extraOptions = {}, tooltipCallba
         }
     });
 }
-
 
 // --- Funções Auxiliares ---
 async function openMaintenanceAlertModal(type) {
