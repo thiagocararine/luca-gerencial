@@ -1260,6 +1260,9 @@ function openVehicleCostModal() {
         
     populateMaintenanceTypes('vehicle-cost-type'); 
     
+    // NOVO: Popula o novo select de classificação
+    populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Classificação Despesa Veiculo`, 'vehicle-cost-classification', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Selecione a Classificação --');
+    
     modal.classList.remove('hidden');
     feather.replace();
 }
@@ -1274,13 +1277,18 @@ async function handleVehicleCostFormSubmit(event) {
         data_manutencao: document.getElementById('vehicle-cost-date').value,
         custo: document.getElementById('vehicle-cost-value').value,
         tipo_manutencao: document.getElementById('vehicle-cost-type').value,
+        classificacao_custo: document.getElementById('vehicle-cost-classification').value, // NOVO
         descricao: document.getElementById('vehicle-cost-description').value,
         id_fornecedor: document.getElementById('vehicle-cost-fornecedor-id').value,
     };
     
     if (!costData.id_veiculo) { alert('Por favor, selecione um veículo.'); saveBtn.disabled = false; return; }
     if (!costData.id_fornecedor) { alert('Por favor, associe um fornecedor ou marque como despesa interna.'); saveBtn.disabled = false; return; }
-    if (!costData.tipo_manutencao) { alert('Por favor, selecione um tipo de despesa.'); saveBtn.disabled = false; return; }
+    if (!costData.tipo_manutencao || !costData.classificacao_custo) { // NOVO: Validação
+        alert('Por favor, selecione um tipo e uma classificação para a despesa.'); 
+        saveBtn.disabled = false; 
+        return; 
+    }
     
     try {
         const response = await fetch(`${apiUrlBase}/logistica/veiculos/${costData.id_veiculo}/manutencoes`, {
@@ -1304,7 +1312,6 @@ async function handleVehicleCostFormSubmit(event) {
         saveBtn.disabled = false;
     }
 }
-
 
 function openFleetCostModal() {
     const modal = document.getElementById('fleet-cost-modal');
