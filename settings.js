@@ -25,6 +25,8 @@ async function initSettingsPage() {
         return;
     }
     document.getElementById('user-name').textContent = getUserName();
+
+    gerenciarAcessoModulos();
     
     setupEventListenersSettings();
     setupParametrosTable(); 
@@ -616,4 +618,35 @@ function setupSidebar() {
         const currentlyCollapsed = sidebar.classList.contains('collapsed');
         setSidebarState(!currentlyCollapsed);
     });
+}
+
+function gerenciarAcessoModulos() {
+    const userData = getUserData();
+    if (!userData || !userData.permissoes) {
+        console.error("Não foi possível obter as permissões do usuário.");
+        return;
+    }
+
+    const permissoesDoUsuario = userData.permissoes;
+
+    // Mapeamento dos nomes dos módulos para os links no HTML
+    const mapaModulos = {
+        'Lançamentos': 'despesas.html',
+        'Logística': 'logistica.html',
+        'Configurações': 'settings.html'
+    };
+
+    // Itera sobre o mapa de módulos para verificar cada permissão
+    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
+        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
+        
+        // Se a permissão não existe ou não é permitida (permitido=false)
+        if (!permissao || !permissao.permitido) {
+            // Encontra o link na barra lateral e esconde o item da lista (o <li> pai)
+            const link = document.querySelector(`#sidebar a[href="${href}"]`);
+            if (link && link.parentElement) {
+                link.parentElement.style.display = 'none';
+            }
+        }
+    }
 }

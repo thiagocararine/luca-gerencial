@@ -66,6 +66,12 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'Utilizador ou senha inválidos.' });
         }
 
+        // NOVO: Buscar as permissões de módulo para este perfil de usuário
+        const [permissoes] = await connection.execute(
+            'SELECT nome_modulo, permitido FROM perfil_permissoes WHERE id_perfil = ?',
+            [user.id_perfil]
+        );
+
         const payload = { 
             userId: user.ID, 
             nome: user.nome_user, 
@@ -74,7 +80,8 @@ router.post('/login', async (req, res) => {
             unidade: user.unidade_user, 
             departamento: user.depart_user,
             perfil: user.perfil_acesso,
-            dashboard: user.dashboard_type
+            dashboard: user.dashboard_type,
+            permissoes: permissoes // NOVO: Adiciona as permissões ao token
         };
         const accessToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8h' });
         res.json({ message: 'Login bem-sucedido!', accessToken });

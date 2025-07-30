@@ -6,13 +6,15 @@ const apiUrlBase = 'http://10.113.0.17:3000/api';
 let datepicker = null;
 
 function initRelatoriosPage() {
-    const token = localStorage.getItem('lucaUserToken');
+    const token = getToken(); // Usando a nova função auxiliar
     if (!token) {
         window.location.href = 'login.html';
         return;
     }
-    const userData = JSON.parse(atob(token.split('.')[1]));
+    const userData = getUserData(); // Usando a nova função auxiliar
     document.getElementById('user-name').textContent = userData.nome || 'Utilizador';
+
+    gerenciarAcessoModulos();
 
     setupEventListeners();
     populateFilialSelect();
@@ -29,11 +31,7 @@ function initRelatoriosPage() {
 }
 
 function setupEventListeners() {
-    document.getElementById('logout-button')?.addEventListener('click', () => {
-        localStorage.removeItem('lucaUserToken');
-        window.location.href = 'login.html';
-    });
-
+    document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('report-type').addEventListener('change', handleReportTypeChange);
     document.getElementById('generate-report-btn').addEventListener('click', generateReport);
 }
@@ -96,7 +94,7 @@ async function generateReport() {
 
     try {
         const response = await fetch(apiUrl, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('lucaUserToken')}` }
+            headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         if (!response.ok) {
             const errorData = await response.json();
@@ -311,7 +309,7 @@ function renderVehicleExpenseReport(data, container) {
 async function populateFilialSelect() {
     const selectElement = document.getElementById('filter-filial');
     try {
-        const response = await fetch(`${apiUrlBase}/settings/parametros?cod=Unidades`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('lucaUserToken')}` } });
+        const response = await fetch(`${apiUrlBase}/settings/parametros?cod=Unidades`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao carregar filiais.');
         const items = await response.json();
         
@@ -331,7 +329,7 @@ async function populateFilialSelect() {
 async function populateVehicleSelect() {
     const selectElement = document.getElementById('filter-vehicle');
     try {
-        const response = await fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('lucaUserToken')}` } });
+        const response = await fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao carregar veículos.');
         const items = await response.json();
         
@@ -345,5 +343,41 @@ async function populateVehicleSelect() {
     } catch (error) {
         selectElement.innerHTML = `<option value="">Erro ao carregar</option>`;
         console.error(error);
+    }
+}
+
+// ADICIONADO: Funções auxiliares para ler o token
+function getToken() { return localStorage.getItem('lucaUserToken'); }
+function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
+function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html';}
+
+function gerenciarAcessoModulos() {
+    const userData = getUserData();
+    if (!userData || !userData.permissoes) {
+        console.error("Não foi possível obter as permissões do usuário.");
+        return;
+    }
+
+    const permissoesDoUsuario = userData.permissoes;
+
+    // Mapeamento dos nomes dos módulos para os links no HTML
+    const mapaModulos = {
+        'Lançamentos': 'despesas.html',
+        'Logística': 'logistica.html',
+        'Configurações': 'settings.html'
+    };
+
+    // Itera sobre o mapa de módulos para verificar cada permissão
+    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
+        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
+        
+        // Se a permissão não existe ou não é permitida (permitido=false)
+        if (!permissao || !permissao.permitido) {
+            // Encontra o link na barra lateral e esconde o item da lista (o <li> pai)
+            const link = document.querySelector(`#sidebar a[href="${href}"]`);
+            if (link && link.parentElement) {
+                link.parentElement.style.display = 'none';
+            }
+        }
     }
 }
