@@ -413,20 +413,26 @@ router.get('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
 
 router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
     const { id: id_veiculo } = req.params;
-    const { data_manutencao, descricao, custo, tipo_manutencao, id_fornecedor } = req.body;
+    // Adicionado 'classificacao_custo' à desestruturação do body
+    const { data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_fornecedor } = req.body;
     const { userId } = req.user;
 
-    if (!data_manutencao || !custo || !tipo_manutencao || !id_fornecedor) {
+    // Adicionada validação para o novo campo
+    if (!data_manutencao || !custo || !tipo_manutencao || !classificacao_custo || !id_fornecedor) {
         return res.status(400).json({ error: 'Todos os campos da manutenção são obrigatórios.' });
     }
 
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
+        // Query SQL atualizada para incluir a nova coluna
         const sql = `
-            INSERT INTO veiculo_manutencoes (id_veiculo, data_manutencao, descricao, custo, tipo_manutencao, id_user_lanc, id_fornecedor, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
-        await connection.execute(sql, [id_veiculo, data_manutencao, descricao, custo, tipo_manutencao, userId, id_fornecedor]);
+            INSERT INTO veiculo_manutencoes (id_veiculo, data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_user_lanc, id_fornecedor, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
+        
+        // Parâmetros da query atualizados
+        await connection.execute(sql, [id_veiculo, data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, userId, id_fornecedor]);
+        
         res.status(201).json({ message: 'Manutenção registada com sucesso!' });
     } catch (error) {
         console.error("Erro ao adicionar manutenção:", error);

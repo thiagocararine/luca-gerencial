@@ -1185,7 +1185,11 @@ function openMaintenanceModal(vehicleId) {
     document.getElementById('maintenance-vehicle-id').value = vehicleId;
     document.getElementById('maintenance-fornecedor-id').value = '';
     document.getElementById('maintenance-date').value = new Date().toISOString().split('T')[0];
+    
+    // Popula os selects existentes e o novo
     populateMaintenanceTypes();
+    populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Classificação Despesa Veiculo`, 'maintenance-classification', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Selecione a Classificação --');
+
     modal.classList.remove('hidden');
     feather.replace();
 }
@@ -1194,24 +1198,28 @@ async function handleMaintenanceFormSubmit(event) {
     event.preventDefault();
     const saveBtn = document.getElementById('save-maintenance-btn');
     saveBtn.disabled = true;
+
     const maintenanceData = {
         id_veiculo: document.getElementById('maintenance-vehicle-id').value,
         data_manutencao: document.getElementById('maintenance-date').value,
         custo: document.getElementById('maintenance-cost').value,
         tipo_manutencao: document.getElementById('maintenance-type').value,
+        classificacao_custo: document.getElementById('maintenance-classification').value, // NOVO
         descricao: document.getElementById('maintenance-description').value,
         id_fornecedor: document.getElementById('maintenance-fornecedor-id').value,
     };
+
     if (!maintenanceData.id_fornecedor) {
         alert('Por favor, consulte um CNPJ válido ou marque como despesa interna.');
         saveBtn.disabled = false;
         return;
     }
-    if (!maintenanceData.tipo_manutencao) {
-        alert('Por favor, selecione um tipo de manutenção.');
+    if (!maintenanceData.tipo_manutencao || !maintenanceData.classificacao_custo) { // NOVO: Validação
+        alert('Por favor, selecione um tipo e uma classificação para a manutenção.');
         saveBtn.disabled = false;
         return;
     }
+
     try {
         const response = await fetch(`${apiUrlBase}/logistica/veiculos/${maintenanceData.id_veiculo}/manutencoes`, {
             method: 'POST',
