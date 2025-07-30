@@ -404,6 +404,9 @@ function openCancelConfirmModal(despesa) {
     document.getElementById('confirm-cancel-modal').classList.remove('hidden');
 }
 
+/**
+ * ATUALIZADO: Gera e descarrega o relatório em PDF com a totalização por grupo.
+ */
 async function exportarPDF() {
     const btn = document.getElementById('generate-pdf-btn');
     btn.textContent = 'A gerar...';
@@ -485,10 +488,8 @@ async function exportarPDF() {
             headStyles: { fillColor: [41, 128, 185], textColor: 255 },
             styles: { fontSize: 8, cellPadding: 2 },
             columnStyles: {
-                0: { cellWidth: 22 },
-                1: { cellWidth: 'auto' },
-                2: { cellWidth: 30 },
-                3: { cellWidth: 30 },
+                0: { cellWidth: 22 }, 1: { cellWidth: 'auto' },
+                2: { cellWidth: 30 }, 3: { cellWidth: 30 },
                 4: { cellWidth: 25, halign: 'right' }
             },
             didParseCell: (data) => {
@@ -503,11 +504,31 @@ async function exportarPDF() {
         });
         
         const finalY = doc.autoTable.previous.finalY;
-        const totalGeral = Object.values(despesasPorDia).reduce((sum, dia) => sum + dia.total, 0);
-        doc.setFontSize(12);
-        doc.setFont(undefined, 'bold');
-        doc.text('Total Geral:', 14, finalY + 10);
-        doc.text(totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), doc.internal.pageSize.getWidth() - 14, finalY + 10, { align: 'right' });
+
+        // NOVO: Lógica para totalizar por grupo
+        const totaisPorGrupo = despesas.reduce((acc, despesa) => {
+            const grupo = despesa.dsp_grupo || 'Não Agrupado';
+            acc[grupo] = (acc[grupo] || 0) + parseFloat(despesa.dsp_valordsp);
+            return acc;
+        }, {});
+        const totalGeral = Object.values(totaisPorGrupo).reduce((sum, value) => sum + value, 0);
+        
+        doc.setFontSize(14);
+        doc.text('Totais por Grupo de Despesa', 14, finalY + 15);
+        
+        const totalBody = Object.entries(totaisPorGrupo).map(([grupo, total]) => [
+            grupo,
+            total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+        ]);
+
+        doc.autoTable({
+            head: [['Grupo', 'Total Gasto']],
+            body: totalBody,
+            startY: finalY + 20,
+            theme: 'striped',
+            foot: [['Total Geral', totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]],
+            footStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold' }
+        });
         
         const dataStr = new Date().toISOString().slice(0, 10);
         doc.save(`Relatorio_Despesas_${dataStr}.pdf`);
