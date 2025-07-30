@@ -1,4 +1,4 @@
-// dashboard.js (Corrigido para inicializar filtros condicionalmente)
+// dashboard.js (COMPLETO E FINAL com filtros compartilhados e múltiplos dashboards)
 
 document.addEventListener('DOMContentLoaded', initDashboardPage);
 
@@ -20,8 +20,7 @@ async function initDashboardPage() {
     
     gerenciarAcessoModulos();
     setupDashboardEventListeners();
-    
-    // A chamada para setupDashboardFilters foi removida daqui
+    await setupSharedDashboardFilters(); // Configura os filtros compartilhados
     
     loadDashboardData();
 }
@@ -29,6 +28,38 @@ async function initDashboardPage() {
 function setupDashboardEventListeners() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('dashboard-filter-button')?.addEventListener('click', loadDashboardData);
+    
+    // O filtro de grupo é específico do financeiro, então seu listener é adicionado dinamicamente
+    const grupoSelect = document.getElementById('dashboard-filter-grupo');
+    if(grupoSelect) {
+        grupoSelect.addEventListener('change', loadDashboardData);
+    }
+}
+
+async function setupSharedDashboardFilters() {
+    const token = getToken();
+    
+    dashboardDatepicker = new Litepicker({
+        element: document.getElementById('dashboard-filter-date'),
+        singleMode: false, 
+        lang: 'pt-BR', 
+        format: 'DD/MM/YYYY',
+    });
+
+    const hoje = new Date();
+    const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+    dashboardDatepicker.setDateRange(primeiroDia, ultimoDia);
+
+    const filialSelect = document.getElementById('dashboard-filter-filial');
+    const userProfile = getUserProfile();
+    if (privilegedAccessProfiles.includes(userProfile)) {
+        await popularSelect(filialSelect, 'Unidades', token, 'Todas as Filiais');
+    } else {
+        const userFilial = getUserFilial();
+        filialSelect.innerHTML = `<option value="${userFilial}">${userFilial}</option>`;
+        filialSelect.disabled = true;
+    }
 }
 
 // --- Lógica Principal do Dashboard ---
@@ -38,7 +69,6 @@ async function loadDashboardData() {
 
     const params = new URLSearchParams();
     
-    // A leitura dos filtros agora é feita com segurança
     if (dashboardDatepicker) {
         const startDate = dashboardDatepicker.getStartDate()?.toJSDate();
         const endDate = dashboardDatepicker.getEndDate()?.toJSDate();
@@ -69,7 +99,7 @@ async function loadDashboardData() {
         }
 
         const data = await response.json();
-        await updateDashboardUI(data); // Transformado em async para aguardar a configuração dos filtros
+        await updateDashboardUI(data);
 
     } catch (error) {
         console.error("Erro ao carregar dados do dashboard:", error);
@@ -85,63 +115,30 @@ async function updateDashboardUI(data) {
     if(dashLogistica) dashLogistica.classList.add('hidden');
     if(accessDenied) accessDenied.classList.add('hidden');
 
-    switch (data.dashboardType) {
-        case 'Todos':
-        case 'Caixa/Loja':
-            if(dashFinanceiro) {
-                dashFinanceiro.classList.remove('hidden');
-                // Os filtros são configurados aqui, apenas quando necessários
-                await setupFinancialDashboardFilters(); 
-                renderFinancialDashboard(data);
-            }
-            break;
-        case 'Logistica':
-             if(dashLogistica) {
-                dashLogistica.classList.remove('hidden');
-                // Futuramente, podemos ter uma função para configurar os filtros de logística aqui
-                renderLogisticsDashboard(data);
-            }
-            break;
-        default:
-            if(accessDenied) accessDenied.classList.remove('hidden');
-            break;
+    if (data.dashboardType === 'Caixa/Loja' || data.dashboardType === 'Todos') {
+        if(dashFinanceiro) {
+            dashFinanceiro.classList.remove('hidden');
+            // Popula o filtro de grupo que é específico deste painel
+            await popularSelect(document.getElementById('dashboard-filter-grupo'), 'Grupo Despesa', getToken(), 'Todos os Grupos');
+            // Usa data.financialData se existir (para o perfil 'Todos'), senão usa a raiz do objeto 'data'
+            renderFinancialDashboard(data.financialData || data); 
+        }
     }
-}
-
-async function setupFinancialDashboardFilters() {
-    // Esta função só será chamada se o datepicker ainda não foi inicializado
-    if (dashboardDatepicker) return;
-
-    const token = getToken();
     
-    dashboardDatepicker = new Litepicker({
-        element: document.getElementById('dashboard-filter-date'),
-        singleMode: false,
-        lang: 'pt-BR',
-        format: 'DD/MM/YYYY',
-    });
-
-    const hoje = new Date();
-    const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-    const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-    dashboardDatepicker.setDateRange(primeiroDia, ultimoDia);
-
-    const filialSelect = document.getElementById('dashboard-filter-filial');
-    const userProfile = getUserProfile();
-    if (privilegedAccessProfiles.includes(userProfile)) {
-        await popularSelect(filialSelect, 'Unidades', token, 'Todas as Filiais');
-    } else {
-        const userFilial = getUserFilial();
-        filialSelect.innerHTML = `<option value="${userFilial}">${userFilial}</option>`;
-        filialSelect.disabled = true;
+    if (data.dashboardType === 'Logistica' || data.dashboardType === 'Todos') {
+        if(dashLogistica) {
+            dashLogistica.classList.remove('hidden');
+            // Usa data.logisticsData se existir (para o perfil 'Todos'), senão usa a raiz do objeto 'data'
+            renderLogisticsDashboard(data.logisticsData || data); 
+        }
     }
-
-    const grupoSelect = document.getElementById('dashboard-filter-grupo');
-    await popularSelect(grupoSelect, 'Grupo Despesa', token, 'Todos os Grupos');
+    
+    if (data.dashboardType === 'Nenhum' || (!data.financialData && !data.logisticsData && data.dashboardType === 'Todos')) {
+        if(accessDenied) accessDenied.classList.remove('hidden');
+    }
 }
 
-
-// --- Funções de Renderização (sem alterações) ---
+// --- Funções de Renderização Específicas para cada Dashboard ---
 
 function renderFinancialDashboard(data) {
     document.getElementById('kpi-total-despesas').textContent = (parseFloat(data.totalDespesas) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -228,7 +225,7 @@ function renderChart(chartData, canvasId, type, extraOptions = {}) {
     });
 }
 
-// --- Funções Auxiliares (sem alterações) ---
+// --- Funções Auxiliares ---
 async function popularSelect(selectElement, codParametro, token, placeholderText) {
     try {
         const response = await fetch(`${apiUrlBase}/settings/parametros?cod=${codParametro}`, { 

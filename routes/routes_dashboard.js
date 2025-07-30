@@ -93,19 +93,24 @@ router.get('/dashboard-summary', authenticateToken, async (req, res) => {
         connection = await mysql.createConnection(dbConfig);
         const dashboardType = req.user.dashboard; 
 
-        let summaryData = {};
+        let responseData = { dashboardType: dashboardType || 'Nenhum' };
         
-        // Decide qual conjunto de dados buscar com base no perfil do usuário
-        if (dashboardType === 'Logistica') { // Supondo que você crie um tipo 'Logistica'
-            summaryData = await getLogisticsSummary(connection, req);
-        } else {
-            summaryData = await getFinancialSummary(connection, req);
+        // Lógica para decidir quais dados buscar
+        if (dashboardType === 'Logistica') {
+            responseData.logisticsData = await getLogisticsSummary(connection, req);
+        } else if (dashboardType === 'Caixa/Loja') {
+            responseData.financialData = await getFinancialSummary(connection, req);
+        } else if (dashboardType === 'Todos') {
+            // Se for 'Todos', busca os dois conjuntos de dados em paralelo
+            const [financial, logistics] = await Promise.all([
+                getFinancialSummary(connection, req),
+                getLogisticsSummary(connection, req)
+            ]);
+            responseData.financialData = financial;
+            responseData.logisticsData = logistics;
         }
 
-        res.json({
-            dashboardType: dashboardType || 'Nenhum',
-            ...summaryData
-        });
+        res.json(responseData);
 
     } catch (error) {
         console.error("Erro ao buscar dados do dashboard:", error);
