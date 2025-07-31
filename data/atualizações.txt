@@ -30,3 +30,14 @@
 
 - Foto de frente do veiculo, deve ser exibida no card da versao mobile.
 
+- Adicionar um controle para combustivel, quando for dada a entrada de custo de compra de Oleo Diesel, inserir a quantidade comprada, para montagem de estoque.
+
+- Inserir um controle para consumo de combustivel, e nessas interações puxar a informação de hodometro do veiculo, litro e buscar uma forma de tirar o consumo médio.
+
+- ter tambem dentro de detalhes de cada veiculo, como marcar "Veiculo com rastreador", "Veiculo com Seguro", criar checkbox para poder exibi-los em relatorio.
+
+- Montar os relatórois exportaveis em PDF do sistema logistica.
+
+- Utilizar o giro de hodometro para calcular a manutenção de cada veiculo, seguindo a regra pré-estabelecida em algum campo.
+
+- Utilizar os KPIs do dashboard, mas adaptalos a regra de KILOMETRAGEM, de acordo com a interface do veículo/ultima preventiva.

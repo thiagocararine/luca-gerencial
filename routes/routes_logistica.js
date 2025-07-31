@@ -52,6 +52,32 @@ const vehicleUpload = multer({
 }).single('ficheiro');
 
 
+/**
+ * Função Auxiliar para registrar logs de logística.
+ */
+async function registrarLog(logData) {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            INSERT INTO logistica_logs 
+            (usuario_id, usuario_nome, tipo_entidade, id_entidade, tipo_acao, descricao) 
+            VALUES (?, ?, ?, ?, ?, ?)`;
+        await connection.execute(sql, [
+            logData.usuario_id,
+            logData.usuario_nome,
+            logData.tipo_entidade,
+            logData.id_entidade || null,
+            logData.tipo_acao,
+            logData.descricao
+        ]);
+    } catch (error) {
+        console.error("ERRO AO REGISTRAR LOG DE LOGÍSTICA:", error);
+    } finally {
+        if (connection) await connection.end();
+    }
+}
+
 // --- ROTAS DE VEÍCULOS ---
 
 router.get('/veiculos', authenticateToken, async (req, res) => {
