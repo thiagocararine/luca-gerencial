@@ -40,15 +40,24 @@ router.get('/parametros', async (req, res) => {
 router.post('/login', async (req, res) => {
     const { identifier, senha } = req.body;
     if (!identifier || !senha) return res.status(400).json({ error: 'Identificador e senha são obrigatórios.' });
+    
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
         const cleanedIdentifier = identifier.replace(/[.\-]/g, '');
+
+        // QUERY ATUALIZADA: Agora faz JOIN com a tabela de parâmetros para buscar o nome correto da filial
         const loginQuery = `
-            SELECT u.*, p.nome_perfil as perfil_acesso, p.dashboard_type 
+            SELECT 
+                u.*, 
+                p_perfil.nome_perfil as perfil_acesso,
+                p_perfil.dashboard_type,
+                p_unidade.NOME_PARAMETRO as nome_unidade
             FROM cad_user u
-            LEFT JOIN perfis_acesso p ON u.id_perfil = p.id
+            LEFT JOIN perfis_acesso p_perfil ON u.id_perfil = p_perfil.id
+            LEFT JOIN parametro p_unidade ON u.id_filial = p_unidade.ID AND p_unidade.COD_PARAMETRO = 'Unidades'
             WHERE u.email_user = ? OR REPLACE(REPLACE(u.cpf_user, '.', ''), '-', '') = ?`;
+            
         const [rows] = await connection.execute(loginQuery, [identifier, cleanedIdentifier]);
         
         if (rows.length === 0) {
@@ -66,22 +75,23 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'Utilizador ou senha inválidos.' });
         }
 
-        // NOVO: Buscar as permissões de módulo para este perfil de usuário
+        // NOVO: Busca as permissões de módulo para este perfil de usuário
         const [permissoes] = await connection.execute(
             'SELECT nome_modulo, permitido FROM perfil_permissoes WHERE id_perfil = ?',
             [user.id_perfil]
         );
 
+        // PAYLOAD ATUALIZADO: Usa 'nome_unidade' vindo do JOIN, que é a fonte segura e correta.
         const payload = { 
             userId: user.ID, 
             nome: user.nome_user, 
             email: user.email_user, 
             cargo: user.cargo_user, 
-            unidade: user.unidade_user, 
+            unidade: user.nome_unidade, // <- MUDANÇA IMPORTANTE AQUI
             departamento: user.depart_user,
             perfil: user.perfil_acesso,
             dashboard: user.dashboard_type,
-            permissoes: permissoes // NOVO: Adiciona as permissões ao token
+            permissoes: permissoes
         };
         const accessToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8h' });
         res.json({ message: 'Login bem-sucedido!', accessToken });
