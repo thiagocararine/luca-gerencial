@@ -270,7 +270,7 @@ router.post('/veiculos/:id/upload', authenticateToken, authorizeAdmin, (req, res
                 await connection.execute(fotoSql, [id, descricao, newFilename]);
             } else {
                 const { data_validade } = req.body;
-                const docSql = 'INSERT INTO veiculo_documentos (id_veiculo, nome_documento, data_validade, caminho_arquivo, data_inclusao, status) VALUES (?, ?, ?, ?, NOW(), ?)';
+                const docSql = 'INSERT INTO veiculo_documentos (id_veiculo, nome_documento, data_validade, caminho_arquivo, data_upload, status) VALUES (?, ?, ?, ?, NOW(), ?)';
                 await connection.execute(docSql, [id, descricao, data_validade || null, newFilename, 'Ativo']);
             }
 
@@ -329,7 +329,7 @@ router.get('/veiculos/:id/documentos', authenticateToken, async (req, res) => {
         }
         const placaSanitizada = sanitizeForPath(vehicleRows[0].placa);
 
-        const [documentos] = await connection.execute("SELECT id, id_veiculo, nome_documento, data_validade, caminho_arquivo, data_inclusao FROM veiculo_documentos WHERE id_veiculo = ? AND status = 'Ativo' ORDER BY data_inclusao DESC", [id]);
+        const [documentos] = await connection.execute("SELECT id, id_veiculo, nome_documento, data_validade, caminho_arquivo, data_upload FROM veiculo_documentos WHERE id_veiculo = ? AND status = 'Ativo' ORDER BY data_upload DESC", [id]);
         
         const documentosComUrl = documentos.map(doc => ({
             ...doc,
