@@ -1,5 +1,4 @@
 // index.js (Servidor Principal Refatorado)
-console.log("--- O SERVIDOR FOI REINICIADO COM A VERSÃO MAIS RECENTE DO CÓDIGO ---");
 
 // 1. Importação das bibliotecas
 const express = require('express');

@@ -1,7 +1,5 @@
 // routes/routes_auth.js
 
-console.log("--- [DIAGNÓSTICO] O arquivo routes_auth.js FOI CARREGADO PELO SERVIDOR ---"); // ADICIONE ESTA LINHA
-
 const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2/promise');
@@ -48,7 +46,6 @@ router.post('/login', async (req, res) => {
         connection = await mysql.createConnection(dbConfig);
         const cleanedIdentifier = identifier.replace(/[.\-]/g, '');
 
-        // QUERY ATUALIZADA: Agora faz JOIN com a tabela de parâmetros para buscar o nome correto da filial
         const loginQuery = `
             SELECT 
                 u.*, 
@@ -68,21 +65,6 @@ router.post('/login', async (req, res) => {
         
         const user = rows[0];
 
-        // =================================================================
-        // INÍCIO DO CÓDIGO DE DIAGNÓSTICO - ADICIONE ESTE BLOCO
-        // =================================================================
-        console.log('--- DADOS DO USUÁRIO ANTES DE CRIAR O TOKEN ---');
-        console.log({
-            ID_Usuario: user.ID,
-            Nome_Usuario: user.nome_user,
-            Coluna_Original_unidade_user: user.unidade_user,
-            Coluna_Nova_id_filial: user.id_filial,
-            Nome_da_Unidade_do_JOIN: user.nome_unidade
-        });
-        // =================================================================
-        // FIM DO CÓDIGO DE DIAGNÓSTICO
-        // =================================================================
-
         if (user.status_user !== 'Ativo') {
             if (user.status_user === 'Pendente') return res.status(403).json({ error: 'A sua conta está pendente de aprovação.' });
             return res.status(403).json({ error: 'A sua conta foi desativada ou não tem permissão para aceder.' });
@@ -93,19 +75,17 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'Utilizador ou senha inválidos.' });
         }
 
-        // NOVO: Busca as permissões de módulo para este perfil de usuário
         const [permissoes] = await connection.execute(
             'SELECT nome_modulo, permitido FROM perfil_permissoes WHERE id_perfil = ?',
             [user.id_perfil]
         );
 
-        // PAYLOAD ATUALIZADO: Usa 'nome_unidade' vindo do JOIN, que é a fonte segura e correta.
         const payload = { 
             userId: user.ID, 
             nome: user.nome_user, 
             email: user.email_user, 
             cargo: user.cargo_user, 
-            unidade: user.nome_unidade, // <- MUDANÇA IMPORTANTE AQUI
+            unidade: user.nome_unidade, // Usa o nome limpo vindo do JOIN
             departamento: user.depart_user,
             perfil: user.perfil_acesso,
             dashboard: user.dashboard_type,
