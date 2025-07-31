@@ -65,6 +65,22 @@ router.post('/login', async (req, res) => {
         }
         
         const user = rows[0];
+
+        // =================================================================
+        // INÍCIO DO CÓDIGO DE DIAGNÓSTICO - ADICIONE ESTE BLOCO
+        // =================================================================
+        console.log('--- DADOS DO USUÁRIO ANTES DE CRIAR O TOKEN ---');
+        console.log({
+            ID_Usuario: user.ID,
+            Nome_Usuario: user.nome_user,
+            Coluna_Original_unidade_user: user.unidade_user,
+            Coluna_Nova_id_filial: user.id_filial,
+            Nome_da_Unidade_do_JOIN: user.nome_unidade
+        });
+        // =================================================================
+        // FIM DO CÓDIGO DE DIAGNÓSTICO
+        // =================================================================
+
         if (user.status_user !== 'Ativo') {
             if (user.status_user === 'Pendente') return res.status(403).json({ error: 'A sua conta está pendente de aprovação.' });
             return res.status(403).json({ error: 'A sua conta foi desativada ou não tem permissão para aceder.' });
