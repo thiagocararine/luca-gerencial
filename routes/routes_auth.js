@@ -1,5 +1,7 @@
 // routes/routes_auth.js
 
+console.log("--- [DIAGNÓSTICO] O arquivo routes_auth.js FOI CARREGADO PELO SERVIDOR ---"); // ADICIONE ESTA LINHA
+
 const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2/promise');
