@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
 // --- Constantes e Variáveis de Estado Globais ---
 const apiUrlBase = 'http://10.113.0.17:3000/api';
-const privilegedAccessProfiles = ["Administrador", "Financeiro"];
+const privilegedAccessProfiles = ["Administrador", "Financeiro", "Logística Gerencial"];
 let allVehicles = []; 
 let dbMarcas = []; 
 let dbModelos = [];
