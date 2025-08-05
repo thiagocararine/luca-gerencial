@@ -11,7 +11,7 @@ let dbModelos = [];
 let currentVehicleId = null;
 let vehicleToDeleteId = null;
 let maintenanceExportDatepicker = null;
-let LOGO_BASE_64 = null; // Variável renomeada
+let LOGO_BASE_64 = null;
 let costToDelete = { id: null, type: null };
 let documentToDelete = { id: null, name: null };
 let photoCaptureState = {
@@ -56,7 +56,7 @@ async function initLogisticaPage() {
     setupEventListeners();
     setupMaintenanceExportModal();
 
-    showLoader(); // Mostra o loader
+    showLoader();
     try {
         await Promise.all([
             populateFilialSelects(),
@@ -71,7 +71,7 @@ async function initLogisticaPage() {
         console.error("Erro na inicialização da página:", error);
         alert("Ocorreu um erro ao carregar os dados. Por favor, tente recarregar a página.");
     } finally {
-        hideLoader(); // Esconde o loader
+        hideLoader();
     }
 
     switchCostTab('gerais');
@@ -778,7 +778,7 @@ async function exportMaintenanceReportPDF() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
 
-        if (LOGO_BASE_64) { // Variável atualizada
+        if (LOGO_BASE_64) {
             try {
                 doc.addImage(LOGO_BASE_64, 'PNG', 14, 15, 25, 0);
             } catch (e) {
@@ -850,7 +850,7 @@ async function loadCurrentLogo() {
         if (!response.ok) return;
         const data = await response.json();
         if (data.logoBase64) {
-            LOGO_BASE_64 = data.logoBase64; // Variável atualizada
+            LOGO_BASE_64 = data.logoBase64;
         }
     } catch (error) {
         console.error("Não foi possível carregar a logo atual:", error);
@@ -980,14 +980,10 @@ function renderVehicleCards(vehicles, container) {
                 : 'https://placehold.co/400x250/e2e8f0/4a5568?text=Sem+Foto');
 
         const statusInfo = getStatusInfo(vehicle.status);
-        const seguroBadge = vehicle.seguro ? '<span class="px-2 py-1 text-xs font-semibold text-white bg-blue-500 rounded-full">Seguro</span>' : '';
-        const rastreadorBadge = vehicle.rastreador ? '<span class="px-2 py-1 text-xs font-semibold text-white bg-orange-500 rounded-full">Rastreador</span>' : '';
         card.innerHTML = `
             <div class="relative">
                 <img src="${photoUrl}" alt="Foto de ${vehicle.modelo}" class="w-full h-40 object-cover">
                 <span class="absolute top-2 right-2 px-2 py-1 text-xs font-semibold text-white ${statusInfo.color} rounded-full">${statusInfo.text}</span>
-                ${seguroBadge}
-                ${rastreadorBadge}
             </div>
             <div class="p-4">
                 <p class="text-xs text-gray-500">${vehicle.marca || 'N/A'}</p>
@@ -1019,8 +1015,6 @@ function renderVehicleTable(vehicles, container) {
     const tbody = table.querySelector('tbody');
     vehicles.forEach(vehicle => {
         const statusInfo = getStatusInfo(vehicle.status);
-        const seguroBadge = vehicle.seguro ? '<span class="px-2 ml-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-500 text-white">Seguro</span>' : '';
-        const rastreadorBadge = vehicle.rastreador ? '<span class="px-2 ml-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-500 text-white">Rastreador</span>' : '';
         const tr = document.createElement('tr');
         tr.className = 'vehicle-item hover:bg-gray-50';
         tr.dataset.id = vehicle.id;
@@ -1033,8 +1027,6 @@ function renderVehicleTable(vehicles, container) {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${vehicle.nome_filial || 'N/A'}</td>
             <td class="px-6 py-4 whitespace-nowrap">
                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusInfo.color} text-white">${statusInfo.text}</span>
-                ${seguroBadge}
-                ${rastreadorBadge}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <button class="text-indigo-600 hover:text-indigo-900" data-action="details">Gerir</button>
@@ -1385,6 +1377,7 @@ async function handleFleetCostFormSubmit(event) {
     }
 }
 
+// ATUALIZADA
 async function openVehicleModal(vehicle = null) {
     const modal = document.getElementById('vehicle-modal');
     const form = document.getElementById('vehicle-form');
@@ -1410,21 +1403,31 @@ async function openVehicleModal(vehicle = null) {
         document.getElementById('vehicle-filial').value = vehicle.id_filial || '';
         document.getElementById('vehicle-status').value = vehicle.status || 'Ativo';
         const hasPlaca = vehicle.placa && vehicle.placa.toUpperCase() !== 'SEM PLACA';
-        document.getElementById('vehicle-tem_seguro').checked = !!vehicle.seguro;
-        document.getElementById('vehicle-tem_rastreador').checked = !!vehicle.rastreador;
         document.getElementById('has-placa-checkbox').checked = hasPlaca;
+        
+        // --- INÍCIO DA ATUALIZAÇÃO ---
+        document.getElementById('vehicle-seguro').checked = !!vehicle.seguro;
+        document.getElementById('vehicle-rastreador').checked = !!vehicle.rastreador;
+        // --- FIM DA ATUALIZAÇÃO ---
+
         handleMarcaChange();
         modeloInput.value = vehicle.modelo || '';
     } else {
         title.textContent = 'Adicionar Veículo';
         document.getElementById('vehicle-id').value = '';
         document.getElementById('has-placa-checkbox').checked = true;
+
+        // --- INÍCIO DA ATUALIZAÇÃO ---
+        document.getElementById('vehicle-seguro').checked = false;
+        document.getElementById('vehicle-rastreador').checked = false;
+        // --- FIM DA ATUALIZAÇÃO ---
     }
     handleHasPlacaChange();
     modal.classList.remove('hidden');
     feather.replace();
 }
 
+// ATUALIZADA
 async function handleVehicleFormSubmit(event) {
     event.preventDefault();
     if (!validateForm()) {
@@ -1435,6 +1438,8 @@ async function handleVehicleFormSubmit(event) {
     saveBtn.disabled = true;
     saveBtn.textContent = 'A salvar...';
     const id = document.getElementById('vehicle-id').value;
+    
+    // --- INÍCIO DA ATUALIZAÇÃO ---
     const vehicleData = {
         placa: document.getElementById('has-placa-checkbox').checked ? document.getElementById('vehicle-placa').value : 'SEM PLACA',
         marca: document.getElementById('vehicle-marca').value,
@@ -1446,8 +1451,10 @@ async function handleVehicleFormSubmit(event) {
         id_filial: document.getElementById('vehicle-filial').value,
         status: document.getElementById('vehicle-status').value,
         seguro: document.getElementById('vehicle-seguro').checked,
-        rastreador: document.getElementById('vehicle-rastreador').checked,
+        rastreador: document.getElementById('vehicle-rastreador').checked
     };
+    // --- FIM DA ATUALIZAÇÃO ---
+
     const method = id ? 'PUT' : 'POST';
     const url = id ? `${apiUrlBase}/logistica/veiculos/${id}` : `${apiUrlBase}/logistica/veiculos`;
     try {
@@ -1612,27 +1619,28 @@ async function populateSelectWithOptions(url, selectId, valueKey, textKey, place
     }
 }
 
+// ATUALIZADA
 function getStatusInfo(status) {
     switch (status) {
         case 'Ativo': return { text: 'Ativo', color: 'bg-green-500' };
         case 'Em Manutenção': return { text: 'Manutenção', color: 'bg-yellow-500' };
         case 'Inativo': return { text: 'Inativo', color: 'bg-red-500' };
+        case 'Vendido': return { text: 'Vendido', color: 'bg-gray-700' };
         default: return { text: 'N/A', color: 'bg-gray-400' };
     }
 }
 
-function useInternalExpense(modalType) {
-    document.getElementById(`${modalType}-cnpj`).value = 'N/A';
-    document.getElementById(`${modalType}-razao-social`).value = 'DESPESA INTERNA';
-    document.getElementById(`${modalType}-fornecedor-id`).value = '0';
-}
+function getToken() { return localStorage.getItem('lucaUserToken'); }
+function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
+function getUserName() { return getUserData()?.nome || 'Utilizador'; }
+function getUserProfile() { return getUserData()?.perfil || null; }
+function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html'; }
 
-// --- Funções Auxiliares e de Autenticação ---
 async function lookupCnpj(modalType) {
     const cnpjInput = document.getElementById(`${modalType}-cnpj`);
     const razaoSocialInput = document.getElementById(`${modalType}-razao-social`);
     const fornecedorIdInput = document.getElementById(`${modalType}-fornecedor-id`);
-
+    
     const cnpj = cnpjInput.value.replace(/\D/g, '');
     if (cnpj.length !== 14) {
         alert('Por favor, digite um CNPJ válido com 14 dígitos.');
@@ -1642,9 +1650,11 @@ async function lookupCnpj(modalType) {
     showLoader();
     try {
         const response = await fetch(`${apiUrlBase}/logistica/cnpj/${cnpj}`, {
-            headers: { 'Authorization': `Bearer ${getToken()}` }
+             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
-        if (!response.ok) throw new Error('CNPJ não encontrado ou serviço indisponível.');
+
+        if (!response.ok) throw new Error('CNPJ не encontrado ou serviço indisponível.');
+        
         const data = await response.json();
 
         const fornecedorResponse = await fetch(`${apiUrlBase}/logistica/fornecedores/cnpj`, {
@@ -1662,11 +1672,13 @@ async function lookupCnpj(modalType) {
                 cep: data.cep
             })
         });
+
         if (!fornecedorResponse.ok) throw new Error('Falha ao registar ou buscar fornecedor no sistema.');
         const fornecedor = await fornecedorResponse.json();
-
+        
         razaoSocialInput.value = fornecedor.razao_social;
         fornecedorIdInput.value = fornecedor.id;
+
     } catch (error) {
         alert(`Erro ao consultar CNPJ: ${error.message}`);
         razaoSocialInput.value = '';
@@ -1676,25 +1688,30 @@ async function lookupCnpj(modalType) {
     }
 }
 
-function getToken() { return localStorage.getItem('lucaUserToken'); }
-function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
-function getUserName() { return getUserData()?.nome || 'Utilizador'; }
-function getUserProfile() { return getUserData()?.perfil || null; }
-function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html'; }
+function useInternalExpense(modalType) {
+    document.getElementById(`${modalType}-cnpj`).value = 'N/A';
+    document.getElementById(`${modalType}-razao-social`).value = 'DESPESA INTERNA';
+    document.getElementById(`${modalType}-fornecedor-id`).value = '0'; 
+}
+
 function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) {
         console.error("Não foi possível obter as permissões do usuário.");
         return;
     }
+
     const permissoesDoUsuario = userData.permissoes;
+
     const mapaModulos = {
         'lancamentos': 'despesas.html',
         'logistica': 'logistica.html',
         'configuracoes': 'settings.html'
     };
+
     for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
         const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
+        
         if (!permissao || !permissao.permitido) {
             const link = document.querySelector(`#sidebar a[href="${href}"]`);
             if (link && link.parentElement) {

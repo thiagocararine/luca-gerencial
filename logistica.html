@@ -159,7 +159,8 @@
                             <option value="Ativo">Apenas Ativos</option>
                             <option value="Em Manutenção">Apenas em Manutenção</option>
                             <option value="Inativo">Inativos</option>
-                            <option value="Vendido">Vendidos</option> </select>
+                            <option value="Vendido">Vendidos</option>
+                        </select>
                     </div>
                     <div class="flex items-end gap-2">
                         <button id="filter-button" class="action-btn bg-indigo-600 hover:bg-indigo-700 w-full flex items-center justify-center gap-2">
@@ -631,7 +632,7 @@
                 <span data-feather="x"></span>
             </button>
         </div>
-        <form id="vehicle-form" class="mt-6 space-y-4">
+        <form id="vehicle-form" class="mt-6">
             <input type="hidden" id="vehicle-id">
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-5 text-sm">
                 <div class="lg:col-span-3 grid grid-cols-3 gap-4 items-end">
@@ -682,23 +683,21 @@
                         <option>Ativo</option>
                         <option>Em Manutenção</option>
                         <option>Inativo</option>
-                        <option>Vendido</option> </select>
+                        <option>Vendido</option>
+                    </select>
                 </div>
                 <div class="lg:col-span-3 grid grid-cols-2 gap-4 items-center pt-4 border-t">
-                        <div class="flex items-center">
-                            <input id="vehicle-seguro" name="seguro" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                            <label for="vehicle-seguro" class="ml-2 block text-sm text-gray-900">Possui Seguro</label>
-                        </div>
-                        <div class="flex items-center">
-                             <input id="vehicle-rastreador" name="rastreador" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                            <label for="vehicle-rastreador" class="ml-2 block text-sm text-gray-900">Possui Rastreador</label>
-                        </div>
+                    <div class="flex items-center">
+                        <input id="vehicle-seguro" name="seguro" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                        <label for="vehicle-seguro" class="ml-2 block text-sm text-gray-900">Possui Seguro</label>
+                    </div>
+                    <div class="flex items-center">
+                         <input id="vehicle-rastreador" name="rastreador" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                        <label for="vehicle-rastreador" class="ml-2 block text-sm text-gray-900">Possui Rastreador</label>
                     </div>
                 </div>
-                 <div class="flex justify-end items-center pt-6 border-t mt-6 gap-4">
-                    </div>
             </div>
-             <div class="flex justify-end items-center pt-6 border-t mt-6 gap-4">
+            <div class="flex justify-end items-center pt-6 border-t mt-6 gap-4">
                 <button type="button" id="cancel-vehicle-form-btn" class="action-btn bg-gray-500 hover:bg-gray-600">Cancelar</button>
                 <button type="submit" id="save-vehicle-btn" class="action-btn bg-indigo-600 hover:bg-indigo-700">Salvar Veículo</button>
             </div>
@@ -725,7 +724,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
-<script src="logistica.js?v=2.0.4" defer></script> <script>
+<script src="logistica.js?v=2.0.5" defer></script>
+<script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
         const sidebar = document.getElementById('sidebar');

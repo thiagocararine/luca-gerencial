@@ -137,7 +137,8 @@ router.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) => 
             (placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status, seguro, rastreador) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             
-        const params = [placa, marca, modelo, ano_fabricacao || null, ano_modelo || null, renavam || null, chassi || null, id_filial, status];
+        // <-- CORREÇÃO: Adicionados 'seguro' e 'rastreador' ao array de parâmetros.
+        const params = [placa, marca, modelo, ano_fabricacao || null, ano_modelo || null, renavam || null, chassi || null, id_filial, status, seguro ? 1 : 0, rastreador ? 1 : 0];
         const [result] = await connection.execute(sql, params);
         const newVehicleId = result.insertId;
 
@@ -186,8 +187,12 @@ router.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) 
         const camposParaComparar = ['placa', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'renavam', 'chassi', 'id_filial', 'status', 'seguro', 'rastreador'];
         
         for (const campo of camposParaComparar) {
-            const valorAntigo = currentVehicle[campo] || '';
-            const valorNovo = vehicleData[campo] || '';
+            // Trata booleanos (que vêm como 0/1 do DB) e os compara com os booleanos do request
+            const valorAntigo = (typeof currentVehicle[campo] === 'boolean' || campo === 'seguro' || campo === 'rastreador') 
+                ? Boolean(currentVehicle[campo]) 
+                : (currentVehicle[campo] || '');
+
+            const valorNovo = vehicleData[campo] || false;
             
             if (String(valorAntigo) !== String(valorNovo)) {
                 logs.push([id, campo, String(valorAntigo), String(valorNovo), userId, nomeUsuario]);
@@ -206,11 +211,14 @@ router.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) 
             seguro = ?, rastreador = ? 
             WHERE id = ?`;
         
+        // <-- CORREÇÃO: Adicionados 'seguro' e 'rastreador' aos parâmetros da query de atualização.
         await connection.execute(updateSql, [
             vehicleData.placa, vehicleData.marca, vehicleData.modelo, 
             vehicleData.ano_fabricacao || null, vehicleData.ano_modelo || null, 
             vehicleData.renavam || null, vehicleData.chassi || null, 
-            vehicleData.id_filial, vehicleData.status, id
+            vehicleData.id_filial, vehicleData.status,
+            vehicleData.seguro ? 1 : 0, vehicleData.rastreador ? 1 : 0,
+            id
         ]);
         
         await connection.commit();
@@ -227,6 +235,9 @@ router.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) 
         if (connection) await connection.end();
     }
 });
+
+// O restante do arquivo continua igual...
+// ... (código das rotas DELETE /veiculos, UPLOAD, FOTOS, DOCUMENTOS, MANUTENÇÕES, CUSTOS, etc.)
 
 router.delete('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) => {
     const { id } = req.params;
@@ -544,12 +555,10 @@ router.post('/fornecedores/cnpj', authenticateToken, async (req, res) => {
 // SEÇÃO DE CUSTOS DE FROTA (COM A CORREÇÃO)
 // =================================================================
 
-// ROTA CORRIGIDA: Removido 'authorizeAdmin' e adicionada verificação interna
 router.post('/custos-frota', authenticateToken, async (req, res) => {
     const { descricao, custo, data_custo, id_fornecedor, filiais_rateio } = req.body;
-    const { userId, nome: nomeUsuario, perfil } = req.user; // Pega o perfil do usuário do token
+    const { userId, nome: nomeUsuario, perfil } = req.user;
 
-    // NOVA VERIFICAÇÃO DE PERMISSÃO
     const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
     if (!allowedProfiles.includes(perfil)) {
         return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
@@ -651,9 +660,8 @@ router.get('/manutencoes/recentes', authenticateToken, async (req, res) => {
 
 router.put('/custos-frota/:id/excluir', authenticateToken, async (req, res) => {
     const { id } = req.params;
-    const { userId, nome: nomeUsuario, perfil } = req.user; // Pega o perfil do usuário do token
+    const { userId, nome: nomeUsuario, perfil } = req.user;
 
-    // NOVA VERIFICAÇÃO DE PERMISSÃO
     const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
     if (!allowedProfiles.includes(perfil)) {
         return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
