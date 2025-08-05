@@ -912,10 +912,11 @@ async function loadVehicles() {
     } catch (error) {
         console.error("Erro ao carregar veículos:", error);
         contentArea.innerHTML = `<p class="text-center p-8 text-red-600">Erro ao carregar veículos.</p>`;
-    }   finally {
+    }
+
+}   finally {
         hideLoader(); // <-- Adicionado
     }
-}
 
 function applyFilters() {
     const searchTerm = document.getElementById('filter-search').value.toLowerCase();
