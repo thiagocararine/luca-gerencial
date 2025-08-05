@@ -547,8 +547,11 @@ router.post('/fornecedores/cnpj', authenticateToken, async (req, res) => {
 
 router.post('/custos-frota', authenticateToken, authorizeAdmin, async (req, res) => {
     const { descricao, custo, data_custo, id_fornecedor, filiais_rateio } = req.body;
-    const { userId } = req.user;
-
+    const { userId, nome: nomeUsuario, perfil } = req.user;
+    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
+    if (!allowedProfiles.includes(perfil)) {
+        return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
+    }
     if (!descricao || !custo || !data_custo || id_fornecedor == null || !filiais_rateio || !Array.isArray(filiais_rateio) || filiais_rateio.length === 0) {
         return res.status(400).json({ error: 'Dados inválidos. Todos os campos são obrigatórios e pelo menos uma filial deve ser selecionada.' });
     }
@@ -969,6 +972,25 @@ router.get('/veiculos/manutencao/a-vencer', authenticateToken, async (req, res) 
         res.status(500).json({ error: 'Erro ao buscar veículos com manutenção a vencer.' });
     } finally {
         if (connection) await connection.end();
+    }
+});
+
+router.get('/cnpj/:cnpj', authenticateToken, async (req, res) => {
+    const { cnpj } = req.params;
+    if (!cnpj) {
+        return res.status(400).json({ error: 'CNPJ é obrigatório.' });
+    }
+    try {
+        // O fetch agora é feito do lado do servidor
+        const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+        if (!response.ok) {
+            throw new Error('CNPJ não encontrado ou serviço indisponível.');
+        }
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        console.error("Erro ao consultar BrasilAPI:", error);
+        res.status(500).json({ error: 'Erro ao consultar o serviço de CNPJ.' });
     }
 });
 

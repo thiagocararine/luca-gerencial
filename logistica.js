@@ -1614,12 +1614,18 @@ async function lookupCnpj(modalType) {
         return;
     }
 
+    showLoader();
     try {
-        const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
-        if (!response.ok) throw new Error('CNPJ não encontrado na API externa.');
+        // ATUALIZADO: Chama a nossa nova rota de backend em vez da BrasilAPI
+        const response = await fetch(`${apiUrlBase}/logistica/cnpj/${cnpj}`, {
+             headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+
+        if (!response.ok) throw new Error('CNPJ не encontrado ou serviço indisponível.');
         
         const data = await response.json();
 
+        // O resto da lógica para salvar o fornecedor permanece a mesma
         const fornecedorResponse = await fetch(`${apiUrlBase}/logistica/fornecedores/cnpj`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -1646,6 +1652,8 @@ async function lookupCnpj(modalType) {
         alert(`Erro ao consultar CNPJ: ${error.message}`);
         razaoSocialInput.value = '';
         fornecedorIdInput.value = '';
+    } finally {
+        hideLoader();
     }
 }
 
