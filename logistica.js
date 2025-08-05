@@ -1710,4 +1710,57 @@ function gerenciarAcessoModulos() {
             }
         }
     }
-}}
+}
+}
+
+function getToken() { 
+    return localStorage.getItem('lucaUserToken'); 
+}
+
+function getUserData() { 
+    const token = getToken(); 
+    if (!token) return null; 
+    try { 
+        return JSON.parse(atob(token.split('.')[1])); 
+    } catch (e) { 
+        return null; 
+    } 
+}
+
+function getUserName() { 
+    return getUserData()?.nome || 'Utilizador'; 
+}
+
+function getUserProfile() { 
+    return getUserData()?.perfil || null; 
+}
+
+function logout() { 
+    localStorage.removeItem('lucaUserToken'); 
+    window.location.href = 'login.html'; 
+}
+
+function gerenciarAcessoModulos() {
+    const userData = getUserData();
+    if (!userData || !userData.permissoes) {
+        console.error("Não foi possível obter as permissões do usuário.");
+        return;
+    }
+
+    const permissoesDoUsuario = userData.permissoes;
+    const mapaModulos = {
+        'lancamentos': 'despesas.html',
+        'logistica': 'logistica.html',
+        'configuracoes': 'settings.html'
+    };
+
+    for (const [moduleKey, href] of Object.entries(mapaModulos)) {
+        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === moduleKey);
+        if (!permissao || !permissao.permitido) {
+            const link = document.querySelector(`#sidebar a[href="${href}"]`);
+            if (link && link.parentElement) {
+                link.parentElement.style.display = 'none';
+            }
+        }
+    }
+}
