@@ -6,7 +6,7 @@ const mysql = require('mysql2/promise');
 const fs = require('fs').promises;
 const path = require('path');
 const multer = require('multer');
-const { authenticateToken, authorizeAdmin } = require('../middlewares');
+const { authenticateToken } = require('../middlewares'); // Removido authorizeAdmin da importação geral
 const dbConfig = require('../dbConfig');
 
 // --- CONFIGURAÇÃO DO MULTER E HELPERS ---
@@ -97,20 +97,7 @@ router.get('/veiculos', authenticateToken, async (req, res) => {
                 v.modelo ASC`;
 
         const [vehicles] = await connection.execute(sql);
-        
-        const vehiclesWithPhotoUrl = vehicles.map(vehicle => {
-             const placaSanitizada = sanitizeForPath(vehicle.placa);
-             const fotoFrentePath = vehicle.foto_frente
-                ? `uploads/veiculos/${placaSanitizada}/fotos/${vehicle.foto_frente}`
-                : null;
-
-            return {
-                ...vehicle,
-                foto_frente: fotoFrentePath
-            };
-        });
-
-        res.json(vehiclesWithPhotoUrl);
+        res.json(vehicles);
 
     } catch (error) {
         console.error("Erro ao buscar veículos:", error);
@@ -120,9 +107,14 @@ router.get('/veiculos', authenticateToken, async (req, res) => {
     }
 });
 
-router.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) => {
+router.post('/veiculos', authenticateToken, async (req, res) => {
+    const { userId, nome: nomeUsuario, perfil } = req.user;
+    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
+    if (!allowedProfiles.includes(perfil)) {
+        return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
+    }
+    
     const { placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status, seguro, rastreador } = req.body;
-
     if (!placa || !marca || !modelo || !id_filial || !status) {
         return res.status(400).json({ error: 'Placa, marca, modelo, filial e status são obrigatórios.' });
     }
@@ -137,19 +129,18 @@ router.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) => 
             (placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status, seguro, rastreador) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             
-        // <-- CORREÇÃO: Adicionados 'seguro' e 'rastreador' ao array de parâmetros.
         const params = [placa, marca, modelo, ano_fabricacao || null, ano_modelo || null, renavam || null, chassi || null, id_filial, status, seguro ? 1 : 0, rastreador ? 1 : 0];
         const [result] = await connection.execute(sql, params);
         const newVehicleId = result.insertId;
 
-        const placaSanitizada = sanitizeForPath(placa);
-        const vehicleDir = path.join(UPLOADS_BASE_PATH, 'veiculos', placaSanitizada);
-        await fs.mkdir(path.join(vehicleDir, 'fotos'), { recursive: true });
-        await fs.mkdir(path.join(vehicleDir, 'documentos'), { recursive: true });
-        
+        await registrarLog({
+            usuario_id: userId, usuario_nome: nomeUsuario, tipo_entidade: 'Veículo',
+            id_entidade: newVehicleId, tipo_acao: 'Criação',
+            descricao: `Criou o veículo ${modelo} - ${placa} (ID: ${newVehicleId}).`
+        });
+
         await connection.commit();
         res.status(201).json({ message: 'Veículo adicionado com sucesso!', vehicleId: newVehicleId });
-
     } catch (error) {
         if (connection) await connection.rollback();
         console.error("Erro ao adicionar veículo:", error);
@@ -162,11 +153,15 @@ router.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) => 
     }
 });
 
-router.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) => {
+router.put('/veiculos/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
-    const { userId, nome: nomeUsuario } = req.user;
-    const vehicleData = req.body;
+    const { userId, nome: nomeUsuario, perfil } = req.user;
+    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
+    if (!allowedProfiles.includes(perfil)) {
+        return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
+    }
 
+    const vehicleData = req.body;
     if (!vehicleData.placa || !vehicleData.marca || !vehicleData.modelo || !vehicleData.id_filial || !vehicleData.status) {
         return res.status(400).json({ error: 'Placa, marca, modelo, filial e status são obrigatórios.' });
     }
@@ -182,26 +177,23 @@ router.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) 
             return res.status(404).json({ message: 'Veículo não encontrado.' });
         }
         const currentVehicle = currentVehicleRows[0];
-
-        const logs = [];
-        const camposParaComparar = ['placa', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'renavam', 'chassi', 'id_filial', 'status', 'seguro', 'rastreador'];
         
+        const changesDescription = [];
+        const camposParaComparar = ['placa', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'renavam', 'chassi', 'id_filial', 'status', 'seguro', 'rastreador'];
         for (const campo of camposParaComparar) {
-            // Trata booleanos (que vêm como 0/1 do DB) e os compara com os booleanos do request
-            const valorAntigo = (typeof currentVehicle[campo] === 'boolean' || campo === 'seguro' || campo === 'rastreador') 
-                ? Boolean(currentVehicle[campo]) 
-                : (currentVehicle[campo] || '');
-
-            const valorNovo = vehicleData[campo] || false;
-            
+            const valorAntigo = (campo === 'seguro' || campo === 'rastreador') ? Boolean(currentVehicle[campo]) : (currentVehicle[campo] || '');
+            const valorNovo = (campo === 'seguro' || campo === 'rastreador') ? Boolean(vehicleData[campo]) : (vehicleData[campo] || '');
             if (String(valorAntigo) !== String(valorNovo)) {
-                logs.push([id, campo, String(valorAntigo), String(valorNovo), userId, nomeUsuario]);
+                changesDescription.push(`${campo} de "${valorAntigo}" para "${valorNovo}"`);
             }
         }
 
-        if (logs.length > 0) {
-            const logSql = 'INSERT INTO veiculos_logs (id_veiculo, campo_alterado, valor_antigo, valor_novo, alterado_por_id, alterado_por_nome) VALUES ?';
-            await connection.query(logSql, [logs]);
+        if (changesDescription.length > 0) {
+            await registrarLog({
+                usuario_id: userId, usuario_nome: nomeUsuario, tipo_entidade: 'Veículo',
+                id_entidade: id, tipo_acao: 'Atualização',
+                descricao: `Atualizou veículo ID ${id}: ${changesDescription.join(', ')}.`
+            });
         }
 
         const updateSql = `
@@ -211,7 +203,6 @@ router.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) 
             seguro = ?, rastreador = ? 
             WHERE id = ?`;
         
-        // <-- CORREÇÃO: Adicionados 'seguro' e 'rastreador' aos parâmetros da query de atualização.
         await connection.execute(updateSql, [
             vehicleData.placa, vehicleData.marca, vehicleData.modelo, 
             vehicleData.ano_fabricacao || null, vehicleData.ano_modelo || null, 
@@ -236,24 +227,41 @@ router.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) 
     }
 });
 
-// O restante do arquivo continua igual...
-// ... (código das rotas DELETE /veiculos, UPLOAD, FOTOS, DOCUMENTOS, MANUTENÇÕES, CUSTOS, etc.)
 
-router.delete('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) => {
+router.delete('/veiculos/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
+    const { userId, nome: nomeUsuario, perfil } = req.user;
+    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
+    if (!allowedProfiles.includes(perfil)) {
+        return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
+    }
+
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        const [result] = await connection.execute('DELETE FROM veiculos WHERE id = ?', [id]);
+        await connection.beginTransaction();
 
-        if (result.affectedRows === 0) {
+        const [vehicle] = await connection.execute('SELECT modelo, placa FROM veiculos WHERE id = ?', [id]);
+        if (vehicle.length === 0) {
             return res.status(404).json({ message: 'Veículo não encontrado.' });
         }
+
+        const [result] = await connection.execute('DELETE FROM veiculos WHERE id = ?', [id]);
+        if (result.affectedRows > 0) {
+             await registrarLog({
+                usuario_id: userId, usuario_nome: nomeUsuario, tipo_entidade: 'Veículo',
+                id_entidade: id, tipo_acao: 'Exclusão',
+                descricao: `Excluiu o veículo ${vehicle[0].modelo} - ${vehicle[0].placa} (ID: ${id}).`
+            });
+        }
+        
+        await connection.commit();
         res.json({ message: 'Veículo apagado com sucesso.' });
     } catch (error) {
+        if(connection) await connection.rollback();
         console.error("Erro ao apagar veículo:", error);
         if (error.code === 'ER_ROW_IS_REFERENCED_2') {
-            return res.status(409).json({ error: 'Não é possível apagar este veículo pois ele possui registos associados (manutenções, documentos, etc.).' });
+            return res.status(409).json({ error: 'Não é possível apagar este veículo pois ele possui registos associados (manutenções, etc.).' });
         }
         res.status(500).json({ error: 'Erro interno ao apagar o veículo.' });
     } finally {
@@ -264,7 +272,13 @@ router.delete('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, re
 
 // --- ROTAS DE UPLOAD, FOTOS, DOCUMENTOS E LOGS ---
 
-router.post('/veiculos/:id/upload', authenticateToken, authorizeAdmin, (req, res) => {
+router.post('/veiculos/:id/upload', authenticateToken, (req, res) => {
+    const { perfil } = req.user;
+    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
+    if (!allowedProfiles.includes(perfil)) {
+        return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
+    }
+
     vehicleUpload(req, res, async (err) => {
         if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
             return res.status(413).json({ error: "Erro: O ficheiro excede o limite de 3MB." });
@@ -383,9 +397,14 @@ router.get('/veiculos/:id/documentos', authenticateToken, async (req, res) => {
     }
 });
 
-router.put('/documentos/:docId/excluir', authenticateToken, authorizeAdmin, async (req, res) => {
+router.put('/documentos/:docId/excluir', authenticateToken, async (req, res) => {
     const { docId } = req.params;
-    const { userId } = req.user;
+    const { userId, perfil } = req.user;
+    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
+    if (!allowedProfiles.includes(perfil)) {
+        return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
+    }
+    
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
@@ -405,15 +424,21 @@ router.put('/documentos/:docId/excluir', authenticateToken, authorizeAdmin, asyn
     }
 });
 
-router.get('/veiculos/:id/logs', authenticateToken, authorizeAdmin, async (req, res) => {
+router.get('/veiculos/:id/logs', authenticateToken, async (req, res) => {
+    const { perfil } = req.user;
+    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
+    if (!allowedProfiles.includes(perfil)) {
+        return res.status(403).json({ error: 'Você não tem permissão para visualizar os logs.' });
+    }
+
     const { id } = req.params;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
         const sql = `
-            SELECT * FROM veiculos_logs 
-            WHERE id_veiculo = ? 
-            ORDER BY data_alteracao DESC`;
+            SELECT * FROM logistica_logs 
+            WHERE tipo_entidade = 'Veículo' AND id_entidade = ? 
+            ORDER BY data_hora DESC`;
         const [logs] = await connection.execute(sql, [id]);
         res.json(logs);
     } catch (error) {
@@ -491,9 +516,14 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
     }
 });
 
-router.put('/manutencoes/:id/excluir', authenticateToken, authorizeAdmin, async (req, res) => {
+router.put('/manutencoes/:id/excluir', authenticateToken, async (req, res) => {
     const { id } = req.params;
-    const { userId, nome: nomeUsuario } = req.user;
+    const { userId, nome: nomeUsuario, perfil } = req.user;
+    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
+    if (!allowedProfiles.includes(perfil)) {
+        return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
+    }
+
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
