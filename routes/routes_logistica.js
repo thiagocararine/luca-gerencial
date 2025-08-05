@@ -648,20 +648,35 @@ router.get('/manutencoes/recentes', authenticateToken, async (req, res) => {
     }
 });
 
-router.put('/custos-frota/:id/excluir', authenticateToken, authorizeAdmin, async (req, res) => {
+router.put('/custos-frota/:id/excluir', authenticateToken, async (req, res) => {
     const { id } = req.params;
-    const { userId, nome: nomeUsuario } = req.user;
+    const { userId, nome: nomeUsuario, perfil } = req.user; // Pega o perfil do usuário do token
+
+    // NOVA VERIFICAÇÃO DE PERMISSÃO
+    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
+    if (!allowedProfiles.includes(perfil)) {
+        return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
+    }
+
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        const sql = `
-            UPDATE custos_frota 
-            SET status = 'Excluída', excluido_por_id = ?, excluido_por_nome = ?, data_exclusao = NOW()
-            WHERE id = ?`;
-        const [result] = await connection.execute(sql, [userId, `${userId} - ${nomeUsuario}`, id]);
-        if (result.affectedRows === 0) {
+        const [cost] = await connection.execute('SELECT descricao, sequencial_rateio FROM custos_frota WHERE id = ?', [id]);
+        if (cost.length === 0) {
             return res.status(404).json({ message: 'Custo de frota não encontrado.' });
         }
+        
+        await connection.execute(`UPDATE custos_frota SET status = 'Excluída', excluido_por_id = ?, excluido_por_nome = ?, data_exclusao = NOW() WHERE id = ?`, [userId, nomeUsuario, id]);
+        
+        await registrarLog({
+            usuario_id: userId,
+            usuario_nome: nomeUsuario,
+            tipo_entidade: 'Custo de Frota',
+            id_entidade: id,
+            tipo_acao: 'Exclusão',
+            descricao: `Excluiu o lançamento de custo de frota ID ${id} (Seq: ${cost[0].sequencial_rateio}).`
+        });
+
         res.json({ message: 'Custo de frota excluído com sucesso.' });
     } catch (error) {
         console.error("Erro ao excluir custo de frota:", error);
