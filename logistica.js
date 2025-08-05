@@ -20,6 +20,15 @@ let photoCaptureState = {
     targetPreviewId: null
 };
 
+function showLoader() {
+    const loader = document.getElementById('global-loader');
+    if (loader) loader.style.display = 'flex';
+}
+function hideLoader() {
+    const loader = document.getElementById('global-loader');
+    if (loader) loader.style.display = 'none';
+}
+
 /**
  * Função principal que inicializa a página de logística.
  */
@@ -57,6 +66,7 @@ async function initLogisticaPage() {
     await loadRecentIndividualCosts();
 
     switchCostTab('gerais');
+    
 }
 
 /**
@@ -889,6 +899,11 @@ function handleMarcaChange() {
 async function loadVehicles() {
     const contentArea = document.getElementById('content-area');
     contentArea.innerHTML = '<p class="text-center p-8 text-gray-500">A carregar veículos...</p>';
+    showLoader(); // <-- Adicione esta linha
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/cnpj/${cnpj}`, {
+             headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
     try {
         const response = await fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error(`Falha ao buscar veículos: ${response.statusText}`);
@@ -897,6 +912,8 @@ async function loadVehicles() {
     } catch (error) {
         console.error("Erro ao carregar veículos:", error);
         contentArea.innerHTML = `<p class="text-center p-8 text-red-600">Erro ao carregar veículos.</p>`;
+    }   finally {
+        hideLoader(); // <-- Adicionado
     }
 }
 
