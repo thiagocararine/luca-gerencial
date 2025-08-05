@@ -90,7 +90,6 @@
 <body class="h-full">
 
 <div class="flex h-full">
-    <!-- Overlay e Sidebar -->
     <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
     <nav id="sidebar" class="fixed inset-y-0 left-0 bg-white shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
         <div class="flex flex-col h-full">
@@ -115,7 +114,6 @@
         </div>
     </nav>
 
-    <!-- Conteúdo Principal -->
     <div class="flex-1 flex flex-col">
         <header class="bg-white shadow-sm border-b h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
             <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900"><span data-feather="menu"></span></button>
@@ -161,7 +159,7 @@
                             <option value="Ativo">Apenas Ativos</option>
                             <option value="Em Manutenção">Apenas em Manutenção</option>
                             <option value="Inativo">Inativos</option>
-                        </select>
+                            <option value="Vendido">Vendidos</option> </select>
                     </div>
                     <div class="flex items-end gap-2">
                         <button id="filter-button" class="action-btn bg-indigo-600 hover:bg-indigo-700 w-full flex items-center justify-center gap-2">
@@ -194,7 +192,6 @@
     </div>
 </div>
 
-<!-- Modal de Gestão Completo -->
 <div id="details-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
     <div class="relative mx-auto w-full max-w-5xl shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between p-4 border-b">
@@ -360,7 +357,6 @@
     </div>
 </div>
 
-<!-- Modal para Lançar Despesa de Veículo -->
 <div id="vehicle-cost-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
     <div class="relative mx-auto border w-full max-w-2xl shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between p-4 border-b">
@@ -427,7 +423,6 @@
     </div>
 </div>
 
-<!-- Modal para Captura de Foto -->
 <div id="photo-capture-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-75 z-[80] flex items-center justify-center p-4">
     <div class="relative mx-auto border w-full max-w-2xl shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between p-4 border-b">
@@ -449,13 +444,11 @@
     </div>
 </div>
 
-<!-- Visualizador de Imagem -->
 <div id="image-viewer-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-80 z-[90] flex items-center justify-center p-4" onclick="this.classList.add('hidden')">
     <button class="absolute top-4 right-4 text-white text-3xl font-bold">&times;</button>
     <img id="viewer-image" src="" alt="Visualização da imagem" class="viewer-content object-contain" onclick="event.stopPropagation()">
 </div>
 
-<!-- Modal de Confirmação de Exclusão de Documento -->
 <div id="confirm-delete-document-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-[70] flex items-center justify-center p-4">
     <div class="relative mx-auto p-6 border w-full max-w-md shadow-lg rounded-md bg-white">
         <div class="text-center">
@@ -471,7 +464,6 @@
     </div>
 </div>
 
-<!-- Modal de Confirmação de Exclusão de Custo -->
 <div id="confirm-delete-cost-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-[70] flex items-center justify-center p-4">
     <div class="relative mx-auto p-6 border w-full max-w-md shadow-lg rounded-md bg-white">
         <div class="text-center">
@@ -487,7 +479,6 @@
     </div>
 </div>
 
-<!-- Modal para Adicionar/Editar Manutenção -->
 <div id="maintenance-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
     <div class="relative mx-auto border w-full max-w-2xl shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between p-4 border-b">
@@ -553,7 +544,6 @@
     </div>
 </div>
 
-<!-- Modal de Exportação de Manutenção -->
 <div id="maintenance-export-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
     <div class="relative mx-auto border w-full max-w-md shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between p-4 border-b">
@@ -574,7 +564,6 @@
     </div>
 </div>
 
-<!-- Modal para Adicionar Custo de Frota (Rateio) -->
 <div id="fleet-cost-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
     <div class="relative mx-auto border w-full max-w-3xl shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between p-4 border-b">
@@ -634,7 +623,6 @@
     </div>
 </div>
 
-<!-- Modal para Adicionar/Editar Veículo -->
 <div id="vehicle-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
     <div class="relative mx-auto p-6 border w-full max-w-3xl shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between pb-4 border-b">
@@ -694,16 +682,16 @@
                         <option>Ativo</option>
                         <option>Em Manutenção</option>
                         <option>Inativo</option>
-                    </select>
+                        <option>Vendido</option> </select>
                 </div>
                 <div class="lg:col-span-3 grid grid-cols-2 gap-4 items-center pt-4 border-t">
                         <div class="flex items-center">
-                            <input id="vehicle-tem_seguro" name="tem_seguro" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                            <label for="vehicle-tem_seguro" class="ml-2 block text-sm text-gray-900">Possui Seguro</label>
+                            <input id="vehicle-seguro" name="seguro" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <label for="vehicle-seguro" class="ml-2 block text-sm text-gray-900">Possui Seguro</label>
                         </div>
                         <div class="flex items-center">
-                            <input id="vehicle-tem_rastreador" name="tem_rastreador" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                            <label for="vehicle-tem_rastreador" class="ml-2 block text-sm text-gray-900">Possui Rastreador</label>
+                            <input id="vehicle-rastreador" name="rastreador" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <label for="vehicle-rastreador" class="ml-2 block text-sm text-gray-900">Possui Rastreador</label>
                         </div>
                     </div>
                 </div>
@@ -716,7 +704,6 @@
     </div>
 </div>
 
-<!-- Modal de Confirmação de Exclusão -->
 <div id="confirm-delete-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex items-center justify-center">
     <div class="relative mx-auto p-6 border w-full max-w-md shadow-lg rounded-md bg-white">
         <div class="text-center">
@@ -736,8 +723,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
-<script src="logistica.js?v=2.0.3" defer></script>
-<script>
+<script src="logistica.js?v=2.0.4" defer></script> <script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
         const sidebar = document.getElementById('sidebar');
