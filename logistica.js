@@ -1,17 +1,17 @@
-// logistica.js (Completo com todas as funcionalidades, incluindo upload de ficheiros)
+// logistica.js (Completo com todas as funções, logs e loader)
 
 document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
 // --- Constantes e Variáveis de Estado Globais ---
 const apiUrlBase = 'http://10.113.0.17:3000/api';
-const privilegedAccessProfiles = ["Administrador", "Financeiro", "Logistica Gerencial", "Logistica"];
-let allVehicles = []; 
-let dbMarcas = []; 
+const privilegedAccessProfiles = ["Administrador", "Financeiro", "Logistica"];
+let allVehicles = [];
+let dbMarcas = [];
 let dbModelos = [];
-let currentVehicleId = null; 
+let currentVehicleId = null;
 let vehicleToDeleteId = null;
 let maintenanceExportDatepicker = null;
-let LOGO_BASE64 = null;
+let LOGO_BASE_64 = null; // Variável renomeada
 let costToDelete = { id: null, type: null };
 let documentToDelete = { id: null, name: null };
 let photoCaptureState = {
@@ -20,6 +20,7 @@ let photoCaptureState = {
     targetPreviewId: null
 };
 
+// --- Funções do Indicador de Carregamento ---
 function showLoader() {
     const loader = document.getElementById('global-loader');
     if (loader) loader.style.display = 'flex';
@@ -39,7 +40,7 @@ async function initLogisticaPage() {
         return;
     }
     document.getElementById('user-name').textContent = getUserName();
-    
+
     gerenciarAcessoModulos();
 
     const userProfile = getUserProfile();
@@ -54,19 +55,26 @@ async function initLogisticaPage() {
 
     setupEventListeners();
     setupMaintenanceExportModal();
-    
-    await Promise.all([
-        populateFilialSelects(),
-        loadMarcasAndModelosFromDB(),
-        loadCurrentLogo()
-    ]);
 
-    await loadVehicles();
-    await loadFleetCosts();
-    await loadRecentIndividualCosts();
+    showLoader(); // Mostra o loader
+    try {
+        await Promise.all([
+            populateFilialSelects(),
+            loadMarcasAndModelosFromDB(),
+            loadCurrentLogo()
+        ]);
+
+        await loadVehicles();
+        await loadFleetCosts();
+        await loadRecentIndividualCosts();
+    } catch (error) {
+        console.error("Erro na inicialização da página:", error);
+        alert("Ocorreu um erro ao carregar os dados. Por favor, tente recarregar a página.");
+    } finally {
+        hideLoader(); // Esconde o loader
+    }
 
     switchCostTab('gerais');
-    
 }
 
 /**
@@ -84,8 +92,8 @@ function setupEventListeners() {
     vehicleModal.querySelector('#cancel-vehicle-form-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
     vehicleModal.querySelector('#vehicle-form').addEventListener('submit', handleVehicleFormSubmit);
     vehicleModal.querySelector('#has-placa-checkbox').addEventListener('change', handleHasPlacaChange);
-    vehicleModal.querySelector('#vehicle-marca').addEventListener('input', handleMarcaChange); 
-    
+    vehicleModal.querySelector('#vehicle-marca').addEventListener('input', handleMarcaChange);
+
     const placaInput = vehicleModal.querySelector('#vehicle-placa');
     placaInput.addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase(); validatePlaca(e.target.value); });
     const renavamInput = vehicleModal.querySelector('#vehicle-renavam');
@@ -98,7 +106,7 @@ function setupEventListeners() {
     const detailsModal = document.getElementById('details-modal');
     detailsModal.querySelector('#close-details-modal-btn').addEventListener('click', () => detailsModal.classList.add('hidden'));
     detailsModal.querySelector('#details-tabs').addEventListener('click', (e) => { if (e.target.matches('.tab-button')) { switchTab(e.target.dataset.tab, currentVehicleId); } });
-    
+
     const maintenanceTab = document.getElementById('maintenance-tab-content');
     maintenanceTab.addEventListener('click', (e) => {
         if (e.target.closest('#add-maintenance-btn')) {
@@ -151,7 +159,7 @@ function setupEventListeners() {
 
     document.getElementById('document-upload-form').addEventListener('submit', handleDocumentUploadSubmit);
     document.getElementById('document-list-container').addEventListener('click', handleDeleteDocumentClick);
-    
+
     document.getElementById('add-vehicle-cost-button')?.addEventListener('click', openVehicleCostModal);
     const vehicleCostModal = document.getElementById('vehicle-cost-modal');
     vehicleCostModal.querySelector('#close-vehicle-cost-modal-btn').addEventListener('click', () => vehicleCostModal.classList.add('hidden'));
@@ -180,14 +188,14 @@ function handlePhotoAreaClick(event) {
 
     if (button) {
         event.stopPropagation();
-        const photoTypeRaw = button.dataset.photoType; 
-        
+        const photoTypeRaw = button.dataset.photoType;
+
         if (button.classList.contains('capture-photo-btn') && photoTypeRaw) {
             const photoType = photoTypeRaw.toLowerCase().replace(/ /g, '-');
             openCaptureModal(`photo-input-${photoType}`, `photo-preview-${photoType}`);
             return;
         }
-        
+
         if (button.classList.contains('upload-photo-btn') && photoTypeRaw) {
             const photoType = photoTypeRaw;
             const typeKey = photoType.toLowerCase().replace(/ /g, '-');
@@ -203,7 +211,7 @@ function handlePhotoAreaClick(event) {
         }
         return;
     }
-    
+
     const photoContainer = target.closest('.group');
     if (photoContainer) {
         const previewImg = photoContainer.querySelector('img[id^="photo-preview-"]');
@@ -220,7 +228,7 @@ async function switchTab(tabName, vehicleId) {
 
     document.getElementById(`${tabName}-tab-content`).classList.add('active');
     document.querySelector(`#details-tabs .tab-button[data-tab="${tabName}"]`).classList.add('active');
-    
+
     feather.replace();
 
     if (tabName === 'details') {
@@ -264,12 +272,12 @@ async function fetchAndDisplayPhotos(vehicleId) {
 
 function handlePhotoInputChange(event) {
     if (event.target.type !== 'file' || !event.target.id.startsWith('photo-input-')) return;
-    
+
     const file = event.target.files[0];
     if (file) {
         if (file.size > 3 * 1024 * 1024) {
             alert('Erro: O ficheiro é maior que 3MB. Por favor, selecione uma imagem menor.');
-            event.target.value = ''; 
+            event.target.value = '';
             return;
         }
 
@@ -314,8 +322,8 @@ async function fetchAndDisplayDocuments(vehicleId) {
             const tr = tbody.insertRow();
             tr.innerHTML = `
                 <td class="px-4 py-2">${doc.nome_documento}</td>
-                <td class="px-4 py-2">${new Date(doc.data_inclusao).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
-                <td class="px-4 py-2">${doc.data_validade ? new Date(doc.data_validade).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A'}</td>
+                <td class="px-4 py-2">${new Date(doc.data_inclusao).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                <td class="px-4 py-2">${doc.data_validade ? new Date(doc.data_validade).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'N/A'}</td>
                 <td class="px-4 py-2 text-center space-x-2">
                     <a href="${apiUrlBase.replace('/api', '')}/${doc.caminho_arquivo}" target="_blank" class="text-indigo-600 hover:underline">Ver</a>
                     ${isPrivileged ? `<button data-doc-id="${doc.id}" data-doc-name="${doc.nome_documento}" class="delete-doc-btn text-red-500 hover:text-red-700">Excluir</button>` : ''}
@@ -344,7 +352,7 @@ async function handleDocumentUploadSubmit(event) {
         button.disabled = false;
         return;
     }
-    
+
     if (file.size > 3 * 1024 * 1024) {
         alert('Erro: O ficheiro é maior que 3MB. Por favor, selecione um ficheiro menor.');
         button.disabled = false;
@@ -374,7 +382,7 @@ async function uploadFile(vehicleId, file, description, expiryDate = null, type 
             const errorData = await response.json().catch(() => ({ error: 'Falha no upload.' }));
             throw new Error(errorData.error);
         }
-        
+
         alert('Ficheiro enviado com sucesso!');
         if (type === 'photo') {
             await fetchAndDisplayPhotos(vehicleId);
@@ -395,7 +403,7 @@ function handleDeleteDocumentClick(event) {
 
     const docId = button.dataset.docId;
     const docName = button.dataset.docName;
-    
+
     openDeleteDocumentConfirmModal(docId, docName);
 }
 
@@ -444,21 +452,19 @@ async function openCaptureModal(targetInputId, targetPreviewId) {
     const modal = document.getElementById('photo-capture-modal');
     const video = document.getElementById('camera-stream');
     const errorMsg = document.getElementById('camera-error');
-    
+
     photoCaptureState.targetInputId = targetInputId;
     photoCaptureState.targetPreviewId = targetPreviewId;
-    
+
     errorMsg.classList.add('hidden');
     modal.classList.remove('hidden');
     feather.replace();
 
-    // Limpa o estado dos botões
     document.getElementById('take-photo-btn').classList.remove('hidden');
     document.getElementById('use-photo-btn').classList.add('hidden');
     document.getElementById('retake-photo-btn').classList.add('hidden');
     document.getElementById('camera-stream').classList.remove('hidden');
     document.getElementById('photo-canvas').classList.add('hidden');
-
 
     try {
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -470,7 +476,6 @@ async function openCaptureModal(targetInputId, targetPreviewId) {
             throw new Error('A API de multimédia não é suportada neste navegador.');
         }
     } catch (err) {
-        // Exibe o erro na UI em vez de apenas no console
         errorMsg.textContent = `Erro ao aceder à câmara: ${err.message}. Verifique as permissões do navegador ou aceda via HTTPS/localhost.`;
         errorMsg.classList.remove('hidden');
         document.getElementById('take-photo-btn').classList.add('hidden');
@@ -490,14 +495,14 @@ function takePhoto() {
     const video = document.getElementById('camera-stream');
     const canvas = document.getElementById('photo-canvas');
     const context = canvas.getContext('2d');
-    
+
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
+
     video.classList.add('hidden');
     canvas.classList.remove('hidden');
-    
+
     document.getElementById('take-photo-btn').classList.add('hidden');
     document.getElementById('use-photo-btn').classList.remove('hidden');
     document.getElementById('retake-photo-btn').classList.remove('hidden');
@@ -514,7 +519,7 @@ function retakePhoto() {
 function useCapturedPhoto() {
     const canvas = document.getElementById('photo-canvas');
     const preview = document.getElementById(photoCaptureState.targetPreviewId);
-    
+
     canvas.toBlob(blob => {
         if (blob.size > 3 * 1024 * 1024) {
             alert('Erro: A foto capturada é maior que 3MB. Tente novamente com uma resolução menor, se possível.');
@@ -528,7 +533,7 @@ function useCapturedPhoto() {
         const dataTransfer = new DataTransfer();
         const file = new File([blob], "captured-photo.jpg", { type: "image/jpeg" });
         dataTransfer.items.add(file);
-        
+
         const input = document.getElementById(photoCaptureState.targetInputId);
         input.files = dataTransfer.files;
 
@@ -558,9 +563,9 @@ function switchCostTab(tabName) {
         activeContent.classList.add('active');
         activeContent.style.display = 'block';
     }
-    
+
     const activeButton = document.querySelector(`#costs-tabs .tab-button[data-cost-tab="${tabName}"]`);
-    if(activeButton) {
+    if (activeButton) {
         activeButton.classList.add('active');
     }
 }
@@ -572,7 +577,7 @@ async function loadFleetCosts() {
         const response = await fetch(`${apiUrlBase}/logistica/custos-frota`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar custos gerais.');
         const custos = await response.json();
-        
+
         if (custos.length === 0) {
             container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo geral registado.</p>';
             return;
@@ -584,7 +589,7 @@ async function loadFleetCosts() {
             const tr = tbody.insertRow();
             tr.innerHTML = `
                 <td class="px-4 py-2 font-mono text-xs">${c.sequencial_rateio || 'N/A'}</td>
-                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
                 <td class="px-4 py-2">${c.descricao}</td>
                 <td class="px-4 py-2">${c.nome_filial || 'N/A'}</td>
                 <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
@@ -611,7 +616,7 @@ async function loadRecentIndividualCosts() {
         const response = await fetch(`${apiUrlBase}/logistica/manutencoes/recentes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar custos individuais.');
         const custos = await response.json();
-        
+
         if (custos.length === 0) {
             container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo individual registado.</p>';
             return;
@@ -622,7 +627,7 @@ async function loadRecentIndividualCosts() {
         custos.forEach(c => {
             const tr = tbody.insertRow();
             tr.innerHTML = `
-                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
                 <td class="px-4 py-2">${c.modelo} (${c.placa})</td>
                 <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
                 <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
@@ -644,7 +649,7 @@ async function loadRecentIndividualCosts() {
 function createCostTable(type) {
     const table = document.createElement('table');
     table.className = 'min-w-full divide-y divide-gray-200 text-sm';
-    
+
     let headers = [];
     if (type === 'gerais') {
         headers = ['Sequencial', 'Data', 'Descrição', 'Filial', 'Fornecedor', 'Custo', 'Ações'];
@@ -674,7 +679,7 @@ function handleDeleteCostClick(event) {
     const id = button.dataset.costId;
     const type = button.dataset.costType;
     const description = button.dataset.costDesc;
-    
+
     openDeleteCostConfirmModal(id, type, description);
 }
 
@@ -706,10 +711,10 @@ async function executeDeleteCost(id, type) {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         if (!response.ok) throw new Error('Falha ao excluir o lançamento.');
-        
+
         alert('Lançamento excluído com sucesso!');
         modal.classList.add('hidden');
-        
+
         await loadFleetCosts();
         await loadRecentIndividualCosts();
 
@@ -773,9 +778,9 @@ async function exportMaintenanceReportPDF() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
 
-        if (LOGO_BASE64) {
+        if (LOGO_BASE_64) { // Variável atualizada
             try {
-                doc.addImage(LOGO_BASE64, 'PNG', 14, 15, 25, 0);
+                doc.addImage(LOGO_BASE_64, 'PNG', 14, 15, 25, 0);
             } catch (e) {
                 console.error("A logo carregada é inválida e não será adicionada ao PDF.", e);
             }
@@ -787,7 +792,7 @@ async function exportMaintenanceReportPDF() {
         doc.text(`Período: ${startDate.toLocaleDateString('pt-BR')} a ${endDate.toLocaleDateString('pt-BR')}`, 14, 40);
 
         const body = manutençõesFiltradas.map(m => [
-            new Date(m.data_manutencao).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
+            new Date(m.data_manutencao).toLocaleDateString('pt-BR', { timeZone: 'UTC' }),
             m.tipo_manutencao,
             m.nome_fornecedor || 'N/A',
             m.descricao || '',
@@ -812,7 +817,7 @@ async function exportMaintenanceReportPDF() {
             acc[tipo] = (acc[tipo] || 0) + custo;
             return acc;
         }, {});
-        
+
         const totalGeral = Object.values(totaisPorTipo).reduce((sum, value) => sum + value, 0);
 
         const summaryBody = Object.entries(totaisPorTipo).map(([tipo, total]) => {
@@ -827,7 +832,7 @@ async function exportMaintenanceReportPDF() {
             foot: [['Total Geral', totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]],
             footStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold' }
         });
-        
+
         doc.save(`Relatorio_Manutencao_${vehicle.placa}.pdf`);
         document.getElementById('maintenance-export-modal').classList.add('hidden');
 
@@ -845,7 +850,7 @@ async function loadCurrentLogo() {
         if (!response.ok) return;
         const data = await response.json();
         if (data.logoBase64) {
-            LOGO_BASE64 = data.logoBase64;
+            LOGO_BASE_64 = data.logoBase64; // Variável atualizada
         }
     } catch (error) {
         console.error("Não foi possível carregar a logo atual:", error);
@@ -866,7 +871,7 @@ async function loadMarcasAndModelosFromDB() {
         dbMarcas.forEach(marca => {
             const option = document.createElement('option');
             option.value = marca.NOME_PARAMETRO;
-            option.dataset.keyVinculacao = marca.KEY_VINCULACAO; 
+            option.dataset.keyVinculacao = marca.KEY_VINCULACAO;
             datalistMarcas.appendChild(option);
         });
     } catch (error) {
@@ -899,11 +904,6 @@ function handleMarcaChange() {
 async function loadVehicles() {
     const contentArea = document.getElementById('content-area');
     contentArea.innerHTML = '<p class="text-center p-8 text-gray-500">A carregar veículos...</p>';
-    showLoader(); // <-- Adicione esta linha
-    try {
-        const response = await fetch(`${apiUrlBase}/logistica/cnpj/${cnpj}`, {
-             headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
     try {
         const response = await fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error(`Falha ao buscar veículos: ${response.statusText}`);
@@ -913,10 +913,7 @@ async function loadVehicles() {
         console.error("Erro ao carregar veículos:", error);
         contentArea.innerHTML = `<p class="text-center p-8 text-red-600">Erro ao carregar veículos.</p>`;
     }
-
-}   finally {
-        hideLoader(); // <-- Adicionado
-    }
+}
 
 function applyFilters() {
     const searchTerm = document.getElementById('filter-search').value.toLowerCase();
@@ -924,16 +921,16 @@ function applyFilters() {
     const status = document.getElementById('filter-status').value;
 
     let filteredVehicles = allVehicles.filter(vehicle => {
-        const searchMatch = !searchTerm || 
-                            (vehicle.placa && vehicle.placa.toLowerCase().includes(searchTerm)) || 
-                            (vehicle.modelo && vehicle.modelo.toLowerCase().includes(searchTerm));
+        const searchMatch = !searchTerm ||
+            (vehicle.placa && vehicle.placa.toLowerCase().includes(searchTerm)) ||
+            (vehicle.modelo && vehicle.modelo.toLowerCase().includes(searchTerm));
         const filialMatch = !filial || vehicle.id_filial == filial;
         return searchMatch && filialMatch;
     });
 
     if (status) {
         if (status === "Ativo / Manutenção") {
-             filteredVehicles = filteredVehicles.filter(v => v.status === 'Ativo' || v.status === 'Em Manutenção');
+            filteredVehicles = filteredVehicles.filter(v => v.status === 'Ativo' || v.status === 'Em Manutenção');
         } else {
             filteredVehicles = filteredVehicles.filter(v => v.status === status);
         }
@@ -974,14 +971,14 @@ function renderVehicleCards(vehicles, container) {
     vehicles.forEach(vehicle => {
         const card = document.createElement('div');
         card.className = 'vehicle-item bg-white rounded-lg shadow-md overflow-hidden cursor-pointer transform hover:-translate-y-1 transition-transform duration-200';
-        card.dataset.id = vehicle.id; 
-        
-        const photoUrl = vehicle.foto_frente 
-            ? `${apiUrlBase.replace('/api', '')}/${vehicle.foto_frente}` 
-            : (vehicle.foto_principal 
+        card.dataset.id = vehicle.id;
+
+        const photoUrl = vehicle.foto_frente
+            ? `${apiUrlBase.replace('/api', '')}/${vehicle.foto_frente}`
+            : (vehicle.foto_principal
                 ? `${apiUrlBase.replace('/api', '')}/${vehicle.foto_principal}`
                 : 'https://placehold.co/400x250/e2e8f0/4a5568?text=Sem+Foto');
-        
+
         const statusInfo = getStatusInfo(vehicle.status);
         card.innerHTML = `
             <div class="relative">
@@ -1054,7 +1051,7 @@ function handleContentClick(event) {
         openVehicleModal(vehicle);
     } else if (action === 'delete') {
         openDeleteConfirmModal(vehicle);
-    } else { 
+    } else {
         openDetailsModal(vehicle);
     }
 }
@@ -1070,7 +1067,7 @@ function openDetailsModal(vehicle) {
         logsTabButton.style.display = 'none';
     }
     modal.classList.remove('hidden');
-    switchTab('details', vehicle.id); 
+    switchTab('details', vehicle.id);
     feather.replace();
 }
 
@@ -1116,7 +1113,7 @@ async function fetchAndDisplayMaintenanceHistory(vehicleId) {
         manutenções.forEach(m => {
             const tr = tbody.insertRow();
             tr.innerHTML = `
-                <td class="px-4 py-2">${new Date(m.data_manutencao).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+                <td class="px-4 py-2">${new Date(m.data_manutencao).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
                 <td class="px-4 py-2">${m.tipo_manutencao}</td>
                 <td class="px-4 py-2">${m.nome_fornecedor || 'N/A'}</td>
                 <td class="px-4 py-2 text-right">R$ ${parseFloat(m.custo).toFixed(2)}</td>`;
@@ -1156,7 +1153,7 @@ async function fetchAndDisplayChangeLogs(vehicleId) {
         const tbody = table.querySelector('tbody');
         logs.forEach(log => {
             const tr = tbody.insertRow();
-            const dataFormatada = new Date(log.data_alteracao).toLocaleString('pt-BR', {timeZone: 'UTC'});
+            const dataFormatada = new Date(log.data_alteracao).toLocaleString('pt-BR', { timeZone: 'UTC' });
             tr.innerHTML = `
                 <td class="px-4 py-2">${dataFormatada}</td>
                 <td class="px-4 py-2">${log.alterado_por_nome || 'N/A'}</td>
@@ -1203,8 +1200,7 @@ function openMaintenanceModal(vehicleId) {
     document.getElementById('maintenance-vehicle-id').value = vehicleId;
     document.getElementById('maintenance-fornecedor-id').value = '';
     document.getElementById('maintenance-date').value = new Date().toISOString().split('T')[0];
-    
-    // Popula os selects existentes e o novo
+
     populateMaintenanceTypes();
     populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Classificação Despesa Veiculo`, 'maintenance-classification', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Selecione a Classificação --');
 
@@ -1222,7 +1218,7 @@ async function handleMaintenanceFormSubmit(event) {
         data_manutencao: document.getElementById('maintenance-date').value,
         custo: document.getElementById('maintenance-cost').value,
         tipo_manutencao: document.getElementById('maintenance-type').value,
-        classificacao_custo: document.getElementById('maintenance-classification').value, // NOVO
+        classificacao_custo: document.getElementById('maintenance-classification').value,
         descricao: document.getElementById('maintenance-description').value,
         id_fornecedor: document.getElementById('maintenance-fornecedor-id').value,
     };
@@ -1232,7 +1228,7 @@ async function handleMaintenanceFormSubmit(event) {
         saveBtn.disabled = false;
         return;
     }
-    if (!maintenanceData.tipo_manutencao || !maintenanceData.classificacao_custo) { // NOVO: Validação
+    if (!maintenanceData.tipo_manutencao || !maintenanceData.classificacao_custo) {
         alert('Por favor, selecione um tipo e uma classificação para a manutenção.');
         saveBtn.disabled = false;
         return;
@@ -1260,10 +1256,10 @@ function openVehicleCostModal() {
     const modal = document.getElementById('vehicle-cost-modal');
     const form = modal.querySelector('form');
     form.reset();
-    
+
     document.getElementById('vehicle-cost-fornecedor-id').value = '';
     document.getElementById('vehicle-cost-date').value = new Date().toISOString().split('T')[0];
-    
+
     const select = document.getElementById('vehicle-cost-vehicle-select');
     select.innerHTML = '<option value="">-- Selecione um Veículo --</option>';
     allVehicles
@@ -1275,12 +1271,10 @@ function openVehicleCostModal() {
             option.textContent = `${v.modelo} - ${v.placa}`;
             select.appendChild(option);
         });
-        
-    populateMaintenanceTypes('vehicle-cost-type'); 
-    
-    // NOVO: Popula o novo select de classificação
+
+    populateMaintenanceTypes('vehicle-cost-type');
     populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Classificação Despesa Veiculo`, 'vehicle-cost-classification', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Selecione a Classificação --');
-    
+
     modal.classList.remove('hidden');
     feather.replace();
 }
@@ -1295,19 +1289,19 @@ async function handleVehicleCostFormSubmit(event) {
         data_manutencao: document.getElementById('vehicle-cost-date').value,
         custo: document.getElementById('vehicle-cost-value').value,
         tipo_manutencao: document.getElementById('vehicle-cost-type').value,
-        classificacao_custo: document.getElementById('vehicle-cost-classification').value, // NOVO
+        classificacao_custo: document.getElementById('vehicle-cost-classification').value,
         descricao: document.getElementById('vehicle-cost-description').value,
         id_fornecedor: document.getElementById('vehicle-cost-fornecedor-id').value,
     };
-    
+
     if (!costData.id_veiculo) { alert('Por favor, selecione um veículo.'); saveBtn.disabled = false; return; }
     if (!costData.id_fornecedor) { alert('Por favor, associe um fornecedor ou marque como despesa interna.'); saveBtn.disabled = false; return; }
-    if (!costData.tipo_manutencao || !costData.classificacao_custo) { // NOVO: Validação
-        alert('Por favor, selecione um tipo e uma classificação para a despesa.'); 
-        saveBtn.disabled = false; 
-        return; 
+    if (!costData.tipo_manutencao || !costData.classificacao_custo) {
+        alert('Por favor, selecione um tipo e uma classificação para a despesa.');
+        saveBtn.disabled = false;
+        return;
     }
-    
+
     try {
         const response = await fetch(`${apiUrlBase}/logistica/veiculos/${costData.id_veiculo}/manutencoes`, {
             method: 'POST',
@@ -1315,11 +1309,11 @@ async function handleVehicleCostFormSubmit(event) {
             body: JSON.stringify(costData)
         });
         if (!response.ok) throw new Error('Falha ao salvar a despesa do veículo.');
-        
+
         document.getElementById('vehicle-cost-modal').classList.add('hidden');
         alert('Despesa do veículo registada com sucesso!');
         await loadRecentIndividualCosts();
-        
+
         if (costData.tipo_manutencao.toLowerCase().includes('manutenção')) {
             await loadVehicles();
         }
@@ -1345,9 +1339,9 @@ async function handleFleetCostFormSubmit(event) {
     event.preventDefault();
     const saveBtn = document.getElementById('save-fleet-cost-btn');
     saveBtn.disabled = true;
-    
+
     const selectedFiliais = Array.from(document.querySelectorAll('#fleet-cost-filiais-checkboxes input[type="checkbox"]:checked'))
-                                .map(cb => cb.value);
+        .map(cb => cb.value);
 
     const costData = {
         descricao: document.getElementById('fleet-cost-description').value,
@@ -1504,9 +1498,9 @@ async function populateCheckboxes(url, containerId, valueKey, textKey) {
     try {
         const response = await fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error(`Falha ao carregar dados para ${containerId}.`);
-        
+
         const items = await response.json();
-        container.innerHTML = ''; 
+        container.innerHTML = '';
         items.forEach(item => {
             const wrapper = document.createElement('div');
             wrapper.className = 'flex items-center';
@@ -1542,7 +1536,7 @@ function handleHasPlacaChange() {
         placaInput.required = true;
         placaInput.classList.remove('opacity-50', 'bg-gray-200');
         placaInput.placeholder = '';
-        if(placaInput.value === 'SEM PLACA') placaInput.value = '';
+        if (placaInput.value === 'SEM PLACA') placaInput.value = '';
     } else {
         placaInput.disabled = true;
         placaInput.required = false;
@@ -1615,17 +1609,18 @@ function getStatusInfo(status) {
     }
 }
 
-function getToken() { return localStorage.getItem('lucaUserToken'); }
-function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
-function getUserName() { return getUserData()?.nome || 'Utilizador'; }
-function getUserProfile() { return getUserData()?.perfil || null; }
-function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html'; }
+function useInternalExpense(modalType) {
+    document.getElementById(`${modalType}-cnpj`).value = 'N/A';
+    document.getElementById(`${modalType}-razao-social`).value = 'DESPESA INTERNA';
+    document.getElementById(`${modalType}-fornecedor-id`).value = '0';
+}
 
+// --- Funções Auxiliares e de Autenticação ---
 async function lookupCnpj(modalType) {
     const cnpjInput = document.getElementById(`${modalType}-cnpj`);
     const razaoSocialInput = document.getElementById(`${modalType}-razao-social`);
     const fornecedorIdInput = document.getElementById(`${modalType}-fornecedor-id`);
-    
+
     const cnpj = cnpjInput.value.replace(/\D/g, '');
     if (cnpj.length !== 14) {
         alert('Por favor, digite um CNPJ válido com 14 dígitos.');
@@ -1634,16 +1629,12 @@ async function lookupCnpj(modalType) {
 
     showLoader();
     try {
-        // ATUALIZADO: Chama a nossa nova rota de backend em vez da BrasilAPI
         const response = await fetch(`${apiUrlBase}/logistica/cnpj/${cnpj}`, {
-             headers: { 'Authorization': `Bearer ${getToken()}` }
+            headers: { 'Authorization': `Bearer ${getToken()}` }
         });
-
-        if (!response.ok) throw new Error('CNPJ не encontrado ou serviço indisponível.');
-        
+        if (!response.ok) throw new Error('CNPJ não encontrado ou serviço indisponível.');
         const data = await response.json();
 
-        // O resto da lógica para salvar o fornecedor permanece a mesma
         const fornecedorResponse = await fetch(`${apiUrlBase}/logistica/fornecedores/cnpj`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -1659,13 +1650,11 @@ async function lookupCnpj(modalType) {
                 cep: data.cep
             })
         });
-
         if (!fornecedorResponse.ok) throw new Error('Falha ao registar ou buscar fornecedor no sistema.');
         const fornecedor = await fornecedorResponse.json();
-        
+
         razaoSocialInput.value = fornecedor.razao_social;
         fornecedorIdInput.value = fornecedor.id;
-
     } catch (error) {
         alert(`Erro ao consultar CNPJ: ${error.message}`);
         razaoSocialInput.value = '';
@@ -1675,87 +1664,25 @@ async function lookupCnpj(modalType) {
     }
 }
 
-function useInternalExpense(modalType) {
-    document.getElementById(`${modalType}-cnpj`).value = 'N/A';
-    document.getElementById(`${modalType}-razao-social`).value = 'DESPESA INTERNA';
-    document.getElementById(`${modalType}-fornecedor-id`).value = '0'; 
-}
-
+function getToken() { return localStorage.getItem('lucaUserToken'); }
+function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
+function getUserName() { return getUserData()?.nome || 'Utilizador'; }
+function getUserProfile() { return getUserData()?.perfil || null; }
+function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html'; }
 function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) {
         console.error("Não foi possível obter as permissões do usuário.");
         return;
     }
-
     const permissoesDoUsuario = userData.permissoes;
-
-    // Mapeamento dos nomes dos módulos para os links no HTML
     const mapaModulos = {
         'lancamentos': 'despesas.html',
         'logistica': 'logistica.html',
         'configuracoes': 'settings.html'
     };
-
-    // Itera sobre o mapa de módulos para verificar cada permissão
     for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
         const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
-        
-        // Se a permissão não existe ou não é permitida (permitido=false)
-        if (!permissao || !permissao.permitido) {
-            // Encontra o link na barra lateral e esconde o item da lista (o <li> pai)
-            const link = document.querySelector(`#sidebar a[href="${href}"]`);
-            if (link && link.parentElement) {
-                link.parentElement.style.display = 'none';
-            }
-        }
-    }
-}
-}
-
-function getToken() { 
-    return localStorage.getItem('lucaUserToken'); 
-}
-
-function getUserData() { 
-    const token = getToken(); 
-    if (!token) return null; 
-    try { 
-        return JSON.parse(atob(token.split('.')[1])); 
-    } catch (e) { 
-        return null; 
-    } 
-}
-
-function getUserName() { 
-    return getUserData()?.nome || 'Utilizador'; 
-}
-
-function getUserProfile() { 
-    return getUserData()?.perfil || null; 
-}
-
-function logout() { 
-    localStorage.removeItem('lucaUserToken'); 
-    window.location.href = 'login.html'; 
-}
-
-function gerenciarAcessoModulos() {
-    const userData = getUserData();
-    if (!userData || !userData.permissoes) {
-        console.error("Não foi possível obter as permissões do usuário.");
-        return;
-    }
-
-    const permissoesDoUsuario = userData.permissoes;
-    const mapaModulos = {
-        'lancamentos': 'despesas.html',
-        'logistica': 'logistica.html',
-        'configuracoes': 'settings.html'
-    };
-
-    for (const [moduleKey, href] of Object.entries(mapaModulos)) {
-        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === moduleKey);
         if (!permissao || !permissao.permitido) {
             const link = document.querySelector(`#sidebar a[href="${href}"]`);
             if (link && link.parentElement) {
