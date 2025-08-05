@@ -121,7 +121,7 @@ router.get('/veiculos', authenticateToken, async (req, res) => {
 });
 
 router.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) => {
-    const { placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status } = req.body;
+    const { placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status, seguro, rastreador } = req.body;
 
     if (!placa || !marca || !modelo || !id_filial || !status) {
         return res.status(400).json({ error: 'Placa, marca, modelo, filial e status são obrigatórios.' });
@@ -134,8 +134,8 @@ router.post('/veiculos', authenticateToken, authorizeAdmin, async (req, res) => 
 
         const sql = `
             INSERT INTO veiculos 
-            (placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            (placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status, seguro, rastreador) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             
         const params = [placa, marca, modelo, ano_fabricacao || null, ano_modelo || null, renavam || null, chassi || null, id_filial, status];
         const [result] = await connection.execute(sql, params);
@@ -183,7 +183,7 @@ router.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) 
         const currentVehicle = currentVehicleRows[0];
 
         const logs = [];
-        const camposParaComparar = ['placa', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'renavam', 'chassi', 'id_filial', 'status'];
+        const camposParaComparar = ['placa', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'renavam', 'chassi', 'id_filial', 'status', 'seguro', 'rastreador'];
         
         for (const campo of camposParaComparar) {
             const valorAntigo = currentVehicle[campo] || '';
@@ -202,7 +202,8 @@ router.put('/veiculos/:id', authenticateToken, authorizeAdmin, async (req, res) 
         const updateSql = `
             UPDATE veiculos SET 
             placa = ?, marca = ?, modelo = ?, ano_fabricacao = ?, ano_modelo = ?, 
-            renavam = ?, chassi = ?, id_filial = ?, status = ? 
+            renavam = ?, chassi = ?, id_filial = ?, status = ?,
+            seguro = ?, rastreador = ? 
             WHERE id = ?`;
         
         await connection.execute(updateSql, [

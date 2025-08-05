@@ -980,10 +980,14 @@ function renderVehicleCards(vehicles, container) {
                 : 'https://placehold.co/400x250/e2e8f0/4a5568?text=Sem+Foto');
 
         const statusInfo = getStatusInfo(vehicle.status);
+        const seguroBadge = vehicle.seguro ? '<span class="px-2 py-1 text-xs font-semibold text-white bg-blue-500 rounded-full">Seguro</span>' : '';
+        const rastreadorBadge = vehicle.rastreador ? '<span class="px-2 py-1 text-xs font-semibold text-white bg-orange-500 rounded-full">Rastreador</span>' : '';
         card.innerHTML = `
             <div class="relative">
                 <img src="${photoUrl}" alt="Foto de ${vehicle.modelo}" class="w-full h-40 object-cover">
                 <span class="absolute top-2 right-2 px-2 py-1 text-xs font-semibold text-white ${statusInfo.color} rounded-full">${statusInfo.text}</span>
+                ${seguroBadge}
+                ${rastreadorBadge}
             </div>
             <div class="p-4">
                 <p class="text-xs text-gray-500">${vehicle.marca || 'N/A'}</p>
@@ -1015,6 +1019,8 @@ function renderVehicleTable(vehicles, container) {
     const tbody = table.querySelector('tbody');
     vehicles.forEach(vehicle => {
         const statusInfo = getStatusInfo(vehicle.status);
+        const seguroBadge = vehicle.seguro ? '<span class="px-2 ml-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-500 text-white">Seguro</span>' : '';
+        const rastreadorBadge = vehicle.rastreador ? '<span class="px-2 ml-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-500 text-white">Rastreador</span>' : '';
         const tr = document.createElement('tr');
         tr.className = 'vehicle-item hover:bg-gray-50';
         tr.dataset.id = vehicle.id;
@@ -1027,6 +1033,8 @@ function renderVehicleTable(vehicles, container) {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${vehicle.nome_filial || 'N/A'}</td>
             <td class="px-6 py-4 whitespace-nowrap">
                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusInfo.color} text-white">${statusInfo.text}</span>
+                ${seguroBadge}
+                ${rastreadorBadge}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <button class="text-indigo-600 hover:text-indigo-900" data-action="details">Gerir</button>
@@ -1402,6 +1410,8 @@ async function openVehicleModal(vehicle = null) {
         document.getElementById('vehicle-filial').value = vehicle.id_filial || '';
         document.getElementById('vehicle-status').value = vehicle.status || 'Ativo';
         const hasPlaca = vehicle.placa && vehicle.placa.toUpperCase() !== 'SEM PLACA';
+        document.getElementById('vehicle-tem_seguro').checked = !!vehicle.seguro;
+        document.getElementById('vehicle-tem_rastreador').checked = !!vehicle.rastreador;
         document.getElementById('has-placa-checkbox').checked = hasPlaca;
         handleMarcaChange();
         modeloInput.value = vehicle.modelo || '';
@@ -1435,6 +1445,8 @@ async function handleVehicleFormSubmit(event) {
         chassi: document.getElementById('vehicle-chassi').value,
         id_filial: document.getElementById('vehicle-filial').value,
         status: document.getElementById('vehicle-status').value,
+        seguro: document.getElementById('vehicle-seguro').checked,
+        rastreador: document.getElementById('vehicle-rastreador').checked,
     };
     const method = id ? 'PUT' : 'POST';
     const url = id ? `${apiUrlBase}/logistica/veiculos/${id}` : `${apiUrlBase}/logistica/veiculos`;
