@@ -971,19 +971,25 @@ function renderVehicleCards(vehicles, container) {
     vehicles.forEach(vehicle => {
         const card = document.createElement('div');
         card.className = 'vehicle-item bg-white rounded-lg shadow-md overflow-hidden cursor-pointer transform hover:-translate-y-1 transition-transform duration-200';
-        card.dataset.id = vehicle.id;
-
-        const photoUrl = vehicle.foto_frente
-            ? `${apiUrlBase.replace('/api', '')}/${vehicle.foto_frente}`
-            : (vehicle.foto_principal
-                ? `${apiUrlBase.replace('/api', '')}/${vehicle.foto_principal}`
-                : 'https://placehold.co/400x250/e2e8f0/4a5568?text=Sem+Foto');
-
+        card.dataset.id = vehicle.id; 
+        
+        const photoUrl = vehicle.foto_frente 
+            ? `${apiUrlBase.replace('/api', '')}/${vehicle.foto_frente}` 
+            : 'https://placehold.co/400x250/e2e8f0/4a5568?text=Sem+Foto';
+        
         const statusInfo = getStatusInfo(vehicle.status);
+        // Lógica para criar os badges de seguro e rastreador
+        const seguroBadge = vehicle.seguro ? '<span class="px-2 py-1 text-xs font-semibold text-white bg-blue-500 rounded-full">Seguro</span>' : '';
+        const rastreadorBadge = vehicle.rastreador ? '<span class="px-2 py-1 text-xs font-semibold text-white bg-orange-500 rounded-full">Rastreador</span>' : '';
+
         card.innerHTML = `
             <div class="relative">
                 <img src="${photoUrl}" alt="Foto de ${vehicle.modelo}" class="w-full h-40 object-cover">
-                <span class="absolute top-2 right-2 px-2 py-1 text-xs font-semibold text-white ${statusInfo.color} rounded-full">${statusInfo.text}</span>
+                <div class="absolute top-2 right-2 flex flex-col items-end gap-1">
+                    <span class="px-2 py-1 text-xs font-semibold text-white ${statusInfo.color} rounded-full">${statusInfo.text}</span>
+                    ${seguroBadge}
+                    ${rastreadorBadge}
+                </div>
             </div>
             <div class="p-4">
                 <p class="text-xs text-gray-500">${vehicle.marca || 'N/A'}</p>
@@ -1015,6 +1021,10 @@ function renderVehicleTable(vehicles, container) {
     const tbody = table.querySelector('tbody');
     vehicles.forEach(vehicle => {
         const statusInfo = getStatusInfo(vehicle.status);
+        // Lógica para criar os badges de seguro e rastreador
+        const seguroBadge = vehicle.seguro ? '<span class="px-2 ml-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-500 text-white">Seguro</span>' : '';
+        const rastreadorBadge = vehicle.rastreador ? '<span class="px-2 ml-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-500 text-white">Rastreador</span>' : '';
+
         const tr = document.createElement('tr');
         tr.className = 'vehicle-item hover:bg-gray-50';
         tr.dataset.id = vehicle.id;
@@ -1027,6 +1037,8 @@ function renderVehicleTable(vehicles, container) {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${vehicle.nome_filial || 'N/A'}</td>
             <td class="px-6 py-4 whitespace-nowrap">
                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusInfo.color} text-white">${statusInfo.text}</span>
+                ${seguroBadge}
+                ${rastreadorBadge}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <button class="text-indigo-600 hover:text-indigo-900" data-action="details">Gerir</button>
@@ -1073,6 +1085,7 @@ function openDetailsModal(vehicle) {
 
 function renderDetailsTab(vehicle) {
     const detailsContent = document.getElementById('details-tab-content');
+    // Adicionadas as informações de Seguro e Rastreador
     detailsContent.innerHTML = `
         <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
             <div><strong class="block text-gray-500">Placa</strong><span>${vehicle.placa}</span></div>
@@ -1083,6 +1096,8 @@ function renderDetailsTab(vehicle) {
             <div class="md:col-span-2"><strong class="block text-gray-500">Chassi</strong><span>${vehicle.chassi || 'N/A'}</span></div>
             <div><strong class="block text-gray-500">Filial</strong><span>${vehicle.nome_filial || 'N/A'}</span></div>
             <div><strong class="block text-gray-500">Status</strong><span>${vehicle.status}</span></div>
+            <div><strong class="block text-gray-500">Seguro</strong><span>${vehicle.seguro ? 'Sim' : 'Não'}</span></div>
+            <div><strong class="block text-gray-500">Rastreador</strong><span>${vehicle.rastreador ? 'Sim' : 'Não'}</span></div>
         </div>`;
 }
 
