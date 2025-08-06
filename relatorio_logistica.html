@@ -79,7 +79,7 @@
             <h2 class="text-2xl font-bold text-gray-900 mb-6">Relatórios de Logística</h2>
 
             <div class="bg-white p-4 rounded-lg shadow mb-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                     <div>
                         <label for="report-type" class="block text-sm font-medium text-gray-700">Tipo de Relatório</label>
                         <select id="report-type" class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm">
@@ -89,6 +89,7 @@
                             <option value="custoDireto">3 - Despesas Diretas de Veículos</option>
                             <option value="listaVeiculos">4 - Lista de Veículos</option>
                             <option value="despesaVeiculo">5 - Despesa por Veículo</option>
+                            <option value="listaVeiculosAgrupado">6 - Lista de Veículos por Filial</option>
                         </select>
                     </div>
 
@@ -117,7 +118,18 @@
                         </select>
                     </div>
                     
-                    <div>
+                    <div id="security-filter-container" class="col-span-1 md:col-span-2 lg:col-span-3 flex items-end space-x-6">
+                        <div class="flex items-center">
+                            <input id="filter-seguro" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <label for="filter-seguro" class="ml-2 block text-sm text-gray-900">Apenas com Seguro</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input id="filter-rastreador" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <label for="filter-rastreador" class="ml-2 block text-sm text-gray-900">Apenas com Rastreador</label>
+                        </div>
+                    </div>
+                    
+                    <div class="lg:col-start-5">
                         <button id="generate-report-btn" class="action-btn bg-indigo-600 hover:bg-indigo-700 w-full flex items-center justify-center gap-2">
                             <span data-feather="play" class="w-4 h-4"></span>Gerar Relatório
                         </button>
@@ -125,8 +137,8 @@
                 </div>
             </div>
             
-            <div id="report-results-area" class="bg-white rounded-lg shadow overflow-x-auto min-h-[300px]">
-                <p class="text-center text-gray-500 p-8">Selecione um tipo de relatório e clique em "Gerar" para ver os resultados.</p>
+            <div id="report-results-area" class="space-y-6">
+                <p id="initial-message" class="text-center text-gray-500 p-8 bg-white rounded-lg shadow">Selecione um tipo de relatório e clique em "Gerar" para ver os resultados.</p>
             </div>
             
             <div id="pagination-controls" class="mt-4 flex justify-end items-center">
@@ -145,7 +157,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
-<script src="relatorio_logistica.js?v=2.0.1" defer></script>
+<script src="relatorio_logistica.js?v=1.2.1" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
