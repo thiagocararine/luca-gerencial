@@ -28,14 +28,14 @@
 - Ao clicar na imagem ela se abre para voce, e botão fechar nela também.
 (IMPLEMENTADO)
 
+- ter tambem dentro de detalhes de cada veiculo, como marcar "Veiculo com rastreador", "Veiculo com Seguro", criar checkbox para poder exibi-los em relatorio.
+(IMPLEMENTADO)
+
 - Foto de frente do veiculo, deve ser exibida no card da versao mobile.
 
 - Adicionar um controle para combustivel, quando for dada a entrada de custo de compra de Oleo Diesel, inserir a quantidade comprada, para montagem de estoque.
 
 - Inserir um controle para consumo de combustivel, e nessas interações puxar a informação de hodometro do veiculo, litro e buscar uma forma de tirar o consumo médio.
-
-- ter tambem dentro de detalhes de cada veiculo, como marcar "Veiculo com rastreador", "Veiculo com Seguro", criar checkbox para poder exibi-los em relatorio.
-(IMPLEMENTADO)
 
 - Montar os relatórios exportaveis em PDF do sistema logistica.
 
