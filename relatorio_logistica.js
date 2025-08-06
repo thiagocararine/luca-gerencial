@@ -1,11 +1,12 @@
-// relatorio_logistica.js (COMPLETO com o Relatório 6 removido)
+// relatorio_logistica.js (COMPLETO com funcionalidade de exportar para PDF)
 
 document.addEventListener('DOMContentLoaded', initRelatoriosPage);
 
 const apiUrlBase = 'http://10.113.0.17:3000/api';
 let datepicker = null;
+let LOGO_BASE_64 = null; // Para guardar a logo da empresa
 
-function initRelatoriosPage() {
+async function initRelatoriosPage() {
     const token = getToken();
     if (!token) {
         window.location.href = 'login.html';
@@ -16,6 +17,8 @@ function initRelatoriosPage() {
 
     gerenciarAcessoModulos();
     setupEventListeners();
+    await loadCurrentLogo(); // Carrega a logo para o PDF
+
     populateFilialSelect();
     populateVehicleSelect();
 
@@ -33,6 +36,163 @@ function setupEventListeners() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('report-type').addEventListener('change', handleReportTypeChange);
     document.getElementById('generate-report-btn').addEventListener('click', generateReport);
+
+    // Novos Listeners para o modal de exportação
+    document.getElementById('open-export-modal-btn')?.addEventListener('click', openExportModal);
+    document.getElementById('close-export-modal-btn')?.addEventListener('click', () => document.getElementById('export-pdf-modal').classList.add('hidden'));
+    document.getElementById('generate-pdf-btn')?.addEventListener('click', exportarRelatorioLogisticaPDF);
+}
+
+// NOVA FUNÇÃO para abrir o modal de exportação
+function openExportModal() {
+    const reportTypeSelect = document.getElementById('report-type');
+    const reportType = reportTypeSelect.value;
+    if (!reportType) {
+        alert("Por favor, selecione um tipo de relatório primeiro.");
+        return;
+    }
+    
+    // Atualiza o modal com as informações dos filtros atuais
+    document.getElementById('export-info-report-type').textContent = reportTypeSelect.options[reportTypeSelect.selectedIndex].text;
+    document.getElementById('export-info-period').textContent = document.getElementById('filter-date-range').value || "Todos";
+    
+    const filialSelect = document.getElementById('filter-filial');
+    document.getElementById('export-info-filial').textContent = filialSelect.options[filialSelect.selectedIndex].text || "Todas";
+
+    document.getElementById('export-pdf-modal').classList.remove('hidden');
+}
+
+
+// NOVA FUNÇÃO para gerar o PDF
+async function exportarRelatorioLogisticaPDF() {
+    const btn = document.getElementById('generate-pdf-btn');
+    btn.textContent = 'A gerar...';
+    btn.disabled = true;
+
+    const reportType = document.getElementById('report-type').value;
+    let apiUrl = `${apiUrlBase}/logistica/relatorios/${reportType}?export=true`;
+    
+    // Adiciona os mesmos filtros da tela principal à URL de exportação
+    const filialId = document.getElementById('filter-filial').value;
+    const vehicleId = document.getElementById('filter-vehicle').value;
+    const status = document.getElementById('filter-status').value;
+    const comSeguro = document.getElementById('filter-seguro').checked;
+    const comRastreador = document.getElementById('filter-rastreador').checked;
+    const startDate = datepicker.getStartDate()?.toJSDate();
+    const endDate = datepicker.getEndDate()?.toJSDate();
+
+    if (filialId && !document.getElementById('filter-filial').disabled) apiUrl += `&filial=${filialId}`;
+    if (vehicleId && !document.getElementById('filter-vehicle').disabled) apiUrl += `&veiculoId=${vehicleId}`;
+    if (status && !document.getElementById('filter-status').disabled) apiUrl += `&status=${status}`;
+    if (comSeguro && !document.getElementById('filter-seguro').disabled) apiUrl += `&seguro=true`;
+    if (comRastreador && !document.getElementById('filter-rastreador').disabled) apiUrl += `&rastreador=true`;
+    if (startDate && !document.getElementById('filter-date-range').disabled) apiUrl += `&dataInicio=${startDate.toISOString().slice(0, 10)}`;
+    if (endDate && !document.getElementById('filter-date-range').disabled) apiUrl += `&dataFim=${endDate.toISOString().slice(0, 10)}`;
+
+    try {
+        const response = await fetch(apiUrl, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao buscar dados para o relatório.');
+        const data = await response.json();
+
+        if (data.length === 0) {
+            alert('Nenhum dado encontrado com os filtros atuais para gerar o relatório.');
+            return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+        
+        // Adiciona a Logo
+        if (LOGO_BASE_64) {
+            doc.addImage(LOGO_BASE_64, 'PNG', 14, 15, 25, 0);
+        }
+
+        // Adiciona Título e Informações do Filtro
+        const reportTitle = document.getElementById('report-type').options[document.getElementById('report-type').selectedIndex].text;
+        doc.setFontSize(18);
+        doc.text(reportTitle, doc.internal.pageSize.getWidth() / 2, 22, { align: 'center' });
+        doc.setFontSize(11);
+        doc.text(`Período: ${document.getElementById('filter-date-range').value || 'Todos'}`, 14, 35);
+        doc.text(`Filial: ${document.getElementById('filter-filial').options[document.getElementById('filter-filial').selectedIndex].text}`, 14, 40);
+
+        let head = [];
+        let body = [];
+        let totalGeral = 0;
+        
+        // Formata os dados de acordo com o tipo de relatório
+        switch (reportType) {
+            case 'custoTotalFilial':
+            case 'custoRateado':
+            case 'custoDireto':
+                head = [['Data', 'Filial', 'Descrição', 'Valor (R$)']];
+                body = data.map(item => {
+                    totalGeral += parseFloat(item.valor);
+                    return [
+                        new Date(item.data_despesa || item.data_custo).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
+                        item.filial_nome,
+                        item.descricao,
+                        parseFloat(item.valor).toFixed(2)
+                    ];
+                });
+                break;
+            case 'listaVeiculos':
+                head = [['Placa', 'Marca/Modelo', 'Ano', 'Filial', 'Status']];
+                body = data.map(v => [v.placa, `${v.marca} / ${v.modelo}`, `${v.ano_fabricacao}/${v.ano_modelo}`, v.nome_filial, v.status]);
+                break;
+            case 'despesaVeiculo':
+                head = [['Data', 'Tipo', 'Descrição', 'Fornecedor', 'Valor (R$)']];
+                body = data.map(item => {
+                    totalGeral += parseFloat(item.custo);
+                    return [
+                        new Date(item.data_manutencao).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
+                        item.tipo_manutencao,
+                        item.descricao,
+                        item.fornecedor_nome || 'N/A',
+                        parseFloat(item.custo).toFixed(2)
+                    ];
+                });
+                break;
+        }
+
+        doc.autoTable({
+            head: head,
+            body: body,
+            startY: 50,
+            theme: 'grid',
+            headStyles: { fillColor: [41, 128, 185] },
+        });
+
+        // Adiciona total geral se for um relatório de custos
+        if (['custoTotalFilial', 'custoRateado', 'custoDireto', 'despesaVeiculo'].includes(reportType)) {
+            const finalY = doc.autoTable.previous.finalY;
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'bold');
+            doc.text('Total Geral:', 14, finalY + 10);
+            doc.text(totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), doc.internal.pageSize.getWidth() - 14, finalY + 10, { align: 'right' });
+        }
+
+        doc.save(`Relatorio_${reportType}.pdf`);
+
+    } catch (error) {
+        alert(`Erro ao gerar PDF: ${error.message}`);
+    } finally {
+        btn.textContent = 'Gerar PDF';
+        btn.disabled = false;
+        document.getElementById('export-pdf-modal').classList.add('hidden');
+    }
+}
+
+async function loadCurrentLogo() {
+    try {
+        const response = await fetch(`${apiUrlBase}/settings/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data.logoBase64) {
+            LOGO_BASE_64 = data.logoBase64;
+        }
+    } catch (error) {
+        console.error("Não foi possível carregar a logo atual:", error);
+    }
 }
 
 function handleReportTypeChange() {
