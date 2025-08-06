@@ -35,8 +35,9 @@
 - Inserir um controle para consumo de combustivel, e nessas interações puxar a informação de hodometro do veiculo, litro e buscar uma forma de tirar o consumo médio.
 
 - ter tambem dentro de detalhes de cada veiculo, como marcar "Veiculo com rastreador", "Veiculo com Seguro", criar checkbox para poder exibi-los em relatorio.
+(IMPLEMENTADO)
 
-- Montar os relatórois exportaveis em PDF do sistema logistica.
+- Montar os relatórios exportaveis em PDF do sistema logistica.
 
 - Utilizar o giro de hodometro para calcular a manutenção de cada veiculo, seguindo a regra pré-estabelecida em algum campo.
 

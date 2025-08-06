@@ -1,4 +1,4 @@
-// relatorio_logistica.js (COMPLETO E ATUALIZADO)
+// relatorio_logistica.js (COMPLETO com o Relatório 6 removido)
 
 document.addEventListener('DOMContentLoaded', initRelatoriosPage);
 
@@ -6,16 +6,15 @@ const apiUrlBase = 'http://10.113.0.17:3000/api';
 let datepicker = null;
 
 function initRelatoriosPage() {
-    const token = getToken(); // Usando a nova função auxiliar
+    const token = getToken();
     if (!token) {
         window.location.href = 'login.html';
         return;
     }
-    const userData = getUserData(); // Usando a nova função auxiliar
+    const userData = getUserData();
     document.getElementById('user-name').textContent = userData.nome || 'Utilizador';
 
     gerenciarAcessoModulos();
-
     setupEventListeners();
     populateFilialSelect();
     populateVehicleSelect();
@@ -39,39 +38,38 @@ function setupEventListeners() {
 function handleReportTypeChange() {
     const reportType = document.getElementById('report-type').value;
     
-    const filialFilterContainer = document.getElementById('filial-filter-container');
-    const vehicleFilterContainer = document.getElementById('vehicle-filter-container');
-    const dateFilterContainer = document.getElementById('date-filter-container');
-    const statusFilterContainer = document.getElementById('status-filter-container');
-    const securityFilterContainer = document.getElementById('security-filter-container');
+    const filialFilter = document.getElementById('filial-filter-container');
+    const vehicleFilter = document.getElementById('vehicle-filter-container');
+    const dateFilter = document.getElementById('date-filter-container');
+    const statusFilter = document.getElementById('status-filter-container');
+    const securityFilter = document.getElementById('security-filter-container');
 
     const toggleFilter = (container, enabled) => {
         if (!container) return;
-        const inputs = container.querySelectorAll('input, select');
-        if (enabled) {
-            container.style.display = 'block';
-            inputs.forEach(input => input.disabled = false);
-        } else {
-            container.style.display = 'none';
-            inputs.forEach(input => input.disabled = true);
-        }
+        container.style.display = enabled ? 'block' : 'none';
+        container.querySelectorAll('input, select').forEach(input => input.disabled = !enabled);
     };
 
     const needsFilial = ['custoTotalFilial', 'custoRateado', 'custoDireto', 'listaVeiculos'].includes(reportType);
     const needsVehicle = ['despesaVeiculo'].includes(reportType);
     const needsDate = ['custoTotalFilial', 'custoRateado', 'custoDireto', 'despesaVeiculo'].includes(reportType);
-    const needsStatus = ['listaVeiculos', 'listaVeiculosAgrupado'].includes(reportType);
-    const needsSecurity = ['listaVeiculos', 'listaVeiculosAgrupado'].includes(reportType);
+    const needsStatus = ['listaVeiculos'].includes(reportType);
+    const needsSecurity = ['listaVeiculos'].includes(reportType);
 
-    toggleFilter(filialFilterContainer, needsFilial);
-    toggleFilter(vehicleFilterContainer, needsVehicle);
-    toggleFilter(dateFilterContainer, needsDate);
-    toggleFilter(statusFilterContainer, needsStatus);
-    toggleFilter(securityFilterContainer, needsSecurity);
+    toggleFilter(filialFilter, needsFilial);
+    toggleFilter(vehicleFilter, needsVehicle);
+    toggleFilter(dateFilter, needsDate);
+    toggleFilter(statusFilter, needsStatus);
+    toggleFilter(securityFilter, needsSecurity);
 }
 
 async function generateReport() {
     const reportType = document.getElementById('report-type').value;
+    if (!reportType) {
+        alert('Por favor, selecione um tipo de relatório.');
+        return;
+    }
+
     const filialId = document.getElementById('filter-filial').value;
     const vehicleId = document.getElementById('filter-vehicle').value;
     const status = document.getElementById('filter-status').value;
@@ -82,13 +80,9 @@ async function generateReport() {
     const endDate = datepicker.getEndDate()?.toJSDate();
     const resultsArea = document.getElementById('report-results-area');
     
-
-    if (!reportType) {
-        alert('Por favor, selecione um tipo de relatório.');
-        return;
-    }
-
     resultsArea.innerHTML = '<p class="text-center text-gray-500 p-8">A gerar relatório...</p>';
+    const initialMessage = document.getElementById('initial-message');
+    if(initialMessage) initialMessage.classList.add('hidden');
 
     let apiUrl = `${apiUrlBase}/logistica/relatorios/${reportType}?`;
     if (filialId && !document.getElementById('filter-filial').disabled) apiUrl += `filial=${filialId}&`;
@@ -101,47 +95,42 @@ async function generateReport() {
     if (limit) apiUrl += `limit=${limit}&`;
 
     try {
-        const response = await fetch(apiUrl, {
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
+        const response = await fetch(apiUrl, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || 'Falha ao buscar os dados do relatório.');
         }
-        
         const data = await response.json();
-
         switch (reportType) {
             case 'custoTotalFilial':
             case 'custoRateado':
-                renderSummaryCostReport(data, resultsArea);
+                renderSummaryCostReport(data, resultsArea); 
                 break;
             case 'custoDireto':
-                renderDirectCostReport(data, resultsArea);
+                renderDirectCostReport(data, resultsArea); 
                 break;
             case 'listaVeiculos':
-                renderVehicleListReport(data, resultsArea);
+                renderVehicleListReport(data, resultsArea); 
                 break;
             case 'despesaVeiculo':
-                renderVehicleExpenseReport(data, resultsArea);
+                renderVehicleExpenseReport(data, resultsArea); 
                 break;
             default:
                  resultsArea.innerHTML = '<p class="text-center text-red-500 p-8">Tipo de relatório inválido.</p>';
         }
     } catch (error) {
-        console.error('Erro ao gerar relatório:', error);
         resultsArea.innerHTML = `<p class="text-center text-red-500 p-8">Erro ao gerar relatório: ${error.message}</p>`;
     }
 }
 
 function renderSummaryCostReport(data, container) {
     if (data.length === 0) {
-        container.innerHTML = '<p class="text-center text-gray-500 p-8">Nenhum dado encontrado para os filtros selecionados.</p>';
+        container.innerHTML = '<p class="text-center text-gray-500 p-8 bg-white rounded-lg shadow">Nenhum dado encontrado para os filtros selecionados.</p>';
         return;
     }
-
+    container.innerHTML = '';
     const table = document.createElement('table');
-    table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+    table.className = 'min-w-full divide-y divide-gray-200 text-sm bg-white rounded-lg shadow';
     table.innerHTML = `
         <thead class="bg-gray-50">
             <tr>
@@ -158,15 +147,12 @@ function renderSummaryCostReport(data, container) {
                 <td id="total-geral" class="px-4 py-2 text-right"></td>
             </tr>
         </tfoot>`;
-
     const tbody = table.querySelector('tbody');
     let totalGeral = 0;
-
     data.forEach(item => {
         const tr = tbody.insertRow();
         const valor = parseFloat(item.valor);
         totalGeral += valor;
-
         tr.innerHTML = `
             <td class="px-4 py-2">${item.filial_nome}</td>
             <td class="px-4 py-2">${item.tipo_custo.replace('Custo', 'Despesa')}</td>
@@ -174,20 +160,18 @@ function renderSummaryCostReport(data, container) {
             <td class="px-4 py-2 text-right">${valor.toFixed(2).replace('.', ',')}</td>
         `;
     });
-    
     table.querySelector('#total-geral').textContent = totalGeral.toFixed(2).replace('.', ',');
-    container.innerHTML = '';
     container.appendChild(table);
 }
 
 function renderDirectCostReport(data, container) {
     if (data.length === 0) {
-        container.innerHTML = '<p class="text-center text-gray-500 p-8">Nenhum dado encontrado para os filtros selecionados.</p>';
+        container.innerHTML = '<p class="text-center text-gray-500 p-8 bg-white rounded-lg shadow">Nenhum dado encontrado para os filtros selecionados.</p>';
         return;
     }
-
+    container.innerHTML = '';
     const table = document.createElement('table');
-    table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+    table.className = 'min-w-full divide-y divide-gray-200 text-sm bg-white rounded-lg shadow';
     table.innerHTML = `
         <thead class="bg-gray-50">
             <tr>
@@ -206,15 +190,12 @@ function renderDirectCostReport(data, container) {
                 <td id="total-geral" class="px-4 py-2 text-right"></td>
             </tr>
         </tfoot>`;
-
     const tbody = table.querySelector('tbody');
     let totalGeral = 0;
-
     data.forEach(item => {
         const tr = tbody.insertRow();
         const valor = parseFloat(item.valor);
         totalGeral += valor;
-
         tr.innerHTML = `
             <td class="px-4 py-2">${new Date(item.data_despesa).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
             <td class="px-4 py-2">${item.filial_nome}</td>
@@ -224,20 +205,18 @@ function renderDirectCostReport(data, container) {
             <td class="px-4 py-2 text-right">${valor.toFixed(2).replace('.', ',')}</td>
         `;
     });
-    
     table.querySelector('#total-geral').textContent = totalGeral.toFixed(2).replace('.', ',');
-    container.innerHTML = '';
     container.appendChild(table);
 }
 
 function renderVehicleListReport(data, container) {
-     if (data.length === 0) {
-        container.innerHTML = '<p class="text-center text-gray-500 p-8">Nenhum veículo encontrado para os filtros selecionados.</p>';
+    if (data.length === 0) {
+        container.innerHTML = '<p class="text-center text-gray-500 p-8 bg-white rounded-lg shadow">Nenhum veículo encontrado para os filtros selecionados.</p>';
         return;
     }
-
+    container.innerHTML = '';
     const table = document.createElement('table');
-    table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+    table.className = 'min-w-full divide-y divide-gray-200 text-sm bg-white rounded-lg shadow';
     table.innerHTML = `
         <thead class="bg-gray-50">
             <tr>
@@ -249,7 +228,6 @@ function renderVehicleListReport(data, container) {
             </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
-
     const tbody = table.querySelector('tbody');
     data.forEach(v => {
         const tr = tbody.insertRow();
@@ -261,19 +239,17 @@ function renderVehicleListReport(data, container) {
             <td class="px-4 py-2">${v.status}</td>
         `;
     });
-    
-    container.innerHTML = '';
     container.appendChild(table);
 }
 
 function renderVehicleExpenseReport(data, container) {
     if (data.length === 0) {
-        container.innerHTML = '<p class="text-center text-gray-500 p-8">Nenhuma despesa encontrada para este veículo no período selecionado.</p>';
+        container.innerHTML = '<p class="text-center text-gray-500 p-8 bg-white rounded-lg shadow">Nenhuma despesa encontrada para este veículo no período selecionado.</p>';
         return;
     }
-
+    container.innerHTML = '';
     const table = document.createElement('table');
-    table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+    table.className = 'min-w-full divide-y divide-gray-200 text-sm bg-white rounded-lg shadow';
     table.innerHTML = `
         <thead class="bg-gray-50">
             <tr>
@@ -291,15 +267,12 @@ function renderVehicleExpenseReport(data, container) {
                 <td id="total-geral" class="px-4 py-2 text-right"></td>
             </tr>
         </tfoot>`;
-
     const tbody = table.querySelector('tbody');
     let totalGeral = 0;
-
     data.forEach(item => {
         const tr = tbody.insertRow();
         const valor = parseFloat(item.custo);
         totalGeral += valor;
-
         tr.innerHTML = `
             <td class="px-4 py-2">${new Date(item.data_manutencao).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
             <td class="px-4 py-2">${item.tipo_manutencao}</td>
@@ -308,9 +281,7 @@ function renderVehicleExpenseReport(data, container) {
             <td class="px-4 py-2 text-right">${valor.toFixed(2).replace('.', ',')}</td>
         `;
     });
-    
     table.querySelector('#total-geral').textContent = totalGeral.toFixed(2).replace('.', ',');
-    container.innerHTML = '';
     container.appendChild(table);
 }
 
@@ -320,7 +291,6 @@ async function populateFilialSelect() {
         const response = await fetch(`${apiUrlBase}/settings/parametros?cod=Unidades`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao carregar filiais.');
         const items = await response.json();
-        
         selectElement.innerHTML = `<option value="">Todas as Filiais</option>`;
         items.forEach(item => {
             const option = document.createElement('option');
@@ -340,7 +310,6 @@ async function populateVehicleSelect() {
         const response = await fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao carregar veículos.');
         const items = await response.json();
-        
         selectElement.innerHTML = `<option value="">-- Selecione um Veículo --</option>`;
         items.sort((a,b) => a.modelo.localeCompare(b.modelo)).forEach(item => {
             const option = document.createElement('option');
@@ -354,34 +323,24 @@ async function populateVehicleSelect() {
     }
 }
 
-// ADICIONADO: Funções auxiliares para ler o token
 function getToken() { return localStorage.getItem('lucaUserToken'); }
 function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
 function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html';}
-
 function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) {
         console.error("Não foi possível obter as permissões do usuário.");
         return;
     }
-
     const permissoesDoUsuario = userData.permissoes;
-
-    // Mapeamento dos nomes dos módulos para os links no HTML
     const mapaModulos = {
         'lancamentos': 'despesas.html',
         'logistica': 'logistica.html',
         'configuracoes': 'settings.html'
     };
-
-    // Itera sobre o mapa de módulos para verificar cada permissão
     for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
         const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
-        
-        // Se a permissão não existe ou não é permitida (permitido=false)
         if (!permissao || !permissao.permitido) {
-            // Encontra o link na barra lateral e esconde o item da lista (o <li> pai)
             const link = document.querySelector(`#sidebar a[href="${href}"]`);
             if (link && link.parentElement) {
                 link.parentElement.style.display = 'none';
