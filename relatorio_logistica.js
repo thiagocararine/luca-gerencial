@@ -43,6 +43,7 @@ function handleReportTypeChange() {
     const vehicleFilterContainer = document.getElementById('vehicle-filter-container');
     const dateFilterContainer = document.getElementById('date-filter-container');
     const statusFilterContainer = document.getElementById('status-filter-container');
+    const securityFilterContainer = document.getElementById('security-filter-container');
 
     const toggleFilter = (container, enabled) => {
         if (!container) return;
@@ -59,12 +60,14 @@ function handleReportTypeChange() {
     const needsFilial = ['custoTotalFilial', 'custoRateado', 'custoDireto', 'listaVeiculos'].includes(reportType);
     const needsVehicle = ['despesaVeiculo'].includes(reportType);
     const needsDate = ['custoTotalFilial', 'custoRateado', 'custoDireto', 'despesaVeiculo'].includes(reportType);
-    const needsStatus = ['listaVeiculos'].includes(reportType);
+    const needsStatus = ['listaVeiculos', 'listaVeiculosAgrupado'].includes(reportType);
+    const needsSecurity = ['listaVeiculos', 'listaVeiculosAgrupado'].includes(reportType);
 
     toggleFilter(filialFilterContainer, needsFilial);
     toggleFilter(vehicleFilterContainer, needsVehicle);
     toggleFilter(dateFilterContainer, needsDate);
     toggleFilter(statusFilterContainer, needsStatus);
+    toggleFilter(securityFilterContainer, needsSecurity);
 }
 
 async function generateReport() {
@@ -73,9 +76,12 @@ async function generateReport() {
     const vehicleId = document.getElementById('filter-vehicle').value;
     const status = document.getElementById('filter-status').value;
     const limit = document.getElementById('filter-limit').value;
+    const comSeguro = document.getElementById('filter-seguro').checked;
+    const comRastreador = document.getElementById('filter-rastreador').checked;
     const startDate = datepicker.getStartDate()?.toJSDate();
     const endDate = datepicker.getEndDate()?.toJSDate();
     const resultsArea = document.getElementById('report-results-area');
+    
 
     if (!reportType) {
         alert('Por favor, selecione um tipo de relatório.');
@@ -88,6 +94,8 @@ async function generateReport() {
     if (filialId && !document.getElementById('filter-filial').disabled) apiUrl += `filial=${filialId}&`;
     if (vehicleId && !document.getElementById('filter-vehicle').disabled) apiUrl += `veiculoId=${vehicleId}&`;
     if (status && !document.getElementById('filter-status').disabled) apiUrl += `status=${status}&`;
+    if (comSeguro && !document.getElementById('filter-seguro').disabled) apiUrl += `seguro=true&`;
+    if (comRastreador && !document.getElementById('filter-rastreador').disabled) apiUrl += `rastreador=true&`;
     if (startDate && !document.getElementById('filter-date-range').disabled) apiUrl += `dataInicio=${startDate.toISOString().slice(0, 10)}&`;
     if (endDate && !document.getElementById('filter-date-range').disabled) apiUrl += `dataFim=${endDate.toISOString().slice(0, 10)}&`;
     if (limit) apiUrl += `limit=${limit}&`;

@@ -728,7 +728,8 @@ router.put('/custos-frota/:id/excluir', authenticateToken, async (req, res) => {
 // --- ROTAS DE RELATÓRIOS ---
 
 router.get('/relatorios/listaVeiculos', authenticateToken, async (req, res) => {
-    const { filial, status, limit } = req.query;
+    // Adicionados 'seguro' e 'rastreador'
+    const { filial, status, limit, seguro, rastreador } = req.query; 
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
@@ -738,10 +739,13 @@ router.get('/relatorios/listaVeiculos', authenticateToken, async (req, res) => {
 
         if (filial) { conditions.push('v.id_filial = ?'); params.push(filial); }
         if (status) { conditions.push('v.status = ?'); params.push(status); }
+        // Adiciona as novas condições se os checkboxes estiverem marcados
+        if (seguro === 'true') { conditions.push('v.seguro = 1'); }
+        if (rastreador === 'true') { conditions.push('v.rastreador = 1'); }
 
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
         const sql = `
-            SELECT v.placa, v.marca, v.modelo, v.ano_fabricacao, v.ano_modelo, v.renavam, v.status, p.NOME_PARAMETRO as nome_filial
+            SELECT v.placa, v.marca, v.modelo, v.ano_fabricacao, v.ano_modelo, v.status, p.NOME_PARAMETRO as nome_filial, v.seguro, v.rastreador
             FROM veiculos v
             LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
             ${whereClause}
