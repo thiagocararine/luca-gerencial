@@ -1,4 +1,4 @@
-// routes/routes_logistica.js (COMPLETO E ATUALIZADO COM CORREÇÃO DE PERMISSÃO)
+// routes/routes_logistica.js (COMPLETO E ATUALIZADO COM MÓDULO DE COMBUSTÍVEL)
 
 const express = require('express');
 const router = express.Router();
@@ -449,6 +449,145 @@ router.get('/veiculos/:id/logs', authenticateToken, async (req, res) => {
     }
 });
 
+// --- ROTAS PARA O MÓDULO DE COMBUSTÍVEL ---
+
+router.get('/estoque/saldo', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        // Por enquanto, busca apenas o diesel. Pode ser expandido no futuro.
+        const [rows] = await connection.execute(
+            "SELECT quantidade_atual, unidade_medida FROM estoque_itens WHERE nome_item = 'Óleo Diesel'"
+        );
+        if (rows.length === 0) {
+            // Se o item não existir, cria-o com saldo zero para evitar erros.
+            await connection.execute(
+                "INSERT INTO estoque_itens (nome_item, unidade_medida, quantidade_atual) VALUES ('Óleo Diesel', 'Litros', 0)"
+            );
+            return res.json({ quantidade_atual: 0, unidade_medida: 'Litros' });
+        }
+        res.json(rows[0]);
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao buscar saldo de estoque.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+router.post('/estoque/entrada', authenticateToken, async (req, res) => {
+    const { itemId, quantidade, custo, fornecedorId } = req.body;
+    const { userId, nome: nomeUsuario, perfil } = req.user;
+    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
+    if (!allowedProfiles.includes(perfil)) {
+        return res.status(403).json({ error: 'Você não tem permissão para esta ação.' });
+    }
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        await connection.beginTransaction();
+
+        // 1. Atualiza o saldo do item
+        await connection.execute(
+            'UPDATE estoque_itens SET quantidade_atual = quantidade_atual + ? WHERE id = ?',
+            [quantidade, itemId]
+        );
+        
+        // 2. Regista o movimento de entrada
+        await connection.execute(
+            'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_usuario, observacao) VALUES (?, ?, ?, ?, ?)',
+            [itemId, 'Entrada', quantidade, userId, `Compra de ${quantidade}L. Custo: R$ ${custo}`]
+        );
+
+        // 3. Regista o log da ação
+        await registrarLog({
+            usuario_id: userId, usuario_nome: nomeUsuario,
+            tipo_entidade: 'Estoque', id_entidade: itemId,
+            tipo_acao: 'Entrada', descricao: `Registou a compra de ${quantidade}L de Óleo Diesel.`
+        });
+        
+        await connection.commit();
+        res.status(201).json({ message: 'Compra registada e estoque atualizado com sucesso!' });
+    } catch (error) {
+        if (connection) await connection.rollback();
+        res.status(500).json({ error: 'Erro ao registar a compra.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+router.post('/estoque/consumo', authenticateToken, async (req, res) => {
+    const { veiculoId, data, quantidade, odometro, custo } = req.body;
+    const { userId, nome: nomeUsuario, perfil } = req.user;
+    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
+    if (!allowedProfiles.includes(perfil)) {
+        return res.status(403).json({ error: 'Você não tem permissão para esta ação.' });
+    }
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        await connection.beginTransaction();
+        
+        // Assume que o ID do Óleo Diesel é 1. Uma lógica mais avançada buscaria o ID pelo nome.
+        const itemId = 1;
+
+        // 1. Verifica se há saldo suficiente
+        const [saldo] = await connection.execute('SELECT quantidade_atual FROM estoque_itens WHERE id = ? FOR UPDATE', [itemId]);
+        if (saldo.length === 0 || saldo[0].quantidade_atual < quantidade) {
+            await connection.rollback();
+            return res.status(400).json({ error: 'Saldo de diesel insuficiente em estoque.' });
+        }
+
+        // 2. Atualiza o saldo do item
+        await connection.execute('UPDATE estoque_itens SET quantidade_atual = quantidade_atual - ? WHERE id = ?', [quantidade, itemId]);
+        
+        // 3. Regista o movimento de saída
+        await connection.execute(
+            'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_veiculo, odometro_no_momento, id_usuario) VALUES (?, ?, ?, ?, ?, ?)',
+            [itemId, 'Saída', quantidade, veiculoId, odometro, userId]
+        );
+
+        // 4. Lança a despesa na tabela de manutenções
+        await connection.execute(
+            'INSERT INTO veiculo_manutencoes (id_veiculo, data_manutencao, custo, tipo_manutencao, classificacao_custo, id_user_lanc, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [veiculoId, data, custo, 'Abastecimento', 'Custo Operacional', userId, 'Ativo']
+        );
+
+        // 5. Encontra o último odómetro registado para este veículo
+        const [ultimoAbastecimento] = await connection.execute(
+            'SELECT odometro_no_momento, quantidade FROM estoque_movimentos WHERE id_veiculo = ? AND tipo_movimento = "Saída" ORDER BY data_movimento DESC LIMIT 1, 1',
+            [veiculoId]
+        );
+
+        let consumoMedio = null;
+        if (ultimoAbastecimento.length > 0) {
+            const odometroAnterior = ultimoAbastecimento[0].odometro_no_momento;
+            const litrosAnteriores = ultimoAbastecimento[0].quantidade;
+            const distancia = odometro - odometroAnterior;
+            if (distancia > 0 && litrosAnteriores > 0) {
+                consumoMedio = (distancia / litrosAnteriores).toFixed(2);
+            }
+        }
+        
+        // 6. Atualiza o odómetro atual do veículo
+        await connection.execute('UPDATE veiculos SET odometro_atual = ? WHERE id = ?', [odometro, veiculoId]);
+        
+        // 7. Regista o log da ação
+        await registrarLog({
+            usuario_id: userId, usuario_nome: nomeUsuario,
+            tipo_entidade: 'Consumo', id_entidade: veiculoId,
+            tipo_acao: 'Saída de Estoque', descricao: `Abasteceu ${quantidade}L no veículo ID ${veiculoId}. Odómetro: ${odometro}.`
+        });
+        
+        await connection.commit();
+        res.status(201).json({ message: 'Consumo registado com sucesso!', consumoMedio: consumoMedio });
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error("Erro ao registar consumo:", error);
+        res.status(500).json({ error: 'Erro ao registar o consumo.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
 
 // --- ROTAS DE MANUTENÇÃO, CUSTOS E FORNECEDORES ---
 

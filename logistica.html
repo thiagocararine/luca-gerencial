@@ -89,6 +89,11 @@
 </head>
 <body class="h-full">
 
+<div id="global-loader" class="fixed inset-0 bg-gray-900 bg-opacity-50 z-[100] flex-col items-center justify-center hidden">
+    <div style="border-top-color: #4f46e5;" class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4 animate-spin"></div>
+    <h2 class="text-center text-white text-xl font-semibold">Aguarde...</h2>
+</div>
+
 <div class="flex h-full">
     <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
     <nav id="sidebar" class="fixed inset-y-0 left-0 bg-white shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
@@ -128,18 +133,24 @@
                 <h2 class="text-2xl font-bold text-gray-900">Gestão de Frota</h2>
                 <div class="flex items-center gap-2 flex-wrap">
                     <a href="relatorio_logistica.html" class="action-btn bg-gray-600 hover:bg-gray-700 flex items-center gap-2">
-                        <span data-feather="bar-chart-2"></span>Ver Relatórios
+                        <span data-feather="bar-chart-2"></span>Relatórios
                     </a>
-                    <button id="add-vehicle-cost-button" class="action-btn bg-green-600 hover:bg-green-700 flex items-center gap-2">
-                        <span data-feather="tool"></span>Lançar Despesa de Veículo
-                    </button>
-                    <button id="add-fleet-cost-button" class="action-btn bg-teal-600 hover:bg-teal-700 flex items-center gap-2">
-                        <span data-feather="trending-up"></span>Lançar Custo de Frota
+                    <button id="open-fuel-modal-btn" class="action-btn bg-yellow-500 hover:bg-yellow-600 flex items-center gap-2">
+                        <span data-feather="droplet"></span>Gestão de Combustível
                     </button>
                     <button id="add-vehicle-button" class="action-btn bg-indigo-600 hover:bg-indigo-700 flex items-center gap-2">
                         <span data-feather="plus"></span>Adicionar Veículo
                     </button>
                 </div>
+            </div>
+
+            <div class="mb-6">
+                 <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                     <div class="bg-white rounded-lg shadow p-5 border-l-4 border-yellow-500">
+                         <h4 class="text-sm font-medium text-gray-500 truncate">Estoque de Diesel</h4>
+                         <p class="mt-1 text-3xl font-semibold text-gray-900" id="kpi-estoque-diesel">0 L</p>
+                     </div>
+                 </div>
             </div>
 
             <div class="bg-white p-4 rounded-lg shadow mb-6">
@@ -176,19 +187,6 @@
             <div id="content-area" class="bg-white rounded-lg shadow overflow-hidden"></div>
             <p id="no-data-message" class="text-center p-8 text-gray-500 hidden">Nenhum veículo encontrado.</p>
 
-            <div class="mt-8">
-                <h3 class="text-xl font-bold text-gray-800 mb-2">Histórico de Custos Recentes</h3>
-                <div class="border-b border-gray-200">
-                    <nav id="costs-tabs" class="-mb-px flex space-x-6" aria-label="Tabs">
-                        <button class="tab-button active" data-cost-tab="gerais">Custos Gerais da Frota</button>
-                        <button class="tab-button" data-cost-tab="individuais">Custos Individuais de Veículos</button>
-                    </nav>
-                </div>
-                <div class="mt-4">
-                    <div id="costs-tab-content-gerais" class="cost-tab-content active bg-white rounded-lg shadow overflow-hidden"></div>
-                    <div id="costs-tab-content-individuais" class="cost-tab-content bg-white rounded-lg shadow overflow-hidden"></div>
-                </div>
-            </div>
         </main>
     </div>
 </div>
@@ -720,11 +718,88 @@
     </div>
 </div>
 
+<div id="fuel-management-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
+    <div class="relative mx-auto border w-full max-w-3xl shadow-lg rounded-md bg-white">
+        <div class="flex items-start justify-between p-4 border-b">
+            <h3 class="text-xl font-semibold">Gestão de Combustível</h3>
+            <button id="close-fuel-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center">
+                <span data-feather="x"></span>
+            </button>
+        </div>
+        
+        <div class="border-b border-gray-200">
+            <nav id="fuel-tabs" class="-mb-px flex space-x-6 px-6" aria-label="Tabs">
+                <button class="tab-button active" data-tab="compra">Registar Compra (Entrada)</button>
+                <button class="tab-button" data-tab="consumo">Registar Consumo (Saída)</button>
+            </nav>
+        </div>
+
+        <div class="p-6">
+            <div id="compra-tab-content" class="tab-content active">
+                <form id="fuel-purchase-form">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6">
+                        <div>
+                            <label for="purchase-item" class="block font-medium">Item</label>
+                            <select id="purchase-item" required class="form-input mt-1 block w-full">
+                            </select>
+                        </div>
+                        <div>
+                            <label for="purchase-quantity" class="block font-medium">Quantidade Comprada (Litros)</label>
+                            <input type="number" step="0.01" id="purchase-quantity" required placeholder="1000.00" class="form-input mt-1 block w-full">
+                        </div>
+                        <div class="md:col-span-2">
+                             <label for="purchase-cost" class="block font-medium">Custo Total da Compra (R$)</label>
+                             <input type="number" step="0.01" id="purchase-cost" required placeholder="5000.00" class="form-input mt-1 block w-full">
+                        </div>
+                    </div>
+                    <div class="border-t pt-4">
+                        <h4 class="text-lg font-medium text-gray-800 mb-2">Fornecedor</h4>
+                        </div>
+                    <div class="flex justify-end pt-6 border-t mt-6 gap-4">
+                        <button type="submit" class="action-btn bg-green-600 hover:bg-green-700">Registar Compra</button>
+                    </div>
+                </form>
+            </div>
+
+            <div id="consumo-tab-content" class="tab-content hidden">
+                <form id="fuel-consumption-form">
+                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-6">
+                         <div class="md:col-span-3">
+                             <label for="consumption-vehicle" class="block font-medium">Veículo</label>
+                             <select id="consumption-vehicle" required class="form-input mt-1 block w-full"></select>
+                         </div>
+                         <div>
+                             <label for="consumption-date" class="block font-medium">Data do Abastecimento</label>
+                             <input type="date" id="consumption-date" required class="form-input mt-1 block w-full">
+                         </div>
+                         <div>
+                             <label for="consumption-quantity" class="block font-medium">Quantidade Abastecida (Litros)</label>
+                             <input type="number" step="0.01" id="consumption-quantity" required placeholder="50.00" class="form-input mt-1 block w-full">
+                         </div>
+                         <div>
+                             <label for="consumption-odometer" class="block font-medium">Odómetro Atual (km)</label>
+                             <input type="number" id="consumption-odometer" required placeholder="123456" class="form-input mt-1 block w-full">
+                         </div>
+                         <div class="md:col-span-3">
+                              <label for="consumption-cost" class="block font-medium">Custo do Abastecimento (R$)</label>
+                              <input type="number" step="0.01" id="consumption-cost" required placeholder="250.00" class="form-input mt-1 block w-full">
+                         </div>
+                     </div>
+                     <div class="flex justify-end pt-6 border-t mt-6 gap-4">
+                         <button type="submit" class="action-btn bg-blue-600 hover:bg-blue-700">Registar Consumo</button>
+                     </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
-<script src="logistica.js?v=2.0.5" defer></script>
+<script src="logistica.js?v=2.0.6" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();

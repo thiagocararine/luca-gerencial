@@ -1,4 +1,4 @@
-// logistica.js (Completo com todas as funções, logs e loader)
+// logistica.js (COMPLETO com módulo de combustível)
 
 document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
@@ -46,12 +46,20 @@ async function initLogisticaPage() {
     const userProfile = getUserProfile();
     const isPrivileged = privilegedAccessProfiles.includes(userProfile);
 
+    // This part seems to be from an older version, the buttons were removed in the new HTML.
+    // I will keep the logic in case you re-add them.
     if (!isPrivileged) {
-        document.getElementById('add-vehicle-button').style.display = 'none';
-        document.getElementById('add-fleet-cost-button').style.display = 'none';
-        document.getElementById('filial-filter-container').style.display = 'none';
-        document.getElementById('add-vehicle-cost-button').style.display = 'none';
+        const addVehicleBtn = document.getElementById('add-vehicle-button');
+        const addFleetCostBtn = document.getElementById('add-fleet-cost-button');
+        const addVehicleCostBtn = document.getElementById('add-vehicle-cost-button');
+        const filialFilter = document.getElementById('filial-filter-container');
+
+        if (addVehicleBtn) addVehicleBtn.style.display = 'none';
+        if (addFleetCostBtn) addFleetCostBtn.style.display = 'none';
+        if (addVehicleCostBtn) addVehicleCostBtn.style.display = 'none';
+        if (filialFilter) filialFilter.style.display = 'none';
     }
+
 
     setupEventListeners();
     setupMaintenanceExportModal();
@@ -61,21 +69,32 @@ async function initLogisticaPage() {
         await Promise.all([
             populateFilialSelects(),
             loadMarcasAndModelosFromDB(),
-            loadCurrentLogo()
+            loadCurrentLogo(),
+            loadCurrentStock()
         ]);
 
         await loadVehicles();
-        await loadFleetCosts();
-        await loadRecentIndividualCosts();
+        // The cost tabs were removed from the new HTML. These functions will fail if the elements are not present.
+        // I will add checks to prevent errors.
+        if (document.getElementById('costs-tab-content-gerais')) {
+            await loadFleetCosts();
+        }
+        if (document.getElementById('costs-tab-content-individuais')) {
+            await loadRecentIndividualCosts();
+        }
     } catch (error) {
         console.error("Erro na inicialização da página:", error);
         alert("Ocorreu um erro ao carregar os dados. Por favor, tente recarregar a página.");
     } finally {
         hideLoader();
     }
-
-    switchCostTab('gerais');
+    
+    // The cost tabs were removed from the new HTML.
+    if (document.getElementById('costs-tabs')) {
+       switchCostTab('gerais');
+    }
 }
+
 
 /**
  * Configura todos os event listeners da página.
@@ -83,7 +102,6 @@ async function initLogisticaPage() {
 function setupEventListeners() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('add-vehicle-button')?.addEventListener('click', () => openVehicleModal());
-    document.getElementById('add-fleet-cost-button')?.addEventListener('click', openFleetCostModal);
     document.getElementById('filter-button').addEventListener('click', applyFilters);
     document.getElementById('clear-filter-button').addEventListener('click', clearFilters);
 
@@ -124,35 +142,43 @@ function setupEventListeners() {
     maintenanceModal.querySelector('#maintenance-despesa-interna-btn').addEventListener('click', () => useInternalExpense('maintenance'));
     maintenanceModal.querySelector('#maintenance-form').addEventListener('submit', handleMaintenanceFormSubmit);
 
-    const fleetCostModal = document.getElementById('fleet-cost-modal');
-    fleetCostModal.querySelector('#close-fleet-cost-modal-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
-    fleetCostModal.querySelector('#cancel-fleet-cost-form-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
-    fleetCostModal.querySelector('#fleet-cost-lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('fleet-cost'));
-    fleetCostModal.querySelector('#fleet-cost-despesa-interna-btn').addEventListener('click', () => useInternalExpense('fleet-cost'));
-    fleetCostModal.querySelector('#fleet-cost-form').addEventListener('submit', handleFleetCostFormSubmit);
-
+    // The fleet cost modal button was removed from the new HTML.
+    const addFleetCostBtn = document.getElementById('add-fleet-cost-button');
+    if (addFleetCostBtn) {
+        addFleetCostBtn.addEventListener('click', openFleetCostModal);
+        const fleetCostModal = document.getElementById('fleet-cost-modal');
+        fleetCostModal.querySelector('#close-fleet-cost-modal-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
+        fleetCostModal.querySelector('#cancel-fleet-cost-form-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
+        fleetCostModal.querySelector('#fleet-cost-lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('fleet-cost'));
+        fleetCostModal.querySelector('#fleet-cost-despesa-interna-btn').addEventListener('click', () => useInternalExpense('fleet-cost'));
+        fleetCostModal.querySelector('#fleet-cost-form').addEventListener('submit', handleFleetCostFormSubmit);
+    }
+    
     document.getElementById('content-area').addEventListener('click', handleContentClick);
     window.addEventListener('resize', () => renderContent(allVehicles));
 
     document.getElementById('close-maintenance-export-modal-btn').addEventListener('click', () => document.getElementById('maintenance-export-modal').classList.add('hidden'));
     document.getElementById('generate-maintenance-pdf-btn').addEventListener('click', exportMaintenanceReportPDF);
 
-    document.getElementById('costs-tabs').addEventListener('click', (e) => {
-        if (e.target.matches('.tab-button')) {
-            switchCostTab(e.target.dataset.costTab);
-        }
-    });
+    // The cost tabs were removed from the new HTML.
+    const costsTabs = document.getElementById('costs-tabs');
+    if(costsTabs){
+        costsTabs.addEventListener('click', (e) => {
+            if (e.target.matches('.tab-button')) {
+                switchCostTab(e.target.dataset.costTab);
+            }
+        });
+        const deleteCostModal = document.getElementById('confirm-delete-cost-modal');
+        deleteCostModal.querySelector('#cancel-delete-cost-btn').addEventListener('click', () => deleteCostModal.classList.add('hidden'));
+        deleteCostModal.querySelector('#confirm-delete-cost-btn').addEventListener('click', () => {
+            if (costToDelete.id && costToDelete.type) {
+                executeDeleteCost(costToDelete.id, costToDelete.type);
+            }
+        });
+        document.getElementById('costs-tab-content-gerais')?.addEventListener('click', handleDeleteCostClick);
+        document.getElementById('costs-tab-content-individuais')?.addEventListener('click', handleDeleteCostClick);
+    }
 
-    const deleteCostModal = document.getElementById('confirm-delete-cost-modal');
-    deleteCostModal.querySelector('#cancel-delete-cost-btn').addEventListener('click', () => deleteCostModal.classList.add('hidden'));
-    deleteCostModal.querySelector('#confirm-delete-cost-btn').addEventListener('click', () => {
-        if (costToDelete.id && costToDelete.type) {
-            executeDeleteCost(costToDelete.id, costToDelete.type);
-        }
-    });
-
-    document.getElementById('costs-tab-content-gerais').addEventListener('click', handleDeleteCostClick);
-    document.getElementById('costs-tab-content-individuais').addEventListener('click', handleDeleteCostClick);
 
     document.getElementById('photos-tab-content').addEventListener('change', handlePhotoInputChange);
     document.getElementById('photos-tab-content').addEventListener('click', handlePhotoAreaClick);
@@ -160,13 +186,17 @@ function setupEventListeners() {
     document.getElementById('document-upload-form').addEventListener('submit', handleDocumentUploadSubmit);
     document.getElementById('document-list-container').addEventListener('click', handleDeleteDocumentClick);
 
-    document.getElementById('add-vehicle-cost-button')?.addEventListener('click', openVehicleCostModal);
-    const vehicleCostModal = document.getElementById('vehicle-cost-modal');
-    vehicleCostModal.querySelector('#close-vehicle-cost-modal-btn').addEventListener('click', () => vehicleCostModal.classList.add('hidden'));
-    vehicleCostModal.querySelector('#cancel-vehicle-cost-form-btn').addEventListener('click', () => vehicleCostModal.classList.add('hidden'));
-    vehicleCostModal.querySelector('#vehicle-cost-form').addEventListener('submit', handleVehicleCostFormSubmit);
-    vehicleCostModal.querySelector('#vehicle-cost-lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('vehicle-cost'));
-    vehicleCostModal.querySelector('#vehicle-cost-despesa-interna-btn').addEventListener('click', () => useInternalExpense('vehicle-cost'));
+    // The vehicle cost modal button was removed from the new HTML.
+    const addVehicleCostButton = document.getElementById('add-vehicle-cost-button');
+    if(addVehicleCostButton){
+        addVehicleCostButton.addEventListener('click', openVehicleCostModal);
+        const vehicleCostModal = document.getElementById('vehicle-cost-modal');
+        vehicleCostModal.querySelector('#close-vehicle-cost-modal-btn').addEventListener('click', () => vehicleCostModal.classList.add('hidden'));
+        vehicleCostModal.querySelector('#cancel-vehicle-cost-form-btn').addEventListener('click', () => vehicleCostModal.classList.add('hidden'));
+        vehicleCostModal.querySelector('#vehicle-cost-form').addEventListener('submit', handleVehicleCostFormSubmit);
+        vehicleCostModal.querySelector('#vehicle-cost-lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('vehicle-cost'));
+        vehicleCostModal.querySelector('#vehicle-cost-despesa-interna-btn').addEventListener('click', () => useInternalExpense('vehicle-cost'));
+    }
 
     const deleteDocModal = document.getElementById('confirm-delete-document-modal');
     deleteDocModal.querySelector('#cancel-delete-document-btn').addEventListener('click', () => deleteDocModal.classList.add('hidden'));
@@ -177,6 +207,154 @@ function setupEventListeners() {
     captureModal.querySelector('#take-photo-btn').addEventListener('click', takePhoto);
     captureModal.querySelector('#use-photo-btn').addEventListener('click', useCapturedPhoto);
     captureModal.querySelector('#retake-photo-btn').addEventListener('click', retakePhoto);
+
+    // NOVOS LISTENERS PARA O MÓDULO DE COMBUSTÍVEL
+    document.getElementById('open-fuel-modal-btn')?.addEventListener('click', openFuelModal);
+    const fuelModal = document.getElementById('fuel-management-modal');
+    fuelModal.querySelector('#close-fuel-modal-btn').addEventListener('click', () => fuelModal.classList.add('hidden'));
+    fuelModal.querySelector('#fuel-tabs').addEventListener('click', (e) => {
+        if (e.target.matches('.tab-button')) {
+            switchFuelTab(e.target.dataset.tab);
+        }
+    });
+    fuelModal.querySelector('#fuel-purchase-form').addEventListener('submit', handleFuelPurchaseSubmit);
+    fuelModal.querySelector('#fuel-consumption-form').addEventListener('submit', handleFuelConsumptionSubmit);
+}
+
+
+// --- NOVAS FUNÇÕES PARA O MÓDULO DE COMBUSTÍVEL ---
+
+async function loadCurrentStock() {
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/estoque/saldo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) return;
+        const data = await response.json();
+        document.getElementById('kpi-estoque-diesel').textContent = `${parseFloat(data.quantidade_atual).toFixed(2)} L`;
+    } catch (error) {
+        document.getElementById('kpi-estoque-diesel').textContent = 'Erro';
+    }
+}
+
+async function openFuelModal() {
+    const modal = document.getElementById('fuel-management-modal');
+    showLoader();
+    try {
+        // Popula os selects necessários para as duas abas
+        // Nota: a rota para 'Insumos' deve existir.
+        await Promise.all([
+            populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Insumos`, 'purchase-item', 'ID', 'NOME_PARAMETRO', '-- Selecione um Item --'),
+            populateSelectWithOptions(`${apiUrlBase}/logistica/veiculos`, 'consumption-vehicle', 'id', 'modelo', '-- Selecione um Veículo --', (v) => `${v.modelo} - ${v.placa}`)
+        ]);
+        
+        // Reseta os formulários
+        document.getElementById('fuel-purchase-form').reset();
+        document.getElementById('fuel-consumption-form').reset();
+        document.getElementById('consumption-date').value = new Date().toISOString().split('T')[0];
+        
+        switchFuelTab('compra'); // Abre na primeira aba por padrão
+        modal.classList.remove('hidden');
+        feather.replace();
+    } catch(error) {
+        alert("Erro ao preparar o modal de combustível: " + error.message);
+    } finally {
+        hideLoader();
+    }
+}
+
+function switchFuelTab(tabName) {
+    document.querySelectorAll('#fuel-management-modal .tab-content').forEach(content => content.classList.add('hidden'));
+    document.querySelectorAll('#fuel-tabs .tab-button').forEach(button => button.classList.remove('active'));
+    
+    // O novo HTML fornecido trocou a classe .active por .hidden para o conteúdo da aba
+    const activeContent = document.getElementById(`${tabName}-tab-content`);
+    if(activeContent) activeContent.classList.remove('hidden');
+
+    const activeButton = document.querySelector(`#fuel-tabs .tab-button[data-tab="${tabName}"]`);
+    if(activeButton) activeButton.classList.add('active');
+}
+
+async function handleFuelPurchaseSubmit(event) {
+    event.preventDefault();
+    showLoader();
+    const purchaseData = {
+        itemId: document.getElementById('purchase-item').value,
+        quantidade: document.getElementById('purchase-quantity').value,
+        custo: document.getElementById('purchase-cost').value,
+        // O HTML não inclui um campo para fornecedor, então enviaremos null.
+        // Se precisar de fornecedor, adicione os campos ao HTML do modal de combustível.
+        fornecedorId: null 
+    };
+
+    if (!purchaseData.itemId || !purchaseData.quantidade || !purchaseData.custo) {
+        alert("Todos os campos são obrigatórios para registar a compra.");
+        hideLoader();
+        return;
+    }
+
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/estoque/entrada`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify(purchaseData)
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Falha ao registar a compra.');
+        
+        alert('Compra registada com sucesso!');
+        document.getElementById('fuel-management-modal').classList.add('hidden');
+        await loadCurrentStock();
+
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        hideLoader();
+    }
+}
+
+async function handleFuelConsumptionSubmit(event) {
+    event.preventDefault();
+    showLoader();
+    const consumptionData = {
+        veiculoId: document.getElementById('consumption-vehicle').value,
+        data: document.getElementById('consumption-date').value,
+        quantidade: document.getElementById('consumption-quantity').value,
+        odometro: document.getElementById('consumption-odometer').value,
+        custo: document.getElementById('consumption-cost').value,
+    };
+
+    if (!consumptionData.veiculoId || !consumptionData.data || !consumptionData.quantidade || !consumptionData.odometro || !consumptionData.custo) {
+        alert("Todos os campos são obrigatórios para registar o consumo.");
+        hideLoader();
+        return;
+    }
+
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/estoque/consumo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify(consumptionData)
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Falha ao registar consumo.');
+        
+        let successMessage = 'Consumo registado com sucesso!';
+        if(result.consumoMedio) {
+            successMessage += `\n\nMédia de Consumo Calculada: ${result.consumoMedio} km/L.`;
+        }
+        alert(successMessage);
+        
+        document.getElementById('fuel-management-modal').classList.add('hidden');
+        await loadCurrentStock();
+        // Se a tabela de custos individuais ainda existir, atualize-a
+        if (document.getElementById('costs-tab-content-individuais')) {
+            await loadRecentIndividualCosts();
+        }
+
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        hideLoader();
+    }
 }
 
 
@@ -547,7 +725,9 @@ function openImageViewer(src) {
 }
 
 
-// --- Lógica de Custos, Modais, etc. ---
+// --- Lógica de Custos, Modais, etc. (Funções Antigas) ---
+// Estas funções dependem de elementos que foram removidos do HTML,
+// então as chamadas a elas foram protegidas com condicionais.
 
 function switchCostTab(tabName) {
     document.querySelectorAll('.cost-tab-content').forEach(content => {
@@ -572,6 +752,7 @@ function switchCostTab(tabName) {
 
 async function loadFleetCosts() {
     const container = document.getElementById('costs-tab-content-gerais');
+    if (!container) return;
     container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
     try {
         const response = await fetch(`${apiUrlBase}/logistica/custos-frota`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
@@ -611,6 +792,7 @@ async function loadFleetCosts() {
 
 async function loadRecentIndividualCosts() {
     const container = document.getElementById('costs-tab-content-individuais');
+    if (!container) return;
     container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
     try {
         const response = await fetch(`${apiUrlBase}/logistica/manutencoes/recentes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
@@ -725,6 +907,9 @@ async function executeDeleteCost(id, type) {
         costToDelete = { id: null, type: null };
     }
 }
+
+
+// --- Resto das Funções ---
 
 function setupMaintenanceExportModal() {
     maintenanceExportDatepicker = new Litepicker({
@@ -978,7 +1163,6 @@ function renderVehicleCards(vehicles, container) {
             : 'https://placehold.co/400x250/e2e8f0/4a5568?text=Sem+Foto';
         
         const statusInfo = getStatusInfo(vehicle.status);
-        // Lógica para criar os badges de seguro e rastreador
         const seguroBadge = vehicle.seguro ? '<span class="px-2 py-1 text-xs font-semibold text-white bg-blue-500 rounded-full">Seguro</span>' : '';
         const rastreadorBadge = vehicle.rastreador ? '<span class="px-2 py-1 text-xs font-semibold text-white bg-orange-500 rounded-full">Rastreador</span>' : '';
 
@@ -1021,7 +1205,6 @@ function renderVehicleTable(vehicles, container) {
     const tbody = table.querySelector('tbody');
     vehicles.forEach(vehicle => {
         const statusInfo = getStatusInfo(vehicle.status);
-        // Lógica para criar os badges de seguro e rastreador
         const seguroBadge = vehicle.seguro ? '<span class="px-2 ml-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-500 text-white">Seguro</span>' : '';
         const rastreadorBadge = vehicle.rastreador ? '<span class="px-2 ml-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-500 text-white">Rastreador</span>' : '';
 
@@ -1085,7 +1268,6 @@ function openDetailsModal(vehicle) {
 
 function renderDetailsTab(vehicle) {
     const detailsContent = document.getElementById('details-tab-content');
-    // Adicionadas as informações de Seguro e Rastreador
     detailsContent.innerHTML = `
         <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
             <div><strong class="block text-gray-500">Placa</strong><span>${vehicle.placa}</span></div>
@@ -1392,8 +1574,7 @@ async function handleFleetCostFormSubmit(event) {
     }
 }
 
-// ATUALIZADA
-async function openVehicleModal(vehicle = null) {
+function openVehicleModal(vehicle = null) {
     const modal = document.getElementById('vehicle-modal');
     const form = document.getElementById('vehicle-form');
     const title = document.getElementById('vehicle-modal-title');
@@ -1419,30 +1600,22 @@ async function openVehicleModal(vehicle = null) {
         document.getElementById('vehicle-status').value = vehicle.status || 'Ativo';
         const hasPlaca = vehicle.placa && vehicle.placa.toUpperCase() !== 'SEM PLACA';
         document.getElementById('has-placa-checkbox').checked = hasPlaca;
-        
-        // --- INÍCIO DA ATUALIZAÇÃO ---
         document.getElementById('vehicle-seguro').checked = !!vehicle.seguro;
         document.getElementById('vehicle-rastreador').checked = !!vehicle.rastreador;
-        // --- FIM DA ATUALIZAÇÃO ---
-
         handleMarcaChange();
         modeloInput.value = vehicle.modelo || '';
     } else {
         title.textContent = 'Adicionar Veículo';
         document.getElementById('vehicle-id').value = '';
         document.getElementById('has-placa-checkbox').checked = true;
-
-        // --- INÍCIO DA ATUALIZAÇÃO ---
         document.getElementById('vehicle-seguro').checked = false;
         document.getElementById('vehicle-rastreador').checked = false;
-        // --- FIM DA ATUALIZAÇÃO ---
     }
     handleHasPlacaChange();
     modal.classList.remove('hidden');
     feather.replace();
 }
 
-// ATUALIZADA
 async function handleVehicleFormSubmit(event) {
     event.preventDefault();
     if (!validateForm()) {
@@ -1454,7 +1627,6 @@ async function handleVehicleFormSubmit(event) {
     saveBtn.textContent = 'A salvar...';
     const id = document.getElementById('vehicle-id').value;
     
-    // --- INÍCIO DA ATUALIZAÇÃO ---
     const vehicleData = {
         placa: document.getElementById('has-placa-checkbox').checked ? document.getElementById('vehicle-placa').value : 'SEM PLACA',
         marca: document.getElementById('vehicle-marca').value,
@@ -1468,7 +1640,6 @@ async function handleVehicleFormSubmit(event) {
         seguro: document.getElementById('vehicle-seguro').checked,
         rastreador: document.getElementById('vehicle-rastreador').checked
     };
-    // --- FIM DA ATUALIZAÇÃO ---
 
     const method = id ? 'PUT' : 'POST';
     const url = id ? `${apiUrlBase}/logistica/veiculos/${id}` : `${apiUrlBase}/logistica/veiculos`;
@@ -1524,7 +1695,9 @@ async function populateFilialSelects() {
     const url = `${apiUrlBase}/settings/parametros?cod=Unidades`;
     await populateSelectWithOptions(url, 'filter-filial', 'ID', 'NOME_PARAMETRO', 'Todas as Filiais');
     await populateSelectWithOptions(url, 'vehicle-filial', 'ID', 'NOME_PARAMETRO', '-- Selecione a Filial --');
-    await populateCheckboxes(url, 'fleet-cost-filiais-checkboxes', 'ID', 'NOME_PARAMETRO');
+    if(document.getElementById('fleet-cost-filiais-checkboxes')){
+        await populateCheckboxes(url, 'fleet-cost-filiais-checkboxes', 'ID', 'NOME_PARAMETRO');
+    }
 }
 
 async function populateCheckboxes(url, containerId, valueKey, textKey) {
@@ -1615,7 +1788,7 @@ function validateRenavam(renavam) {
     return isValid;
 }
 
-async function populateSelectWithOptions(url, selectId, valueKey, textKey, placeholder) {
+async function populateSelectWithOptions(url, selectId, valueKey, textKey, placeholder, textFormatter = null) {
     const selectElement = document.getElementById(selectId);
     try {
         const response = await fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } });
@@ -1625,7 +1798,7 @@ async function populateSelectWithOptions(url, selectId, valueKey, textKey, place
         items.forEach(item => {
             const option = document.createElement('option');
             option.value = item[valueKey];
-            option.textContent = item[textKey];
+            option.textContent = textFormatter ? textFormatter(item) : item[textKey];
             selectElement.appendChild(option);
         });
     } catch (error) {
@@ -1634,7 +1807,6 @@ async function populateSelectWithOptions(url, selectId, valueKey, textKey, place
     }
 }
 
-// ATUALIZADA
 function getStatusInfo(status) {
     switch (status) {
         case 'Ativo': return { text: 'Ativo', color: 'bg-green-500' };
@@ -1668,7 +1840,7 @@ async function lookupCnpj(modalType) {
              headers: { 'Authorization': `Bearer ${getToken()}` }
         });
 
-        if (!response.ok) throw new Error('CNPJ не encontrado ou serviço indisponível.');
+        if (!response.ok) throw new Error('CNPJ não encontrado ou serviço indisponível.');
         
         const data = await response.json();
 
