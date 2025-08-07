@@ -1,4 +1,4 @@
-// settings.js (Lógica de permissões ajustada para usar chaves simples)
+// settings.js (COMPLETO E ATUALIZADO COM CADASTRO DE ITENS)
 
 document.addEventListener('DOMContentLoaded', () => {
     if (document.querySelector('.tabs')) {
@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // --- Constantes e Variáveis de Estado Globais ---
 const apiUrlBase = 'http://10.113.0.17:3000/api';
-let parametrosTable, usersTable, perfisTable;
+let parametrosTable, usersTable, perfisTable, itensEstoqueTable; // Variável para a nova tabela de itens
 let currentParamCode = null;
 let currentParentList = []; 
 let todosOsPerfis = [];
@@ -45,6 +45,7 @@ async function initSettingsPage() {
         await preCarregarPerfisDeAcesso();
         setupUsersTable();
         setupPerfisTable();
+        setupItensEstoqueTable(); // Nova chamada para configurar a tabela de itens
     }
     
     await popularSeletorDeCodigos();
@@ -70,6 +71,7 @@ function setupEventListenersSettings() {
 
             if(tab === 'usuarios' && usersTable) usersTable.setData();
             if(tab === 'perfis' && perfisTable) perfisTable.setData();
+            if(tab === 'itens_estoque' && itensEstoqueTable) itensEstoqueTable.setData(); // Atualiza dados ao clicar na aba
         }
     });
     
@@ -100,6 +102,10 @@ function setupEventListenersSettings() {
         if (typeof actionToConfirm === 'function') actionToConfirm();
         document.getElementById('confirm-action-modal').style.display = 'none';
     });
+    
+    // NOVOS LISTENERS PARA O CADASTRO DE ITENS
+    document.getElementById('item-estoque-form')?.addEventListener('submit', handleItemEstoqueFormSubmit);
+    document.getElementById('cancel-edit-item-btn')?.addEventListener('click', resetItemEstoqueForm);
 }
 
 // --- GESTÃO DE UTILIZADORES ---
@@ -239,7 +245,7 @@ async function handleSaveUserSettings() {
 }
 
 
-// --- GESTÃO DE PERFIS E PARÂMETROS (sem alterações) ---
+// --- GESTÃO DE PERFIS ---
 
 async function preCarregarPerfisDeAcesso() {
     try {
@@ -340,6 +346,100 @@ async function handleDeletePerfil(id) {
        alert('Falha ao apagar o perfil.');
    }
 }
+
+// --- NOVAS FUNÇÕES PARA ITENS DE ESTOQUE ---
+
+function setupItensEstoqueTable() {
+    itensEstoqueTable = new Tabulator("#itens-estoque-table", {
+        layout: "fitColumns",
+        placeholder: "A carregar itens...",
+        ajaxURL: `${apiUrlBase}/logistica/itens-estoque`, // Nova rota
+        ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
+        columns: [
+            { title: "ID", field: "id", width: 60 },
+            { title: "Nome do Item", field: "nome_item", minWidth: 200 },
+            { title: "Unidade", field: "unidade_medida", width: 120 },
+            { title: "Saldo Atual", field: "quantidade_atual", hozAlign: "right", width: 120 },
+            {
+                title: "Ações", hozAlign: "center", width: 180,
+                formatter: () => `<button class="edit-btn">Editar</button><button class="delete-btn ml-2">Apagar</button>`,
+                cellClick: (e, cell) => {
+                    const data = cell.getRow().getData();
+                    if (e.target.classList.contains('edit-btn')) {
+                        preencherFormularioParaEdicaoItem(data);
+                    } else if (e.target.classList.contains('delete-btn')) {
+                        openConfirmModal('apagar', () => handleDeleteItem(data.id), `Tem a certeza que deseja apagar o item "${data.nome_item}"?`);
+                    }
+                }
+            }
+        ],
+    });
+}
+
+function preencherFormularioParaEdicaoItem(data) {
+    document.getElementById('item-form-title').textContent = `A Editar Item ID: ${data.id}`;
+    document.getElementById('item-id').value = data.id;
+    document.getElementById('item-nome').value = data.nome_item;
+    document.getElementById('item-unidade').value = data.unidade_medida;
+    document.getElementById('item-descricao').value = data.descricao;
+    document.getElementById('cancel-edit-item-btn').style.display = 'inline-block';
+    document.querySelector('#item-estoque-form button[type="submit"]').textContent = "Salvar Alterações";
+}
+
+function resetItemEstoqueForm() {
+    document.getElementById('item-form-title').textContent = 'Adicionar Novo Item';
+    document.getElementById('item-estoque-form').reset();
+    document.getElementById('item-id').value = '';
+    document.getElementById('cancel-edit-item-btn').style.display = 'none';
+    document.querySelector('#item-estoque-form button[type="submit"]').textContent = "Salvar Item";
+}
+
+async function handleItemEstoqueFormSubmit(e) {
+    e.preventDefault();
+    const id = document.getElementById('item-id').value;
+    const body = {
+        nome_item: document.getElementById('item-nome').value,
+        unidade_medida: document.getElementById('item-unidade').value,
+        descricao: document.getElementById('item-descricao').value,
+    };
+
+    const url = id ? `${apiUrlBase}/logistica/itens-estoque/${id}` : `${apiUrlBase}/logistica/itens-estoque`;
+    const method = id ? 'PUT' : 'POST';
+    
+    try {
+        const response = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify(body)
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Falha ao salvar o item.');
+        }
+        alert(`Item ${id ? 'atualizado' : 'criado'} com sucesso!`);
+        resetItemEstoqueForm();
+        itensEstoqueTable.replaceData();
+    } catch (error) {
+        alert(`Falha ao salvar o item: ${error.message}`);
+    }
+}
+
+async function handleDeleteItem(id) {
+     try {
+        const response = await fetch(`${apiUrlBase}/logistica/itens-estoque/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error('Falha ao apagar o item.');
+        alert(`Item ID ${id} apagado com sucesso!`);
+        itensEstoqueTable.replaceData();
+    } catch (error) {
+        alert('Falha ao apagar o item.');
+    }
+}
+
+
+// --- GESTÃO DE PARÂMETROS ---
 
 async function popularSeletorDeCodigos() {
     const token = getToken();
@@ -529,6 +629,9 @@ async function handleDeleteParam(id) {
         alert('Falha ao apagar o parâmetro.');
     }
 }
+
+
+// --- FUNÇÕES DE LOGO E UTILITÁRIAS ---
 
 function previewLogo(event) {
     const file = event.target.files[0];

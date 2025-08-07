@@ -70,7 +70,7 @@ async function initLogisticaPage() {
             populateFilialSelects(),
             loadMarcasAndModelosFromDB(),
             loadCurrentLogo(),
-            loadCurrentStock()
+            loadCurrentStock() // ADICIONE ESTA LINHA
         ]);
 
         await loadVehicles();
@@ -219,14 +219,17 @@ function setupEventListeners() {
     });
     fuelModal.querySelector('#fuel-purchase-form').addEventListener('submit', handleFuelPurchaseSubmit);
     fuelModal.querySelector('#fuel-consumption-form').addEventListener('submit', handleFuelConsumptionSubmit);
+    
+    // Listener para a busca de CNPJ na aba de compra
+    fuelModal.querySelector('#purchase-lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('purchase'));
 }
 
 
 // --- NOVAS FUNÇÕES PARA O MÓDULO DE COMBUSTÍVEL ---
-
 async function loadCurrentStock() {
     try {
-        const response = await fetch(`${apiUrlBase}/logistica/estoque/saldo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        // Assume que o ID do Óleo Diesel é 1.
+        const response = await fetch(`${apiUrlBase}/logistica/estoque/saldo/1`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) return;
         const data = await response.json();
         document.getElementById('kpi-estoque-diesel').textContent = `${parseFloat(data.quantidade_atual).toFixed(2)} L`;
@@ -234,24 +237,20 @@ async function loadCurrentStock() {
         document.getElementById('kpi-estoque-diesel').textContent = 'Erro';
     }
 }
-
 async function openFuelModal() {
     const modal = document.getElementById('fuel-management-modal');
     showLoader();
     try {
-        // Popula os selects necessários para as duas abas
-        // Nota: a rota para 'Insumos' deve existir.
         await Promise.all([
-            populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Insumos`, 'purchase-item', 'ID', 'NOME_PARAMETRO', '-- Selecione um Item --'),
+            populateSelectWithOptions(`${apiUrlBase}/logistica/itens-estoque`, 'purchase-item', 'id', 'nome_item', '-- Selecione um Item --'),
             populateSelectWithOptions(`${apiUrlBase}/logistica/veiculos`, 'consumption-vehicle', 'id', 'modelo', '-- Selecione um Veículo --', (v) => `${v.modelo} - ${v.placa}`)
         ]);
         
-        // Reseta os formulários
         document.getElementById('fuel-purchase-form').reset();
         document.getElementById('fuel-consumption-form').reset();
         document.getElementById('consumption-date').value = new Date().toISOString().split('T')[0];
         
-        switchFuelTab('compra'); // Abre na primeira aba por padrão
+        switchFuelTab('compra');
         modal.classList.remove('hidden');
         feather.replace();
     } catch(error) {
@@ -260,19 +259,13 @@ async function openFuelModal() {
         hideLoader();
     }
 }
-
 function switchFuelTab(tabName) {
     document.querySelectorAll('#fuel-management-modal .tab-content').forEach(content => content.classList.add('hidden'));
     document.querySelectorAll('#fuel-tabs .tab-button').forEach(button => button.classList.remove('active'));
     
-    // O novo HTML fornecido trocou a classe .active por .hidden para o conteúdo da aba
-    const activeContent = document.getElementById(`${tabName}-tab-content`);
-    if(activeContent) activeContent.classList.remove('hidden');
-
-    const activeButton = document.querySelector(`#fuel-tabs .tab-button[data-tab="${tabName}"]`);
-    if(activeButton) activeButton.classList.add('active');
+    document.getElementById(`${tabName}-tab-content`).classList.remove('hidden');
+    document.querySelector(`#fuel-tabs .tab-button[data-tab="${tabName}"]`).classList.add('active');
 }
-
 async function handleFuelPurchaseSubmit(event) {
     event.preventDefault();
     showLoader();
@@ -280,13 +273,11 @@ async function handleFuelPurchaseSubmit(event) {
         itemId: document.getElementById('purchase-item').value,
         quantidade: document.getElementById('purchase-quantity').value,
         custo: document.getElementById('purchase-cost').value,
-        // O HTML não inclui um campo para fornecedor, então enviaremos null.
-        // Se precisar de fornecedor, adicione os campos ao HTML do modal de combustível.
-        fornecedorId: null 
+        fornecedorId: document.getElementById('purchase-fornecedor-id').value
     };
 
-    if (!purchaseData.itemId || !purchaseData.quantidade || !purchaseData.custo) {
-        alert("Todos os campos são obrigatórios para registar a compra.");
+    if (!purchaseData.itemId || !purchaseData.quantidade || !purchaseData.custo || !purchaseData.fornecedorId) {
+        alert("Todos os campos, incluindo o fornecedor, são obrigatórios.");
         hideLoader();
         return;
     }
@@ -303,14 +294,12 @@ async function handleFuelPurchaseSubmit(event) {
         alert('Compra registada com sucesso!');
         document.getElementById('fuel-management-modal').classList.add('hidden');
         await loadCurrentStock();
-
     } catch (error) {
         alert(`Erro: ${error.message}`);
     } finally {
         hideLoader();
     }
 }
-
 async function handleFuelConsumptionSubmit(event) {
     event.preventDefault();
     showLoader();
@@ -319,15 +308,7 @@ async function handleFuelConsumptionSubmit(event) {
         data: document.getElementById('consumption-date').value,
         quantidade: document.getElementById('consumption-quantity').value,
         odometro: document.getElementById('consumption-odometer').value,
-        custo: document.getElementById('consumption-cost').value,
     };
-
-    if (!consumptionData.veiculoId || !consumptionData.data || !consumptionData.quantidade || !consumptionData.odometro || !consumptionData.custo) {
-        alert("Todos os campos são obrigatórios para registar o consumo.");
-        hideLoader();
-        return;
-    }
-
     try {
         const response = await fetch(`${apiUrlBase}/logistica/estoque/consumo`, {
             method: 'POST',
@@ -345,11 +326,7 @@ async function handleFuelConsumptionSubmit(event) {
         
         document.getElementById('fuel-management-modal').classList.add('hidden');
         await loadCurrentStock();
-        // Se a tabela de custos individuais ainda existir, atualize-a
-        if (document.getElementById('costs-tab-content-individuais')) {
-            await loadRecentIndividualCosts();
-        }
-
+        await loadRecentIndividualCosts();
     } catch (error) {
         alert(`Erro: ${error.message}`);
     } finally {

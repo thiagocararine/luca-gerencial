@@ -40,10 +40,8 @@
 <body class="h-full">
 
 <div class="flex h-full">
-    <!-- Overlay para o menu mobile -->
     <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
     
-    <!-- Sidebar com a nova estrutura responsiva -->
     <nav id="sidebar" class="fixed inset-y-0 left-0 bg-white shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
         <div class="flex flex-col h-full">
             <div class="h-16 flex items-center justify-center border-b px-4 gap-2">
@@ -87,7 +85,6 @@
         </div>
     </nav>
 
-    <!-- Área de Conteúdo Principal -->
     <div class="flex-1 flex flex-col">
         <header class="bg-white shadow-sm border-b h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
             <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900">
@@ -105,6 +102,7 @@
             <div class="tabs border-b border-gray-200">
                 <nav class="-mb-px flex space-x-6" aria-label="Tabs">
                     <button class="tab-button active whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="parametros">Parâmetros</button>
+                    <button class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="itens_estoque">Itens de Estoque</button>
                     <button class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="perfis" style="display: none;">Perfis de Acesso</button>
                     <button class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="usuarios" id="user-tab-btn" style="display: none;">Utilizadores</button>
                     <button class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="logo">Logo</button>
@@ -149,6 +147,36 @@
                     </section>
                 </div>
                 
+                <div id="itens_estoque-content" class="tab-content hidden space-y-8">
+                    <section class="settings-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-lg font-semibold text-gray-900">Itens de Estoque</h3>
+                        <p class="mt-1 text-sm text-gray-600">Gira os insumos que serão controlados pelo sistema (combustíveis, óleos, pneus, etc.).</p>
+                        <div id="itens-estoque-table" class="mt-6"></div>
+                    </section>
+                    <section class="settings-section bg-white p-6 rounded-lg shadow">
+                        <h4 id="item-form-title" class="text-lg font-semibold text-gray-900">Adicionar Novo Item</h4>
+                        <form id="item-estoque-form" class="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2">
+                            <input type="hidden" id="item-id">
+                            <div>
+                                <label for="item-nome" class="block text-sm font-medium text-gray-700">Nome do Item</label>
+                                <input type="text" id="item-nome" required placeholder="Ex: Óleo Diesel S10" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                            </div>
+                            <div>
+                                <label for="item-unidade" class="block text-sm font-medium text-gray-700">Unidade de Medida</label>
+                                <input type="text" id="item-unidade" required placeholder="Ex: Litros, Unidades" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label for="item-descricao" class="block text-sm font-medium text-gray-700">Descrição (Opcional)</label>
+                                <textarea id="item-descricao" rows="2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></textarea>
+                            </div>
+                            <div class="sm:col-span-2 flex items-center gap-4">
+                                <button type="submit" class="inline-flex justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">Salvar Item</button>
+                                <button type="button" id="cancel-edit-item-btn" class="rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50" style="display: none;">Cancelar Edição</button>
+                            </div>
+                        </form>
+                    </section>
+                </div>
+
                 <div id="perfis-content" class="tab-content hidden space-y-8">
                     <section class="settings-section bg-white p-6 rounded-lg shadow">
                         <h3 class="text-lg font-semibold text-gray-900">Gerir Perfis de Acesso</h3>
@@ -209,7 +237,6 @@
     </div>
 </div>
 
-<!-- Modal de Gestão de Utilizadores -->
 <div id="user-settings-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
     <div class="relative mx-auto p-6 border w-full max-w-lg shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between pb-4 border-b">
@@ -242,8 +269,7 @@
             <div class="border-t pt-4">
                 <label class="block text-sm font-medium text-gray-700">Acesso aos Módulos</label>
                 <div id="user-modal-permissions" class="mt-2 space-y-2">
-                    <!-- Checkboxes de permissão serão inseridos aqui -->
-                </div>
+                    </div>
             </div>
         </form>
         <div class="flex justify-end items-center pt-6 mt-6 border-t gap-4">
@@ -266,10 +292,9 @@
     </div>
 </div>
 
-<!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
 <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
-<script src="settings.js?v=2.0.2" defer></script>
+<script src="settings.js?v=1.0.6" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
