@@ -208,9 +208,13 @@ function setupEventListeners() {
     captureModal.querySelector('#use-photo-btn').addEventListener('click', useCapturedPhoto);
     captureModal.querySelector('#retake-photo-btn').addEventListener('click', retakePhoto);
 
-    // NOVOS LISTENERS PARA O MÓDULO DE COMBUSTÍVEL
-    document.getElementById('open-fuel-modal-btn')?.addEventListener('click', openFuelModal);
-    const fuelModal = document.getElementById('fuel-management-modal');
+    const openFuelBtn = document.getElementById('open-fuel-modal-btn');
+if (openFuelBtn) {
+    openFuelBtn.addEventListener('click', openFuelModal);
+}
+
+const fuelModal = document.getElementById('fuel-management-modal');
+if (fuelModal) {
     fuelModal.querySelector('#close-fuel-modal-btn').addEventListener('click', () => fuelModal.classList.add('hidden'));
     fuelModal.querySelector('#fuel-tabs').addEventListener('click', (e) => {
         if (e.target.matches('.tab-button')) {
@@ -220,8 +224,11 @@ function setupEventListeners() {
     fuelModal.querySelector('#fuel-purchase-form').addEventListener('submit', handleFuelPurchaseSubmit);
     fuelModal.querySelector('#fuel-consumption-form').addEventListener('submit', handleFuelConsumptionSubmit);
     
-    // Listener para a busca de CNPJ na aba de compra
-    fuelModal.querySelector('#purchase-lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('purchase'));
+    // Adicionado o listener para a busca de CNPJ na aba de compra, dentro da verificação
+    const purchaseCnpjBtn = fuelModal.querySelector('#purchase-lookup-cnpj-btn');
+    if (purchaseCnpjBtn) {
+        purchaseCnpjBtn.addEventListener('click', () => lookupCnpj('purchase'));
+    }
 }
 
 
