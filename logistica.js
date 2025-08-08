@@ -1,4 +1,4 @@
-// logistica.js (COMPLETO com módulo de combustível)
+// logistica.js (COMPLETO com todas as funções, logs e loader)
 
 document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
@@ -46,8 +46,6 @@ async function initLogisticaPage() {
     const userProfile = getUserProfile();
     const isPrivileged = privilegedAccessProfiles.includes(userProfile);
 
-    // This part seems to be from an older version, the buttons were removed in the new HTML.
-    // I will keep the logic in case you re-add them.
     if (!isPrivileged) {
         const addVehicleBtn = document.getElementById('add-vehicle-button');
         const addFleetCostBtn = document.getElementById('add-fleet-cost-button');
@@ -70,28 +68,20 @@ async function initLogisticaPage() {
             populateFilialSelects(),
             loadMarcasAndModelosFromDB(),
             loadCurrentLogo(),
-            loadCurrentStock() // ADICIONE ESTA LINHA
+            loadCurrentStock()
         ]);
 
         await loadVehicles();
-        // The cost tabs were removed from the new HTML. These functions will fail if the elements are not present.
-        // I will add checks to prevent errors.
         if (document.getElementById('costs-tab-content-gerais')) {
             await loadFleetCosts();
-        }
-        if (document.getElementById('costs-tab-content-individuais')) {
             await loadRecentIndividualCosts();
+            switchCostTab('gerais');
         }
     } catch (error) {
         console.error("Erro na inicialização da página:", error);
         alert("Ocorreu um erro ao carregar os dados. Por favor, tente recarregar a página.");
     } finally {
         hideLoader();
-    }
-    
-    // The cost tabs were removed from the new HTML.
-    if (document.getElementById('costs-tabs')) {
-       switchCostTab('gerais');
     }
 }
 
@@ -102,6 +92,8 @@ async function initLogisticaPage() {
 function setupEventListeners() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('add-vehicle-button')?.addEventListener('click', () => openVehicleModal());
+    document.getElementById('add-fleet-cost-button')?.addEventListener('click', openFleetCostModal);
+    document.getElementById('add-vehicle-cost-button')?.addEventListener('click', openVehicleCostModal);
     document.getElementById('filter-button').addEventListener('click', applyFilters);
     document.getElementById('clear-filter-button').addEventListener('click', clearFilters);
 
@@ -142,27 +134,23 @@ function setupEventListeners() {
     maintenanceModal.querySelector('#maintenance-despesa-interna-btn').addEventListener('click', () => useInternalExpense('maintenance'));
     maintenanceModal.querySelector('#maintenance-form').addEventListener('submit', handleMaintenanceFormSubmit);
 
-    // The fleet cost modal button was removed from the new HTML.
-    const addFleetCostBtn = document.getElementById('add-fleet-cost-button');
-    if (addFleetCostBtn) {
-        addFleetCostBtn.addEventListener('click', openFleetCostModal);
-        const fleetCostModal = document.getElementById('fleet-cost-modal');
+    const fleetCostModal = document.getElementById('fleet-cost-modal');
+    if (fleetCostModal) {
         fleetCostModal.querySelector('#close-fleet-cost-modal-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
         fleetCostModal.querySelector('#cancel-fleet-cost-form-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
         fleetCostModal.querySelector('#fleet-cost-lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('fleet-cost'));
         fleetCostModal.querySelector('#fleet-cost-despesa-interna-btn').addEventListener('click', () => useInternalExpense('fleet-cost'));
         fleetCostModal.querySelector('#fleet-cost-form').addEventListener('submit', handleFleetCostFormSubmit);
     }
-    
+
     document.getElementById('content-area').addEventListener('click', handleContentClick);
     window.addEventListener('resize', () => renderContent(allVehicles));
 
     document.getElementById('close-maintenance-export-modal-btn').addEventListener('click', () => document.getElementById('maintenance-export-modal').classList.add('hidden'));
     document.getElementById('generate-maintenance-pdf-btn').addEventListener('click', exportMaintenanceReportPDF);
 
-    // The cost tabs were removed from the new HTML.
     const costsTabs = document.getElementById('costs-tabs');
-    if(costsTabs){
+    if (costsTabs) {
         costsTabs.addEventListener('click', (e) => {
             if (e.target.matches('.tab-button')) {
                 switchCostTab(e.target.dataset.costTab);
@@ -179,18 +167,14 @@ function setupEventListeners() {
         document.getElementById('costs-tab-content-individuais')?.addEventListener('click', handleDeleteCostClick);
     }
 
-
     document.getElementById('photos-tab-content').addEventListener('change', handlePhotoInputChange);
     document.getElementById('photos-tab-content').addEventListener('click', handlePhotoAreaClick);
 
     document.getElementById('document-upload-form').addEventListener('submit', handleDocumentUploadSubmit);
     document.getElementById('document-list-container').addEventListener('click', handleDeleteDocumentClick);
 
-    // The vehicle cost modal button was removed from the new HTML.
-    const addVehicleCostButton = document.getElementById('add-vehicle-cost-button');
-    if(addVehicleCostButton){
-        addVehicleCostButton.addEventListener('click', openVehicleCostModal);
-        const vehicleCostModal = document.getElementById('vehicle-cost-modal');
+    const vehicleCostModal = document.getElementById('vehicle-cost-modal');
+    if (vehicleCostModal) {
         vehicleCostModal.querySelector('#close-vehicle-cost-modal-btn').addEventListener('click', () => vehicleCostModal.classList.add('hidden'));
         vehicleCostModal.querySelector('#cancel-vehicle-cost-form-btn').addEventListener('click', () => vehicleCostModal.classList.add('hidden'));
         vehicleCostModal.querySelector('#vehicle-cost-form').addEventListener('submit', handleVehicleCostFormSubmit);
@@ -208,31 +192,29 @@ function setupEventListeners() {
     captureModal.querySelector('#use-photo-btn').addEventListener('click', useCapturedPhoto);
     captureModal.querySelector('#retake-photo-btn').addEventListener('click', retakePhoto);
 
-    const openFuelBtn = document.getElementById('open-fuel-modal-btn');
-if (openFuelBtn) {
-    openFuelBtn.addEventListener('click', openFuelModal);
-}
+    // NOVOS LISTENERS PARA O MÓDULO DE COMBUSTÍVEL
+    document.getElementById('open-fuel-modal-btn')?.addEventListener('click', openFuelModal);
+    const fuelModal = document.getElementById('fuel-management-modal');
 
-const fuelModal = document.getElementById('fuel-management-modal');
-if (fuelModal) {
-    fuelModal.querySelector('#close-fuel-modal-btn').addEventListener('click', () => fuelModal.classList.add('hidden'));
-    fuelModal.querySelector('#fuel-tabs').addEventListener('click', (e) => {
-        if (e.target.matches('.tab-button')) {
-            switchFuelTab(e.target.dataset.tab);
+    // VERIFICA SE O MODAL EXISTE ANTES DE ADICIONAR OS LISTENERS
+    if (fuelModal) {
+        fuelModal.querySelector('#close-fuel-modal-btn').addEventListener('click', () => fuelModal.classList.add('hidden'));
+        fuelModal.querySelector('#fuel-tabs').addEventListener('click', (e) => {
+            if (e.target.matches('.tab-button')) {
+                switchFuelTab(e.target.dataset.tab);
+            }
+        });
+        fuelModal.querySelector('#fuel-purchase-form').addEventListener('submit', handleFuelPurchaseSubmit);
+        fuelModal.querySelector('#fuel-consumption-form').addEventListener('submit', handleFuelConsumptionSubmit);
+        const purchaseCnpjBtn = fuelModal.querySelector('#purchase-lookup-cnpj-btn');
+        if (purchaseCnpjBtn) {
+            purchaseCnpjBtn.addEventListener('click', () => lookupCnpj('purchase'));
         }
-    });
-    fuelModal.querySelector('#fuel-purchase-form').addEventListener('submit', handleFuelPurchaseSubmit);
-    fuelModal.querySelector('#fuel-consumption-form').addEventListener('submit', handleFuelConsumptionSubmit);
-    
-    // Adicionado o listener para a busca de CNPJ na aba de compra, dentro da verificação
-    const purchaseCnpjBtn = fuelModal.querySelector('#purchase-lookup-cnpj-btn');
-    if (purchaseCnpjBtn) {
-        purchaseCnpjBtn.addEventListener('click', () => lookupCnpj('purchase'));
     }
 }
 
 
-// --- NOVAS FUNÇÕES PARA O MÓDULO DE COMBUSTÍVEL ---
+// --- Funções de Combustível ---
 async function loadCurrentStock() {
     try {
         // Assume que o ID do Óleo Diesel é 1.
@@ -244,6 +226,7 @@ async function loadCurrentStock() {
         document.getElementById('kpi-estoque-diesel').textContent = 'Erro';
     }
 }
+
 async function openFuelModal() {
     const modal = document.getElementById('fuel-management-modal');
     showLoader();
@@ -252,27 +235,29 @@ async function openFuelModal() {
             populateSelectWithOptions(`${apiUrlBase}/logistica/itens-estoque`, 'purchase-item', 'id', 'nome_item', '-- Selecione um Item --'),
             populateSelectWithOptions(`${apiUrlBase}/logistica/veiculos`, 'consumption-vehicle', 'id', 'modelo', '-- Selecione um Veículo --', (v) => `${v.modelo} - ${v.placa}`)
         ]);
-        
+
         document.getElementById('fuel-purchase-form').reset();
         document.getElementById('fuel-consumption-form').reset();
         document.getElementById('consumption-date').value = new Date().toISOString().split('T')[0];
-        
+
         switchFuelTab('compra');
         modal.classList.remove('hidden');
         feather.replace();
-    } catch(error) {
+    } catch (error) {
         alert("Erro ao preparar o modal de combustível: " + error.message);
     } finally {
         hideLoader();
     }
 }
+
 function switchFuelTab(tabName) {
     document.querySelectorAll('#fuel-management-modal .tab-content').forEach(content => content.classList.add('hidden'));
     document.querySelectorAll('#fuel-tabs .tab-button').forEach(button => button.classList.remove('active'));
-    
+
     document.getElementById(`${tabName}-tab-content`).classList.remove('hidden');
     document.querySelector(`#fuel-tabs .tab-button[data-tab="${tabName}"]`).classList.add('active');
 }
+
 async function handleFuelPurchaseSubmit(event) {
     event.preventDefault();
     showLoader();
@@ -297,7 +282,7 @@ async function handleFuelPurchaseSubmit(event) {
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Falha ao registar a compra.');
-        
+
         alert('Compra registada com sucesso!');
         document.getElementById('fuel-management-modal').classList.add('hidden');
         await loadCurrentStock();
@@ -307,6 +292,7 @@ async function handleFuelPurchaseSubmit(event) {
         hideLoader();
     }
 }
+
 async function handleFuelConsumptionSubmit(event) {
     event.preventDefault();
     showLoader();
@@ -324,13 +310,13 @@ async function handleFuelConsumptionSubmit(event) {
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Falha ao registar consumo.');
-        
+
         let successMessage = 'Consumo registado com sucesso!';
-        if(result.consumoMedio) {
+        if (result.consumoMedio) {
             successMessage += `\n\nMédia de Consumo Calculada: ${result.consumoMedio} km/L.`;
         }
         alert(successMessage);
-        
+
         document.getElementById('fuel-management-modal').classList.add('hidden');
         await loadCurrentStock();
         await loadRecentIndividualCosts();
@@ -341,9 +327,730 @@ async function handleFuelConsumptionSubmit(event) {
     }
 }
 
+// --- Funções de Veículos ---
+async function loadVehicles() {
+    const contentArea = document.getElementById('content-area');
+    contentArea.innerHTML = '<p class="text-center p-8 text-gray-500">A carregar veículos...</p>';
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error(`Falha ao buscar veículos: ${response.statusText}`);
+        allVehicles = await response.json();
+        applyFilters();
+    } catch (error) {
+        console.error("Erro ao carregar veículos:", error);
+        contentArea.innerHTML = `<p class="text-center p-8 text-red-600">Erro ao carregar veículos.</p>`;
+    }
+}
 
-// --- LÓGICA DE FOTOS E DOCUMENTOS ---
+function applyFilters() {
+    const searchTerm = document.getElementById('filter-search').value.toLowerCase();
+    const filial = document.getElementById('filter-filial').value;
+    const status = document.getElementById('filter-status').value;
 
+    let filteredVehicles = allVehicles.filter(vehicle => {
+        const searchMatch = !searchTerm ||
+            (vehicle.placa && vehicle.placa.toLowerCase().includes(searchTerm)) ||
+            (vehicle.modelo && vehicle.modelo.toLowerCase().includes(searchTerm));
+        const filialMatch = !filial || vehicle.id_filial == filial;
+        return searchMatch && filialMatch;
+    });
+
+    if (status) {
+        if (status === "Ativo / Manutenção") {
+            filteredVehicles = filteredVehicles.filter(v => v.status === 'Ativo' || v.status === 'Em Manutenção');
+        } else {
+            filteredVehicles = filteredVehicles.filter(v => v.status === status);
+        }
+    } else {
+        filteredVehicles = filteredVehicles.filter(v => v.status === 'Ativo' || v.status === 'Em Manutenção');
+    }
+
+    renderContent(filteredVehicles);
+}
+
+function clearFilters() {
+    document.getElementById('filter-search').value = '';
+    document.getElementById('filter-filial').value = '';
+    document.getElementById('filter-status').value = '';
+    applyFilters();
+}
+
+function renderContent(vehicles) {
+    const contentArea = document.getElementById('content-area');
+    const noDataMessage = document.getElementById('no-data-message');
+    contentArea.innerHTML = '';
+    if (vehicles.length === 0) {
+        if (noDataMessage) noDataMessage.classList.remove('hidden');
+    } else {
+        if (noDataMessage) noDataMessage.classList.add('hidden');
+        if (window.innerWidth < 768) {
+            renderVehicleCards(vehicles, contentArea);
+        } else {
+            renderVehicleTable(vehicles, contentArea);
+        }
+    }
+    feather.replace();
+}
+
+function renderVehicleCards(vehicles, container) {
+    const cardsContainer = document.createElement('div');
+    cardsContainer.className = 'p-4 grid grid-cols-1 sm:grid-cols-2 gap-6';
+    vehicles.forEach(vehicle => {
+        const card = document.createElement('div');
+        card.className = 'vehicle-item bg-white rounded-lg shadow-md overflow-hidden cursor-pointer transform hover:-translate-y-1 transition-transform duration-200';
+        card.dataset.id = vehicle.id;
+
+        const photoUrl = vehicle.foto_frente
+            ? `${apiUrlBase.replace('/api', '')}/${vehicle.foto_frente}`
+            : 'https://placehold.co/400x250/e2e8f0/4a5568?text=Sem+Foto';
+
+        const statusInfo = getStatusInfo(vehicle.status);
+        const seguroBadge = vehicle.seguro ? '<span class="px-2 py-1 text-xs font-semibold text-white bg-blue-500 rounded-full">Seguro</span>' : '';
+        const rastreadorBadge = vehicle.rastreador ? '<span class="px-2 py-1 text-xs font-semibold text-white bg-orange-500 rounded-full">Rastreador</span>' : '';
+
+        card.innerHTML = `
+            <div class="relative">
+                <img src="${photoUrl}" alt="Foto de ${vehicle.modelo}" class="w-full h-40 object-cover">
+                <div class="absolute top-2 right-2 flex flex-col items-end gap-1">
+                    <span class="px-2 py-1 text-xs font-semibold text-white ${statusInfo.color} rounded-full">${statusInfo.text}</span>
+                    ${seguroBadge}
+                    ${rastreadorBadge}
+                </div>
+            </div>
+            <div class="p-4">
+                <p class="text-xs text-gray-500">${vehicle.marca || 'N/A'}</p>
+                <h4 class="font-bold text-lg text-gray-900 truncate" title="${vehicle.modelo || ''}">${vehicle.modelo || 'Modelo não definido'}</h4>
+                <div class="flex justify-between items-center mt-2">
+                    <span class="px-2 py-1 text-sm font-semibold text-white bg-gray-800 rounded-md">${vehicle.placa || 'Sem Placa'}</span>
+                    <span class="text-sm text-gray-600">${vehicle.nome_filial || 'Sem filial'}</span>
+                </div>
+            </div>`;
+        cardsContainer.appendChild(card);
+    });
+    container.appendChild(cardsContainer);
+}
+
+function renderVehicleTable(vehicles, container) {
+    const table = document.createElement('table');
+    table.className = 'min-w-full divide-y divide-gray-200';
+    table.innerHTML = `
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Veículo</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Placa</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Filial</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+            </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
+    const tbody = table.querySelector('tbody');
+    vehicles.forEach(vehicle => {
+        const statusInfo = getStatusInfo(vehicle.status);
+        const seguroBadge = vehicle.seguro ? '<span class="px-2 ml-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-500 text-white">Seguro</span>' : '';
+        const rastreadorBadge = vehicle.rastreador ? '<span class="px-2 ml-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-500 text-white">Rastreador</span>' : '';
+
+        const tr = document.createElement('tr');
+        tr.className = 'vehicle-item hover:bg-gray-50';
+        tr.dataset.id = vehicle.id;
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm font-medium text-gray-900">${vehicle.modelo}</div>
+                <div class="text-sm text-gray-500">${vehicle.marca}</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">${vehicle.placa}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${vehicle.nome_filial || 'N/A'}</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusInfo.color} text-white">${statusInfo.text}</span>
+                ${seguroBadge}
+                ${rastreadorBadge}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button class="text-indigo-600 hover:text-indigo-900" data-action="details">Gerir</button>
+                ${privilegedAccessProfiles.includes(getUserProfile()) ? `
+                <button class="text-blue-600 hover:text-blue-900 ml-4" data-action="edit">Editar</button>
+                ` : ''}
+            </td>`;
+        tbody.appendChild(tr);
+    });
+    container.appendChild(table);
+}
+
+function handleContentClick(event) {
+    const target = event.target;
+    const vehicleItem = target.closest('.vehicle-item');
+    if (!vehicleItem) return;
+    const vehicleId = parseInt(vehicleItem.dataset.id, 10);
+    const vehicle = allVehicles.find(v => v.id === vehicleId);
+    if (!vehicle) return;
+    const action = target.dataset.action;
+    if (action === 'edit') {
+        openVehicleModal(vehicle);
+    } else if (action === 'delete') {
+        openDeleteConfirmModal(vehicle);
+    } else {
+        openDetailsModal(vehicle);
+    }
+}
+
+function openDetailsModal(vehicle) {
+    currentVehicleId = vehicle.id;
+    const modal = document.getElementById('details-modal');
+    document.getElementById('details-modal-title').textContent = `Gestão de: ${vehicle.modelo} - ${vehicle.placa}`;
+    const logsTabButton = document.getElementById('logs-tab-button');
+    if (privilegedAccessProfiles.includes(getUserProfile())) {
+        logsTabButton.style.display = 'block';
+    } else {
+        logsTabButton.style.display = 'none';
+    }
+    modal.classList.remove('hidden');
+    switchTab('details', vehicle.id);
+    feather.replace();
+}
+
+function renderDetailsTab(vehicle) {
+    const detailsContent = document.getElementById('details-tab-content');
+    detailsContent.innerHTML = `
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+            <div><strong class="block text-gray-500">Placa</strong><span>${vehicle.placa}</span></div>
+            <div><strong class="block text-gray-500">Marca</strong><span>${vehicle.marca}</span></div>
+            <div><strong class="block text-gray-500">Modelo</strong><span>${vehicle.modelo}</span></div>
+            <div><strong class="block text-gray-500">Ano Fab./Mod.</strong><span>${vehicle.ano_fabricacao || 'N/A'}/${vehicle.ano_modelo || 'N/A'}</span></div>
+            <div><strong class="block text-gray-500">RENAVAM</strong><span>${vehicle.renavam || 'N/A'}</span></div>
+            <div class="md:col-span-2"><strong class="block text-gray-500">Chassi</strong><span>${vehicle.chassi || 'N/A'}</span></div>
+            <div><strong class="block text-gray-500">Filial</strong><span>${vehicle.nome_filial || 'N/A'}</span></div>
+            <div><strong class="block text-gray-500">Status</strong><span>${vehicle.status}</span></div>
+            <div><strong class="block text-gray-500">Seguro</strong><span>${vehicle.seguro ? 'Sim' : 'Não'}</span></div>
+            <div><strong class="block text-gray-500">Rastreador</strong><span>${vehicle.rastreador ? 'Sim' : 'Não'}</span></div>
+        </div>`;
+}
+
+
+// --- Funções de Manutenção ---
+async function fetchAndDisplayMaintenanceHistory(vehicleId) {
+    const container = document.getElementById('maintenance-history-container');
+    container.innerHTML = '<p class="text-center text-gray-500">A carregar histórico...</p>';
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/veiculos/${vehicleId}/manutencoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao buscar histórico.');
+        const manutenções = await response.json();
+        if (manutenções.length === 0) {
+            container.innerHTML = '<p class="text-center text-gray-500">Nenhuma manutenção registada.</p>';
+            return;
+        }
+        const table = document.createElement('table');
+        table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+        table.innerHTML = `
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Tipo</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Fornecedor</th>
+                    <th class="px-4 py-2 text-right font-medium text-gray-500">Custo</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
+        const tbody = table.querySelector('tbody');
+        manutenções.forEach(m => {
+            const tr = tbody.insertRow();
+            tr.innerHTML = `
+                <td class="px-4 py-2">${new Date(m.data_manutencao).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                <td class="px-4 py-2">${m.tipo_manutencao}</td>
+                <td class="px-4 py-2">${m.nome_fornecedor || 'N/A'}</td>
+                <td class="px-4 py-2 text-right">R$ ${parseFloat(m.custo).toFixed(2)}</td>`;
+        });
+        container.innerHTML = '';
+        container.appendChild(table);
+    } catch (error) {
+        container.innerHTML = '<p class="text-center text-red-500">Erro ao carregar histórico.</p>';
+        console.error(error);
+    }
+}
+
+function setupMaintenanceExportModal() {
+    maintenanceExportDatepicker = new Litepicker({
+        element: document.getElementById('maintenance-export-date-range'),
+        singleMode: false,
+        lang: 'pt-BR',
+        format: 'DD/MM/YYYY',
+    });
+}
+
+function openMaintenanceExportModal() {
+    maintenanceExportDatepicker.clearSelection();
+    document.getElementById('maintenance-export-modal').classList.remove('hidden');
+    feather.replace();
+}
+
+async function exportMaintenanceReportPDF() {
+    const btn = document.getElementById('generate-maintenance-pdf-btn');
+    btn.textContent = 'A gerar...';
+    btn.disabled = true;
+
+    try {
+        if (!currentVehicleId) throw new Error("ID do veículo não encontrado.");
+        const vehicle = allVehicles.find(v => v.id === currentVehicleId);
+        if (!vehicle) throw new Error("Dados do veículo não encontrados.");
+
+        const startDate = maintenanceExportDatepicker.getStartDate()?.toJSDate();
+        const endDate = maintenanceExportDatepicker.getEndDate()?.toJSDate();
+
+        if (!startDate || !endDate) {
+            alert("Por favor, selecione um período para gerar o relatório.");
+            btn.disabled = false;
+            return;
+        }
+
+        const response = await fetch(`${apiUrlBase}/logistica/veiculos/${currentVehicleId}/manutencoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao buscar dados de manutenção.');
+        const allManutencoes = await response.json();
+
+        const manutençõesFiltradas = allManutencoes.filter(m => {
+            const dataManutencao = new Date(m.data_manutencao);
+            return dataManutencao >= startDate && dataManutencao <= endDate;
+        });
+
+        if (manutençõesFiltradas.length === 0) {
+            alert("Nenhuma manutenção encontrada no período selecionado.");
+            btn.disabled = false;
+            return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+
+        if (LOGO_BASE_64) {
+            try {
+                doc.addImage(LOGO_BASE_64, 'PNG', 14, 15, 25, 0);
+            } catch (e) {
+                console.error("A logo carregada é inválida e não será adicionada ao PDF.", e);
+            }
+        }
+        doc.setFontSize(18);
+        doc.text('Relatório de Manutenções', doc.internal.pageSize.getWidth() / 2, 22, { align: 'center' });
+        doc.setFontSize(11);
+        doc.text(`Veículo: ${vehicle.modelo} - ${vehicle.placa}`, 14, 35);
+        doc.text(`Período: ${startDate.toLocaleDateString('pt-BR')} a ${endDate.toLocaleDateString('pt-BR')}`, 14, 40);
+
+        const body = manutençõesFiltradas.map(m => [
+            new Date(m.data_manutencao).toLocaleDateString('pt-BR', { timeZone: 'UTC' }),
+            m.tipo_manutencao,
+            m.nome_fornecedor || 'N/A',
+            m.descricao || '',
+            parseFloat(m.custo).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+        ]);
+
+        doc.autoTable({
+            head: [['Data', 'Tipo', 'Fornecedor', 'Descrição', 'Custo']],
+            body: body,
+            startY: 50,
+            theme: 'grid',
+            headStyles: { fillColor: [41, 128, 185] },
+            columnStyles: {
+                2: { cellWidth: 45, overflow: 'ellipsize' },
+                3: { cellWidth: 'auto', overflow: 'ellipsize' },
+            }
+        });
+
+        const totaisPorTipo = manutençõesFiltradas.reduce((acc, m) => {
+            const tipo = m.tipo_manutencao || 'Não especificado';
+            const custo = parseFloat(m.custo) || 0;
+            acc[tipo] = (acc[tipo] || 0) + custo;
+            return acc;
+        }, {});
+
+        const totalGeral = Object.values(totaisPorTipo).reduce((sum, value) => sum + value, 0);
+
+        const summaryBody = Object.entries(totaisPorTipo).map(([tipo, total]) => {
+            return [tipo, total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })];
+        });
+
+        doc.autoTable({
+            head: [['Tipo de Manutenção', 'Custo Total']],
+            body: summaryBody,
+            startY: doc.autoTable.previous.finalY + 10,
+            theme: 'striped',
+            foot: [['Total Geral', totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]],
+            footStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold' }
+        });
+
+        doc.save(`Relatorio_Manutencao_${vehicle.placa}.pdf`);
+        document.getElementById('maintenance-export-modal').classList.add('hidden');
+
+    } catch (error) {
+        alert(`Erro ao gerar PDF: ${error.message}`);
+    } finally {
+        btn.textContent = 'Gerar PDF';
+        btn.disabled = false;
+    }
+}
+
+function openMaintenanceModal(vehicleId) {
+    const modal = document.getElementById('maintenance-modal');
+    const form = document.getElementById('maintenance-form');
+    form.reset();
+    document.getElementById('maintenance-vehicle-id').value = vehicleId;
+    document.getElementById('maintenance-fornecedor-id').value = '';
+    document.getElementById('maintenance-date').value = new Date().toISOString().split('T')[0];
+
+    populateMaintenanceTypes();
+    populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Classificação Despesa Veiculo`, 'maintenance-classification', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Selecione a Classificação --');
+
+    modal.classList.remove('hidden');
+    feather.replace();
+}
+
+async function handleMaintenanceFormSubmit(event) {
+    event.preventDefault();
+    const saveBtn = document.getElementById('save-maintenance-btn');
+    saveBtn.disabled = true;
+
+    const maintenanceData = {
+        id_veiculo: document.getElementById('maintenance-vehicle-id').value,
+        data_manutencao: document.getElementById('maintenance-date').value,
+        custo: document.getElementById('maintenance-cost').value,
+        tipo_manutencao: document.getElementById('maintenance-type').value,
+        classificacao_custo: document.getElementById('maintenance-classification').value,
+        descricao: document.getElementById('maintenance-description').value,
+        id_fornecedor: document.getElementById('maintenance-fornecedor-id').value,
+    };
+
+    if (!maintenanceData.id_fornecedor) {
+        alert('Por favor, consulte um CNPJ válido ou marque como despesa interna.');
+        saveBtn.disabled = false;
+        return;
+    }
+    if (!maintenanceData.tipo_manutencao || !maintenanceData.classificacao_custo) {
+        alert('Por favor, selecione um tipo e uma classificação para a manutenção.');
+        saveBtn.disabled = false;
+        return;
+    }
+
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/veiculos/${maintenanceData.id_veiculo}/manutencoes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify(maintenanceData)
+        });
+        if (!response.ok) throw new Error('Falha ao salvar manutenção.');
+        document.getElementById('maintenance-modal').classList.add('hidden');
+        alert('Manutenção registada com sucesso!');
+        await fetchAndDisplayMaintenanceHistory(maintenanceData.id_veiculo);
+        await loadRecentIndividualCosts();
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        saveBtn.disabled = false;
+    }
+}
+
+// --- Funções de Custos ---
+function openVehicleCostModal() {
+    const modal = document.getElementById('vehicle-cost-modal');
+    const form = modal.querySelector('form');
+    form.reset();
+
+    document.getElementById('vehicle-cost-fornecedor-id').value = '';
+    document.getElementById('vehicle-cost-date').value = new Date().toISOString().split('T')[0];
+
+    const select = document.getElementById('vehicle-cost-vehicle-select');
+    select.innerHTML = '<option value="">-- Selecione um Veículo --</option>';
+    allVehicles
+        .filter(v => v.status === 'Ativo' || v.status === 'Em Manutenção')
+        .sort((a, b) => a.modelo.localeCompare(b.modelo))
+        .forEach(v => {
+            const option = document.createElement('option');
+            option.value = v.id;
+            option.textContent = `${v.modelo} - ${v.placa}`;
+            select.appendChild(option);
+        });
+
+    populateMaintenanceTypes('vehicle-cost-type');
+    populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Classificação Despesa Veiculo`, 'vehicle-cost-classification', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Selecione a Classificação --');
+
+    modal.classList.remove('hidden');
+    feather.replace();
+}
+
+async function handleVehicleCostFormSubmit(event) {
+    event.preventDefault();
+    const saveBtn = document.getElementById('save-vehicle-cost-btn');
+    saveBtn.disabled = true;
+
+    const costData = {
+        id_veiculo: document.getElementById('vehicle-cost-vehicle-select').value,
+        data_manutencao: document.getElementById('vehicle-cost-date').value,
+        custo: document.getElementById('vehicle-cost-value').value,
+        tipo_manutencao: document.getElementById('vehicle-cost-type').value,
+        classificacao_custo: document.getElementById('vehicle-cost-classification').value,
+        descricao: document.getElementById('vehicle-cost-description').value,
+        id_fornecedor: document.getElementById('vehicle-cost-fornecedor-id').value,
+    };
+
+    if (!costData.id_veiculo) { alert('Por favor, selecione um veículo.'); saveBtn.disabled = false; return; }
+    if (!costData.id_fornecedor) { alert('Por favor, associe um fornecedor ou marque como despesa interna.'); saveBtn.disabled = false; return; }
+    if (!costData.tipo_manutencao || !costData.classificacao_custo) {
+        alert('Por favor, selecione um tipo e uma classificação para a despesa.');
+        saveBtn.disabled = false;
+        return;
+    }
+
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/veiculos/${costData.id_veiculo}/manutencoes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify(costData)
+        });
+        if (!response.ok) throw new Error('Falha ao salvar a despesa do veículo.');
+
+        document.getElementById('vehicle-cost-modal').classList.add('hidden');
+        alert('Despesa do veículo registada com sucesso!');
+        await loadRecentIndividualCosts();
+
+        if (costData.tipo_manutencao.toLowerCase().includes('manutenção')) {
+            await loadVehicles();
+        }
+
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        saveBtn.disabled = false;
+    }
+}
+
+function openFleetCostModal() {
+    const modal = document.getElementById('fleet-cost-modal');
+    modal.querySelector('form').reset();
+    document.getElementById('fleet-cost-fornecedor-id').value = '';
+    document.getElementById('fleet-cost-date').value = new Date().toISOString().split('T')[0];
+    document.querySelectorAll('#fleet-cost-filiais-checkboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
+    modal.classList.remove('hidden');
+    feather.replace();
+}
+
+async function handleFleetCostFormSubmit(event) {
+    event.preventDefault();
+    const saveBtn = document.getElementById('save-fleet-cost-btn');
+    saveBtn.disabled = true;
+
+    const selectedFiliais = Array.from(document.querySelectorAll('#fleet-cost-filiais-checkboxes input[type="checkbox"]:checked'))
+        .map(cb => cb.value);
+
+    const costData = {
+        descricao: document.getElementById('fleet-cost-description').value,
+        custo: document.getElementById('fleet-cost-value').value,
+        data_custo: document.getElementById('fleet-cost-date').value,
+        id_fornecedor: document.getElementById('fleet-cost-fornecedor-id').value,
+        filiais_rateio: selectedFiliais
+    };
+    if (!costData.id_fornecedor) {
+        alert('Por favor, associe um fornecedor ou marque como despesa interna.');
+        saveBtn.disabled = false;
+        return;
+    }
+    if (costData.filiais_rateio.length === 0) {
+        alert('Por favor, selecione pelo menos uma filial para o rateio.');
+        saveBtn.disabled = false;
+        return;
+    }
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/custos-frota`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify(costData)
+        });
+        if (!response.ok) throw new Error('Falha ao salvar custo de frota.');
+        document.getElementById('fleet-cost-modal').classList.add('hidden');
+        alert('Custo de frota registado com sucesso!');
+        await loadFleetCosts();
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        saveBtn.disabled = false;
+    }
+}
+
+function switchCostTab(tabName) {
+    document.querySelectorAll('.cost-tab-content').forEach(content => {
+        content.classList.remove('active');
+        content.style.display = 'none';
+    });
+    document.querySelectorAll('#costs-tabs .tab-button').forEach(button => {
+        button.classList.remove('active');
+    });
+
+    const activeContent = document.getElementById(`costs-tab-content-${tabName}`);
+    if (activeContent) {
+        activeContent.classList.add('active');
+        activeContent.style.display = 'block';
+    }
+
+    const activeButton = document.querySelector(`#costs-tabs .tab-button[data-cost-tab="${tabName}"]`);
+    if (activeButton) {
+        activeButton.classList.add('active');
+    }
+}
+
+async function loadFleetCosts() {
+    const container = document.getElementById('costs-tab-content-gerais');
+    if (!container) return;
+    container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/custos-frota`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao buscar custos gerais.');
+        const custos = await response.json();
+
+        if (custos.length === 0) {
+            container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo geral registado.</p>';
+            return;
+        }
+
+        const table = createCostTable('gerais');
+        const tbody = table.querySelector('tbody');
+        custos.forEach(c => {
+            const tr = tbody.insertRow();
+            tr.innerHTML = `
+                <td class="px-4 py-2 font-mono text-xs">${c.sequencial_rateio || 'N/A'}</td>
+                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                <td class="px-4 py-2">${c.descricao}</td>
+                <td class="px-4 py-2">${c.nome_filial || 'N/A'}</td>
+                <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
+                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
+                <td class="px-4 py-2 text-center">
+                    <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="geral" data-cost-desc="${c.descricao}">
+                        <span data-feather="trash-2" class="w-4 h-4"></span>
+                    </button>
+                </td>
+            `;
+        });
+        container.innerHTML = '';
+        container.appendChild(table);
+        feather.replace();
+    } catch (error) {
+        container.innerHTML = `<p class="text-center p-4 text-red-500">${error.message}</p>`;
+    }
+}
+
+async function loadRecentIndividualCosts() {
+    const container = document.getElementById('costs-tab-content-individuais');
+    if (!container) return;
+    container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/manutencoes/recentes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao buscar custos individuais.');
+        const custos = await response.json();
+
+        if (custos.length === 0) {
+            container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo individual registado.</p>';
+            return;
+        }
+
+        const table = createCostTable('individuais');
+        const tbody = table.querySelector('tbody');
+        custos.forEach(c => {
+            const tr = tbody.insertRow();
+            tr.innerHTML = `
+                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                <td class="px-4 py-2">${c.modelo} (${c.placa})</td>
+                <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
+                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
+                <td class="px-4 py-2 text-center">
+                    <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="individual" data-cost-desc="${c.descricao || `Manutenção em ${c.modelo}`}">
+                        <span data-feather="trash-2" class="w-4 h-4"></span>
+                    </button>
+                </td>
+            `;
+        });
+        container.innerHTML = '';
+        container.appendChild(table);
+        feather.replace();
+    } catch (error) {
+        container.innerHTML = `<p class="text-center p-4 text-red-500">${error.message}</p>`;
+    }
+}
+
+function createCostTable(type) {
+    const table = document.createElement('table');
+    table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+
+    let headers = [];
+    if (type === 'gerais') {
+        headers = ['Sequencial', 'Data', 'Descrição', 'Filial', 'Fornecedor', 'Custo', 'Ações'];
+    } else { // 'individuais'
+        headers = ['Data', 'Veículo', 'Fornecedor', 'Custo', 'Ações'];
+    }
+
+    const headerHtml = headers.map(h => {
+        let alignClass = 'text-left';
+        if (h === 'Custo') alignClass = 'text-right';
+        if (h === 'Ações') alignClass = 'text-center';
+        return `<th class="px-4 py-2 ${alignClass} font-medium text-gray-500">${h}</th>`;
+    }).join('');
+
+    table.innerHTML = `
+        <thead class="bg-gray-50">
+            <tr>${headerHtml}</tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
+    return table;
+}
+
+function handleDeleteCostClick(event) {
+    const button = event.target.closest('button[data-cost-id]');
+    if (!button) return;
+
+    const id = button.dataset.costId;
+    const type = button.dataset.costType;
+    const description = button.dataset.costDesc;
+
+    openDeleteCostConfirmModal(id, type, description);
+}
+
+function openDeleteCostConfirmModal(id, type, description) {
+    costToDelete = { id, type };
+    document.getElementById('delete-cost-info').textContent = description;
+    document.getElementById('confirm-delete-cost-modal').classList.remove('hidden');
+    feather.replace();
+}
+
+async function executeDeleteCost(id, type) {
+    const modal = document.getElementById('confirm-delete-cost-modal');
+    const confirmBtn = modal.querySelector('#confirm-delete-cost-btn');
+    confirmBtn.disabled = true;
+
+    let url = '';
+    if (type === 'geral') {
+        url = `${apiUrlBase}/logistica/custos-frota/${id}/excluir`;
+    } else if (type === 'individual') {
+        url = `${apiUrlBase}/logistica/manutencoes/${id}/excluir`;
+    } else {
+        confirmBtn.disabled = false;
+        return;
+    }
+
+    try {
+        const response = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error('Falha ao excluir o lançamento.');
+
+        alert('Lançamento excluído com sucesso!');
+        modal.classList.add('hidden');
+
+        await loadFleetCosts();
+        await loadRecentIndividualCosts();
+
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        confirmBtn.disabled = false;
+        costToDelete = { id: null, type: null };
+    }
+}
+
+
+// --- Funções de Fotos e Documentos ---
 function handlePhotoAreaClick(event) {
     const target = event.target;
     const button = target.closest('button');
@@ -556,9 +1263,6 @@ async function uploadFile(vehicleId, file, description, expiryDate = null, type 
     }
 }
 
-
-// --- LÓGICA DE EXCLUSÃO DE DOCUMENTOS ---
-
 function handleDeleteDocumentClick(event) {
     const button = event.target.closest('.delete-doc-btn');
     if (!button) return;
@@ -606,9 +1310,6 @@ async function executeDeleteDocument() {
         documentToDelete = { id: null, name: null };
     }
 }
-
-
-// --- LÓGICA DE CAPTURA DE FOTO E VISUALIZADOR ---
 
 async function openCaptureModal(targetInputId, targetPreviewId) {
     const modal = document.getElementById('photo-capture-modal');
@@ -708,605 +1409,6 @@ function openImageViewer(src) {
     document.getElementById('image-viewer-modal').classList.remove('hidden');
 }
 
-
-// --- Lógica de Custos, Modais, etc. (Funções Antigas) ---
-// Estas funções dependem de elementos que foram removidos do HTML,
-// então as chamadas a elas foram protegidas com condicionais.
-
-function switchCostTab(tabName) {
-    document.querySelectorAll('.cost-tab-content').forEach(content => {
-        content.classList.remove('active');
-        content.style.display = 'none';
-    });
-    document.querySelectorAll('#costs-tabs .tab-button').forEach(button => {
-        button.classList.remove('active');
-    });
-
-    const activeContent = document.getElementById(`costs-tab-content-${tabName}`);
-    if (activeContent) {
-        activeContent.classList.add('active');
-        activeContent.style.display = 'block';
-    }
-
-    const activeButton = document.querySelector(`#costs-tabs .tab-button[data-cost-tab="${tabName}"]`);
-    if (activeButton) {
-        activeButton.classList.add('active');
-    }
-}
-
-async function loadFleetCosts() {
-    const container = document.getElementById('costs-tab-content-gerais');
-    if (!container) return;
-    container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
-    try {
-        const response = await fetch(`${apiUrlBase}/logistica/custos-frota`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!response.ok) throw new Error('Falha ao buscar custos gerais.');
-        const custos = await response.json();
-
-        if (custos.length === 0) {
-            container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo geral registado.</p>';
-            return;
-        }
-
-        const table = createCostTable('gerais');
-        const tbody = table.querySelector('tbody');
-        custos.forEach(c => {
-            const tr = tbody.insertRow();
-            tr.innerHTML = `
-                <td class="px-4 py-2 font-mono text-xs">${c.sequencial_rateio || 'N/A'}</td>
-                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                <td class="px-4 py-2">${c.descricao}</td>
-                <td class="px-4 py-2">${c.nome_filial || 'N/A'}</td>
-                <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
-                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
-                <td class="px-4 py-2 text-center">
-                    <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="geral" data-cost-desc="${c.descricao}">
-                        <span data-feather="trash-2" class="w-4 h-4"></span>
-                    </button>
-                </td>
-            `;
-        });
-        container.innerHTML = '';
-        container.appendChild(table);
-        feather.replace();
-    } catch (error) {
-        container.innerHTML = `<p class="text-center p-4 text-red-500">${error.message}</p>`;
-    }
-}
-
-async function loadRecentIndividualCosts() {
-    const container = document.getElementById('costs-tab-content-individuais');
-    if (!container) return;
-    container.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
-    try {
-        const response = await fetch(`${apiUrlBase}/logistica/manutencoes/recentes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!response.ok) throw new Error('Falha ao buscar custos individuais.');
-        const custos = await response.json();
-
-        if (custos.length === 0) {
-            container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo individual registado.</p>';
-            return;
-        }
-
-        const table = createCostTable('individuais');
-        const tbody = table.querySelector('tbody');
-        custos.forEach(c => {
-            const tr = tbody.insertRow();
-            tr.innerHTML = `
-                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                <td class="px-4 py-2">${c.modelo} (${c.placa})</td>
-                <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
-                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
-                <td class="px-4 py-2 text-center">
-                    <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="individual" data-cost-desc="${c.descricao || `Manutenção em ${c.modelo}`}">
-                        <span data-feather="trash-2" class="w-4 h-4"></span>
-                    </button>
-                </td>
-            `;
-        });
-        container.innerHTML = '';
-        container.appendChild(table);
-        feather.replace();
-    } catch (error) {
-        container.innerHTML = `<p class="text-center p-4 text-red-500">${error.message}</p>`;
-    }
-}
-
-function createCostTable(type) {
-    const table = document.createElement('table');
-    table.className = 'min-w-full divide-y divide-gray-200 text-sm';
-
-    let headers = [];
-    if (type === 'gerais') {
-        headers = ['Sequencial', 'Data', 'Descrição', 'Filial', 'Fornecedor', 'Custo', 'Ações'];
-    } else { // 'individuais'
-        headers = ['Data', 'Veículo', 'Fornecedor', 'Custo', 'Ações'];
-    }
-
-    const headerHtml = headers.map(h => {
-        let alignClass = 'text-left';
-        if (h === 'Custo') alignClass = 'text-right';
-        if (h === 'Ações') alignClass = 'text-center';
-        return `<th class="px-4 py-2 ${alignClass} font-medium text-gray-500">${h}</th>`;
-    }).join('');
-
-    table.innerHTML = `
-        <thead class="bg-gray-50">
-            <tr>${headerHtml}</tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
-    return table;
-}
-
-function handleDeleteCostClick(event) {
-    const button = event.target.closest('button[data-cost-id]');
-    if (!button) return;
-
-    const id = button.dataset.costId;
-    const type = button.dataset.costType;
-    const description = button.dataset.costDesc;
-
-    openDeleteCostConfirmModal(id, type, description);
-}
-
-function openDeleteCostConfirmModal(id, type, description) {
-    costToDelete = { id, type };
-    document.getElementById('delete-cost-info').textContent = description;
-    document.getElementById('confirm-delete-cost-modal').classList.remove('hidden');
-    feather.replace();
-}
-
-async function executeDeleteCost(id, type) {
-    const modal = document.getElementById('confirm-delete-cost-modal');
-    const confirmBtn = modal.querySelector('#confirm-delete-cost-btn');
-    confirmBtn.disabled = true;
-
-    let url = '';
-    if (type === 'geral') {
-        url = `${apiUrlBase}/logistica/custos-frota/${id}/excluir`;
-    } else if (type === 'individual') {
-        url = `${apiUrlBase}/logistica/manutencoes/${id}/excluir`;
-    } else {
-        confirmBtn.disabled = false;
-        return;
-    }
-
-    try {
-        const response = await fetch(url, {
-            method: 'PUT',
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
-        if (!response.ok) throw new Error('Falha ao excluir o lançamento.');
-
-        alert('Lançamento excluído com sucesso!');
-        modal.classList.add('hidden');
-
-        await loadFleetCosts();
-        await loadRecentIndividualCosts();
-
-    } catch (error) {
-        alert(`Erro: ${error.message}`);
-    } finally {
-        confirmBtn.disabled = false;
-        costToDelete = { id: null, type: null };
-    }
-}
-
-
-// --- Resto das Funções ---
-
-function setupMaintenanceExportModal() {
-    maintenanceExportDatepicker = new Litepicker({
-        element: document.getElementById('maintenance-export-date-range'),
-        singleMode: false,
-        lang: 'pt-BR',
-        format: 'DD/MM/YYYY',
-    });
-}
-
-function openMaintenanceExportModal() {
-    maintenanceExportDatepicker.clearSelection();
-    document.getElementById('maintenance-export-modal').classList.remove('hidden');
-    feather.replace();
-}
-
-async function exportMaintenanceReportPDF() {
-    const btn = document.getElementById('generate-maintenance-pdf-btn');
-    btn.textContent = 'A gerar...';
-    btn.disabled = true;
-
-    try {
-        if (!currentVehicleId) throw new Error("ID do veículo não encontrado.");
-        const vehicle = allVehicles.find(v => v.id === currentVehicleId);
-        if (!vehicle) throw new Error("Dados do veículo não encontrados.");
-
-        const startDate = maintenanceExportDatepicker.getStartDate()?.toJSDate();
-        const endDate = maintenanceExportDatepicker.getEndDate()?.toJSDate();
-
-        if (!startDate || !endDate) {
-            alert("Por favor, selecione um período para gerar o relatório.");
-            btn.disabled = false;
-            return;
-        }
-
-        const response = await fetch(`${apiUrlBase}/logistica/veiculos/${currentVehicleId}/manutencoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!response.ok) throw new Error('Falha ao buscar dados de manutenção.');
-        const allManutencoes = await response.json();
-
-        const manutençõesFiltradas = allManutencoes.filter(m => {
-            const dataManutencao = new Date(m.data_manutencao);
-            return dataManutencao >= startDate && dataManutencao <= endDate;
-        });
-
-        if (manutençõesFiltradas.length === 0) {
-            alert("Nenhuma manutenção encontrada no período selecionado.");
-            btn.disabled = false;
-            return;
-        }
-
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-
-        if (LOGO_BASE_64) {
-            try {
-                doc.addImage(LOGO_BASE_64, 'PNG', 14, 15, 25, 0);
-            } catch (e) {
-                console.error("A logo carregada é inválida e não será adicionada ao PDF.", e);
-            }
-        }
-        doc.setFontSize(18);
-        doc.text('Relatório de Manutenções', doc.internal.pageSize.getWidth() / 2, 22, { align: 'center' });
-        doc.setFontSize(11);
-        doc.text(`Veículo: ${vehicle.modelo} - ${vehicle.placa}`, 14, 35);
-        doc.text(`Período: ${startDate.toLocaleDateString('pt-BR')} a ${endDate.toLocaleDateString('pt-BR')}`, 14, 40);
-
-        const body = manutençõesFiltradas.map(m => [
-            new Date(m.data_manutencao).toLocaleDateString('pt-BR', { timeZone: 'UTC' }),
-            m.tipo_manutencao,
-            m.nome_fornecedor || 'N/A',
-            m.descricao || '',
-            parseFloat(m.custo).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-        ]);
-
-        doc.autoTable({
-            head: [['Data', 'Tipo', 'Fornecedor', 'Descrição', 'Custo']],
-            body: body,
-            startY: 50,
-            theme: 'grid',
-            headStyles: { fillColor: [41, 128, 185] },
-            columnStyles: {
-                2: { cellWidth: 45, overflow: 'ellipsize' },
-                3: { cellWidth: 'auto', overflow: 'ellipsize' },
-            }
-        });
-
-        const totaisPorTipo = manutençõesFiltradas.reduce((acc, m) => {
-            const tipo = m.tipo_manutencao || 'Não especificado';
-            const custo = parseFloat(m.custo) || 0;
-            acc[tipo] = (acc[tipo] || 0) + custo;
-            return acc;
-        }, {});
-
-        const totalGeral = Object.values(totaisPorTipo).reduce((sum, value) => sum + value, 0);
-
-        const summaryBody = Object.entries(totaisPorTipo).map(([tipo, total]) => {
-            return [tipo, total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })];
-        });
-
-        doc.autoTable({
-            head: [['Tipo de Manutenção', 'Custo Total']],
-            body: summaryBody,
-            startY: doc.autoTable.previous.finalY + 10,
-            theme: 'striped',
-            foot: [['Total Geral', totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]],
-            footStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold' }
-        });
-
-        doc.save(`Relatorio_Manutencao_${vehicle.placa}.pdf`);
-        document.getElementById('maintenance-export-modal').classList.add('hidden');
-
-    } catch (error) {
-        alert(`Erro ao gerar PDF: ${error.message}`);
-    } finally {
-        btn.textContent = 'Gerar PDF';
-        btn.disabled = false;
-    }
-}
-
-async function loadCurrentLogo() {
-    try {
-        const response = await fetch(`${apiUrlBase}/settings/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!response.ok) return;
-        const data = await response.json();
-        if (data.logoBase64) {
-            LOGO_BASE_64 = data.logoBase64;
-        }
-    } catch (error) {
-        console.error("Não foi possível carregar a logo atual:", error);
-    }
-}
-
-async function loadMarcasAndModelosFromDB() {
-    const datalistMarcas = document.getElementById('marcas-list');
-    try {
-        const [marcasResponse, modelosResponse] = await Promise.all([
-            fetch(`${apiUrlBase}/settings/parametros?cod=Marca - Veículo`, { headers: { 'Authorization': `Bearer ${getToken()}` } }),
-            fetch(`${apiUrlBase}/settings/parametros?cod=Modelo - Veículo`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
-        ]);
-        if (!marcasResponse.ok || !modelosResponse.ok) throw new Error('Falha ao carregar parâmetros de veículos.');
-        dbMarcas = await marcasResponse.json();
-        dbModelos = await modelosResponse.json();
-        datalistMarcas.innerHTML = '';
-        dbMarcas.forEach(marca => {
-            const option = document.createElement('option');
-            option.value = marca.NOME_PARAMETRO;
-            option.dataset.keyVinculacao = marca.KEY_VINCULACAO;
-            datalistMarcas.appendChild(option);
-        });
-    } catch (error) {
-        console.error("Erro ao carregar marcas e modelos:", error);
-    }
-}
-
-function handleMarcaChange() {
-    const marcaInput = document.getElementById('vehicle-marca');
-    const modeloInput = document.getElementById('vehicle-modelo');
-    const modelosDatalist = document.getElementById('modelos-list');
-    const marcaNome = marcaInput.value;
-    const marcaSelecionada = dbMarcas.find(m => m.NOME_PARAMETRO.toLowerCase() === marcaNome.toLowerCase());
-    modeloInput.value = '';
-    modelosDatalist.innerHTML = '';
-    if (marcaSelecionada) {
-        const keyVinculacaoMarca = marcaSelecionada.KEY_VINCULACAO;
-        const modelosFiltrados = dbModelos.filter(mod => mod.KEY_VINCULACAO == keyVinculacaoMarca);
-        modelosFiltrados.forEach(modelo => {
-            const option = document.createElement('option');
-            option.value = modelo.NOME_PARAMETRO;
-            modelosDatalist.appendChild(option);
-        });
-        modeloInput.disabled = false;
-    } else {
-        modeloInput.disabled = true;
-    }
-}
-
-async function loadVehicles() {
-    const contentArea = document.getElementById('content-area');
-    contentArea.innerHTML = '<p class="text-center p-8 text-gray-500">A carregar veículos...</p>';
-    try {
-        const response = await fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!response.ok) throw new Error(`Falha ao buscar veículos: ${response.statusText}`);
-        allVehicles = await response.json();
-        applyFilters();
-    } catch (error) {
-        console.error("Erro ao carregar veículos:", error);
-        contentArea.innerHTML = `<p class="text-center p-8 text-red-600">Erro ao carregar veículos.</p>`;
-    }
-}
-
-function applyFilters() {
-    const searchTerm = document.getElementById('filter-search').value.toLowerCase();
-    const filial = document.getElementById('filter-filial').value;
-    const status = document.getElementById('filter-status').value;
-
-    let filteredVehicles = allVehicles.filter(vehicle => {
-        const searchMatch = !searchTerm ||
-            (vehicle.placa && vehicle.placa.toLowerCase().includes(searchTerm)) ||
-            (vehicle.modelo && vehicle.modelo.toLowerCase().includes(searchTerm));
-        const filialMatch = !filial || vehicle.id_filial == filial;
-        return searchMatch && filialMatch;
-    });
-
-    if (status) {
-        if (status === "Ativo / Manutenção") {
-            filteredVehicles = filteredVehicles.filter(v => v.status === 'Ativo' || v.status === 'Em Manutenção');
-        } else {
-            filteredVehicles = filteredVehicles.filter(v => v.status === status);
-        }
-    } else {
-        filteredVehicles = filteredVehicles.filter(v => v.status === 'Ativo' || v.status === 'Em Manutenção');
-    }
-
-    renderContent(filteredVehicles);
-}
-
-function clearFilters() {
-    document.getElementById('filter-search').value = '';
-    document.getElementById('filter-filial').value = '';
-    document.getElementById('filter-status').value = '';
-    applyFilters();
-}
-
-function renderContent(vehicles) {
-    const contentArea = document.getElementById('content-area');
-    const noDataMessage = document.getElementById('no-data-message');
-    contentArea.innerHTML = '';
-    if (vehicles.length === 0) {
-        noDataMessage.classList.remove('hidden');
-    } else {
-        noDataMessage.classList.add('hidden');
-        if (window.innerWidth < 768) {
-            renderVehicleCards(vehicles, contentArea);
-        } else {
-            renderVehicleTable(vehicles, contentArea);
-        }
-    }
-    feather.replace();
-}
-
-function renderVehicleCards(vehicles, container) {
-    const cardsContainer = document.createElement('div');
-    cardsContainer.className = 'p-4 grid grid-cols-1 sm:grid-cols-2 gap-6';
-    vehicles.forEach(vehicle => {
-        const card = document.createElement('div');
-        card.className = 'vehicle-item bg-white rounded-lg shadow-md overflow-hidden cursor-pointer transform hover:-translate-y-1 transition-transform duration-200';
-        card.dataset.id = vehicle.id; 
-        
-        const photoUrl = vehicle.foto_frente 
-            ? `${apiUrlBase.replace('/api', '')}/${vehicle.foto_frente}` 
-            : 'https://placehold.co/400x250/e2e8f0/4a5568?text=Sem+Foto';
-        
-        const statusInfo = getStatusInfo(vehicle.status);
-        const seguroBadge = vehicle.seguro ? '<span class="px-2 py-1 text-xs font-semibold text-white bg-blue-500 rounded-full">Seguro</span>' : '';
-        const rastreadorBadge = vehicle.rastreador ? '<span class="px-2 py-1 text-xs font-semibold text-white bg-orange-500 rounded-full">Rastreador</span>' : '';
-
-        card.innerHTML = `
-            <div class="relative">
-                <img src="${photoUrl}" alt="Foto de ${vehicle.modelo}" class="w-full h-40 object-cover">
-                <div class="absolute top-2 right-2 flex flex-col items-end gap-1">
-                    <span class="px-2 py-1 text-xs font-semibold text-white ${statusInfo.color} rounded-full">${statusInfo.text}</span>
-                    ${seguroBadge}
-                    ${rastreadorBadge}
-                </div>
-            </div>
-            <div class="p-4">
-                <p class="text-xs text-gray-500">${vehicle.marca || 'N/A'}</p>
-                <h4 class="font-bold text-lg text-gray-900 truncate" title="${vehicle.modelo || ''}">${vehicle.modelo || 'Modelo não definido'}</h4>
-                <div class="flex justify-between items-center mt-2">
-                    <span class="px-2 py-1 text-sm font-semibold text-white bg-gray-800 rounded-md">${vehicle.placa || 'Sem Placa'}</span>
-                    <span class="text-sm text-gray-600">${vehicle.nome_filial || 'Sem filial'}</span>
-                </div>
-            </div>`;
-        cardsContainer.appendChild(card);
-    });
-    container.appendChild(cardsContainer);
-}
-
-function renderVehicleTable(vehicles, container) {
-    const table = document.createElement('table');
-    table.className = 'min-w-full divide-y divide-gray-200';
-    table.innerHTML = `
-        <thead class="bg-gray-50">
-            <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Veículo</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Placa</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Filial</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-            </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
-    const tbody = table.querySelector('tbody');
-    vehicles.forEach(vehicle => {
-        const statusInfo = getStatusInfo(vehicle.status);
-        const seguroBadge = vehicle.seguro ? '<span class="px-2 ml-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-500 text-white">Seguro</span>' : '';
-        const rastreadorBadge = vehicle.rastreador ? '<span class="px-2 ml-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-500 text-white">Rastreador</span>' : '';
-
-        const tr = document.createElement('tr');
-        tr.className = 'vehicle-item hover:bg-gray-50';
-        tr.dataset.id = vehicle.id;
-        tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm font-medium text-gray-900">${vehicle.modelo}</div>
-                <div class="text-sm text-gray-500">${vehicle.marca}</div>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">${vehicle.placa}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${vehicle.nome_filial || 'N/A'}</td>
-            <td class="px-6 py-4 whitespace-nowrap">
-                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusInfo.color} text-white">${statusInfo.text}</span>
-                ${seguroBadge}
-                ${rastreadorBadge}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button class="text-indigo-600 hover:text-indigo-900" data-action="details">Gerir</button>
-                ${privilegedAccessProfiles.includes(getUserProfile()) ? `
-                <button class="text-blue-600 hover:text-blue-900 ml-4" data-action="edit">Editar</button>
-                ` : ''}
-            </td>`;
-        tbody.appendChild(tr);
-    });
-    container.appendChild(table);
-}
-
-function handleContentClick(event) {
-    const target = event.target;
-    const vehicleItem = target.closest('.vehicle-item');
-    if (!vehicleItem) return;
-    const vehicleId = parseInt(vehicleItem.dataset.id, 10);
-    const vehicle = allVehicles.find(v => v.id === vehicleId);
-    if (!vehicle) return;
-    const action = target.dataset.action;
-    if (action === 'edit') {
-        openVehicleModal(vehicle);
-    } else if (action === 'delete') {
-        openDeleteConfirmModal(vehicle);
-    } else {
-        openDetailsModal(vehicle);
-    }
-}
-
-function openDetailsModal(vehicle) {
-    currentVehicleId = vehicle.id;
-    const modal = document.getElementById('details-modal');
-    document.getElementById('details-modal-title').textContent = `Gestão de: ${vehicle.modelo} - ${vehicle.placa}`;
-    const logsTabButton = document.getElementById('logs-tab-button');
-    if (privilegedAccessProfiles.includes(getUserProfile())) {
-        logsTabButton.style.display = 'block';
-    } else {
-        logsTabButton.style.display = 'none';
-    }
-    modal.classList.remove('hidden');
-    switchTab('details', vehicle.id);
-    feather.replace();
-}
-
-function renderDetailsTab(vehicle) {
-    const detailsContent = document.getElementById('details-tab-content');
-    detailsContent.innerHTML = `
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-            <div><strong class="block text-gray-500">Placa</strong><span>${vehicle.placa}</span></div>
-            <div><strong class="block text-gray-500">Marca</strong><span>${vehicle.marca}</span></div>
-            <div><strong class="block text-gray-500">Modelo</strong><span>${vehicle.modelo}</span></div>
-            <div><strong class="block text-gray-500">Ano Fab./Mod.</strong><span>${vehicle.ano_fabricacao || 'N/A'}/${vehicle.ano_modelo || 'N/A'}</span></div>
-            <div><strong class="block text-gray-500">RENAVAM</strong><span>${vehicle.renavam || 'N/A'}</span></div>
-            <div class="md:col-span-2"><strong class="block text-gray-500">Chassi</strong><span>${vehicle.chassi || 'N/A'}</span></div>
-            <div><strong class="block text-gray-500">Filial</strong><span>${vehicle.nome_filial || 'N/A'}</span></div>
-            <div><strong class="block text-gray-500">Status</strong><span>${vehicle.status}</span></div>
-            <div><strong class="block text-gray-500">Seguro</strong><span>${vehicle.seguro ? 'Sim' : 'Não'}</span></div>
-            <div><strong class="block text-gray-500">Rastreador</strong><span>${vehicle.rastreador ? 'Sim' : 'Não'}</span></div>
-        </div>`;
-}
-
-async function fetchAndDisplayMaintenanceHistory(vehicleId) {
-    const container = document.getElementById('maintenance-history-container');
-    container.innerHTML = '<p class="text-center text-gray-500">A carregar histórico...</p>';
-    try {
-        const response = await fetch(`${apiUrlBase}/logistica/veiculos/${vehicleId}/manutencoes`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!response.ok) throw new Error('Falha ao buscar histórico.');
-        const manutenções = await response.json();
-        if (manutenções.length === 0) {
-            container.innerHTML = '<p class="text-center text-gray-500">Nenhuma manutenção registada.</p>';
-            return;
-        }
-        const table = document.createElement('table');
-        table.className = 'min-w-full divide-y divide-gray-200 text-sm';
-        table.innerHTML = `
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
-                    <th class="px-4 py-2 text-left font-medium text-gray-500">Tipo</th>
-                    <th class="px-4 py-2 text-left font-medium text-gray-500">Fornecedor</th>
-                    <th class="px-4 py-2 text-right font-medium text-gray-500">Custo</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
-        const tbody = table.querySelector('tbody');
-        manutenções.forEach(m => {
-            const tr = tbody.insertRow();
-            tr.innerHTML = `
-                <td class="px-4 py-2">${new Date(m.data_manutencao).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                <td class="px-4 py-2">${m.tipo_manutencao}</td>
-                <td class="px-4 py-2">${m.nome_fornecedor || 'N/A'}</td>
-                <td class="px-4 py-2 text-right">R$ ${parseFloat(m.custo).toFixed(2)}</td>`;
-        });
-        container.innerHTML = '';
-        container.appendChild(table);
-    } catch (error) {
-        container.innerHTML = '<p class="text-center text-red-500">Erro ao carregar histórico.</p>';
-        console.error(error);
-    }
-}
-
 async function fetchAndDisplayChangeLogs(vehicleId) {
     const container = document.getElementById('logs-history-container');
     container.innerHTML = '<p class="text-center text-gray-500">A carregar histórico de alterações...</p>';
@@ -1374,190 +1476,7 @@ async function populateMaintenanceTypes(selectElementId = 'maintenance-type') {
     }
 }
 
-function openMaintenanceModal(vehicleId) {
-    const modal = document.getElementById('maintenance-modal');
-    const form = document.getElementById('maintenance-form');
-    form.reset();
-    document.getElementById('maintenance-vehicle-id').value = vehicleId;
-    document.getElementById('maintenance-fornecedor-id').value = '';
-    document.getElementById('maintenance-date').value = new Date().toISOString().split('T')[0];
-
-    populateMaintenanceTypes();
-    populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Classificação Despesa Veiculo`, 'maintenance-classification', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Selecione a Classificação --');
-
-    modal.classList.remove('hidden');
-    feather.replace();
-}
-
-async function handleMaintenanceFormSubmit(event) {
-    event.preventDefault();
-    const saveBtn = document.getElementById('save-maintenance-btn');
-    saveBtn.disabled = true;
-
-    const maintenanceData = {
-        id_veiculo: document.getElementById('maintenance-vehicle-id').value,
-        data_manutencao: document.getElementById('maintenance-date').value,
-        custo: document.getElementById('maintenance-cost').value,
-        tipo_manutencao: document.getElementById('maintenance-type').value,
-        classificacao_custo: document.getElementById('maintenance-classification').value,
-        descricao: document.getElementById('maintenance-description').value,
-        id_fornecedor: document.getElementById('maintenance-fornecedor-id').value,
-    };
-
-    if (!maintenanceData.id_fornecedor) {
-        alert('Por favor, consulte um CNPJ válido ou marque como despesa interna.');
-        saveBtn.disabled = false;
-        return;
-    }
-    if (!maintenanceData.tipo_manutencao || !maintenanceData.classificacao_custo) {
-        alert('Por favor, selecione um tipo e uma classificação para a manutenção.');
-        saveBtn.disabled = false;
-        return;
-    }
-
-    try {
-        const response = await fetch(`${apiUrlBase}/logistica/veiculos/${maintenanceData.id_veiculo}/manutencoes`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-            body: JSON.stringify(maintenanceData)
-        });
-        if (!response.ok) throw new Error('Falha ao salvar manutenção.');
-        document.getElementById('maintenance-modal').classList.add('hidden');
-        alert('Manutenção registada com sucesso!');
-        await fetchAndDisplayMaintenanceHistory(maintenanceData.id_veiculo);
-        await loadRecentIndividualCosts();
-    } catch (error) {
-        alert(`Erro: ${error.message}`);
-    } finally {
-        saveBtn.disabled = false;
-    }
-}
-
-function openVehicleCostModal() {
-    const modal = document.getElementById('vehicle-cost-modal');
-    const form = modal.querySelector('form');
-    form.reset();
-
-    document.getElementById('vehicle-cost-fornecedor-id').value = '';
-    document.getElementById('vehicle-cost-date').value = new Date().toISOString().split('T')[0];
-
-    const select = document.getElementById('vehicle-cost-vehicle-select');
-    select.innerHTML = '<option value="">-- Selecione um Veículo --</option>';
-    allVehicles
-        .filter(v => v.status === 'Ativo' || v.status === 'Em Manutenção')
-        .sort((a, b) => a.modelo.localeCompare(b.modelo))
-        .forEach(v => {
-            const option = document.createElement('option');
-            option.value = v.id;
-            option.textContent = `${v.modelo} - ${v.placa}`;
-            select.appendChild(option);
-        });
-
-    populateMaintenanceTypes('vehicle-cost-type');
-    populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Classificação Despesa Veiculo`, 'vehicle-cost-classification', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Selecione a Classificação --');
-
-    modal.classList.remove('hidden');
-    feather.replace();
-}
-
-async function handleVehicleCostFormSubmit(event) {
-    event.preventDefault();
-    const saveBtn = document.getElementById('save-vehicle-cost-btn');
-    saveBtn.disabled = true;
-
-    const costData = {
-        id_veiculo: document.getElementById('vehicle-cost-vehicle-select').value,
-        data_manutencao: document.getElementById('vehicle-cost-date').value,
-        custo: document.getElementById('vehicle-cost-value').value,
-        tipo_manutencao: document.getElementById('vehicle-cost-type').value,
-        classificacao_custo: document.getElementById('vehicle-cost-classification').value,
-        descricao: document.getElementById('vehicle-cost-description').value,
-        id_fornecedor: document.getElementById('vehicle-cost-fornecedor-id').value,
-    };
-
-    if (!costData.id_veiculo) { alert('Por favor, selecione um veículo.'); saveBtn.disabled = false; return; }
-    if (!costData.id_fornecedor) { alert('Por favor, associe um fornecedor ou marque como despesa interna.'); saveBtn.disabled = false; return; }
-    if (!costData.tipo_manutencao || !costData.classificacao_custo) {
-        alert('Por favor, selecione um tipo e uma classificação para a despesa.');
-        saveBtn.disabled = false;
-        return;
-    }
-
-    try {
-        const response = await fetch(`${apiUrlBase}/logistica/veiculos/${costData.id_veiculo}/manutencoes`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-            body: JSON.stringify(costData)
-        });
-        if (!response.ok) throw new Error('Falha ao salvar a despesa do veículo.');
-
-        document.getElementById('vehicle-cost-modal').classList.add('hidden');
-        alert('Despesa do veículo registada com sucesso!');
-        await loadRecentIndividualCosts();
-
-        if (costData.tipo_manutencao.toLowerCase().includes('manutenção')) {
-            await loadVehicles();
-        }
-
-    } catch (error) {
-        alert(`Erro: ${error.message}`);
-    } finally {
-        saveBtn.disabled = false;
-    }
-}
-
-function openFleetCostModal() {
-    const modal = document.getElementById('fleet-cost-modal');
-    modal.querySelector('form').reset();
-    document.getElementById('fleet-cost-fornecedor-id').value = '';
-    document.getElementById('fleet-cost-date').value = new Date().toISOString().split('T')[0];
-    document.querySelectorAll('#fleet-cost-filiais-checkboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
-    modal.classList.remove('hidden');
-    feather.replace();
-}
-
-async function handleFleetCostFormSubmit(event) {
-    event.preventDefault();
-    const saveBtn = document.getElementById('save-fleet-cost-btn');
-    saveBtn.disabled = true;
-
-    const selectedFiliais = Array.from(document.querySelectorAll('#fleet-cost-filiais-checkboxes input[type="checkbox"]:checked'))
-        .map(cb => cb.value);
-
-    const costData = {
-        descricao: document.getElementById('fleet-cost-description').value,
-        custo: document.getElementById('fleet-cost-value').value,
-        data_custo: document.getElementById('fleet-cost-date').value,
-        id_fornecedor: document.getElementById('fleet-cost-fornecedor-id').value,
-        filiais_rateio: selectedFiliais
-    };
-    if (!costData.id_fornecedor) {
-        alert('Por favor, associe um fornecedor ou marque como despesa interna.');
-        saveBtn.disabled = false;
-        return;
-    }
-    if (costData.filiais_rateio.length === 0) {
-        alert('Por favor, selecione pelo menos uma filial para o rateio.');
-        saveBtn.disabled = false;
-        return;
-    }
-    try {
-        const response = await fetch(`${apiUrlBase}/logistica/custos-frota`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-            body: JSON.stringify(costData)
-        });
-        if (!response.ok) throw new Error('Falha ao salvar custo de frota.');
-        document.getElementById('fleet-cost-modal').classList.add('hidden');
-        alert('Custo de frota registado com sucesso!');
-        await loadFleetCosts();
-    } catch (error) {
-        alert(`Erro: ${error.message}`);
-    } finally {
-        saveBtn.disabled = false;
-    }
-}
-
+// --- Funções de Formulário e Validação ---
 function openVehicleModal(vehicle = null) {
     const modal = document.getElementById('vehicle-modal');
     const form = document.getElementById('vehicle-form');
@@ -1575,7 +1494,6 @@ function openVehicleModal(vehicle = null) {
         document.getElementById('vehicle-id').value = vehicle.id;
         document.getElementById('vehicle-placa').value = vehicle.placa || '';
         marcaInput.value = vehicle.marca || '';
-        modeloInput.value = vehicle.modelo || '';
         document.getElementById('vehicle-ano-fabricacao').value = vehicle.ano_fabricacao || '';
         document.getElementById('vehicle-ano-modelo').value = vehicle.ano_modelo || '';
         document.getElementById('vehicle-renavam').value = vehicle.renavam || '';
@@ -1610,7 +1528,7 @@ async function handleVehicleFormSubmit(event) {
     saveBtn.disabled = true;
     saveBtn.textContent = 'A salvar...';
     const id = document.getElementById('vehicle-id').value;
-    
+
     const vehicleData = {
         placa: document.getElementById('has-placa-checkbox').checked ? document.getElementById('vehicle-placa').value : 'SEM PLACA',
         marca: document.getElementById('vehicle-marca').value,
@@ -1640,6 +1558,7 @@ async function handleVehicleFormSubmit(event) {
         document.getElementById('vehicle-modal').classList.add('hidden');
         alert(`Veículo ${id ? 'atualizado' : 'adicionado'} com sucesso!`);
         await loadVehicles();
+        await loadMarcasAndModelosFromDB();
     } catch (error) {
         alert(`Erro: ${error.message}`);
     } finally {
@@ -1647,6 +1566,7 @@ async function handleVehicleFormSubmit(event) {
         saveBtn.textContent = 'Salvar Veículo';
     }
 }
+
 
 function openDeleteConfirmModal(vehicle) {
     vehicleToDeleteId = vehicle.id;
@@ -1679,7 +1599,7 @@ async function populateFilialSelects() {
     const url = `${apiUrlBase}/settings/parametros?cod=Unidades`;
     await populateSelectWithOptions(url, 'filter-filial', 'ID', 'NOME_PARAMETRO', 'Todas as Filiais');
     await populateSelectWithOptions(url, 'vehicle-filial', 'ID', 'NOME_PARAMETRO', '-- Selecione a Filial --');
-    if(document.getElementById('fleet-cost-filiais-checkboxes')){
+    if (document.getElementById('fleet-cost-filiais-checkboxes')) {
         await populateCheckboxes(url, 'fleet-cost-filiais-checkboxes', 'ID', 'NOME_PARAMETRO');
     }
 }
@@ -1791,6 +1711,50 @@ async function populateSelectWithOptions(url, selectId, valueKey, textKey, place
     }
 }
 
+async function loadMarcasAndModelosFromDB() {
+    const datalistMarcas = document.getElementById('marcas-list');
+    try {
+        const [marcasResponse, modelosResponse] = await Promise.all([
+            fetch(`${apiUrlBase}/settings/parametros?cod=Marca - Veículo`, { headers: { 'Authorization': `Bearer ${getToken()}` } }),
+            fetch(`${apiUrlBase}/settings/parametros?cod=Modelo - Veículo`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
+        ]);
+        if (!marcasResponse.ok || !modelosResponse.ok) throw new Error('Falha ao carregar parâmetros de veículos.');
+        dbMarcas = await marcasResponse.json();
+        dbModelos = await modelosResponse.json();
+        datalistMarcas.innerHTML = '';
+        dbMarcas.forEach(marca => {
+            const option = document.createElement('option');
+            option.value = marca.NOME_PARAMETRO;
+            option.dataset.keyVinculacao = marca.KEY_VINCULACAO;
+            datalistMarcas.appendChild(option);
+        });
+    } catch (error) {
+        console.error("Erro ao carregar marcas e modelos:", error);
+    }
+}
+
+function handleMarcaChange() {
+    const marcaInput = document.getElementById('vehicle-marca');
+    const modeloInput = document.getElementById('vehicle-modelo');
+    const modelosDatalist = document.getElementById('modelos-list');
+    const marcaNome = marcaInput.value;
+    const marcaSelecionada = dbMarcas.find(m => m.NOME_PARAMETRO.toLowerCase() === marcaNome.toLowerCase());
+    modeloInput.value = '';
+    modelosDatalist.innerHTML = '';
+    if (marcaSelecionada) {
+        const keyVinculacaoMarca = marcaSelecionada.KEY_VINCULACAO;
+        const modelosFiltrados = dbModelos.filter(mod => mod.KEY_VINCULACAO == keyVinculacaoMarca);
+        modelosFiltrados.forEach(modelo => {
+            const option = document.createElement('option');
+            option.value = modelo.NOME_PARAMETRO;
+            modelosDatalist.appendChild(option);
+        });
+        modeloInput.disabled = false;
+    } else {
+        modeloInput.disabled = true;
+    }
+}
+
 function getStatusInfo(status) {
     switch (status) {
         case 'Ativo': return { text: 'Ativo', color: 'bg-green-500' };
@@ -1801,17 +1765,31 @@ function getStatusInfo(status) {
     }
 }
 
-function getToken() { return localStorage.getItem('lucaUserToken'); }
-function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
-function getUserName() { return getUserData()?.nome || 'Utilizador'; }
-function getUserProfile() { return getUserData()?.perfil || null; }
-function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html'; }
+async function loadCurrentLogo() {
+    try {
+        const response = await fetch(`${apiUrlBase}/settings/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data.logoBase64) {
+            LOGO_BASE_64 = data.logoBase64;
+        }
+    } catch (error) {
+        console.error("Não foi possível carregar a logo atual:", error);
+    }
+}
 
+function useInternalExpense(modalType) {
+    document.getElementById(`${modalType}-cnpj`).value = 'N/A';
+    document.getElementById(`${modalType}-razao-social`).value = 'DESPESA INTERNA';
+    document.getElementById(`${modalType}-fornecedor-id`).value = '0';
+}
+
+// --- Funções Auxiliares e de Autenticação ---
 async function lookupCnpj(modalType) {
     const cnpjInput = document.getElementById(`${modalType}-cnpj`);
     const razaoSocialInput = document.getElementById(`${modalType}-razao-social`);
     const fornecedorIdInput = document.getElementById(`${modalType}-fornecedor-id`);
-    
+
     const cnpj = cnpjInput.value.replace(/\D/g, '');
     if (cnpj.length !== 14) {
         alert('Por favor, digite um CNPJ válido com 14 dígitos.');
@@ -1821,11 +1799,11 @@ async function lookupCnpj(modalType) {
     showLoader();
     try {
         const response = await fetch(`${apiUrlBase}/logistica/cnpj/${cnpj}`, {
-             headers: { 'Authorization': `Bearer ${getToken()}` }
+            headers: { 'Authorization': `Bearer ${getToken()}` }
         });
 
         if (!response.ok) throw new Error('CNPJ não encontrado ou serviço indisponível.');
-        
+
         const data = await response.json();
 
         const fornecedorResponse = await fetch(`${apiUrlBase}/logistica/fornecedores/cnpj`, {
@@ -1846,7 +1824,7 @@ async function lookupCnpj(modalType) {
 
         if (!fornecedorResponse.ok) throw new Error('Falha ao registar ou buscar fornecedor no sistema.');
         const fornecedor = await fornecedorResponse.json();
-        
+
         razaoSocialInput.value = fornecedor.razao_social;
         fornecedorIdInput.value = fornecedor.id;
 
@@ -1859,11 +1837,11 @@ async function lookupCnpj(modalType) {
     }
 }
 
-function useInternalExpense(modalType) {
-    document.getElementById(`${modalType}-cnpj`).value = 'N/A';
-    document.getElementById(`${modalType}-razao-social`).value = 'DESPESA INTERNA';
-    document.getElementById(`${modalType}-fornecedor-id`).value = '0'; 
-}
+function getToken() { return localStorage.getItem('lucaUserToken'); }
+function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
+function getUserName() { return getUserData()?.nome || 'Utilizador'; }
+function getUserProfile() { return getUserData()?.perfil || null; }
+function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html'; }
 
 function gerenciarAcessoModulos() {
     const userData = getUserData();
@@ -1882,59 +1860,6 @@ function gerenciarAcessoModulos() {
 
     for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
         const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
-        
-        if (!permissao || !permissao.permitido) {
-            const link = document.querySelector(`#sidebar a[href="${href}"]`);
-            if (link && link.parentElement) {
-                link.parentElement.style.display = 'none';
-            }
-        }
-    }
-}}
-
-function getToken() { 
-    return localStorage.getItem('lucaUserToken'); 
-}
-
-function getUserData() { 
-    const token = getToken(); 
-    if (!token) return null; 
-    try { 
-        return JSON.parse(atob(token.split('.')[1])); 
-    } catch (e) { 
-        return null; 
-    } 
-}
-
-function getUserName() { 
-    return getUserData()?.nome || 'Utilizador'; 
-}
-
-function getUserProfile() { 
-    return getUserData()?.perfil || null; 
-}
-
-function logout() { 
-    localStorage.removeItem('lucaUserToken'); 
-    window.location.href = 'login.html'; 
-}
-
-function gerenciarAcessoModulos() {
-    const userData = getUserData();
-    if (!userData || !userData.permissoes) {
-        console.error("Não foi possível obter as permissões do usuário.");
-        return;
-    }
-
-    const permissoesDoUsuario = userData.permissoes;
-    const mapaModulos = {
-        'lancamentos': 'despesas.html',
-        'logistica': 'logistica.html',
-        'configuracoes': 'settings.html'
-    };
-
-    for (const [moduleKey, href] of Object.entries(mapaModulos)) {
-        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === moduleKey);
         if (!permissao || !permissao.permitido) {
             const link = document.querySelector(`#sidebar a[href="${href}"]`);
             if (link && link.parentElement) {
