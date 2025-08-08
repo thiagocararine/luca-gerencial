@@ -603,7 +603,7 @@ router.post('/estoque/entrada', authenticateToken, async (req, res) => {
 });
 
 router.post('/estoque/consumo', authenticateToken, async (req, res) => {
-    // itemId agora vem do frontend
+    // Mantém a estrutura dinâmica do arquivo original, recebendo itemId e custo
     const { veiculoId, data, quantidade, odometro, custo, itemId } = req.body;
     const { userId, nome: nomeUsuario, perfil } = req.user;
     const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
@@ -620,12 +620,20 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
 
-        // 1. Verifica se há saldo suficiente
+        // 1. Verifica se há saldo suficiente no item de estoque correto (ex: 'estoque_itens')
         const [itemRows] = await connection.execute('SELECT quantidade_atual FROM estoque_itens WHERE id = ? FOR UPDATE', [itemId]);
         if (itemRows.length === 0 || itemRows[0].quantidade_atual < quantidade) {
             await connection.rollback();
             return res.status(400).json({ error: 'Saldo do item insuficiente em estoque.' });
         }
+
+        // NOVO: Busca o ID da filial do veículo que está a ser abastecido
+        const [vehicleData] = await connection.execute('SELECT id_filial FROM veiculos WHERE id = ?', [veiculoId]);
+        if (vehicleData.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Veículo não encontrado.' });
+        }
+        const id_filial_veiculo = vehicleData[0].id_filial;
 
         // 2. Atualiza o saldo do item
         await connection.execute('UPDATE estoque_itens SET quantidade_atual = quantidade_atual - ? WHERE id = ?', [quantidade, itemId]);
@@ -636,10 +644,10 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
             [itemId, 'Saída', quantidade, veiculoId, odometro, userId]
         );
 
-        // 4. Lança a despesa na tabela de manutenções
+        // 4. ATUALIZADO: Lança a despesa na tabela de manutenções, incluindo o id_filial
         await connection.execute(
-            'INSERT INTO veiculo_manutencoes (id_veiculo, data_manutencao, custo, tipo_manutencao, classificacao_custo, id_user_lanc, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [veiculoId, data, custo, 'Abastecimento', 'Custo Operacional', userId, 'Ativo']
+            'INSERT INTO veiculo_manutencoes (id_veiculo, id_filial, data_manutencao, custo, tipo_manutencao, classificacao_custo, id_user_lanc, status, descricao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [veiculoId, id_filial_veiculo, data, custo, 'Abastecimento', 'Custo Operacional', userId, 'Ativo', `Abastecimento de ${quantidade}L`]
         );
 
         // 5. Encontra o último odómetro registado para este veículo para calcular o consumo
@@ -670,6 +678,7 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         
         await connection.commit();
         res.status(201).json({ message: 'Consumo registado com sucesso!', consumoMedio: consumoMedio });
+
     } catch (error) {
         if (connection) await connection.rollback();
         console.error("Erro ao registar consumo:", error);
@@ -706,7 +715,7 @@ router.get('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
 router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
     const { id: id_veiculo } = req.params;
     const { data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_fornecedor } = req.body;
-    const { userId } = req.user;
+    const { userId, nome: nomeUsuario } = req.user;
 
     if (!data_manutencao || !custo || !tipo_manutencao || !classificacao_custo || !id_fornecedor) {
         return res.status(400).json({ error: 'Todos os campos da manutenção são obrigatórios.' });
@@ -717,11 +726,23 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
 
+        // NOVO: Busca o ID da filial do veículo que está a receber a manutenção
+        const [vehicleData] = await connection.execute('SELECT id_filial FROM veiculos WHERE id = ?', [id_veiculo]);
+        if (vehicleData.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Veículo não encontrado.' });
+        }
+        const id_filial_veiculo = vehicleData[0].id_filial;
+
+        // ATUALIZADO: Query de inserção agora inclui id_filial e a descrição
         const sqlInsert = `
-            INSERT INTO veiculo_manutencoes (id_veiculo, data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_user_lanc, id_fornecedor, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
-        await connection.execute(sqlInsert, [id_veiculo, data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, userId, id_fornecedor]);
+            INSERT INTO veiculo_manutencoes 
+            (id_veiculo, id_filial, data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_user_lanc, id_fornecedor, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
         
+        await connection.execute(sqlInsert, [id_veiculo, id_filial_veiculo, data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, userId, id_fornecedor]);
+        
+        // Lógica para atualizar a data da próxima manutenção preventiva (preservada do arquivo original)
         if (classificacao_custo === 'Preventiva') {
             const proximaManutencao = new Date(data_manutencao);
             proximaManutencao.setMonth(proximaManutencao.getMonth() + 3);
@@ -733,6 +754,16 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
             await connection.execute(sqlUpdateVeiculo, [data_manutencao, proximaManutencao, id_veiculo]);
         }
         
+        // Lógica de registrar log (preservada do arquivo original)
+        await registrarLog({
+            usuario_id: userId,
+            usuario_nome: nomeUsuario,
+            tipo_entidade: 'Manutenção',
+            id_entidade: id_veiculo,
+            tipo_acao: 'Criação',
+            descricao: `Registou manutenção (${tipo_manutencao}) para o veículo ID ${id_veiculo} no valor de R$ ${custo}.`
+        });
+
         await connection.commit();
         res.status(201).json({ message: 'Manutenção registada com sucesso!' });
 
@@ -865,27 +896,20 @@ router.get('/custos-frota', authenticateToken, async (req, res) => {
         connection = await mysql.createConnection(dbConfig);
         const sql = `
             SELECT 
-                cf.id,
-                cf.descricao,
-                cf.custo,
-                cf.data_custo,
-                cf.sequencial_rateio,
+                cf.id, cf.descricao, cf.custo, cf.data_custo, cf.sequencial_rateio,
                 p.NOME_PARAMETRO as nome_filial,
-                CASE 
-                    WHEN cf.id_fornecedor = 0 THEN 'DESPESA INTERNA'
-                    ELSE f.razao_social 
-                END as nome_fornecedor,
+                CASE WHEN cf.id_fornecedor = 0 THEN 'DESPESA INTERNA' ELSE f.razao_social END as nome_fornecedor,
                 u.nome_user as nome_utilizador
             FROM custos_frota cf
             LEFT JOIN parametro p ON cf.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
             LEFT JOIN fornecedores f ON cf.id_fornecedor = f.id
             LEFT JOIN cad_user u ON cf.id_user_lanc = u.ID
             WHERE cf.status = 'Ativo'
-            ORDER BY cf.data_custo DESC`;
+            ORDER BY cf.data_custo DESC, cf.id DESC
+            LIMIT 50`; // Limite para não sobrecarregar
         const [custos] = await connection.execute(sql);
         res.json(custos);
     } catch (error) {
-        console.error("Erro ao buscar custos de frota:", error);
         res.status(500).json({ error: 'Erro ao buscar custos de frota.' });
     } finally {
         if (connection) await connection.end();
@@ -1282,6 +1306,35 @@ router.get('/cnpj/:cnpj', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error("Erro ao consultar BrasilAPI:", error);
         res.status(500).json({ error: 'Erro ao consultar o serviço de CNPJ.' });
+    }
+});
+
+router.get('/abastecimentos', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            SELECT 
+                em.id,
+                em.data_movimento,
+                em.quantidade,
+                em.odometro_no_momento,
+                v.placa,
+                v.modelo,
+                u.nome_user as nome_usuario
+            FROM estoque_movimentos em
+            JOIN veiculos v ON em.id_veiculo = v.id
+            JOIN cad_user u ON em.id_usuario = u.ID
+            WHERE em.tipo_movimento = 'Saída'
+            ORDER BY em.data_movimento DESC
+            LIMIT 100`; // Limite para não sobrecarregar
+        const [abastecimentos] = await connection.execute(sql);
+        res.json(abastecimentos);
+    } catch (error) {
+        console.error("Erro ao buscar histórico de abastecimentos:", error);
+        res.status(500).json({ error: 'Erro ao buscar histórico de abastecimentos.' });
+    } finally {
+        if (connection) await connection.end();
     }
 });
 

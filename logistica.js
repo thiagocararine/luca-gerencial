@@ -72,9 +72,12 @@ async function initLogisticaPage() {
         ]);
 
         await loadVehicles();
-        if (document.getElementById('costs-tab-content-gerais')) {
+        
+        // Verifica se a área de custos/histórico existe antes de carregar os dados
+        if (document.getElementById('costs-tabs')) {
             await loadFleetCosts();
             await loadRecentIndividualCosts();
+            await loadAbastecimentosHistory(); // <-- NOVA CHAMADA ADICIONADA AQUI
             switchCostTab('gerais');
         }
     } catch (error) {
@@ -85,6 +88,61 @@ async function initLogisticaPage() {
     }
 }
 
+async function loadAbastecimentosHistory() {
+    const container = document.getElementById('costs-tab-content-abastecimentos');
+    if (!container) return; // Se a aba de abastecimentos não existir, não faz nada.
+    
+    container.innerHTML = '<p class="p-4 text-center text-gray-500">A carregar histórico de abastecimentos...</p>';
+    showLoader();
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/abastecimentos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Falha ao buscar histórico de abastecimentos.');
+        }
+
+        const abastecimentos = await response.json();
+
+        if (abastecimentos.length === 0) {
+            container.innerHTML = '<p class="p-4 text-center text-gray-500">Nenhum abastecimento registado.</p>';
+            return;
+        }
+
+        const table = document.createElement('table');
+        table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+        table.innerHTML = `
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo</th>
+                    <th class="px-4 py-2 text-right font-medium text-gray-500">Quantidade (L)</th>
+                    <th class="px-4 py-2 text-right font-medium text-gray-500">Odómetro (km)</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Utilizador</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
+            
+        const tbody = table.querySelector('tbody');
+        abastecimentos.forEach(item => {
+            const tr = tbody.insertRow();
+            tr.innerHTML = `
+                <td class="px-4 py-2">${new Date(item.data_movimento).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                <td class="px-4 py-2">${item.modelo} (${item.placa})</td>
+                <td class="px-4 py-2 text-right">${parseFloat(item.quantidade).toFixed(2)}</td>
+                <td class="px-4 py-2 text-right">${item.odometro_no_momento ? item.odometro_no_momento.toLocaleString('pt-BR') : 'N/A'}</td>
+                <td class="px-4 py-2">${item.nome_usuario}</td>
+            `;
+        });
+
+        container.innerHTML = '';
+        container.appendChild(table);
+
+    } catch (error) {
+        container.innerHTML = `<p class="p-4 text-center text-red-500">${error.message}</p>`;
+    } finally {
+        hideLoader();
+    }
+}
 
 /**
  * Configura todos os event listeners da página.
@@ -195,8 +253,6 @@ function setupEventListeners() {
     // NOVOS LISTENERS PARA O MÓDULO DE COMBUSTÍVEL
     document.getElementById('open-fuel-modal-btn')?.addEventListener('click', openFuelModal);
     const fuelModal = document.getElementById('fuel-management-modal');
-
-    // VERIFICA SE O MODAL EXISTE ANTES DE ADICIONAR OS LISTENERS
     if (fuelModal) {
         fuelModal.querySelector('#close-fuel-modal-btn').addEventListener('click', () => fuelModal.classList.add('hidden'));
         fuelModal.querySelector('#fuel-tabs').addEventListener('click', (e) => {
@@ -206,10 +262,7 @@ function setupEventListeners() {
         });
         fuelModal.querySelector('#fuel-purchase-form').addEventListener('submit', handleFuelPurchaseSubmit);
         fuelModal.querySelector('#fuel-consumption-form').addEventListener('submit', handleFuelConsumptionSubmit);
-        const purchaseCnpjBtn = fuelModal.querySelector('#purchase-lookup-cnpj-btn');
-        if (purchaseCnpjBtn) {
-            purchaseCnpjBtn.addEventListener('click', () => lookupCnpj('purchase'));
-        }
+        fuelModal.querySelector('#purchase-lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('purchase'));
     }
 }
 
@@ -235,15 +288,15 @@ async function openFuelModal() {
             populateSelectWithOptions(`${apiUrlBase}/logistica/itens-estoque`, 'purchase-item', 'id', 'nome_item', '-- Selecione um Item --'),
             populateSelectWithOptions(`${apiUrlBase}/logistica/veiculos`, 'consumption-vehicle', 'id', 'modelo', '-- Selecione um Veículo --', (v) => `${v.modelo} - ${v.placa}`)
         ]);
-
+        
         document.getElementById('fuel-purchase-form').reset();
         document.getElementById('fuel-consumption-form').reset();
         document.getElementById('consumption-date').value = new Date().toISOString().split('T')[0];
-
+        
         switchFuelTab('compra');
         modal.classList.remove('hidden');
         feather.replace();
-    } catch (error) {
+    } catch(error) {
         alert("Erro ao preparar o modal de combustível: " + error.message);
     } finally {
         hideLoader();
@@ -251,11 +304,24 @@ async function openFuelModal() {
 }
 
 function switchFuelTab(tabName) {
-    document.querySelectorAll('#fuel-management-modal .tab-content').forEach(content => content.classList.add('hidden'));
-    document.querySelectorAll('#fuel-tabs .tab-button').forEach(button => button.classList.remove('active'));
+    document.querySelectorAll('#fuel-management-modal .tab-content').forEach(content => {
+        content.classList.remove('active');
+        content.classList.add('hidden');
+    });
+    document.querySelectorAll('#fuel-tabs .tab-button').forEach(button => {
+        button.classList.remove('active');
+    });
+    
+    const activeContent = document.getElementById(`${tabName}-tab-content`);
+    if(activeContent) {
+        activeContent.classList.add('active');
+        activeContent.classList.remove('hidden');
+    }
 
-    document.getElementById(`${tabName}-tab-content`).classList.remove('hidden');
-    document.querySelector(`#fuel-tabs .tab-button[data-tab="${tabName}"]`).classList.add('active');
+    const activeButton = document.querySelector(`#fuel-tabs .tab-button[data-tab="${tabName}"]`);
+    if(activeButton) {
+        activeButton.classList.add('active');
+    }
 }
 
 async function handleFuelPurchaseSubmit(event) {
@@ -282,7 +348,7 @@ async function handleFuelPurchaseSubmit(event) {
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Falha ao registar a compra.');
-
+        
         alert('Compra registada com sucesso!');
         document.getElementById('fuel-management-modal').classList.add('hidden');
         await loadCurrentStock();
@@ -310,16 +376,18 @@ async function handleFuelConsumptionSubmit(event) {
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Falha ao registar consumo.');
-
+        
         let successMessage = 'Consumo registado com sucesso!';
-        if (result.consumoMedio) {
+        if(result.consumoMedio) {
             successMessage += `\n\nMédia de Consumo Calculada: ${result.consumoMedio} km/L.`;
         }
         alert(successMessage);
-
+        
         document.getElementById('fuel-management-modal').classList.add('hidden');
         await loadCurrentStock();
-        await loadRecentIndividualCosts();
+        if(document.getElementById('costs-tab-content-individuais')) {
+            await loadRecentIndividualCosts();
+        }
     } catch (error) {
         alert(`Erro: ${error.message}`);
     } finally {
