@@ -894,7 +894,12 @@ router.get('/custos-frota', authenticateToken, async (req, res) => {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        const sql = `
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = (page - 1) * limit;
+
+        const countQuery = `SELECT COUNT(*) as total FROM custos_frota WHERE status = 'Ativo'`;
+        const dataQuery = `
             SELECT 
                 cf.id, cf.descricao, cf.custo, cf.data_custo, cf.sequencial_rateio,
                 p.NOME_PARAMETRO as nome_filial,
@@ -906,10 +911,20 @@ router.get('/custos-frota', authenticateToken, async (req, res) => {
             LEFT JOIN cad_user u ON cf.id_user_lanc = u.ID
             WHERE cf.status = 'Ativo'
             ORDER BY cf.data_custo DESC, cf.id DESC
-            LIMIT 50`; // Limite para não sobrecarregar
-        const [custos] = await connection.execute(sql);
-        res.json(custos);
+            LIMIT ? OFFSET ?`;
+        
+        const [totalResult] = await connection.execute(countQuery);
+        const totalItems = totalResult[0].total;
+        const [data] = await connection.execute(dataQuery, [limit, offset]);
+        
+        res.json({
+            totalItems,
+            totalPages: Math.ceil(totalItems / limit),
+            currentPage: page,
+            data
+        });
     } catch (error) {
+        console.error("Erro ao buscar custos de frota:", error);
         res.status(500).json({ error: 'Erro ao buscar custos de frota.' });
     } finally {
         if (connection) await connection.end();
@@ -920,7 +935,12 @@ router.get('/manutencoes/recentes', authenticateToken, async (req, res) => {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        const sql = `
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = (page - 1) * limit;
+
+        const countQuery = `SELECT COUNT(*) as total FROM veiculo_manutencoes WHERE status = 'Ativo'`;
+        const dataQuery = `
             SELECT 
                 vm.id, vm.data_manutencao as data_custo, vm.descricao, vm.custo,
                 v.placa, v.modelo, f.razao_social as nome_fornecedor, u.nome_user as nome_utilizador
@@ -930,9 +950,18 @@ router.get('/manutencoes/recentes', authenticateToken, async (req, res) => {
             LEFT JOIN cad_user u ON vm.id_user_lanc = u.ID
             WHERE vm.status = 'Ativo'
             ORDER BY vm.data_manutencao DESC
-            LIMIT 50`;
-        const [custos] = await connection.execute(sql);
-        res.json(custos);
+            LIMIT ? OFFSET ?`;
+
+        const [totalResult] = await connection.execute(countQuery);
+        const totalItems = totalResult[0].total;
+        const [data] = await connection.execute(dataQuery, [limit, offset]);
+        
+        res.json({
+            totalItems,
+            totalPages: Math.ceil(totalItems / limit),
+            currentPage: page,
+            data
+        });
     } catch (error) {
         console.error("Erro ao buscar custos individuais recentes:", error);
         res.status(500).json({ error: 'Erro ao buscar custos individuais.' });
