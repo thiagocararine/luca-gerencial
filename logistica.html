@@ -183,6 +183,15 @@
             <div id="content-area" class="bg-white rounded-lg shadow overflow-hidden"></div>
             <p id="no-data-message" class="text-center p-8 text-gray-500 hidden">Nenhum veículo encontrado.</p>
 
+            <div id="vehicle-pagination-controls" class="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div id="vehicle-pagination-info" class="text-sm text-gray-700"></div>
+                <div class="flex items-center gap-2">
+                    <button id="vehicle-prev-page-btn" disabled class="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">&laquo; Anterior</button>
+                    <span id="vehicle-page-info-span" class="text-sm text-gray-700">Página 1 de 1</span>
+                    <button id="vehicle-next-page-btn" disabled class="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Próxima &raquo;</button>
+                </div>
+            </div>
+
             <div class="mt-8">
                 <h3 class="text-xl font-bold text-gray-900 mb-4">Histórico de Custos Recentes</h3>
                 <div class="border-b border-gray-200">
@@ -196,6 +205,14 @@
                     <div id="costs-tab-content-gerais" class="cost-tab-content active bg-white rounded-lg shadow overflow-hidden"></div>
                     <div id="costs-tab-content-individuais" class="cost-tab-content hidden bg-white rounded-lg shadow overflow-hidden"></div>
                     <div id="costs-tab-content-abastecimentos" class="cost-tab-content hidden bg-white rounded-lg shadow overflow-hidden"></div>
+                </div>
+                <div id="history-pagination-controls" class="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div id="history-pagination-info" class="text-sm text-gray-700"></div>
+                    <div class="flex items-center gap-2">
+                        <button id="history-prev-page-btn" disabled class="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">&laquo; Anterior</button>
+                        <span id="history-page-info-span" class="text-sm text-gray-700">Página 1 de 1</span>
+                        <button id="history-next-page-btn" disabled class="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Próxima &raquo;</button>
+                    </div>
                 </div>
             </div>
         </main>
@@ -823,7 +840,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
-<script src="logistica.js?v=2.0.8" defer></script>
+<script src="logistica.js?v=2.0.10" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
