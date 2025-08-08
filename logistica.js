@@ -493,21 +493,23 @@ async function loadAbastecimentosHistory() {
     container.innerHTML = '<p class="p-4 text-center text-gray-500">A carregar histórico de abastecimentos...</p>';
     showLoader();
     try {
-        const params = new URLSearchParams({
-            page: historyPages.abastecimentos,
-            limit: HISTORY_ITEMS_PER_PAGE
-        });
-        const response = await fetch(`${apiUrlBase}/logistica/abastecimentos?${params.toString()}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const response = await fetch(`${apiUrlBase}/logistica/abastecimentos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar histórico de abastecimentos.');
         
-        const result = await response.json();
-        const abastecimentos = result.data; // CORREÇÃO: Pega a lista de dentro do objeto 'data'
+        // CORREÇÃO: A resposta da API é um array direto, não um objeto.
+        const abastecimentos = await response.json(); 
+
+        // Como esta rota não tem paginação, limpamos os controlos.
+        document.getElementById('history-pagination-info').textContent = '';
+        document.getElementById('history-page-info-span').textContent = '';
+        document.getElementById('history-prev-page-btn').disabled = true;
+        document.getElementById('history-next-page-btn').disabled = true;
 
         if (abastecimentos.length === 0) {
             container.innerHTML = '<p class="p-4 text-center text-gray-500">Nenhum abastecimento registado.</p>';
-            renderHistoryPagination('abastecimentos', result);
             return;
         }
+
         const table = document.createElement('table');
         table.className = 'min-w-full divide-y divide-gray-200 text-sm';
         table.innerHTML = `
@@ -521,11 +523,12 @@ async function loadAbastecimentosHistory() {
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
+        
         const tbody = table.querySelector('tbody');
         abastecimentos.forEach(item => {
             const tr = tbody.insertRow();
             tr.innerHTML = `
-                <td class="px-4 py-2">${new Date(item.data_movimento).toLocaleString('pt-BR')}</td>
+                <td class="px-4 py-2">${new Date(item.data_movimento).toLocaleString('pt-BR', { timeZone: 'UTC' })}</td>
                 <td class="px-4 py-2">${item.modelo} (${item.placa})</td>
                 <td class="px-4 py-2 text-right">${parseFloat(item.quantidade).toFixed(2)}</td>
                 <td class="px-4 py-2 text-right">${item.odometro_no_momento.toLocaleString('pt-BR')}</td>
@@ -534,14 +537,12 @@ async function loadAbastecimentosHistory() {
         });
         container.innerHTML = '';
         container.appendChild(table);
-        renderHistoryPagination('abastecimentos', result);
     } catch (error) {
         container.innerHTML = `<p class="p-4 text-center text-red-500">${error.message}</p>`;
     } finally {
         hideLoader();
     }
 }
-
 
 // --- RESTANTE DAS FUNÇÕES (sem alterações) ---
 
