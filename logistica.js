@@ -401,36 +401,38 @@ async function loadFleetCosts() {
         if (!response.ok) throw new Error('Falha ao buscar custos gerais.');
         
         const result = await response.json();
-        const custos = result.data;
+        const custos = result.data; // CORREÇÃO: Pega a lista de dentro do objeto 'data'
 
-        if (custos.length === 0 && result.currentPage === 1) {
-            container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo geral registado.</p>';
-        } else {
-            const table = createCostTable('gerais');
-            const tbody = table.querySelector('tbody');
-            custos.forEach(c => {
-                const tr = tbody.insertRow();
-                tr.innerHTML = `
-                    <td class="px-4 py-2 font-mono text-xs">${c.sequencial_rateio || 'N/A'}</td>
-                    <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                    <td class="px-4 py-2">${c.descricao}</td>
-                    <td class="px-4 py-2">${c.nome_filial || 'N/A'}</td>
-                    <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
-                    <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
-                    <td class="px-4 py-2 text-center">
-                        <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="geral" data-cost-desc="${c.descricao}">
-                            <span data-feather="trash-2" class="w-4 h-4"></span>
-                        </button>
-                    </td>
-                `;
-            });
-            container.innerHTML = '';
-            container.appendChild(table);
-            feather.replace();
+        if (custos.length === 0) {
+            container.innerHTML = '<p class="p-4 text-center text-gray-500">Nenhum custo geral registado.</p>';
+            renderHistoryPagination('gerais', result); // Envia o objeto completo para a paginação
+            return;
         }
-        renderHistoryPagination('gerais', result);
+
+        const table = createCostTable('gerais');
+        const tbody = table.querySelector('tbody');
+        custos.forEach(c => {
+            const tr = tbody.insertRow();
+            tr.innerHTML = `
+                <td class="px-4 py-2 font-mono text-xs">${c.sequencial_rateio || 'N/A'}</td>
+                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                <td class="px-4 py-2">${c.descricao}</td>
+                <td class="px-4 py-2">${c.nome_filial || 'N/A'}</td>
+                <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
+                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
+                <td class="px-4 py-2 text-center">
+                    <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="geral" data-cost-desc="${c.descricao}">
+                        <span data-feather="trash-2" class="w-4 h-4"></span>
+                    </button>
+                </td>
+            `;
+        });
+        container.innerHTML = '';
+        container.appendChild(table);
+        feather.replace();
+        renderHistoryPagination('gerais', result); // Envia o objeto completo para a paginação
     } catch (error) {
-        container.innerHTML = `<p class="text-center p-4 text-red-500">${error.message}</p>`;
+        container.innerHTML = `<p class="p-4 text-center text-red-500">${error.message}</p>`;
     } finally {
         hideLoader();
     }
@@ -448,36 +450,38 @@ async function loadRecentIndividualCosts() {
         });
         const response = await fetch(`${apiUrlBase}/logistica/manutencoes/recentes?${params.toString()}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar custos individuais.');
-        
-        const result = await response.json();
-        const custos = result.data;
 
-        if (custos.length === 0 && result.currentPage === 1) {
-            container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo individual registado.</p>';
-        } else {
-            const table = createCostTable('individuais');
-            const tbody = table.querySelector('tbody');
-            custos.forEach(c => {
-                const tr = tbody.insertRow();
-                tr.innerHTML = `
-                    <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                    <td class="px-4 py-2">${c.modelo} (${c.placa})</td>
-                    <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
-                    <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
-                    <td class="px-4 py-2 text-center">
-                        <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="individual" data-cost-desc="${c.descricao || `Manutenção em ${c.modelo}`}">
-                            <span data-feather="trash-2" class="w-4 h-4"></span>
-                        </button>
-                    </td>
-                `;
-            });
-            container.innerHTML = '';
-            container.appendChild(table);
-            feather.replace();
+        const result = await response.json();
+        const custos = result.data; // CORREÇÃO: Pega a lista de dentro do objeto 'data'
+
+        if (custos.length === 0) {
+            container.innerHTML = '<p class="p-4 text-center text-gray-500">Nenhum custo individual registado.</p>';
+            renderHistoryPagination('individuais', result);
+            return;
         }
+
+        const table = createCostTable('individuais');
+        const tbody = table.querySelector('tbody');
+        custos.forEach(c => {
+            const tr = tbody.insertRow();
+            tr.innerHTML = `
+                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                <td class="px-4 py-2">${c.modelo} (${c.placa})</td>
+                <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
+                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
+                <td class="px-4 py-2 text-center">
+                    <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="individual" data-cost-desc="${c.descricao || `Manutenção em ${c.modelo}`}">
+                        <span data-feather="trash-2" class="w-4 h-4"></span>
+                    </button>
+                </td>
+            `;
+        });
+        container.innerHTML = '';
+        container.appendChild(table);
+        feather.replace();
         renderHistoryPagination('individuais', result);
     } catch (error) {
-        container.innerHTML = `<p class="text-center p-4 text-red-500">${error.message}</p>`;
+        container.innerHTML = `<p class="p-4 text-center text-red-500">${error.message}</p>`;
     } finally {
         hideLoader();
     }
@@ -497,38 +501,39 @@ async function loadAbastecimentosHistory() {
         if (!response.ok) throw new Error('Falha ao buscar histórico de abastecimentos.');
         
         const result = await response.json();
-        const abastecimentos = result.data;
+        const abastecimentos = result.data; // CORREÇÃO: Pega a lista de dentro do objeto 'data'
 
-        if (abastecimentos.length === 0 && result.currentPage === 1) {
+        if (abastecimentos.length === 0) {
             container.innerHTML = '<p class="p-4 text-center text-gray-500">Nenhum abastecimento registado.</p>';
-        } else {
-            const table = document.createElement('table');
-            table.className = 'min-w-full divide-y divide-gray-200 text-sm';
-            table.innerHTML = `
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
-                        <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo</th>
-                        <th class="px-4 py-2 text-right font-medium text-gray-500">Quantidade (L)</th>
-                        <th class="px-4 py-2 text-right font-medium text-gray-500">Odómetro (km)</th>
-                        <th class="px-4 py-2 text-left font-medium text-gray-500">Utilizador</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
-            const tbody = table.querySelector('tbody');
-            abastecimentos.forEach(item => {
-                const tr = tbody.insertRow();
-                tr.innerHTML = `
-                    <td class="px-4 py-2">${new Date(item.data_movimento).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
-                    <td class="px-4 py-2">${item.modelo} (${item.placa})</td>
-                    <td class="px-4 py-2 text-right">${parseFloat(item.quantidade).toFixed(2)}</td>
-                    <td class="px-4 py-2 text-right">${item.odometro_no_momento ? item.odometro_no_momento.toLocaleString('pt-BR') : 'N/A'}</td>
-                    <td class="px-4 py-2">${item.nome_usuario}</td>
-                `;
-            });
-            container.innerHTML = '';
-            container.appendChild(table);
+            renderHistoryPagination('abastecimentos', result);
+            return;
         }
+        const table = document.createElement('table');
+        table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+        table.innerHTML = `
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo</th>
+                    <th class="px-4 py-2 text-right font-medium text-gray-500">Quantidade (L)</th>
+                    <th class="px-4 py-2 text-right font-medium text-gray-500">Odómetro (km)</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Utilizador</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
+        const tbody = table.querySelector('tbody');
+        abastecimentos.forEach(item => {
+            const tr = tbody.insertRow();
+            tr.innerHTML = `
+                <td class="px-4 py-2">${new Date(item.data_movimento).toLocaleString('pt-BR')}</td>
+                <td class="px-4 py-2">${item.modelo} (${item.placa})</td>
+                <td class="px-4 py-2 text-right">${parseFloat(item.quantidade).toFixed(2)}</td>
+                <td class="px-4 py-2 text-right">${item.odometro_no_momento.toLocaleString('pt-BR')}</td>
+                <td class="px-4 py-2">${item.nome_usuario}</td>
+            `;
+        });
+        container.innerHTML = '';
+        container.appendChild(table);
         renderHistoryPagination('abastecimentos', result);
     } catch (error) {
         container.innerHTML = `<p class="p-4 text-center text-red-500">${error.message}</p>`;
