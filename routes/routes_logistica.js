@@ -527,13 +527,18 @@ router.get('/estoque/saldo/:itemId', authenticateToken, async (req, res) => {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
+        // A consulta agora usa o itemId para buscar o item correto
         const [rows] = await connection.execute(
-            "SELECT id, nome_item, quantidade_atual, unidade_medida, ultimo_preco_unitario FROM estoque_itens WHERE id = ?", [itemId]
+            "SELECT quantidade_atual, unidade_medida FROM itens_estoque WHERE id = ?",
+            [itemId]
         );
+
         if (rows.length === 0) {
-            return res.status(404).json({ error: 'Item de estoque não encontrado.' });
+            // Se o item específico não for encontrado, retorna um erro claro.
+            return res.status(404).json({ error: `Item de estoque com ID ${itemId} não encontrado.` });
         }
         res.json(rows[0]);
+
     } catch (error) {
         console.error("Erro ao buscar saldo de estoque:", error);
         res.status(500).json({ error: 'Erro ao buscar saldo de estoque.' });
