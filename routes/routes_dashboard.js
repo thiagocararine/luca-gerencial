@@ -43,72 +43,70 @@ async function getFinancialSummary(connection, req) {
 // Função para buscar dados do dashboard de Logística (ATUALIZADA)
 async function getLogisticsSummary(connection, req) {
     const { dataInicio, dataFim, filial } = req.query;
+    
+    // --- Constrói cláusulas WHERE dinâmicas ---
 
-    // Constrói cláusulas WHERE para contagem de veículos
-    const paramsVeiculos = [];
-    let whereClauseVeiculos = "WHERE status IN ('Ativo', 'Em Manutenção')";
-    if (filial) { whereClauseVeiculos += " AND id_filial = ?"; paramsVeiculos.push(filial); }
-
-    // Constrói cláusulas WHERE dinâmicas para CUSTOS DIRETOS (veiculo_manutencoes)
+    // Filtros para CUSTOS DIRETOS (veiculo_manutencoes)
     const paramsCustosDiretos = [];
-    let whereClauseCustosDiretos = "WHERE v.status = 'Ativo'";
+    let whereClauseCustosDiretos = "WHERE vm.status = 'Ativo'";
     if (dataInicio) { whereClauseCustosDiretos += " AND vm.data_manutencao >= ?"; paramsCustosDiretos.push(dataInicio); }
     if (dataFim) { whereClauseCustosDiretos += " AND vm.data_manutencao <= ?"; paramsCustosDiretos.push(dataFim); }
     if (filial) { whereClauseCustosDiretos += " AND v.id_filial = ?"; paramsCustosDiretos.push(filial); }
-
-    // Constrói cláusulas WHERE dinâmicas para CUSTOS DE FROTA (custos_frota)
+    
+    // Filtros para CUSTOS DE FROTA (custos_frota)
     const paramsCustosFrota = [];
-    let whereClauseCustosFrota = "WHERE cf.status = 'Ativo'";
+    let whereClauseCustosFrota = "WHERE cf.status = 'Ativo'"; // <-- A condição de status crucial
     if (dataInicio) { whereClauseCustosFrota += " AND cf.data_custo >= ?"; paramsCustosFrota.push(dataInicio); }
     if (dataFim) { whereClauseCustosFrota += " AND cf.data_custo <= ?"; paramsCustosFrota.push(dataFim); }
     if (filial) { whereClauseCustosFrota += " AND cf.id_filial = ?"; paramsCustosFrota.push(filial); }
 
-    // Queries para os KPIs de manutenção (sem filtro de período)
-    const manutencoesVencidasQuery = `SELECT COUNT(*) as total FROM veiculos WHERE data_proxima_manutencao < CURDATE() AND status = 'Ativo'`;
-    const manutencoesAVencerQuery = `SELECT COUNT(*) as total FROM veiculos WHERE data_proxima_manutencao BETWEEN CURDATE() AND LAST_DAY(CURDATE()) AND status = 'Ativo'`;
+    // Outros filtros
+    const paramsVeiculos = [];
+    let whereClauseVeiculos = "WHERE status IN ('Ativo', 'Em Manutenção')";
+    if (filial) { whereClauseVeiculos += " AND id_filial = ?"; paramsVeiculos.push(filial); }
 
-    // Queries para status e custos (com filtros de período/filial)
-    const veiculosStatusQuery = `SELECT status, COUNT(*) as total FROM veiculos ${whereClauseVeiculos} GROUP BY status`;
+
+    // --- Queries ---
+
+    // CORREÇÃO: Duas queries separadas para somar os custos totais
     const custoDiretoQuery = `SELECT SUM(custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustosDiretos}`;
     const custoFrotaQuery = `SELECT SUM(custo) as total FROM custos_frota cf ${whereClauseCustosFrota}`;
+    
+    const veiculosStatusQuery = `SELECT status, COUNT(*) as total FROM veiculos ${whereClauseVeiculos} GROUP BY status`;
     const custoClassificacaoQuery = `SELECT classificacao_custo, SUM(custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustosDiretos} GROUP BY classificacao_custo`;
     const top5VeiculosQuery = `SELECT CONCAT(v.modelo, ' - ', v.placa) as veiculo, SUM(vm.custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustosDiretos} GROUP BY vm.id_veiculo ORDER BY total DESC LIMIT 5`;
     const chartVeiculosFilialQuery = `SELECT p.NOME_PARAMETRO as filial, COUNT(v.id) as total FROM veiculos v JOIN parametro p ON v.id_filial = p.ID WHERE v.status IN ('Ativo', 'Em Manutenção') AND p.COD_PARAMETRO = 'Unidades' GROUP BY v.id_filial`;
 
     const [
-        statusResult,
         custoDiretoResult,
         custoFrotaResult,
+        statusResult,
         custoClassificacaoResult,
         top5VeiculosResult,
-        veiculosFilialResult,
-        manutencoesVencidasResult,
-        manutencoesAVencerResult
+        veiculosFilialResult
     ] = await Promise.all([
-        connection.execute(veiculosStatusQuery, paramsVeiculos),
         connection.execute(custoDiretoQuery, paramsCustosDiretos),
         connection.execute(custoFrotaQuery, paramsCustosFrota),
+        connection.execute(veiculosStatusQuery, paramsVeiculos),
         connection.execute(custoClassificacaoQuery, paramsCustosDiretos),
         connection.execute(top5VeiculosQuery, paramsCustosDiretos),
-        connection.execute(chartVeiculosFilialQuery, []),
-        connection.execute(manutencoesVencidasQuery),
-        connection.execute(manutencoesAVencerQuery)
+        connection.execute(chartVeiculosFilialQuery,[])
     ]);
-    
-    const veiculosAtivos = statusResult[0].find(r => r.status === 'Ativo')?.total || 0;
-    const veiculosEmManutencao = statusResult[0].find(r => r.status === 'Em Manutenção')?.total || 0;
+
+    // CORREÇÃO: Soma os resultados das duas queries de custo
     const totalCustoDireto = custoDiretoResult[0][0]?.total || 0;
     const totalCustoFrota = custoFrotaResult[0][0]?.total || 0;
     const custoTotalPeriodo = parseFloat(totalCustoDireto) + parseFloat(totalCustoFrota);
+
+    const veiculosAtivos = statusResult[0].find(r => r.status === 'Ativo')?.total || 0;
+    const veiculosEmManutencao = statusResult[0].find(r => r.status === 'Em Manutenção')?.total || 0;
 
     return {
         kpis: {
             veiculosAtivos: veiculosAtivos,
             veiculosEmManutencao: veiculosEmManutencao,
             totalVeiculos: veiculosAtivos + veiculosEmManutencao,
-            custoTotalPeriodo: custoTotalPeriodo,
-            manutencoesVencidas: manutencoesVencidasResult[0][0]?.total || 0,
-            manutencoesAVencer: manutencoesAVencerResult[0][0]?.total || 0
+            custoTotalPeriodo: custoTotalPeriodo, // Envia o valor total corrigido
         },
         charts: {
             statusFrota: statusResult[0],
