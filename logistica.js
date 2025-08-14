@@ -257,46 +257,44 @@ async function loadCurrentStock() {
     }
 }
 
-async function openFuelModal() {
-    const modal = document.getElementById('fuel-management-modal');
+async function openVehicleModal(vehicle = null) {
+    const modal = document.getElementById('vehicle-modal');
+    const form = document.getElementById('vehicle-form');
+    const title = document.getElementById('vehicle-modal-title');
+    
+    form.reset();
+    document.getElementById('placa-error').style.display = 'none';
+    document.getElementById('renavam-error').style.display = 'none';
+    
     showLoader();
     try {
-        const consumptionVehicleSelect = document.getElementById('consumption-vehicle');
-        if (consumptionVehicleSelect.tomselect) {
-            consumptionVehicleSelect.tomselect.destroy();
+        // Popula o novo select de combustível com os itens de estoque
+        await populateSelectWithOptions(`${apiUrlBase}/logistica/itens-estoque`, 'vehicle-tipo-combustivel', 'nome_item', 'nome_item', '-- Selecione --');
+    
+        if (vehicle) {
+            title.textContent = 'Editar Veículo';
+            document.getElementById('vehicle-id').value = vehicle.id;
+            document.getElementById('vehicle-placa').value = vehicle.placa || '';
+            document.getElementById('vehicle-marca').value = vehicle.marca || '';
+            document.getElementById('vehicle-modelo').value = vehicle.modelo || '';
+            document.getElementById('vehicle-ano-fabricacao').value = vehicle.ano_fabricacao || '';
+            document.getElementById('vehicle-ano-modelo').value = vehicle.ano_modelo || '';
+            document.getElementById('vehicle-renavam').value = vehicle.renavam || '';
+            document.getElementById('vehicle-chassi').value = vehicle.chassi || '';
+            document.getElementById('vehicle-filial').value = vehicle.id_filial || '';
+            document.getElementById('vehicle-status').value = vehicle.status || 'Ativo';
+            document.getElementById('vehicle-seguro').checked = !!vehicle.seguro;
+            document.getElementById('vehicle-rastreador').checked = !!vehicle.rastreador;
+            document.getElementById('vehicle-tipo-combustivel').value = vehicle.tipo_combustivel || ''; // Define o valor
+        } else {
+            title.textContent = 'Adicionar Veículo';
+            document.getElementById('vehicle-id').value = '';
         }
-
-        const [itemsResponse, vehiclesResponse] = await Promise.all([
-            fetch(`${apiUrlBase}/logistica/itens-estoque`, { headers: { 'Authorization': `Bearer ${getToken()}` } }),
-            fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
-        ]);
-
-        if (!itemsResponse.ok || !vehiclesResponse.ok) {
-            throw new Error("Falha ao carregar dados para o modal de combustível.");
-        }
-
-        const itens = await itemsResponse.json();
-        const veiculos = await vehiclesResponse.json();
-        
-        populateSelectWithOptions(itens, 'purchase-item', 'id', 'nome_item', '-- Selecione um Item --');
-
-        const dieselVehicles = veiculos.filter(v => v.tipo_combustivel === 'Óleo Diesel S10');
-        populateSelectWithOptions(dieselVehicles, 'consumption-vehicle', 'id', 'modelo', '-- Selecione um Veículo --', (v) => `${v.modelo} - ${v.placa}`);
-
-        new TomSelect('#consumption-vehicle',{
-            create: false,
-            sortField: { field: "text", direction: "asc" }
-        });
-        
-        document.getElementById('fuel-purchase-form').reset();
-        document.getElementById('fuel-consumption-form').reset();
-        document.getElementById('consumption-date').value = new Date().toISOString().split('T')[0];
-        
-        switchFuelTab('compra');
+        handleHasPlacaChange();
         modal.classList.remove('hidden');
         feather.replace();
     } catch(error) {
-        alert("Erro ao preparar o modal de combustível: " + error.message);
+        alert("Erro ao abrir o modal do veículo.");
     } finally {
         hideLoader();
     }
