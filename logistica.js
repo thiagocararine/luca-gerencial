@@ -561,10 +561,31 @@ async function openFuelModal() {
     const modal = document.getElementById('fuel-management-modal');
     showLoader();
     try {
-        await Promise.all([
-            populateSelectWithOptions(`${apiUrlBase}/logistica/itens-estoque`, 'purchase-item', 'id', 'nome_item', '-- Selecione um Item --'),
-            populateSelectWithOptions(`${apiUrlBase}/logistica/veiculos`, 'consumption-vehicle', 'id', 'modelo', '-- Selecione um Veículo --', (v) => `${v.modelo} - ${v.placa}`)
-        ]);
+        // Limpa instâncias antigas do Tom Select para evitar bugs de reinicialização
+        if (document.getElementById('consumption-vehicle').tomselect) {
+            document.getElementById('consumption-vehicle').tomselect.destroy();
+        }
+
+        // Popula o select de itens de compra
+        await populateSelectWithOptions(`${apiUrlBase}/logistica/itens-estoque`, 'purchase-item', 'id', 'nome_item', '-- Selecione um Item --');
+
+        // NOVA IMPLEMENTAÇÃO: Busca, filtra e popula veículos a diesel
+        const allVehiclesResponse = await fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!allVehiclesResponse.ok) throw new Error('Falha ao buscar lista de veículos.');
+        const allVehiclesData = await allVehiclesResponse.json();
+        const dieselVehicles = allVehiclesData.filter(v => v.tipo_combustivel === 'Óleo Diesel');
+        
+        // Alimenta o select com a lista filtrada (passando o array diretamente)
+        populateSelectWithOptions(dieselVehicles, 'consumption-vehicle', 'id', 'modelo', '-- Selecione um Veículo --', (v) => `${v.modelo} - ${v.placa}`);
+        
+        // Ativa o Tom Select no campo de veículos
+        new TomSelect('#consumption-vehicle',{
+            create: false,
+            sortField: {
+                field: "text",
+                direction: "asc"
+            }
+        });
         
         document.getElementById('fuel-purchase-form').reset();
         document.getElementById('fuel-consumption-form').reset();
@@ -579,6 +600,7 @@ async function openFuelModal() {
         hideLoader();
     }
 }
+
 function switchFuelTab(tabName) {
     document.querySelectorAll('#fuel-management-modal .tab-content').forEach(content => {
         content.classList.remove('active');
@@ -636,12 +658,21 @@ async function handleFuelPurchaseSubmit(event) {
 async function handleFuelConsumptionSubmit(event) {
     event.preventDefault();
     showLoader();
+    // 'custo' foi removido do objeto, pois será calculado no backend
     const consumptionData = {
         veiculoId: document.getElementById('consumption-vehicle').value,
         data: document.getElementById('consumption-date').value,
         quantidade: document.getElementById('consumption-quantity').value,
         odometro: document.getElementById('consumption-odometer').value,
     };
+
+    // Validação também foi atualizada
+    if (!consumptionData.veiculoId || !consumptionData.data || !consumptionData.quantidade || !consumptionData.odometro) {
+        alert("Todos os campos são obrigatórios para registar o consumo.");
+        hideLoader();
+        return;
+    }
+
     try {
         const response = await fetch(`${apiUrlBase}/logistica/estoque/consumo`, {
             method: 'POST',
@@ -659,9 +690,7 @@ async function handleFuelConsumptionSubmit(event) {
         
         document.getElementById('fuel-management-modal').classList.add('hidden');
         await loadCurrentStock();
-        if(document.getElementById('costs-tabs')) {
-            loadActiveHistoryTab();
-        }
+        await loadRecentIndividualCosts();
     } catch (error) {
         alert(`Erro: ${error.message}`);
     } finally {
@@ -1648,6 +1677,10 @@ function openVehicleModal(vehicle = null) {
     modeloInput.value = '';
     modeloInput.disabled = true;
     document.getElementById('modelos-list').innerHTML = '';
+
+    // NOVA IMPLEMENTAÇÃO: Popula o select de combustível
+    populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Tipo Combustivel`, 'vehicle-tipo-combustivel', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Selecione --');
+
     if (vehicle) {
         title.textContent = 'Editar Veículo';
         document.getElementById('vehicle-id').value = vehicle.id;
@@ -1663,6 +1696,10 @@ function openVehicleModal(vehicle = null) {
         document.getElementById('has-placa-checkbox').checked = hasPlaca;
         document.getElementById('vehicle-seguro').checked = !!vehicle.seguro;
         document.getElementById('vehicle-rastreador').checked = !!vehicle.rastreador;
+
+        // NOVA IMPLEMENTAÇÃO: Define o valor do combustível ao editar
+        document.getElementById('vehicle-tipo-combustivel').value = vehicle.tipo_combustivel || '';
+
         handleMarcaChange();
         modeloInput.value = vehicle.modelo || '';
     } else {
@@ -1676,6 +1713,7 @@ function openVehicleModal(vehicle = null) {
     modal.classList.remove('hidden');
     feather.replace();
 }
+
 async function handleVehicleFormSubmit(event) {
     event.preventDefault();
     if (!validateForm()) {
@@ -1698,7 +1736,9 @@ async function handleVehicleFormSubmit(event) {
         id_filial: document.getElementById('vehicle-filial').value,
         status: document.getElementById('vehicle-status').value,
         seguro: document.getElementById('vehicle-seguro').checked,
-        rastreador: document.getElementById('vehicle-rastreador').checked
+        rastreador: document.getElementById('vehicle-rastreador').checked,
+        // NOVA IMPLEMENTAÇÃO: Adiciona o tipo de combustível ao objeto de dados
+        tipo_combustivel: document.getElementById('vehicle-tipo-combustivel').value
     };
 
     const method = id ? 'PUT' : 'POST';
@@ -1724,6 +1764,7 @@ async function handleVehicleFormSubmit(event) {
         saveBtn.textContent = 'Salvar Veículo';
     }
 }
+
 function openDeleteConfirmModal(vehicle) {
     vehicleToDeleteId = vehicle.id;
     document.getElementById('delete-vehicle-info').textContent = `${vehicle.modelo} - ${vehicle.placa}`;

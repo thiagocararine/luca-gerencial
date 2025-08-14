@@ -115,7 +115,8 @@ router.post('/veiculos', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
     }
     
-    const { placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status, seguro, rastreador } = req.body;
+    // ATUALIZADO: Adicionado 'tipo_combustivel' à desestruturação
+    const { placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status, seguro, rastreador, tipo_combustivel } = req.body;
     if (!placa || !marca || !modelo || !id_filial || !status) {
         return res.status(400).json({ error: 'Placa, marca, modelo, filial e status são obrigatórios.' });
     }
@@ -125,12 +126,20 @@ router.post('/veiculos', authenticateToken, async (req, res) => {
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
 
+        // ATUALIZADO: 'tipo_combustivel' adicionado ao INSERT
         const sql = `
             INSERT INTO veiculos 
-            (placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status, seguro, rastreador) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            (placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status, seguro, rastreador, tipo_combustivel) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             
-        const params = [placa, marca, modelo, ano_fabricacao || null, ano_modelo || null, renavam || null, chassi || null, id_filial, status, seguro ? 1 : 0, rastreador ? 1 : 0];
+        // ATUALIZADO: 'tipo_combustivel' adicionado aos parâmetros
+        const params = [
+            placa, marca, modelo, 
+            ano_fabricacao || null, ano_modelo || null, 
+            renavam || null, chassi || null, id_filial, status, 
+            seguro ? 1 : 0, rastreador ? 1 : 0, 
+            tipo_combustivel || null
+        ];
         const [result] = await connection.execute(sql, params);
         const newVehicleId = result.insertId;
 
@@ -180,7 +189,9 @@ router.put('/veiculos/:id', authenticateToken, async (req, res) => {
         const currentVehicle = currentVehicleRows[0];
         
         const changesDescription = [];
-        const camposParaComparar = ['placa', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'renavam', 'chassi', 'id_filial', 'status', 'seguro', 'rastreador'];
+        // ATUALIZADO: Adicionado 'tipo_combustivel' à lista de campos para comparação no log
+        const camposParaComparar = ['placa', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'renavam', 'chassi', 'id_filial', 'status', 'seguro', 'rastreador', 'tipo_combustivel'];
+        
         for (const campo of camposParaComparar) {
             const valorAntigo = (campo === 'seguro' || campo === 'rastreador') ? Boolean(currentVehicle[campo]) : (currentVehicle[campo] || '');
             const valorNovo = (campo === 'seguro' || campo === 'rastreador') ? Boolean(vehicleData[campo]) : (vehicleData[campo] || '');
@@ -197,19 +208,22 @@ router.put('/veiculos/:id', authenticateToken, async (req, res) => {
             });
         }
 
+        // ATUALIZADO: 'tipo_combustivel' adicionado ao UPDATE
         const updateSql = `
             UPDATE veiculos SET 
             placa = ?, marca = ?, modelo = ?, ano_fabricacao = ?, ano_modelo = ?, 
             renavam = ?, chassi = ?, id_filial = ?, status = ?,
-            seguro = ?, rastreador = ? 
+            seguro = ?, rastreador = ?, tipo_combustivel = ? 
             WHERE id = ?`;
         
+        // ATUALIZADO: 'tipo_combustivel' adicionado aos parâmetros da query
         await connection.execute(updateSql, [
             vehicleData.placa, vehicleData.marca, vehicleData.modelo, 
             vehicleData.ano_fabricacao || null, vehicleData.ano_modelo || null, 
             vehicleData.renavam || null, vehicleData.chassi || null, 
             vehicleData.id_filial, vehicleData.status,
             vehicleData.seguro ? 1 : 0, vehicleData.rastreador ? 1 : 0,
+            vehicleData.tipo_combustivel || null,
             id
         ]);
         

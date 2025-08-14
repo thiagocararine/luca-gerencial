@@ -11,6 +11,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
     
     <style>
         body { font-family: 'Inter', sans-serif; overflow-x: hidden; }
@@ -712,6 +714,10 @@
                         <option>Vendido</option>
                     </select>
                 </div>
+                <div>
+                    <label for="vehicle-tipo-combustivel" class="block font-medium text-gray-700">Tipo de Combustível</label>
+                    <select id="vehicle-tipo-combustivel" class="form-input mt-1 block w-full ..."></select>
+                </div>
                 <div class="lg:col-span-3 grid grid-cols-2 gap-4 items-center pt-4 border-t">
                     <div class="flex items-center">
                         <input id="vehicle-seguro" name="seguro" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
@@ -820,10 +826,6 @@
                          <div>
                              <label for="consumption-odometer" class="block font-medium">Odómetro Atual (km)</label>
                              <input type="number" id="consumption-odometer" required placeholder="123456" class="form-input mt-1 block w-full">
-                         </div>
-                         <div class="md:col-span-3">
-                              <label for="consumption-cost" class="block font-medium">Custo do Abastecimento (R$)</label>
-                              <input type="number" step="0.01" id="consumption-cost" required placeholder="250.00" class="form-input mt-1 block w-full">
                          </div>
                      </div>
                      <div class="flex justify-end pt-6 border-t mt-6 gap-4">
