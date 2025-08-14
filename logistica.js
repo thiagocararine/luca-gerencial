@@ -1,4 +1,4 @@
-// logistica.js (COMPLETO com correções no seletor pesquisável e na lista de combustíveis)
+// logistica.js (COMPLETO com todas as funções, incluindo os últimos ajustes)
 
 document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
@@ -257,44 +257,46 @@ async function loadCurrentStock() {
     }
 }
 
-async function openVehicleModal(vehicle = null) {
-    const modal = document.getElementById('vehicle-modal');
-    const form = document.getElementById('vehicle-form');
-    const title = document.getElementById('vehicle-modal-title');
-    
-    form.reset();
-    document.getElementById('placa-error').style.display = 'none';
-    document.getElementById('renavam-error').style.display = 'none';
-    
+async function openFuelModal() {
+    const modal = document.getElementById('fuel-management-modal');
     showLoader();
     try {
-        // Popula o novo select de combustível com os itens de estoque
-        await populateSelectWithOptions(`${apiUrlBase}/logistica/itens-estoque`, 'vehicle-tipo-combustivel', 'nome_item', 'nome_item', '-- Selecione --');
-    
-        if (vehicle) {
-            title.textContent = 'Editar Veículo';
-            document.getElementById('vehicle-id').value = vehicle.id;
-            document.getElementById('vehicle-placa').value = vehicle.placa || '';
-            document.getElementById('vehicle-marca').value = vehicle.marca || '';
-            document.getElementById('vehicle-modelo').value = vehicle.modelo || '';
-            document.getElementById('vehicle-ano-fabricacao').value = vehicle.ano_fabricacao || '';
-            document.getElementById('vehicle-ano-modelo').value = vehicle.ano_modelo || '';
-            document.getElementById('vehicle-renavam').value = vehicle.renavam || '';
-            document.getElementById('vehicle-chassi').value = vehicle.chassi || '';
-            document.getElementById('vehicle-filial').value = vehicle.id_filial || '';
-            document.getElementById('vehicle-status').value = vehicle.status || 'Ativo';
-            document.getElementById('vehicle-seguro').checked = !!vehicle.seguro;
-            document.getElementById('vehicle-rastreador').checked = !!vehicle.rastreador;
-            document.getElementById('vehicle-tipo-combustivel').value = vehicle.tipo_combustivel || ''; // Define o valor
-        } else {
-            title.textContent = 'Adicionar Veículo';
-            document.getElementById('vehicle-id').value = '';
+        const consumptionVehicleSelect = document.getElementById('consumption-vehicle');
+        if (consumptionVehicleSelect.tomselect) {
+            consumptionVehicleSelect.tomselect.destroy();
         }
-        handleHasPlacaChange();
+
+        const [itemsResponse, vehiclesResponse] = await Promise.all([
+            fetch(`${apiUrlBase}/logistica/itens-estoque`, { headers: { 'Authorization': `Bearer ${getToken()}` } }),
+            fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
+        ]);
+
+        if (!itemsResponse.ok || !vehiclesResponse.ok) {
+            throw new Error("Falha ao carregar dados para o modal de combustível.");
+        }
+
+        const itens = await itemsResponse.json();
+        const veiculos = await vehiclesResponse.json();
+        
+        populateSelectWithOptions(itens, 'purchase-item', 'id', 'nome_item', '-- Selecione um Item --');
+
+        const dieselVehicles = veiculos.filter(v => v.tipo_combustivel === 'Óleo Diesel S10');
+        populateSelectWithOptions(dieselVehicles, 'consumption-vehicle', 'id', 'modelo', '-- Selecione um Veículo --', (v) => `${v.modelo} - ${v.placa}`);
+
+        new TomSelect('#consumption-vehicle',{
+            create: false,
+            sortField: { field: "text", direction: "asc" }
+        });
+        
+        document.getElementById('fuel-purchase-form').reset();
+        document.getElementById('fuel-consumption-form').reset();
+        document.getElementById('consumption-date').value = new Date().toISOString().split('T')[0];
+        
+        switchFuelTab('compra');
         modal.classList.remove('hidden');
         feather.replace();
     } catch(error) {
-        alert("Erro ao abrir o modal do veículo.");
+        alert("Erro ao preparar o modal de combustível: " + error.message);
     } finally {
         hideLoader();
     }
@@ -459,7 +461,7 @@ function renderVehiclePagination(totalItems, totalPages, currentPage) {
         info.textContent = 'Nenhum veículo encontrado.';
         pageSpan.textContent = '';
     } else {
-        const startItem = (currentPage - 1) * VEHICLES_PER_PAGE + 1;
+        const startItem = (currentVehiclePage - 1) * VEHICLES_PER_PAGE + 1;
         const endItem = Math.min(currentPage * VEHICLES_PER_PAGE, totalItems);
         info.textContent = `Mostrando ${startItem} - ${endItem} de ${totalItems} veículos.`;
         pageSpan.textContent = `Página ${currentPage} de ${totalPages}`;
@@ -714,6 +716,7 @@ async function openVehicleModal(vehicle = null) {
             document.getElementById('has-placa-checkbox').checked = true;
         }
         handleHasPlacaChange();
+        handleMarcaChange();
         modal.classList.remove('hidden');
         feather.replace();
     } catch(error) {
@@ -774,9 +777,7 @@ async function handleVehicleFormSubmit(event) {
 }
 
 
-// --- RESTANTE DO ARQUIVO --- (Funções de load, render, forms, etc.)
-
-// Funções de Veículos
+// --- Funções de Veículos ---
 async function loadVehicles() {
     const contentArea = document.getElementById('content-area');
     contentArea.innerHTML = '<p class="text-center p-8 text-gray-500">A carregar veículos...</p>';
@@ -790,12 +791,14 @@ async function loadVehicles() {
         contentArea.innerHTML = `<p class="text-center p-8 text-red-600">Erro ao carregar veículos.</p>`;
     }
 }
+
 function clearFilters() {
     document.getElementById('filter-search').value = '';
     document.getElementById('filter-filial').value = '';
     document.getElementById('filter-status').value = '';
     applyFilters();
 }
+
 function renderVehicleCards(vehicles, container) {
     const cardsContainer = document.createElement('div');
     cardsContainer.className = 'p-4 grid grid-cols-1 sm:grid-cols-2 gap-6';
@@ -833,6 +836,7 @@ function renderVehicleCards(vehicles, container) {
     });
     container.appendChild(cardsContainer);
 }
+
 function renderVehicleTable(vehicles, container) {
     const table = document.createElement('table');
     table.className = 'min-w-full divide-y divide-gray-200';
@@ -878,6 +882,7 @@ function renderVehicleTable(vehicles, container) {
     });
     container.appendChild(table);
 }
+
 function handleContentClick(event) {
     const target = event.target;
     const vehicleItem = target.closest('.vehicle-item');
@@ -892,6 +897,7 @@ function handleContentClick(event) {
         openDetailsModal(vehicle);
     }
 }
+
 function openDetailsModal(vehicle) {
     currentVehicleId = vehicle.id;
     const modal = document.getElementById('details-modal');
@@ -906,6 +912,7 @@ function openDetailsModal(vehicle) {
     switchTab('details', vehicle.id);
     feather.replace();
 }
+
 function renderDetailsTab(vehicle) {
     const detailsContent = document.getElementById('details-tab-content');
     detailsContent.innerHTML = `
@@ -922,6 +929,7 @@ function renderDetailsTab(vehicle) {
             <div><strong class="block text-gray-500">Rastreador</strong><span>${vehicle.rastreador ? 'Sim' : 'Não'}</span></div>
         </div>`;
 }
+
 
 // Funções de Manutenção
 async function fetchAndDisplayMaintenanceHistory(vehicleId) {
@@ -963,6 +971,7 @@ async function fetchAndDisplayMaintenanceHistory(vehicleId) {
         console.error(error);
     }
 }
+
 function setupMaintenanceExportModal() {
     maintenanceExportDatepicker = new Litepicker({
         element: document.getElementById('maintenance-export-date-range'),
@@ -971,11 +980,13 @@ function setupMaintenanceExportModal() {
         format: 'DD/MM/YYYY',
     });
 }
+
 function openMaintenanceExportModal() {
     maintenanceExportDatepicker.clearSelection();
     document.getElementById('maintenance-export-modal').classList.remove('hidden');
     feather.replace();
 }
+
 async function exportMaintenanceReportPDF() {
     const btn = document.getElementById('generate-maintenance-pdf-btn');
     btn.textContent = 'A gerar...';
@@ -1078,6 +1089,7 @@ async function exportMaintenanceReportPDF() {
         btn.disabled = false;
     }
 }
+
 function openMaintenanceModal(vehicleId) {
     const modal = document.getElementById('maintenance-modal');
     const form = document.getElementById('maintenance-form');
@@ -1092,6 +1104,7 @@ function openMaintenanceModal(vehicleId) {
     modal.classList.remove('hidden');
     feather.replace();
 }
+
 async function handleMaintenanceFormSubmit(event) {
     event.preventDefault();
     const saveBtn = document.getElementById('save-maintenance-btn');
@@ -1163,6 +1176,7 @@ function openVehicleCostModal() {
     modal.classList.remove('hidden');
     feather.replace();
 }
+
 async function handleVehicleCostFormSubmit(event) {
     event.preventDefault();
     const saveBtn = document.getElementById('save-vehicle-cost-btn');
@@ -1208,6 +1222,7 @@ async function handleVehicleCostFormSubmit(event) {
         saveBtn.disabled = false;
     }
 }
+
 function openFleetCostModal() {
     const modal = document.getElementById('fleet-cost-modal');
     modal.querySelector('form').reset();
@@ -1217,6 +1232,7 @@ function openFleetCostModal() {
     modal.classList.remove('hidden');
     feather.replace();
 }
+
 async function handleFleetCostFormSubmit(event) {
     event.preventDefault();
     const saveBtn = document.getElementById('save-fleet-cost-btn');
@@ -1258,6 +1274,7 @@ async function handleFleetCostFormSubmit(event) {
         saveBtn.disabled = false;
     }
 }
+
 function createCostTable(type) {
     const table = document.createElement('table');
     table.className = 'min-w-full divide-y divide-gray-200 text-sm';
@@ -1283,6 +1300,7 @@ function createCostTable(type) {
         <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
     return table;
 }
+
 function handleDeleteCostClick(event) {
     const button = event.target.closest('button[data-cost-id]');
     if (!button) return;
@@ -1293,12 +1311,14 @@ function handleDeleteCostClick(event) {
 
     openDeleteCostConfirmModal(id, type, description);
 }
+
 function openDeleteCostConfirmModal(id, type, description) {
     costToDelete = { id, type };
     document.getElementById('delete-cost-info').textContent = description;
     document.getElementById('confirm-delete-cost-modal').classList.remove('hidden');
     feather.replace();
 }
+
 async function executeDeleteCost(id, type) {
     const modal = document.getElementById('confirm-delete-cost-modal');
     const confirmBtn = modal.querySelector('#confirm-delete-cost-btn');
@@ -1373,6 +1393,7 @@ function handlePhotoAreaClick(event) {
         }
     }
 }
+
 async function switchTab(tabName, vehicleId) {
     document.querySelectorAll('#details-modal .tab-content').forEach(content => content.classList.remove('active'));
     document.querySelectorAll('#details-tabs .tab-button').forEach(button => button.classList.remove('active'));
@@ -1395,6 +1416,7 @@ async function switchTab(tabName, vehicleId) {
         await fetchAndDisplayChangeLogs(vehicleId);
     }
 }
+
 async function fetchAndDisplayPhotos(vehicleId) {
     const photoTypes = ['frente', 'traseira', 'lateral-direita', 'lateral-esquerda', 'painel'];
     photoTypes.forEach(type => {
@@ -1419,6 +1441,7 @@ async function fetchAndDisplayPhotos(vehicleId) {
         console.error("Erro ao carregar fotos:", error);
     }
 }
+
 function handlePhotoInputChange(event) {
     if (event.target.type !== 'file' || !event.target.id.startsWith('photo-input-')) return;
 
@@ -1439,6 +1462,7 @@ function handlePhotoInputChange(event) {
         reader.readAsDataURL(file);
     }
 }
+
 async function fetchAndDisplayDocuments(vehicleId) {
     const container = document.getElementById('document-list-container');
     container.innerHTML = '<p>A carregar documentos...</p>';
@@ -1484,6 +1508,7 @@ async function fetchAndDisplayDocuments(vehicleId) {
         container.innerHTML = `<p class="text-red-500">${error.message}</p>`;
     }
 }
+
 async function handleDocumentUploadSubmit(event) {
     event.preventDefault();
     const form = event.target;
@@ -1510,6 +1535,7 @@ async function handleDocumentUploadSubmit(event) {
     form.reset();
     button.disabled = false;
 }
+
 async function uploadFile(vehicleId, file, description, expiryDate = null, type = 'photo') {
     const formData = new FormData();
     formData.append('ficheiro', file);
@@ -1539,6 +1565,7 @@ async function uploadFile(vehicleId, file, description, expiryDate = null, type 
         alert(`Erro: ${error.message}`);
     }
 }
+
 function handleDeleteDocumentClick(event) {
     const button = event.target.closest('.delete-doc-btn');
     if (!button) return;
@@ -1548,12 +1575,14 @@ function handleDeleteDocumentClick(event) {
 
     openDeleteDocumentConfirmModal(docId, docName);
 }
+
 function openDeleteDocumentConfirmModal(id, name) {
     documentToDelete = { id, name };
     document.getElementById('delete-document-info').textContent = name;
     document.getElementById('confirm-delete-document-modal').classList.remove('hidden');
     feather.replace();
 }
+
 async function executeDeleteDocument() {
     const { id } = documentToDelete;
     if (!id) return;
@@ -1584,6 +1613,7 @@ async function executeDeleteDocument() {
         documentToDelete = { id: null, name: null };
     }
 }
+
 async function openCaptureModal(targetInputId, targetPreviewId) {
     const modal = document.getElementById('photo-capture-modal');
     const video = document.getElementById('camera-stream');
@@ -1618,6 +1648,7 @@ async function openCaptureModal(targetInputId, targetPreviewId) {
         console.error("Erro na câmara:", err);
     }
 }
+
 function closeCaptureModal() {
     if (photoCaptureState.stream) {
         photoCaptureState.stream.getTracks().forEach(track => track.stop());
@@ -1625,6 +1656,7 @@ function closeCaptureModal() {
     photoCaptureState = { stream: null, targetInputId: null, targetPreviewId: null };
     document.getElementById('photo-capture-modal').classList.add('hidden');
 }
+
 function takePhoto() {
     const video = document.getElementById('camera-stream');
     const canvas = document.getElementById('photo-canvas');
@@ -1641,6 +1673,7 @@ function takePhoto() {
     document.getElementById('use-photo-btn').classList.remove('hidden');
     document.getElementById('retake-photo-btn').classList.remove('hidden');
 }
+
 function retakePhoto() {
     document.getElementById('camera-stream').classList.remove('hidden');
     document.getElementById('photo-canvas').classList.add('hidden');
@@ -1648,6 +1681,7 @@ function retakePhoto() {
     document.getElementById('use-photo-btn').classList.add('hidden');
     document.getElementById('retake-photo-btn').classList.add('hidden');
 }
+
 function useCapturedPhoto() {
     const canvas = document.getElementById('photo-canvas');
     const preview = document.getElementById(photoCaptureState.targetPreviewId);
@@ -1672,10 +1706,12 @@ function useCapturedPhoto() {
         closeCaptureModal();
     }, 'image/jpeg', 0.9);
 }
+
 function openImageViewer(src) {
     document.getElementById('viewer-image').src = src;
     document.getElementById('image-viewer-modal').classList.remove('hidden');
 }
+
 async function fetchAndDisplayChangeLogs(vehicleId) {
     const container = document.getElementById('logs-history-container');
     container.innerHTML = '<p class="text-center text-gray-500">A carregar histórico de alterações...</p>';
@@ -1718,6 +1754,7 @@ async function fetchAndDisplayChangeLogs(vehicleId) {
         console.error(error);
     }
 }
+
 async function populateMaintenanceTypes(selectElementId = 'maintenance-type') {
     const selectElement = document.getElementById(selectElementId);
     selectElement.innerHTML = '<option value="">A carregar...</option>';
@@ -1743,13 +1780,13 @@ async function populateMaintenanceTypes(selectElementId = 'maintenance-type') {
 }
 
 // Funções de Formulário e Validação
-
 function openDeleteConfirmModal(vehicle) {
     vehicleToDeleteId = vehicle.id;
     document.getElementById('delete-vehicle-info').textContent = `${vehicle.modelo} - ${vehicle.placa}`;
     document.getElementById('confirm-delete-modal').classList.remove('hidden');
     feather.replace();
 }
+
 async function deleteVehicle(id) {
     const confirmBtn = document.getElementById('confirm-delete-btn');
     confirmBtn.disabled = true;
@@ -1769,6 +1806,7 @@ async function deleteVehicle(id) {
         vehicleToDeleteId = null;
     }
 }
+
 async function populateFilialSelects() {
     const url = `${apiUrlBase}/settings/parametros?cod=Unidades`;
     await populateSelectWithOptions(url, 'filter-filial', 'ID', 'NOME_PARAMETRO', 'Todas as Filiais');
@@ -1777,6 +1815,7 @@ async function populateFilialSelects() {
         await populateCheckboxes(url, 'fleet-cost-filiais-checkboxes', 'ID', 'NOME_PARAMETRO');
     }
 }
+
 async function populateCheckboxes(url, containerId, valueKey, textKey) {
     const container = document.getElementById(containerId);
     if(!container) return;
@@ -1810,6 +1849,7 @@ async function populateCheckboxes(url, containerId, valueKey, textKey) {
         console.error(error);
     }
 }
+
 function handleHasPlacaChange() {
     const hasPlacaCheckbox = document.getElementById('has-placa-checkbox');
     const placaInput = document.getElementById('vehicle-placa');
@@ -1828,6 +1868,7 @@ function handleHasPlacaChange() {
         placaError.style.display = 'none';
     }
 }
+
 function validateForm() {
     const hasPlaca = document.getElementById('has-placa-checkbox').checked;
     const placa = document.getElementById('vehicle-placa').value;
@@ -1839,6 +1880,7 @@ function validateForm() {
     const isRenavamValid = renavam ? validateRenavam(renavam) : true;
     return isPlacaValid && isRenavamValid;
 }
+
 function validatePlaca(placa) {
     const placaError = document.getElementById('placa-error');
     if (!placa) {
@@ -1850,6 +1892,7 @@ function validatePlaca(placa) {
     placaError.style.display = isValid ? 'none' : 'block';
     return isValid;
 }
+
 function validateRenavam(renavam) {
     const renavamError = document.getElementById('renavam-error');
     if (!renavam) {
@@ -1865,11 +1908,11 @@ async function populateSelectWithOptions(source, selectId, valueKey, textKey, pl
     const selectElement = document.getElementById(selectId);
     try {
         let items = [];
-        if (typeof source === 'string') { // Se for uma URL, faz o fetch
+        if (typeof source === 'string') {
             const response = await fetch(source, { headers: { 'Authorization': `Bearer ${getToken()}` } });
             if (!response.ok) throw new Error(`Falha ao carregar dados para ${selectId}.`);
             items = await response.json();
-        } else { // Se for um array, usa-o diretamente
+        } else {
             items = source;
         }
 
@@ -1885,6 +1928,7 @@ async function populateSelectWithOptions(source, selectId, valueKey, textKey, pl
         console.error(error);
     }
 }
+
 async function loadMarcasAndModelosFromDB() {
     const datalistMarcas = document.getElementById('marcas-list');
     try {
@@ -1906,6 +1950,7 @@ async function loadMarcasAndModelosFromDB() {
         console.error("Erro ao carregar marcas e modelos:", error);
     }
 }
+
 function handleMarcaChange() {
     const marcaInput = document.getElementById('vehicle-marca');
     const modeloInput = document.getElementById('vehicle-modelo');
@@ -1927,6 +1972,7 @@ function handleMarcaChange() {
         modeloInput.disabled = true;
     }
 }
+
 function getStatusInfo(status) {
     switch (status) {
         case 'Ativo': return { text: 'Ativo', color: 'bg-green-500' };
@@ -1936,6 +1982,7 @@ function getStatusInfo(status) {
         default: return { text: 'N/A', color: 'bg-gray-400' };
     }
 }
+
 async function loadCurrentLogo() {
     try {
         const response = await fetch(`${apiUrlBase}/settings/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
@@ -1948,6 +1995,7 @@ async function loadCurrentLogo() {
         console.error("Não foi possível carregar a logo atual:", error);
     }
 }
+
 function useInternalExpense(modalType) {
     document.getElementById(`${modalType}-cnpj`).value = 'N/A';
     document.getElementById(`${modalType}-razao-social`).value = 'DESPESA INTERNA';
@@ -2006,11 +2054,13 @@ async function lookupCnpj(modalType) {
         hideLoader();
     }
 }
+
 function getToken() { return localStorage.getItem('lucaUserToken'); }
 function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
 function getUserName() { return getUserData()?.nome || 'Utilizador'; }
 function getUserProfile() { return getUserData()?.perfil || null; }
 function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html'; }
+
 function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) {
