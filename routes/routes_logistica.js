@@ -579,10 +579,9 @@ router.post('/estoque/entrada', authenticateToken, async (req, res) => {
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
 
-        // CORREÇÃO: Define a variável 'precoUnitario' que estava em falta.
         const precoUnitario = parseFloat(custo) / parseFloat(quantidade);
 
-        // 1. Atualiza o saldo do item E o seu último preço.
+        // 1. Atualiza o saldo do item e o seu último preço.
         await connection.execute(
             'UPDATE itens_estoque SET quantidade_atual = quantidade_atual + ?, ultimo_preco_unitario = ? WHERE id = ?',
             [quantidade, precoUnitario, itemId]
@@ -594,21 +593,35 @@ router.post('/estoque/entrada', authenticateToken, async (req, res) => {
             [itemId, 'Entrada', quantidade, userId, `Compra de ${quantidade}L. Custo Total: R$ ${custo}`]
         );
 
-        // 3. NOVO: Regista a compra como um custo geral de frota para controlo financeiro.
-        // Assume que a compra é para a filial principal ou não é rateada neste momento.
+        // 3. NOVO: Regista a compra como um CUSTO DE FROTA RATEADO.
         const [itemData] = await connection.execute('SELECT nome_item FROM itens_estoque WHERE id = ?', [itemId]);
         const nomeItem = itemData[0].nome_item;
         
-        await connection.execute(
-            `INSERT INTO custos_frota (descricao, custo, data_custo, id_fornecedor, id_user_lanc, status) VALUES (?, ?, CURDATE(), ?, ?, 'Ativo')`,
-            [`Compra de ${nomeItem}`, custo, fornecedorId, userId]
-        );
+        const filiaisParaRateio = [27, 36, 37, 38];
+        const valorRateado = (parseFloat(custo) / filiaisParaRateio.length).toFixed(2);
+        const sequencial = `CF-${Date.now()}`;
+        
+        const sqlCustoFrota = `
+            INSERT INTO custos_frota 
+            (descricao, custo, data_custo, id_fornecedor, id_user_lanc, status, id_filial, sequencial_rateio) 
+            VALUES (?, ?, CURDATE(), ?, ?, 'Ativo', ?, ?)`;
+
+        for (const id_filial of filiaisParaRateio) {
+            await connection.execute(sqlCustoFrota, [
+                `Compra de ${nomeItem}`, 
+                valorRateado, 
+                fornecedorId, 
+                userId, 
+                id_filial, 
+                sequencial
+            ]);
+        }
 
         // 4. Regista o log da ação.
         await registrarLog({
             usuario_id: userId, usuario_nome: nomeUsuario,
             tipo_entidade: 'Estoque', id_entidade: itemId,
-            tipo_acao: 'Entrada', descricao: `Registou a compra de ${quantidade}L de ${nomeItem}.`
+            tipo_acao: 'Entrada', descricao: `Registou a compra de ${quantidade}L de ${nomeItem} e rateou o custo.`
         });
         
         await connection.commit();
@@ -624,31 +637,53 @@ router.post('/estoque/entrada', authenticateToken, async (req, res) => {
 });
 
 router.post('/estoque/consumo', authenticateToken, async (req, res) => {
-    // Mantém a estrutura dinâmica do arquivo original, recebendo itemId e custo
-    const { veiculoId, data, quantidade, odometro, custo, itemId } = req.body;
+    // A 'custo' foi removida, pois será calculada aqui
+    const { veiculoId, data, quantidade, odometro } = req.body;
     const { userId, nome: nomeUsuario, perfil } = req.user;
-    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
     
+    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
     if (!allowedProfiles.includes(perfil)) {
         return res.status(403).json({ error: 'Você não tem permissão para esta ação.' });
     }
-    if (!veiculoId || !data || !quantidade || !odometro || !custo || !itemId) {
-        return res.status(400).json({ error: 'Todos os campos são obrigatórios.'});
+
+    // Validação corrigida para não exigir o custo
+    if (!veiculoId || !data || !quantidade || !odometro) {
+        return res.status(400).json({ error: 'Todos os campos são obrigatórios.' });
     }
 
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
+        
+        const itemId = 1; // Assumindo que o ID do Óleo Diesel é 1.
 
-        // 1. Verifica se há saldo suficiente no item de estoque correto (ex: 'estoque_itens')
-        const [itemRows] = await connection.execute('SELECT quantidade_atual FROM estoque_itens WHERE id = ? FOR UPDATE', [itemId]);
-        if (itemRows.length === 0 || itemRows[0].quantidade_atual < quantidade) {
+        const [itemRows] = await connection.execute('SELECT quantidade_atual, ultimo_preco_unitario FROM itens_estoque WHERE id = ? FOR UPDATE', [itemId]);
+        if (itemRows.length === 0) {
             await connection.rollback();
-            return res.status(400).json({ error: 'Saldo do item insuficiente em estoque.' });
+            return res.status(400).json({ error: 'Item de estoque "Óleo Diesel" não encontrado.' });
+        }
+        const item = itemRows[0];
+        
+        if (parseFloat(item.quantidade_atual) < parseFloat(quantidade)) {
+            await connection.rollback();
+            return res.status(400).json({ error: 'Saldo de diesel insuficiente em estoque.' });
+        }
+        if (!item.ultimo_preco_unitario || item.ultimo_preco_unitario <= 0) {
+            await connection.rollback();
+            return res.status(400).json({ error: 'Preço por litro não definido. Registe uma compra primeiro para estabelecer o preço.' });
         }
 
-        // NOVO: Busca o ID da filial do veículo que está a ser abastecido
+        // Lógica para calcular o custo do abastecimento
+        const custoCalculado = parseFloat(quantidade) * parseFloat(item.ultimo_preco_unitario);
+
+        await connection.execute('UPDATE itens_estoque SET quantidade_atual = quantidade_atual - ? WHERE id = ?', [quantidade, itemId]);
+        
+        await connection.execute(
+            'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_veiculo, odometro_no_momento, id_usuario) VALUES (?, ?, ?, ?, ?, ?)',
+            [itemId, 'Saída', quantidade, veiculoId, odometro, userId]
+        );
+
         const [vehicleData] = await connection.execute('SELECT id_filial FROM veiculos WHERE id = ?', [veiculoId]);
         if (vehicleData.length === 0) {
             await connection.rollback();
@@ -656,27 +691,15 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         }
         const id_filial_veiculo = vehicleData[0].id_filial;
 
-        // 2. Atualiza o saldo do item
-        await connection.execute('UPDATE estoque_itens SET quantidade_atual = quantidade_atual - ? WHERE id = ?', [quantidade, itemId]);
-        
-        // 3. Regista o movimento de saída
-        await connection.execute(
-            'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_veiculo, odometro_no_momento, id_usuario) VALUES (?, ?, ?, ?, ?, ?)',
-            [itemId, 'Saída', quantidade, veiculoId, odometro, userId]
-        );
-
-        // 4. ATUALIZADO: Lança a despesa na tabela de manutenções, incluindo o id_filial
         await connection.execute(
             'INSERT INTO veiculo_manutencoes (id_veiculo, id_filial, data_manutencao, custo, tipo_manutencao, classificacao_custo, id_user_lanc, status, descricao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [veiculoId, id_filial_veiculo, data, custo, 'Abastecimento', 'Custo Operacional', userId, 'Ativo', `Abastecimento de ${quantidade}L`]
+            [veiculoId, id_filial_veiculo, data, custoCalculado, 'Abastecimento', 'Custo Operacional', userId, 'Ativo', `Abastecimento de ${quantidade}L`]
         );
 
-        // 5. Encontra o último odómetro registado para este veículo para calcular o consumo
         const [ultimoAbastecimento] = await connection.execute(
             'SELECT odometro_no_momento, quantidade FROM estoque_movimentos WHERE id_veiculo = ? AND tipo_movimento = "Saída" ORDER BY data_movimento DESC LIMIT 1, 1',
             [veiculoId]
         );
-
         let consumoMedio = null;
         if (ultimoAbastecimento.length > 0) {
             const odometroAnterior = ultimoAbastecimento[0].odometro_no_momento;
@@ -687,14 +710,12 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
             }
         }
         
-        // 6. Atualiza o odómetro atual do veículo
         await connection.execute('UPDATE veiculos SET odometro_atual = ? WHERE id = ?', [odometro, veiculoId]);
         
-        // 7. Regista o log da ação
         await registrarLog({
             usuario_id: userId, usuario_nome: nomeUsuario,
             tipo_entidade: 'Consumo', id_entidade: veiculoId,
-            tipo_acao: 'Saída de Estoque', descricao: `Abasteceu ${quantidade}L (Item ID: ${itemId}) no veículo ID ${veiculoId}. Odómetro: ${odometro}.`
+            tipo_acao: 'Saída de Estoque', descricao: `Abasteceu ${quantidade}L no veículo ID ${veiculoId}. Odómetro: ${odometro}.`
         });
         
         await connection.commit();
