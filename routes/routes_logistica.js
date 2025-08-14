@@ -564,13 +564,14 @@ router.get('/estoque/saldo/:itemId', authenticateToken, async (req, res) => {
 router.post('/estoque/entrada', authenticateToken, async (req, res) => {
     const { itemId, quantidade, custo, fornecedorId } = req.body;
     const { userId, nome: nomeUsuario, perfil } = req.user;
+    
     const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
-
     if (!allowedProfiles.includes(perfil)) {
         return res.status(403).json({ error: 'Você não tem permissão para esta ação.' });
     }
-    if (!itemId || !quantidade || !custo) {
-        return res.status(400).json({ error: 'Item, quantidade e custo são obrigatórios.' });
+
+    if (!itemId || !quantidade || !custo || !fornecedorId) {
+        return res.status(400).json({ error: 'Todos os campos são obrigatórios.'});
     }
 
     let connection;
@@ -578,38 +579,44 @@ router.post('/estoque/entrada', authenticateToken, async (req, res) => {
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
 
-        // Calcula o preço unitário para esta entrada
+        // CORREÇÃO: Define a variável 'precoUnitario' que estava em falta.
         const precoUnitario = parseFloat(custo) / parseFloat(quantidade);
-        if (isNaN(precoUnitario) || !isFinite(precoUnitario)) {
-             await connection.rollback();
-             return res.status(400).json({ error: 'Valores de custo ou quantidade inválidos.' });
-        }
 
-        // 1. Atualiza o saldo e o último preço unitário do item
+        // 1. Atualiza o saldo do item E o seu último preço.
         await connection.execute(
-            'UPDATE estoque_itens SET quantidade_atual = quantidade_atual + ?, ultimo_preco_unitario = ? WHERE id = ?',
+            'UPDATE itens_estoque SET quantidade_atual = quantidade_atual + ?, ultimo_preco_unitario = ? WHERE id = ?',
             [quantidade, precoUnitario, itemId]
         );
         
-        // 2. Regista o movimento de entrada
-        const obs = fornecedorId ? `Compra (Fornecedor ID: ${fornecedorId}). Custo total: R$ ${custo}` : `Entrada manual. Custo total: R$ ${custo}`;
+        // 2. Regista o movimento de entrada no extrato do estoque.
         await connection.execute(
             'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_usuario, observacao) VALUES (?, ?, ?, ?, ?)',
-            [itemId, 'Entrada', quantidade, userId, obs]
+            [itemId, 'Entrada', quantidade, userId, `Compra de ${quantidade}L. Custo Total: R$ ${custo}`]
         );
 
-        // 3. Regista o log da ação
+        // 3. NOVO: Regista a compra como um custo geral de frota para controlo financeiro.
+        // Assume que a compra é para a filial principal ou não é rateada neste momento.
+        const [itemData] = await connection.execute('SELECT nome_item FROM itens_estoque WHERE id = ?', [itemId]);
+        const nomeItem = itemData[0].nome_item;
+        
+        await connection.execute(
+            `INSERT INTO custos_frota (descricao, custo, data_custo, id_fornecedor, id_user_lanc, status) VALUES (?, ?, CURDATE(), ?, ?, 'Ativo')`,
+            [`Compra de ${nomeItem}`, custo, fornecedorId, userId]
+        );
+
+        // 4. Regista o log da ação.
         await registrarLog({
             usuario_id: userId, usuario_nome: nomeUsuario,
             tipo_entidade: 'Estoque', id_entidade: itemId,
-            tipo_acao: 'Entrada', descricao: `Registou a entrada de ${quantidade} unidades/litros para o item ID ${itemId}.`
+            tipo_acao: 'Entrada', descricao: `Registou a compra de ${quantidade}L de ${nomeItem}.`
         });
         
         await connection.commit();
-        res.status(201).json({ message: 'Entrada registada e estoque atualizado com sucesso!' });
+        res.status(201).json({ message: 'Compra registada, estoque e custos atualizados com sucesso!' });
+
     } catch (error) {
         if (connection) await connection.rollback();
-        console.error("Erro ao registar entrada:", error);
+        console.error("Erro ao registar entrada em estoque:", error);
         res.status(500).json({ error: 'Erro ao registar a entrada em estoque.' });
     } finally {
         if (connection) await connection.end();
