@@ -637,7 +637,6 @@ router.post('/estoque/entrada', authenticateToken, async (req, res) => {
 });
 
 router.post('/estoque/consumo', authenticateToken, async (req, res) => {
-    // A 'custo' foi removida, pois será calculada aqui
     const { veiculoId, data, quantidade, odometro } = req.body;
     const { userId, nome: nomeUsuario, perfil } = req.user;
     
@@ -646,7 +645,6 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Você não tem permissão para esta ação.' });
     }
 
-    // Validação corrigida para não exigir o custo
     if (!veiculoId || !data || !quantidade || !odometro) {
         return res.status(400).json({ error: 'Todos os campos são obrigatórios.' });
     }
@@ -656,7 +654,8 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
         
-        const itemId = 1; // Assumindo que o ID do Óleo Diesel é 1.
+        const itemId = 1; // ID do Óleo Diesel
+        const fornecedorCombustivelId = 3; // Fornecedor fixo para combustível, conforme solicitado
 
         const [itemRows] = await connection.execute('SELECT quantidade_atual, ultimo_preco_unitario FROM itens_estoque WHERE id = ? FOR UPDATE', [itemId]);
         if (itemRows.length === 0) {
@@ -674,15 +673,7 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Preço por litro não definido. Registe uma compra primeiro para estabelecer o preço.' });
         }
 
-        // Lógica para calcular o custo do abastecimento
         const custoCalculado = parseFloat(quantidade) * parseFloat(item.ultimo_preco_unitario);
-
-        await connection.execute('UPDATE itens_estoque SET quantidade_atual = quantidade_atual - ? WHERE id = ?', [quantidade, itemId]);
-        
-        await connection.execute(
-            'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_veiculo, odometro_no_momento, id_usuario) VALUES (?, ?, ?, ?, ?, ?)',
-            [itemId, 'Saída', quantidade, veiculoId, odometro, userId]
-        );
 
         const [vehicleData] = await connection.execute('SELECT id_filial FROM veiculos WHERE id = ?', [veiculoId]);
         if (vehicleData.length === 0) {
@@ -691,9 +682,16 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         }
         const id_filial_veiculo = vehicleData[0].id_filial;
 
+        await connection.execute('UPDATE itens_estoque SET quantidade_atual = quantidade_atual - ? WHERE id = ?', [quantidade, itemId]);
+        
         await connection.execute(
-            'INSERT INTO veiculo_manutencoes (id_veiculo, id_filial, data_manutencao, custo, tipo_manutencao, classificacao_custo, id_user_lanc, status, descricao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [veiculoId, id_filial_veiculo, data, custoCalculado, 'Abastecimento', 'Custo Operacional', userId, 'Ativo', `Abastecimento de ${quantidade}L`]
+            'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_veiculo, odometro_no_momento, id_usuario) VALUES (?, ?, ?, ?, ?, ?)',
+            [itemId, 'Saída', quantidade, veiculoId, odometro, userId]
+        );
+
+        await connection.execute(
+            'INSERT INTO veiculo_manutencoes (id_veiculo, id_filial, data_manutencao, custo, tipo_manutencao, classificacao_custo, id_user_lanc, id_fornecedor, status, descricao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [veiculoId, id_filial_veiculo, data, custoCalculado, 'Abastecimento', 'Custo Operacional', userId, fornecedorCombustivelId, 'Ativo', `Abastecimento de ${quantidade}L`]
         );
 
         const [ultimoAbastecimento] = await connection.execute(
@@ -720,7 +718,6 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         
         await connection.commit();
         res.status(201).json({ message: 'Consumo registado com sucesso!', consumoMedio: consumoMedio });
-
     } catch (error) {
         if (connection) await connection.rollback();
         console.error("Erro ao registar consumo:", error);
@@ -1381,33 +1378,39 @@ router.get('/cnpj/:cnpj', authenticateToken, async (req, res) => {
 });
 
 router.get('/abastecimentos', authenticateToken, async (req, res) => {
+    const { filial } = req.query; // Pega o filtro da URL
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
         const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 20; // O padrão é 20, como nos outros históricos
+        const limit = parseInt(req.query.limit) || 20;
         const offset = (page - 1) * limit;
 
-        const countQuery = `SELECT COUNT(*) as total FROM estoque_movimentos WHERE tipo_movimento = 'Saída'`;
+        let conditions = ["em.tipo_movimento = 'Saída'"];
+        const params = [];
+        
+        if (filial) {
+            conditions.push("v.id_filial = ?");
+            params.push(filial);
+        }
+        
+        const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+        const countQuery = `SELECT COUNT(*) as total FROM estoque_movimentos em JOIN veiculos v ON em.id_veiculo = v.id ${whereClause}`;
         const dataQuery = `
             SELECT 
-                em.id,
-                em.data_movimento,
-                em.quantidade,
-                em.odometro_no_momento,
-                v.placa,
-                v.modelo,
-                u.nome_user as nome_usuario
+                em.id, em.data_movimento, em.quantidade, em.odometro_no_momento,
+                v.placa, v.modelo, u.nome_user as nome_usuario
             FROM estoque_movimentos em
             JOIN veiculos v ON em.id_veiculo = v.id
             JOIN cad_user u ON em.id_usuario = u.ID
-            WHERE em.tipo_movimento = 'Saída'
+            ${whereClause}
             ORDER BY em.data_movimento DESC
             LIMIT ? OFFSET ?`;
         
-        const [totalResult] = await connection.execute(countQuery);
+        const [totalResult] = await connection.execute(countQuery, params);
         const totalItems = totalResult[0].total;
-        const [data] = await connection.execute(dataQuery, [limit, offset]);
+        const [data] = await connection.execute(dataQuery, [...params, limit, offset]);
         
         res.json({
             totalItems,
