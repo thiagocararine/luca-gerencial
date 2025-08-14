@@ -1,4 +1,4 @@
-// logistica.js (COMPLETO com paginação)
+// logistica.js (COMPLETO com correções no seletor pesquisável e na lista de combustíveis)
 
 document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', initLogisticaPage);
 const apiUrlBase = 'http://10.113.0.17:3000/api';
 const privilegedAccessProfiles = ["Administrador", "Financeiro", "Logistica"];
 let allVehicles = [];
-let filteredVehicles = []; // Nova lista para veículos filtrados
+let filteredVehicles = []; // Lista para veículos filtrados
 let currentVehiclePage = 1;
 const VEHICLES_PER_PAGE = 5; // Itens por página para a lista de veículos
 let historyPages = {
@@ -200,7 +200,7 @@ function setupEventListeners() {
     captureModal.querySelector('#use-photo-btn').addEventListener('click', useCapturedPhoto);
     captureModal.querySelector('#retake-photo-btn').addEventListener('click', retakePhoto);
 
-    // NOVOS LISTENERS PARA O MÓDULO DE COMBUSTÍVEL
+    // LISTENERS PARA O MÓDULO DE COMBUSTÍVEL
     document.getElementById('open-fuel-modal-btn')?.addEventListener('click', openFuelModal);
     const fuelModal = document.getElementById('fuel-management-modal');
     if (fuelModal) {
@@ -239,10 +239,159 @@ function setupEventListeners() {
     });
     document.getElementById('history-next-page-btn').addEventListener('click', () => {
         const activeTab = document.querySelector('#costs-tabs .tab-button.active').dataset.costTab;
-        // A validação de página máxima é feita pelo botão disabled, que vem da API
         historyPages[activeTab]++;
         loadActiveHistoryTab();
     });
+}
+
+
+// --- Funções de Combustível ---
+async function loadCurrentStock() {
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/estoque/saldo/1`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) return;
+        const data = await response.json();
+        document.getElementById('kpi-estoque-diesel').textContent = `${parseFloat(data.quantidade_atual).toFixed(2)} L`;
+    } catch (error) {
+        document.getElementById('kpi-estoque-diesel').textContent = 'Erro';
+    }
+}
+
+async function openFuelModal() {
+    const modal = document.getElementById('fuel-management-modal');
+    showLoader();
+    try {
+        const consumptionVehicleSelect = document.getElementById('consumption-vehicle');
+        if (consumptionVehicleSelect.tomselect) {
+            consumptionVehicleSelect.tomselect.destroy();
+        }
+
+        const [itemsResponse, vehiclesResponse] = await Promise.all([
+            fetch(`${apiUrlBase}/logistica/itens-estoque`, { headers: { 'Authorization': `Bearer ${getToken()}` } }),
+            fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
+        ]);
+
+        if (!itemsResponse.ok || !vehiclesResponse.ok) {
+            throw new Error("Falha ao carregar dados para o modal de combustível.");
+        }
+
+        const itens = await itemsResponse.json();
+        const veiculos = await vehiclesResponse.json();
+        
+        populateSelectWithOptions(itens, 'purchase-item', 'id', 'nome_item', '-- Selecione um Item --');
+
+        const dieselVehicles = veiculos.filter(v => v.tipo_combustivel === 'Óleo Diesel S10');
+        populateSelectWithOptions(dieselVehicles, 'consumption-vehicle', 'id', 'modelo', '-- Selecione um Veículo --', (v) => `${v.modelo} - ${v.placa}`);
+
+        new TomSelect('#consumption-vehicle',{
+            create: false,
+            sortField: { field: "text", direction: "asc" }
+        });
+        
+        document.getElementById('fuel-purchase-form').reset();
+        document.getElementById('fuel-consumption-form').reset();
+        document.getElementById('consumption-date').value = new Date().toISOString().split('T')[0];
+        
+        switchFuelTab('compra');
+        modal.classList.remove('hidden');
+        feather.replace();
+    } catch(error) {
+        alert("Erro ao preparar o modal de combustível: " + error.message);
+    } finally {
+        hideLoader();
+    }
+}
+
+function switchFuelTab(tabName) {
+    document.querySelectorAll('#fuel-management-modal .tab-content').forEach(content => {
+        content.classList.remove('active');
+        content.classList.add('hidden');
+    });
+    document.querySelectorAll('#fuel-tabs .tab-button').forEach(button => {
+        button.classList.remove('active');
+    });
+    
+    const activeContent = document.getElementById(`${tabName}-tab-content`);
+    if(activeContent) {
+        activeContent.classList.add('active');
+        activeContent.classList.remove('hidden');
+    }
+
+    const activeButton = document.querySelector(`#fuel-tabs .tab-button[data-tab="${tabName}"]`);
+    if(activeButton) {
+        activeButton.classList.add('active');
+    }
+}
+
+async function handleFuelPurchaseSubmit(event) {
+    event.preventDefault();
+    showLoader();
+    const purchaseData = {
+        itemId: document.getElementById('purchase-item').value,
+        quantidade: document.getElementById('purchase-quantity').value,
+        custo: document.getElementById('purchase-cost').value,
+        fornecedorId: document.getElementById('purchase-fornecedor-id').value
+    };
+
+    if (!purchaseData.itemId || !purchaseData.quantidade || !purchaseData.custo || !purchaseData.fornecedorId) {
+        alert("Todos os campos, incluindo o fornecedor, são obrigatórios.");
+        hideLoader();
+        return;
+    }
+
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/estoque/entrada`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify(purchaseData)
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Falha ao registar a compra.');
+        
+        alert('Compra registada com sucesso!');
+        document.getElementById('fuel-management-modal').classList.add('hidden');
+        await loadCurrentStock();
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        hideLoader();
+    }
+}
+
+async function handleFuelConsumptionSubmit(event) {
+    event.preventDefault();
+    showLoader();
+    const consumptionData = {
+        veiculoId: document.getElementById('consumption-vehicle').value,
+        data: document.getElementById('consumption-date').value,
+        quantidade: document.getElementById('consumption-quantity').value,
+        odometro: document.getElementById('consumption-odometer').value,
+    };
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/estoque/consumo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify(consumptionData)
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Falha ao registar consumo.');
+        
+        let successMessage = 'Consumo registado com sucesso!';
+        if(result.consumoMedio) {
+            successMessage += `\n\nMédia de Consumo Calculada: ${result.consumoMedio} km/L.`;
+        }
+        alert(successMessage);
+        
+        document.getElementById('fuel-management-modal').classList.add('hidden');
+        await loadCurrentStock();
+        if(document.getElementById('costs-tabs')) {
+            loadActiveHistoryTab();
+        }
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        hideLoader();
+    }
 }
 
 
@@ -285,7 +434,6 @@ function renderContent(vehicles) {
     } else {
         if(noDataMessage) noDataMessage.classList.add('hidden');
 
-        // Lógica de paginação para os veículos
         const totalItems = vehicles.length;
         const totalPages = Math.ceil(totalItems / VEHICLES_PER_PAGE);
         const start = (currentVehiclePage - 1) * VEHICLES_PER_PAGE;
@@ -342,9 +490,8 @@ function renderHistoryPagination(tabName, responseData) {
     nextBtn.disabled = currentPage >= totalPages;
 }
 
-// --- Funções de Carregamento de Histórico (Atualizadas para Paginação) ---
+// --- Funções de Carregamento de Histórico ---
 function switchCostTab(tabName) {
-    // Esconde todas as abas e desativa todos os botões
     document.querySelectorAll('.cost-tab-content').forEach(content => {
         content.classList.remove('active');
         content.style.display = 'none';
@@ -353,7 +500,6 @@ function switchCostTab(tabName) {
         button.classList.remove('active');
     });
 
-    // Mostra a aba e ativa o botão correto
     const activeContent = document.getElementById(`costs-tab-content-${tabName}`);
     if (activeContent) {
         activeContent.classList.add('active');
@@ -364,16 +510,11 @@ function switchCostTab(tabName) {
         activeButton.classList.add('active');
     }
     
-    // Reseta a página da aba para 1 ao trocar
     Object.keys(historyPages).forEach(key => historyPages[key] = 1);
 
-    // Carrega os dados da nova aba ativa
     loadActiveHistoryTab();
 }
 
-/**
- * Função para centralizar a chamada da aba de histórico ativa.
- */
 function loadActiveHistoryTab() {
     const activeTab = document.querySelector('#costs-tabs .tab-button.active')?.dataset.costTab;
     if (!activeTab) return;
@@ -401,38 +542,36 @@ async function loadFleetCosts() {
         if (!response.ok) throw new Error('Falha ao buscar custos gerais.');
         
         const result = await response.json();
-        const custos = result.data; // CORREÇÃO: Pega a lista de dentro do objeto 'data'
+        const custos = result.data;
 
-        if (custos.length === 0) {
-            container.innerHTML = '<p class="p-4 text-center text-gray-500">Nenhum custo geral registado.</p>';
-            renderHistoryPagination('gerais', result); // Envia o objeto completo para a paginação
-            return;
+        if (custos.length === 0 && result.currentPage === 1) {
+            container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo geral registado.</p>';
+        } else {
+            const table = createCostTable('gerais');
+            const tbody = table.querySelector('tbody');
+            custos.forEach(c => {
+                const tr = tbody.insertRow();
+                tr.innerHTML = `
+                    <td class="px-4 py-2 font-mono text-xs">${c.sequencial_rateio || 'N/A'}</td>
+                    <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                    <td class="px-4 py-2">${c.descricao}</td>
+                    <td class="px-4 py-2">${c.nome_filial || 'N/A'}</td>
+                    <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
+                    <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
+                    <td class="px-4 py-2 text-center">
+                        <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="geral" data-cost-desc="${c.descricao}">
+                            <span data-feather="trash-2" class="w-4 h-4"></span>
+                        </button>
+                    </td>
+                `;
+            });
+            container.innerHTML = '';
+            container.appendChild(table);
+            feather.replace();
         }
-
-        const table = createCostTable('gerais');
-        const tbody = table.querySelector('tbody');
-        custos.forEach(c => {
-            const tr = tbody.insertRow();
-            tr.innerHTML = `
-                <td class="px-4 py-2 font-mono text-xs">${c.sequencial_rateio || 'N/A'}</td>
-                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                <td class="px-4 py-2">${c.descricao}</td>
-                <td class="px-4 py-2">${c.nome_filial || 'N/A'}</td>
-                <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
-                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
-                <td class="px-4 py-2 text-center">
-                    <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="geral" data-cost-desc="${c.descricao}">
-                        <span data-feather="trash-2" class="w-4 h-4"></span>
-                    </button>
-                </td>
-            `;
-        });
-        container.innerHTML = '';
-        container.appendChild(table);
-        feather.replace();
-        renderHistoryPagination('gerais', result); // Envia o objeto completo para a paginação
+        renderHistoryPagination('gerais', result);
     } catch (error) {
-        container.innerHTML = `<p class="p-4 text-center text-red-500">${error.message}</p>`;
+        container.innerHTML = `<p class="text-center p-4 text-red-500">${error.message}</p>`;
     } finally {
         hideLoader();
     }
@@ -450,38 +589,36 @@ async function loadRecentIndividualCosts() {
         });
         const response = await fetch(`${apiUrlBase}/logistica/manutencoes/recentes?${params.toString()}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar custos individuais.');
-
+        
         const result = await response.json();
-        const custos = result.data; // CORREÇÃO: Pega a lista de dentro do objeto 'data'
+        const custos = result.data;
 
-        if (custos.length === 0) {
-            container.innerHTML = '<p class="p-4 text-center text-gray-500">Nenhum custo individual registado.</p>';
-            renderHistoryPagination('individuais', result);
-            return;
+        if (custos.length === 0 && result.currentPage === 1) {
+            container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo individual registado.</p>';
+        } else {
+            const table = createCostTable('individuais');
+            const tbody = table.querySelector('tbody');
+            custos.forEach(c => {
+                const tr = tbody.insertRow();
+                tr.innerHTML = `
+                    <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                    <td class="px-4 py-2">${c.modelo} (${c.placa})</td>
+                    <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
+                    <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
+                    <td class="px-4 py-2 text-center">
+                        <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="individual" data-cost-desc="${c.descricao || `Manutenção em ${c.modelo}`}">
+                            <span data-feather="trash-2" class="w-4 h-4"></span>
+                        </button>
+                    </td>
+                `;
+            });
+            container.innerHTML = '';
+            container.appendChild(table);
+            feather.replace();
         }
-
-        const table = createCostTable('individuais');
-        const tbody = table.querySelector('tbody');
-        custos.forEach(c => {
-            const tr = tbody.insertRow();
-            tr.innerHTML = `
-                <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                <td class="px-4 py-2">${c.modelo} (${c.placa})</td>
-                <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
-                <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
-                <td class="px-4 py-2 text-center">
-                    <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="individual" data-cost-desc="${c.descricao || `Manutenção em ${c.modelo}`}">
-                        <span data-feather="trash-2" class="w-4 h-4"></span>
-                    </button>
-                </td>
-            `;
-        });
-        container.innerHTML = '';
-        container.appendChild(table);
-        feather.replace();
         renderHistoryPagination('individuais', result);
     } catch (error) {
-        container.innerHTML = `<p class="p-4 text-center text-red-500">${error.message}</p>`;
+        container.innerHTML = `<p class="text-center p-4 text-red-500">${error.message}</p>`;
     } finally {
         hideLoader();
     }
@@ -493,50 +630,47 @@ async function loadAbastecimentosHistory() {
     container.innerHTML = '<p class="p-4 text-center text-gray-500">A carregar histórico de abastecimentos...</p>';
     showLoader();
     try {
-        const response = await fetch(`${apiUrlBase}/logistica/abastecimentos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const params = new URLSearchParams({
+            page: historyPages.abastecimentos,
+            limit: HISTORY_ITEMS_PER_PAGE
+        });
+        const response = await fetch(`${apiUrlBase}/logistica/abastecimentos?${params.toString()}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar histórico de abastecimentos.');
         
-        // CORREÇÃO: A resposta da API é um array direto, não um objeto.
-        const abastecimentos = await response.json(); 
+        const result = await response.json();
+        const abastecimentos = result.data;
 
-        // Como esta rota não tem paginação, limpamos os controlos.
-        document.getElementById('history-pagination-info').textContent = '';
-        document.getElementById('history-page-info-span').textContent = '';
-        document.getElementById('history-prev-page-btn').disabled = true;
-        document.getElementById('history-next-page-btn').disabled = true;
-
-        if (abastecimentos.length === 0) {
+        if (abastecimentos.length === 0 && result.currentPage === 1) {
             container.innerHTML = '<p class="p-4 text-center text-gray-500">Nenhum abastecimento registado.</p>';
-            return;
+        } else {
+            const table = document.createElement('table');
+            table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+            table.innerHTML = `
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
+                        <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo</th>
+                        <th class="px-4 py-2 text-right font-medium text-gray-500">Quantidade (L)</th>
+                        <th class="px-4 py-2 text-right font-medium text-gray-500">Odómetro (km)</th>
+                        <th class="px-4 py-2 text-left font-medium text-gray-500">Utilizador</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
+            const tbody = table.querySelector('tbody');
+            abastecimentos.forEach(item => {
+                const tr = tbody.insertRow();
+                tr.innerHTML = `
+                    <td class="px-4 py-2">${new Date(item.data_movimento).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                    <td class="px-4 py-2">${item.modelo} (${item.placa})</td>
+                    <td class="px-4 py-2 text-right">${parseFloat(item.quantidade).toFixed(2)}</td>
+                    <td class="px-4 py-2 text-right">${item.odometro_no_momento ? item.odometro_no_momento.toLocaleString('pt-BR') : 'N/A'}</td>
+                    <td class="px-4 py-2">${item.nome_usuario}</td>
+                `;
+            });
+            container.innerHTML = '';
+            container.appendChild(table);
         }
-
-        const table = document.createElement('table');
-        table.className = 'min-w-full divide-y divide-gray-200 text-sm';
-        table.innerHTML = `
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
-                    <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo</th>
-                    <th class="px-4 py-2 text-right font-medium text-gray-500">Quantidade (L)</th>
-                    <th class="px-4 py-2 text-right font-medium text-gray-500">Odómetro (km)</th>
-                    <th class="px-4 py-2 text-left font-medium text-gray-500">Utilizador</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
-        
-        const tbody = table.querySelector('tbody');
-        abastecimentos.forEach(item => {
-            const tr = tbody.insertRow();
-            tr.innerHTML = `
-                <td class="px-4 py-2">${new Date(item.data_movimento).toLocaleString('pt-BR', { timeZone: 'UTC' })}</td>
-                <td class="px-4 py-2">${item.modelo} (${item.placa})</td>
-                <td class="px-4 py-2 text-right">${parseFloat(item.quantidade).toFixed(2)}</td>
-                <td class="px-4 py-2 text-right">${item.odometro_no_momento.toLocaleString('pt-BR')}</td>
-                <td class="px-4 py-2">${item.nome_usuario}</td>
-            `;
-        });
-        container.innerHTML = '';
-        container.appendChild(table);
+        renderHistoryPagination('abastecimentos', result);
     } catch (error) {
         container.innerHTML = `<p class="p-4 text-center text-red-500">${error.message}</p>`;
     } finally {
@@ -544,157 +678,105 @@ async function loadAbastecimentosHistory() {
     }
 }
 
-// --- RESTANTE DAS FUNÇÕES (sem alterações) ---
 
-// Funções de Combustível
-async function loadCurrentStock() {
-    try {
-        const response = await fetch(`${apiUrlBase}/logistica/estoque/saldo/1`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!response.ok) return;
-        const data = await response.json();
-        document.getElementById('kpi-estoque-diesel').textContent = `${parseFloat(data.quantidade_atual).toFixed(2)} L`;
-    } catch (error) {
-        document.getElementById('kpi-estoque-diesel').textContent = 'Erro';
-    }
-}
-
-async function openFuelModal() {
-    const modal = document.getElementById('fuel-management-modal');
+// --- LÓGICA DE VEÍCULOS ---
+async function openVehicleModal(vehicle = null) {
+    const modal = document.getElementById('vehicle-modal');
+    const form = document.getElementById('vehicle-form');
+    const title = document.getElementById('vehicle-modal-title');
+    
+    form.reset();
+    document.getElementById('placa-error').style.display = 'none';
+    document.getElementById('renavam-error').style.display = 'none';
+    
     showLoader();
     try {
-        // Limpa instâncias antigas do Tom Select para evitar bugs
-        const consumptionVehicleSelect = document.getElementById('consumption-vehicle');
-        if (consumptionVehicleSelect.tomselect) {
-            consumptionVehicleSelect.tomselect.destroy();
+        await populateSelectWithOptions(`${apiUrlBase}/logistica/itens-estoque`, 'vehicle-tipo-combustivel', 'nome_item', 'nome_item', '-- Selecione --');
+    
+        if (vehicle) {
+            title.textContent = 'Editar Veículo';
+            document.getElementById('vehicle-id').value = vehicle.id;
+            document.getElementById('vehicle-placa').value = vehicle.placa || '';
+            document.getElementById('vehicle-marca').value = vehicle.marca || '';
+            document.getElementById('vehicle-modelo').value = vehicle.modelo || '';
+            document.getElementById('vehicle-ano-fabricacao').value = vehicle.ano_fabricacao || '';
+            document.getElementById('vehicle-ano-modelo').value = vehicle.ano_modelo || '';
+            document.getElementById('vehicle-renavam').value = vehicle.renavam || '';
+            document.getElementById('vehicle-chassi').value = vehicle.chassi || '';
+            document.getElementById('vehicle-filial').value = vehicle.id_filial || '';
+            document.getElementById('vehicle-status').value = vehicle.status || 'Ativo';
+            document.getElementById('vehicle-seguro').checked = !!vehicle.seguro;
+            document.getElementById('vehicle-rastreador').checked = !!vehicle.rastreador;
+            document.getElementById('vehicle-tipo-combustivel').value = vehicle.tipo_combustivel || '';
+            const hasPlaca = vehicle.placa && vehicle.placa.toUpperCase() !== 'SEM PLACA';
+            document.getElementById('has-placa-checkbox').checked = hasPlaca;
+        } else {
+            title.textContent = 'Adicionar Veículo';
+            document.getElementById('vehicle-id').value = '';
+            document.getElementById('has-placa-checkbox').checked = true;
         }
-
-        // Busca todos os veículos e filtra apenas os que usam Óleo Diesel
-        const allVehiclesResponse = await fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        const allVehiclesData = await allVehiclesResponse.json();
-        const dieselVehicles = allVehiclesData.filter(v => v.tipo_combustivel === 'Óleo Diesel S10'); // Filtra pelo nome exato do item
-
-        // Popula o select de veículos manualmente
-        populateSelectWithOptions(dieselVehicles, 'consumption-vehicle', 'id', 'modelo', '-- Selecione um Veículo --', (v) => `${v.modelo} - ${v.placa}`);
-        
-        // Popula o select de itens para a compra
-        await populateSelectWithOptions(`${apiUrlBase}/logistica/itens-estoque`, 'purchase-item', 'id', 'nome_item', '-- Selecione um Item --');
-
-        // AGORA, inicializa o Tom Select no campo já populado
-        new TomSelect('#consumption-vehicle',{
-            create: false,
-            sortField: { field: "text", direction: "asc" }
-        });
-        
-        document.getElementById('fuel-purchase-form').reset();
-        document.getElementById('fuel-consumption-form').reset();
-        document.getElementById('consumption-date').value = new Date().toISOString().split('T')[0];
-        
-        switchFuelTab('compra');
+        handleHasPlacaChange();
         modal.classList.remove('hidden');
         feather.replace();
     } catch(error) {
-        alert("Erro ao preparar o modal de combustível: " + error.message);
+        alert("Erro ao abrir o modal do veículo.");
     } finally {
         hideLoader();
     }
 }
 
-function switchFuelTab(tabName) {
-    document.querySelectorAll('#fuel-management-modal .tab-content').forEach(content => {
-        content.classList.remove('active');
-        content.classList.add('hidden');
-    });
-    document.querySelectorAll('#fuel-tabs .tab-button').forEach(button => {
-        button.classList.remove('active');
-    });
-    
-    const activeContent = document.getElementById(`${tabName}-tab-content`);
-    if(activeContent) {
-        activeContent.classList.add('active');
-        activeContent.classList.remove('hidden');
-    }
-
-    const activeButton = document.querySelector(`#fuel-tabs .tab-button[data-tab="${tabName}"]`);
-    if(activeButton) {
-        activeButton.classList.add('active');
-    }
-}
-async function handleFuelPurchaseSubmit(event) {
+async function handleVehicleFormSubmit(event) {
     event.preventDefault();
-    showLoader();
-    const purchaseData = {
-        itemId: document.getElementById('purchase-item').value,
-        quantidade: document.getElementById('purchase-quantity').value,
-        custo: document.getElementById('purchase-cost').value,
-        fornecedorId: document.getElementById('purchase-fornecedor-id').value
-    };
-
-    if (!purchaseData.itemId || !purchaseData.quantidade || !purchaseData.custo || !purchaseData.fornecedorId) {
-        alert("Todos os campos, incluindo o fornecedor, são obrigatórios.");
-        hideLoader();
+    if (!validateForm()) {
+        alert('Por favor, corrija os erros no formulário.');
         return;
     }
+    const saveBtn = document.getElementById('save-vehicle-btn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'A salvar...';
+    const id = document.getElementById('vehicle-id').value;
 
-    try {
-        const response = await fetch(`${apiUrlBase}/logistica/estoque/entrada`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-            body: JSON.stringify(purchaseData)
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Falha ao registar a compra.');
-        
-        alert('Compra registada com sucesso!');
-        document.getElementById('fuel-management-modal').classList.add('hidden');
-        await loadCurrentStock();
-    } catch (error) {
-        alert(`Erro: ${error.message}`);
-    } finally {
-        hideLoader();
-    }
-}
-async function handleFuelConsumptionSubmit(event) {
-    event.preventDefault();
-    showLoader();
-    // 'custo' foi removido do objeto, pois será calculado no backend
-    const consumptionData = {
-        veiculoId: document.getElementById('consumption-vehicle').value,
-        data: document.getElementById('consumption-date').value,
-        quantidade: document.getElementById('consumption-quantity').value,
-        odometro: document.getElementById('consumption-odometer').value,
+    const vehicleData = {
+        placa: document.getElementById('has-placa-checkbox').checked ? document.getElementById('vehicle-placa').value : 'SEM PLACA',
+        marca: document.getElementById('vehicle-marca').value,
+        modelo: document.getElementById('vehicle-modelo').value,
+        ano_fabricacao: document.getElementById('vehicle-ano-fabricacao').value,
+        ano_modelo: document.getElementById('vehicle-ano-modelo').value,
+        renavam: document.getElementById('vehicle-renavam').value,
+        chassi: document.getElementById('vehicle-chassi').value,
+        id_filial: document.getElementById('vehicle-filial').value,
+        status: document.getElementById('vehicle-status').value,
+        seguro: document.getElementById('vehicle-seguro').checked,
+        rastreador: document.getElementById('vehicle-rastreador').checked,
+        tipo_combustivel: document.getElementById('vehicle-tipo-combustivel').value
     };
 
-    // Validação também foi atualizada
-    if (!consumptionData.veiculoId || !consumptionData.data || !consumptionData.quantidade || !consumptionData.odometro) {
-        alert("Todos os campos são obrigatórios para registar o consumo.");
-        hideLoader();
-        return;
-    }
-
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? `${apiUrlBase}/logistica/veiculos/${id}` : `${apiUrlBase}/logistica/veiculos`;
     try {
-        const response = await fetch(`${apiUrlBase}/logistica/estoque/consumo`, {
-            method: 'POST',
+        const response = await fetch(url, {
+            method: method,
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-            body: JSON.stringify(consumptionData)
+            body: JSON.stringify(vehicleData)
         });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Falha ao registar consumo.');
-        
-        let successMessage = 'Consumo registado com sucesso!';
-        if(result.consumoMedio) {
-            successMessage += `\n\nMédia de Consumo Calculada: ${result.consumoMedio} km/L.`;
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Falha ao salvar o veículo.');
         }
-        alert(successMessage);
-        
-        document.getElementById('fuel-management-modal').classList.add('hidden');
-        await loadCurrentStock();
-        await loadRecentIndividualCosts();
+        document.getElementById('vehicle-modal').classList.add('hidden');
+        alert(`Veículo ${id ? 'atualizado' : 'adicionado'} com sucesso!`);
+        await loadVehicles();
+        await loadMarcasAndModelosFromDB();
     } catch (error) {
         alert(`Erro: ${error.message}`);
     } finally {
-        hideLoader();
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Salvar Veículo';
     }
 }
+
+
+// --- RESTANTE DO ARQUIVO --- (Funções de load, render, forms, etc.)
 
 // Funções de Veículos
 async function loadVehicles() {
@@ -798,7 +880,6 @@ function renderVehicleTable(vehicles, container) {
     });
     container.appendChild(table);
 }
-
 function handleContentClick(event) {
     const target = event.target;
     const vehicleItem = target.closest('.vehicle-item');
@@ -1664,107 +1745,6 @@ async function populateMaintenanceTypes(selectElementId = 'maintenance-type') {
 }
 
 // Funções de Formulário e Validação
-function openVehicleModal(vehicle = null) {
-    const modal = document.getElementById('vehicle-modal');
-    const form = document.getElementById('vehicle-form');
-    const title = document.getElementById('vehicle-modal-title');
-    const marcaInput = document.getElementById('vehicle-marca');
-    const modeloInput = document.getElementById('vehicle-modelo');
-    form.reset();
-    document.getElementById('placa-error').style.display = 'none';
-    document.getElementById('renavam-error').style.display = 'none';
-    modeloInput.value = '';
-    modeloInput.disabled = true;
-    document.getElementById('modelos-list').innerHTML = '';
-
-    // NOVA IMPLEMENTAÇÃO: Popula o select de combustível
-    populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Tipo Combustivel`, 'vehicle-tipo-combustivel', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Selecione --');
-
-    if (vehicle) {
-        title.textContent = 'Editar Veículo';
-        document.getElementById('vehicle-id').value = vehicle.id;
-        document.getElementById('vehicle-placa').value = vehicle.placa || '';
-        marcaInput.value = vehicle.marca || '';
-        document.getElementById('vehicle-ano-fabricacao').value = vehicle.ano_fabricacao || '';
-        document.getElementById('vehicle-ano-modelo').value = vehicle.ano_modelo || '';
-        document.getElementById('vehicle-renavam').value = vehicle.renavam || '';
-        document.getElementById('vehicle-chassi').value = vehicle.chassi || '';
-        document.getElementById('vehicle-filial').value = vehicle.id_filial || '';
-        document.getElementById('vehicle-status').value = vehicle.status || 'Ativo';
-        const hasPlaca = vehicle.placa && vehicle.placa.toUpperCase() !== 'SEM PLACA';
-        document.getElementById('has-placa-checkbox').checked = hasPlaca;
-        document.getElementById('vehicle-seguro').checked = !!vehicle.seguro;
-        document.getElementById('vehicle-rastreador').checked = !!vehicle.rastreador;
-
-        // NOVA IMPLEMENTAÇÃO: Define o valor do combustível ao editar
-        setTimeout(() => { // Adiciona um pequeno delay para garantir que o select foi populado
-             document.getElementById('vehicle-tipo-combustivel').value = vehicle.tipo_combustivel || '';
-        }, 100);
-
-        handleMarcaChange();
-        modeloInput.value = vehicle.modelo || '';
-    } else {
-        title.textContent = 'Adicionar Veículo';
-        document.getElementById('vehicle-id').value = '';
-        document.getElementById('has-placa-checkbox').checked = true;
-        document.getElementById('vehicle-seguro').checked = false;
-        document.getElementById('vehicle-rastreador').checked = false;
-    }
-    handleHasPlacaChange();
-    modal.classList.remove('hidden');
-    feather.replace();
-}
-
-async function handleVehicleFormSubmit(event) {
-    event.preventDefault();
-    if (!validateForm()) {
-        alert('Por favor, corrija os erros no formulário.');
-        return;
-    }
-    const saveBtn = document.getElementById('save-vehicle-btn');
-    saveBtn.disabled = true;
-    saveBtn.textContent = 'A salvar...';
-    const id = document.getElementById('vehicle-id').value;
-
-    const vehicleData = {
-        placa: document.getElementById('has-placa-checkbox').checked ? document.getElementById('vehicle-placa').value : 'SEM PLACA',
-        marca: document.getElementById('vehicle-marca').value,
-        modelo: document.getElementById('vehicle-modelo').value,
-        ano_fabricacao: document.getElementById('vehicle-ano-fabricacao').value,
-        ano_modelo: document.getElementById('vehicle-ano-modelo').value,
-        renavam: document.getElementById('vehicle-renavam').value,
-        chassi: document.getElementById('vehicle-chassi').value,
-        id_filial: document.getElementById('vehicle-filial').value,
-        status: document.getElementById('vehicle-status').value,
-        seguro: document.getElementById('vehicle-seguro').checked,
-        rastreador: document.getElementById('vehicle-rastreador').checked,
-        // NOVA IMPLEMENTAÇÃO: Adiciona o tipo de combustível ao objeto de dados
-        tipo_combustivel: document.getElementById('vehicle-tipo-combustivel').value
-    };
-
-    const method = id ? 'PUT' : 'POST';
-    const url = id ? `${apiUrlBase}/logistica/veiculos/${id}` : `${apiUrlBase}/logistica/veiculos`;
-    try {
-        const response = await fetch(url, {
-            method: method,
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-            body: JSON.stringify(vehicleData)
-        });
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Falha ao salvar o veículo.');
-        }
-        document.getElementById('vehicle-modal').classList.add('hidden');
-        alert(`Veículo ${id ? 'atualizado' : 'adicionado'} com sucesso!`);
-        await loadVehicles();
-        await loadMarcasAndModelosFromDB();
-    } catch (error) {
-        alert(`Erro: ${error.message}`);
-    } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Salvar Veículo';
-    }
-}
 
 function openDeleteConfirmModal(vehicle) {
     vehicleToDeleteId = vehicle.id;
@@ -1882,12 +1862,19 @@ function validateRenavam(renavam) {
     renavamError.style.display = isValid ? 'none' : 'block';
     return isValid;
 }
-async function populateSelectWithOptions(url, selectId, valueKey, textKey, placeholder, textFormatter = null) {
+
+async function populateSelectWithOptions(source, selectId, valueKey, textKey, placeholder, textFormatter = null) {
     const selectElement = document.getElementById(selectId);
     try {
-        const response = await fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!response.ok) throw new Error(`Falha ao carregar dados para ${selectId}.`);
-        const items = await response.json();
+        let items = [];
+        if (typeof source === 'string') { // Se for uma URL, faz o fetch
+            const response = await fetch(source, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+            if (!response.ok) throw new Error(`Falha ao carregar dados para ${selectId}.`);
+            items = await response.json();
+        } else { // Se for um array, usa-o diretamente
+            items = source;
+        }
+
         selectElement.innerHTML = `<option value="">${placeholder}</option>`;
         items.forEach(item => {
             const option = document.createElement('option');
