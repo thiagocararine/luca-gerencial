@@ -557,34 +557,32 @@ async function loadCurrentStock() {
         document.getElementById('kpi-estoque-diesel').textContent = 'Erro';
     }
 }
+
 async function openFuelModal() {
     const modal = document.getElementById('fuel-management-modal');
     showLoader();
     try {
-        // Limpa instâncias antigas do Tom Select para evitar bugs de reinicialização
-        if (document.getElementById('consumption-vehicle').tomselect) {
-            document.getElementById('consumption-vehicle').tomselect.destroy();
+        // Limpa instâncias antigas do Tom Select para evitar bugs
+        const consumptionVehicleSelect = document.getElementById('consumption-vehicle');
+        if (consumptionVehicleSelect.tomselect) {
+            consumptionVehicleSelect.tomselect.destroy();
         }
 
-        // Popula o select de itens de compra
-        await populateSelectWithOptions(`${apiUrlBase}/logistica/itens-estoque`, 'purchase-item', 'id', 'nome_item', '-- Selecione um Item --');
-
-        // NOVA IMPLEMENTAÇÃO: Busca, filtra e popula veículos a diesel
+        // Busca todos os veículos e filtra apenas os que usam Óleo Diesel
         const allVehiclesResponse = await fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!allVehiclesResponse.ok) throw new Error('Falha ao buscar lista de veículos.');
         const allVehiclesData = await allVehiclesResponse.json();
-        const dieselVehicles = allVehiclesData.filter(v => v.tipo_combustivel === 'Óleo Diesel');
-        
-        // Alimenta o select com a lista filtrada (passando o array diretamente)
+        const dieselVehicles = allVehiclesData.filter(v => v.tipo_combustivel === 'Óleo Diesel S10'); // Filtra pelo nome exato do item
+
+        // Popula o select de veículos manualmente
         populateSelectWithOptions(dieselVehicles, 'consumption-vehicle', 'id', 'modelo', '-- Selecione um Veículo --', (v) => `${v.modelo} - ${v.placa}`);
         
-        // Ativa o Tom Select no campo de veículos
+        // Popula o select de itens para a compra
+        await populateSelectWithOptions(`${apiUrlBase}/logistica/itens-estoque`, 'purchase-item', 'id', 'nome_item', '-- Selecione um Item --');
+
+        // AGORA, inicializa o Tom Select no campo já populado
         new TomSelect('#consumption-vehicle',{
             create: false,
-            sortField: {
-                field: "text",
-                direction: "asc"
-            }
+            sortField: { field: "text", direction: "asc" }
         });
         
         document.getElementById('fuel-purchase-form').reset();
@@ -800,6 +798,7 @@ function renderVehicleTable(vehicles, container) {
     });
     container.appendChild(table);
 }
+
 function handleContentClick(event) {
     const target = event.target;
     const vehicleItem = target.closest('.vehicle-item');
@@ -1698,7 +1697,9 @@ function openVehicleModal(vehicle = null) {
         document.getElementById('vehicle-rastreador').checked = !!vehicle.rastreador;
 
         // NOVA IMPLEMENTAÇÃO: Define o valor do combustível ao editar
-        document.getElementById('vehicle-tipo-combustivel').value = vehicle.tipo_combustivel || '';
+        setTimeout(() => { // Adiciona um pequeno delay para garantir que o select foi populado
+             document.getElementById('vehicle-tipo-combustivel').value = vehicle.tipo_combustivel || '';
+        }, 100);
 
         handleMarcaChange();
         modeloInput.value = vehicle.modelo || '';
