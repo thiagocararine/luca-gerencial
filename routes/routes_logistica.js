@@ -1384,7 +1384,12 @@ router.get('/abastecimentos', authenticateToken, async (req, res) => {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        const sql = `
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20; // O padrão é 20, como nos outros históricos
+        const offset = (page - 1) * limit;
+
+        const countQuery = `SELECT COUNT(*) as total FROM estoque_movimentos WHERE tipo_movimento = 'Saída'`;
+        const dataQuery = `
             SELECT 
                 em.id,
                 em.data_movimento,
@@ -1398,9 +1403,18 @@ router.get('/abastecimentos', authenticateToken, async (req, res) => {
             JOIN cad_user u ON em.id_usuario = u.ID
             WHERE em.tipo_movimento = 'Saída'
             ORDER BY em.data_movimento DESC
-            LIMIT 100`; // Limite para não sobrecarregar
-        const [abastecimentos] = await connection.execute(sql);
-        res.json(abastecimentos);
+            LIMIT ? OFFSET ?`;
+        
+        const [totalResult] = await connection.execute(countQuery);
+        const totalItems = totalResult[0].total;
+        const [data] = await connection.execute(dataQuery, [limit, offset]);
+        
+        res.json({
+            totalItems,
+            totalPages: Math.ceil(totalItems / limit),
+            currentPage: page,
+            data
+        });
     } catch (error) {
         console.error("Erro ao buscar histórico de abastecimentos:", error);
         res.status(500).json({ error: 'Erro ao buscar histórico de abastecimentos.' });
