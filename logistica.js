@@ -1,4 +1,4 @@
-// logistica.js (COMPLETO com todas as funções, incluindo os últimos ajustes)
+// logistica.js (COMPLETO com funcionalidade de estorno de abastecimento)
 
 document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
@@ -23,6 +23,7 @@ let maintenanceExportDatepicker = null;
 let LOGO_BASE_64 = null;
 let costToDelete = { id: null, type: null };
 let documentToDelete = { id: null, name: null };
+let estornoMovimentoId = null; // Nova variável global
 let photoCaptureState = {
     stream: null,
     targetInputId: null,
@@ -242,6 +243,68 @@ function setupEventListeners() {
         historyPages[activeTab]++;
         loadActiveHistoryTab();
     });
+
+    // Adiciona o listener para a nova tabela de histórico
+    document.getElementById('costs-tab-content-abastecimentos')?.addEventListener('click', handleDeleteAbastecimentoClick);
+    
+    // Listeners para o novo modal de estorno
+    const estornoModal = document.getElementById('confirm-estorno-modal');
+    estornoModal.querySelector('#cancel-estorno-btn').addEventListener('click', () => estornoModal.classList.add('hidden'));
+    estornoModal.querySelector('#confirm-estorno-btn').addEventListener('click', () => {
+        if (estornoMovimentoId) {
+            executeEstornoMovimento(estornoMovimentoId);
+        }
+    });
+}
+
+
+// --- Funções de Estorno de Abastecimento ---
+function handleDeleteAbastecimentoClick(event) {
+    const button = event.target.closest('button.delete-abastecimento-btn');
+    if (!button) return;
+    
+    const movimentoId = button.dataset.movimentoId;
+    const info = button.dataset.info;
+    openEstornoConfirmModal(movimentoId, info);
+}
+
+function openEstornoConfirmModal(id, info) {
+    estornoMovimentoId = id;
+    document.getElementById('estorno-info').textContent = info;
+    document.getElementById('confirm-estorno-modal').classList.remove('hidden');
+    feather.replace();
+}
+
+async function executeEstornoMovimento(id) {
+    const modal = document.getElementById('confirm-estorno-modal');
+    const confirmBtn = modal.querySelector('#confirm-estorno-btn');
+    confirmBtn.disabled = true;
+    showLoader();
+
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/estoque/movimento/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Falha ao estornar o lançamento.');
+        
+        alert('Lançamento estornado com sucesso!');
+        modal.classList.add('hidden');
+        
+        // Recarrega os dados relevantes
+        await loadCurrentStock();
+        await loadAbastecimentosHistory();
+        await loadFleetCosts(); // Recarrega para refletir a exclusão de compras
+        await loadRecentIndividualCosts(); // Recarrega para refletir a exclusão de abastecimentos
+
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        confirmBtn.disabled = false;
+        hideLoader();
+        estornoMovimentoId = null;
+    }
 }
 
 
@@ -648,9 +711,10 @@ async function loadAbastecimentosHistory() {
 
         if (abastecimentos.length === 0) {
             container.innerHTML = '<p class="p-4 text-center text-gray-500">Nenhum abastecimento registado para os filtros selecionados.</p>';
-            renderHistoryPagination('abastecimentos', result);
+            renderHistoryPagination('abastecimentos', { totalItems: 0, totalPages: 1, currentPage: 1 });
             return;
         }
+
         const table = document.createElement('table');
         table.className = 'min-w-full divide-y divide-gray-200 text-sm';
         table.innerHTML = `
@@ -661,22 +725,33 @@ async function loadAbastecimentosHistory() {
                     <th class="px-4 py-2 text-right font-medium text-gray-500">Quantidade (L)</th>
                     <th class="px-4 py-2 text-right font-medium text-gray-500">Odómetro (km)</th>
                     <th class="px-4 py-2 text-left font-medium text-gray-500">Utilizador</th>
+                    <th class="px-4 py-2 text-center font-medium text-gray-500">Ações</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
+            
         const tbody = table.querySelector('tbody');
+        const isPrivileged = privilegedAccessProfiles.includes(getUserProfile());
+
         abastecimentos.forEach(item => {
             const tr = tbody.insertRow();
+            const infoText = `Abastecimento de ${parseFloat(item.quantidade).toFixed(2)}L para ${item.modelo} (${item.placa})`;
             tr.innerHTML = `
                 <td class="px-4 py-2">${new Date(item.data_movimento).toLocaleString('pt-BR', { timeZone: 'UTC' })}</td>
                 <td class="px-4 py-2">${item.modelo} (${item.placa})</td>
                 <td class="px-4 py-2 text-right">${parseFloat(item.quantidade).toFixed(2)}</td>
                 <td class="px-4 py-2 text-right">${item.odometro_no_momento.toLocaleString('pt-BR')}</td>
                 <td class="px-4 py-2">${item.nome_usuario}</td>
+                <td class="px-4 py-2 text-center">
+                    ${isPrivileged ? `<button class="text-red-500 hover:text-red-700 delete-abastecimento-btn" data-movimento-id="${item.id}" data-info="${infoText}">
+                        <span data-feather="trash-2" class="w-4 h-4"></span>
+                    </button>` : ''}
+                </td>
             `;
         });
         container.innerHTML = '';
         container.appendChild(table);
+        feather.replace();
         renderHistoryPagination('abastecimentos', result);
     } catch (error) {
         container.innerHTML = `<p class="p-4 text-center text-red-500">${error.message}</p>`;

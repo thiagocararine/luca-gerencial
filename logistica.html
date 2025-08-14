@@ -209,12 +209,6 @@
                     <div id="costs-tab-content-abastecimentos" class="cost-tab-content hidden bg-white rounded-lg shadow overflow-hidden"></div>
                 </div>
                 <div id="history-pagination-controls" class="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div id="history-pagination-info" class="text-sm text-gray-700"></div>
-                    <div class="flex items-center gap-2">
-                        <button id="history-prev-page-btn" disabled class="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">&laquo; Anterior</button>
-                        <span id="history-page-info-span" class="text-sm text-gray-700">Página 1 de 1</span>
-                        <button id="history-next-page-btn" disabled class="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Próxima &raquo;</button>
-                    </div>
                 </div>
             </div>
         </main>
@@ -504,6 +498,21 @@
         <div class="mt-6 flex justify-center gap-4">
             <button id="cancel-delete-cost-btn" class="action-btn bg-gray-200 hover:bg-gray-300 text-gray-800">Cancelar</button>
             <button id="confirm-delete-cost-btn" class="action-btn bg-red-600 hover:bg-red-700">Confirmar Exclusão</button>
+        </div>
+    </div>
+</div>
+
+<div id="confirm-estorno-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-[70] flex items-center justify-center p-4">
+    <div class="relative mx-auto p-6 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <div class="text-center">
+            <span data-feather="alert-triangle" class="mx-auto mb-4 w-12 h-12 text-yellow-500"></span>
+            <h3 class="text-lg font-medium text-gray-900">Estornar Lançamento</h3>
+            <p class="mt-2 text-sm text-gray-500">Tem a certeza de que quer estornar este lançamento? A quantidade de combustível voltará para o estoque e a despesa associada será apagada.</p>
+            <p id="estorno-info" class="mt-2 text-sm font-bold text-gray-700"></p>
+        </div>
+        <div class="mt-6 flex justify-center gap-4">
+            <button id="cancel-estorno-btn" class="action-btn bg-gray-200 hover:bg-gray-300 text-gray-800">Cancelar</button>
+            <button id="confirm-estorno-btn" class="action-btn bg-yellow-600 hover:bg-yellow-700">Confirmar Estorno</button>
         </div>
     </div>
 </div>

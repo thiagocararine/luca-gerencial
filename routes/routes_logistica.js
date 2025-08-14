@@ -1441,4 +1441,78 @@ router.get('/itens-estoque', authenticateToken, async (req, res) => {
     }
 });
 
+router.delete('/estoque/movimento/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { userId, nome: nomeUsuario, perfil } = req.user;
+
+    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
+    if (!allowedProfiles.includes(perfil)) {
+        return res.status(403).json({ error: 'Você não tem permissão para esta ação.' });
+    }
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        await connection.beginTransaction();
+
+        // 1. Busca os detalhes do movimento a ser estornado
+        const [movimentoRows] = await connection.execute('SELECT * FROM estoque_movimentos WHERE id = ?', [id]);
+        if (movimentoRows.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Movimento de estoque não encontrado.' });
+        }
+        const movimento = movimentoRows[0];
+        const { id_item, tipo_movimento, quantidade, id_veiculo } = movimento;
+
+        // 2. Executa a operação inversa no saldo de estoque
+        if (tipo_movimento === 'Saída') { // Estorno de um consumo
+            await connection.execute(
+                'UPDATE itens_estoque SET quantidade_atual = quantidade_atual + ? WHERE id = ?',
+                [quantidade, id_item]
+            );
+            // Apaga a despesa correspondente em veiculo_manutencoes
+            await connection.execute(
+                "DELETE FROM veiculo_manutencoes WHERE id_veiculo = ? AND tipo_manutencao = 'Abastecimento' AND data_manutencao = ? AND quantidade = ?",
+                 [id_veiculo, movimento.data_movimento, quantidade] // Usa uma combinação de campos para segurança
+            );
+
+        } else if (tipo_movimento === 'Entrada') { // Estorno de uma compra
+             await connection.execute(
+                'UPDATE itens_estoque SET quantidade_atual = quantidade_atual - ? WHERE id = ?',
+                [quantidade, id_item]
+            );
+             // Apaga os custos de frota rateados correspondentes
+             // Esta lógica assume que podemos identificar a compra pela data e quantidade
+             // Uma lógica mais robusta exigiria um ID de compra no movimento.
+             await connection.execute(
+                "DELETE FROM custos_frota WHERE descricao LIKE 'Compra de%' AND data_custo = ? AND custo = ?",
+                 [movimento.data_movimento.toISOString().slice(0, 10), quantidade] 
+             );
+        }
+
+        // 3. Apaga o registo do movimento
+        await connection.execute('DELETE FROM estoque_movimentos WHERE id = ?', [id]);
+
+        // 4. Regista o log do estorno
+        await registrarLog({
+            usuario_id: userId,
+            usuario_nome: nomeUsuario,
+            tipo_entidade: 'Estoque',
+            id_entidade: id_item,
+            tipo_acao: 'Estorno',
+            descricao: `Estornou o movimento ID ${id} (Tipo: ${tipo_movimento}, Quantidade: ${quantidade}).`
+        });
+        
+        await connection.commit();
+        res.json({ message: 'Lançamento estornado com sucesso!' });
+
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error("Erro ao estornar movimento:", error);
+        res.status(500).json({ error: 'Erro interno ao processar o estorno.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
 module.exports = router;
