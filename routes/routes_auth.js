@@ -1,4 +1,4 @@
-// routes/routes_auth.js (ATUALIZADO PARA GERIR FILIAL DO UTILIZADOR)
+// routes/routes_auth.js (CORRIGIDO PARA EXIBIR FILIAL ATUALIZADA NA TABELA)
 
 const express = require('express');
 const router = express.Router();
@@ -8,9 +8,7 @@ const jwt = require('jsonwebtoken');
 const { authenticateToken, authorizeAdmin } = require('../middlewares');
 const dbConfig = require('../dbConfig');
 
-// =================================================================
 // ROTA PÚBLICA PARA BUSCAR PARÂMETROS
-// =================================================================
 router.get('/parametros', async (req, res) => {
     const { cod } = req.query;
     if (!cod) {
@@ -37,6 +35,7 @@ router.get('/parametros', async (req, res) => {
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
+    // ... (nenhuma alteração nesta rota)
     const { identifier, senha } = req.body;
     if (!identifier || !senha) return res.status(400).json({ error: 'Identificador e senha são obrigatórios.' });
     
@@ -103,6 +102,7 @@ router.post('/login', async (req, res) => {
 
 // POST /api/auth/signup
 router.post('/signup', async (req, res) => {
+    // ... (nenhuma alteração nesta rota)
     const { nome_user, email_user, cpf_user, senha, depart_user, unidade_user, cargo_user } = req.body;
     if (!nome_user || !email_user || !cpf_user || !senha || !depart_user || !unidade_user || !cargo_user) {
         return res.status(400).json({ error: "Todos os campos são obrigatórios." });
@@ -147,17 +147,32 @@ router.post('/signup', async (req, res) => {
     }
 });
 
-// GET /api/auth/users (ATUALIZADO)
+// GET /api/auth/users (CORRIGIDO)
 router.get('/users', authenticateToken, authorizeAdmin, async (req, res) => {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        // ADICIONADO u.id_filial ao SELECT
+        
+        // ===== ALTERAÇÃO APLICADA AQUI =====
+        // 1. Adicionado LEFT JOIN com a tabela 'parametro' para buscar o nome da unidade.
+        // 2. Trocado 'u.unidade_user' por 'p_unidade.NOME_PARAMETRO as unidade_user'.
         const sql = `
-            SELECT u.ID, u.nome_user, u.email_user, u.cargo_user, u.unidade_user, u.status_user, p.nome_perfil as perfil_acesso, u.id_perfil, u.id_filial
+            SELECT 
+                u.ID, 
+                u.nome_user, 
+                u.email_user, 
+                u.cargo_user, 
+                p_unidade.NOME_PARAMETRO as unidade_user, -- Alterado aqui
+                u.status_user, 
+                p.nome_perfil as perfil_acesso, 
+                u.id_perfil, 
+                u.id_filial
             FROM cad_user u
             LEFT JOIN perfis_acesso p ON u.id_perfil = p.id
+            LEFT JOIN parametro p_unidade ON u.id_filial = p_unidade.ID AND p_unidade.COD_PARAMETRO = 'Unidades' -- Adicionado aqui
             ORDER BY u.nome_user`;
+        // ===== FIM DA ALTERAÇÃO =====
+        
         const [users] = await connection.execute(sql);
         res.json(users);
     } catch (error) { 
@@ -168,10 +183,10 @@ router.get('/users', authenticateToken, authorizeAdmin, async (req, res) => {
     }
 });
 
-// PUT /api/auth/users/:id/manage (ATUALIZADO)
+// PUT /api/auth/users/:id/manage
 router.put('/users/:id/manage', authenticateToken, authorizeAdmin, async (req, res) => {
+    // ... (nenhuma alteração nesta rota, já estava correta)
     const { id } = req.params;
-    // ADICIONADO id_filial
     const { status, id_perfil, senha, id_filial } = req.body;
     let connection;
     try {
@@ -187,7 +202,6 @@ router.put('/users/:id/manage', authenticateToken, authorizeAdmin, async (req, r
             fieldsToUpdate.push('id_perfil = ?');
             params.push(id_perfil);
         }
-        // NOVA LÓGICA PARA ATUALIZAR A FILIAL
         if (id_filial) {
             fieldsToUpdate.push('id_filial = ?');
             params.push(id_filial);
