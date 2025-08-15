@@ -789,14 +789,14 @@ async function openVehicleModal(vehicle = null) {
             document.getElementById('vehicle-filial').value = vehicle.id_filial || '';
             document.getElementById('vehicle-status').value = vehicle.status || 'Ativo';
             
-            //const seguroCheckbox = document.getElementById('vehicle-seguro');
-            //if (seguroCheckbox) {
-            //    seguroCheckbox.checked = !!vehicle.seguro;
-            //}
-            //const rastreadorCheckbox = document.getElementById('vehicle-rastreador');
-            //if (rastreadorCheckbox) {
-            //    rastreadorCheckbox.checked = !!vehicle.rastreador;
-            //}
+            const seguroCheckbox = document.getElementById('vehicle-seguro');
+            if (seguroCheckbox) {
+                seguroCheckbox.checked = !!vehicle.seguro;
+            }
+            const rastreadorCheckbox = document.getElementById('vehicle-rastreador');
+            if (rastreadorCheckbox) {
+                rastreadorCheckbox.checked = !!vehicle.rastreador;
+            }
 
             document.getElementById('vehicle-tipo-combustivel').value = vehicle.tipo_combustivel || '';
             const hasPlaca = vehicle.placa && vehicle.placa.toUpperCase() !== 'SEM PLACA';
@@ -811,7 +811,7 @@ async function openVehicleModal(vehicle = null) {
         modal.classList.remove('hidden');
         feather.replace();
     } catch(error) {
-        alert("Erro ao abrir o modal do veículo.");
+        alert("Erro ao abrir o modal do veículo Logistica.js.");
     } finally {
         hideLoader();
     }
