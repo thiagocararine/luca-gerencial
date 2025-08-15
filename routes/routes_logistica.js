@@ -1,12 +1,9 @@
-// routes/routes_logistica.js (COMPLETO E ATUALIZADO COM CADASTRO DE ITENS E MÓDULO DE COMBUSTÍVEL)
-
 const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2/promise');
 const fs = require('fs').promises;
 const path = require('path');
 const multer = require('multer');
-// Adicionado authorizeAdmin à importação
 const { authenticateToken, authorizeAdmin } = require('../middlewares'); 
 const dbConfig = require('../dbConfig');
 
@@ -98,7 +95,21 @@ router.get('/veiculos', authenticateToken, async (req, res) => {
                 v.modelo ASC`;
 
         const [vehicles] = await connection.execute(sql);
-        res.json(vehicles);
+        
+        // ATUALIZADO: Mapeia os resultados para construir a URL completa da foto
+        const vehiclesWithPhotoUrl = vehicles.map(vehicle => {
+              const placaSanitizada = sanitizeForPath(vehicle.placa);
+              const fotoFrentePath = vehicle.foto_frente
+                ? `uploads/veiculos/${placaSanitizada}/fotos/${vehicle.foto_frente}`
+                : null;
+
+              return {
+                  ...vehicle,
+                  foto_frente: fotoFrentePath
+              };
+        });
+
+        res.json(vehiclesWithPhotoUrl);
 
     } catch (error) {
         console.error("Erro ao buscar veículos:", error);
@@ -115,7 +126,6 @@ router.post('/veiculos', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
     }
     
-    // ATUALIZADO: Adicionado 'tipo_combustivel' à desestruturação
     const { placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status, seguro, rastreador, tipo_combustivel } = req.body;
     if (!placa || !marca || !modelo || !id_filial || !status) {
         return res.status(400).json({ error: 'Placa, marca, modelo, filial e status são obrigatórios.' });
@@ -126,13 +136,11 @@ router.post('/veiculos', authenticateToken, async (req, res) => {
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
 
-        // ATUALIZADO: 'tipo_combustivel' adicionado ao INSERT
         const sql = `
             INSERT INTO veiculos 
             (placa, marca, modelo, ano_fabricacao, ano_modelo, renavam, chassi, id_filial, status, seguro, rastreador, tipo_combustivel) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             
-        // ATUALIZADO: 'tipo_combustivel' adicionado aos parâmetros
         const params = [
             placa, marca, modelo, 
             ano_fabricacao || null, ano_modelo || null, 
@@ -189,7 +197,6 @@ router.put('/veiculos/:id', authenticateToken, async (req, res) => {
         const currentVehicle = currentVehicleRows[0];
         
         const changesDescription = [];
-        // ATUALIZADO: Adicionado 'tipo_combustivel' à lista de campos para comparação no log
         const camposParaComparar = ['placa', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'renavam', 'chassi', 'id_filial', 'status', 'seguro', 'rastreador', 'tipo_combustivel'];
         
         for (const campo of camposParaComparar) {
@@ -208,7 +215,6 @@ router.put('/veiculos/:id', authenticateToken, async (req, res) => {
             });
         }
 
-        // ATUALIZADO: 'tipo_combustivel' adicionado ao UPDATE
         const updateSql = `
             UPDATE veiculos SET 
             placa = ?, marca = ?, modelo = ?, ano_fabricacao = ?, ano_modelo = ?, 
@@ -216,7 +222,6 @@ router.put('/veiculos/:id', authenticateToken, async (req, res) => {
             seguro = ?, rastreador = ?, tipo_combustivel = ? 
             WHERE id = ?`;
         
-        // ATUALIZADO: 'tipo_combustivel' adicionado aos parâmetros da query
         await connection.execute(updateSql, [
             vehicleData.placa, vehicleData.marca, vehicleData.modelo, 
             vehicleData.ano_fabricacao || null, vehicleData.ano_modelo || null, 
@@ -466,6 +471,7 @@ router.get('/veiculos/:id/logs', authenticateToken, async (req, res) => {
 
 // --- ROTAS PARA O CADASTRO DE ITENS DE ESTOQUE ---
 
+// Rota para buscar lista de itens (tabela itens_estoque)
 router.get('/itens-estoque', authenticateToken, async (req, res) => {
     let connection;
     try {
@@ -480,6 +486,7 @@ router.get('/itens-estoque', authenticateToken, async (req, res) => {
     }
 });
 
+// Rotas CRUD para gerir os itens (tabela estoque_itens)
 router.post('/itens-estoque', authenticateToken, authorizeAdmin, async (req, res) => {
     const { nome_item, unidade_medida, descricao } = req.body;
     if (!nome_item || !unidade_medida) return res.status(400).json({ error: 'Nome e unidade de medida são obrigatórios.' });
@@ -534,21 +541,19 @@ router.delete('/itens-estoque/:id', authenticateToken, authorizeAdmin, async (re
 });
 
 
-// --- ROTAS PARA O MÓDULO DE COMBUSTÍVEL (ATUALIZADAS) ---
+// --- ROTAS PARA O MÓDULO DE COMBUSTÍVEL ---
 
 router.get('/estoque/saldo/:itemId', authenticateToken, async (req, res) => {
     const { itemId } = req.params;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        // A consulta agora usa o itemId para buscar o item correto
         const [rows] = await connection.execute(
             "SELECT quantidade_atual, unidade_medida FROM itens_estoque WHERE id = ?",
             [itemId]
         );
 
         if (rows.length === 0) {
-            // Se o item específico não for encontrado, retorna um erro claro.
             return res.status(404).json({ error: `Item de estoque com ID ${itemId} não encontrado.` });
         }
         res.json(rows[0]);
@@ -581,19 +586,16 @@ router.post('/estoque/entrada', authenticateToken, async (req, res) => {
 
         const precoUnitario = parseFloat(custo) / parseFloat(quantidade);
 
-        // 1. Atualiza o saldo do item e o seu último preço.
         await connection.execute(
             'UPDATE itens_estoque SET quantidade_atual = quantidade_atual + ?, ultimo_preco_unitario = ? WHERE id = ?',
             [quantidade, precoUnitario, itemId]
         );
         
-        // 2. Regista o movimento de entrada no extrato do estoque.
         await connection.execute(
             'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_usuario, observacao) VALUES (?, ?, ?, ?, ?)',
             [itemId, 'Entrada', quantidade, userId, `Compra de ${quantidade}L. Custo Total: R$ ${custo}`]
         );
 
-        // 3. NOVO: Regista a compra como um CUSTO DE FROTA RATEADO.
         const [itemData] = await connection.execute('SELECT nome_item FROM itens_estoque WHERE id = ?', [itemId]);
         const nomeItem = itemData[0].nome_item;
         
@@ -617,7 +619,6 @@ router.post('/estoque/entrada', authenticateToken, async (req, res) => {
             ]);
         }
 
-        // 4. Regista o log da ação.
         await registrarLog({
             usuario_id: userId, usuario_nome: nomeUsuario,
             tipo_entidade: 'Estoque', id_entidade: itemId,
@@ -655,8 +656,8 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         await connection.beginTransaction();
         
         const itemId = 1; // ID do Óleo Diesel
-        const fornecedorCombustivelId = 3; // Fornecedor fixo para combustível, conforme solicitado
-
+        const fornecedorCombustivelId = 3; // Fornecedor fixo para combustível
+        
         const [itemRows] = await connection.execute('SELECT quantidade_atual, ultimo_preco_unitario FROM itens_estoque WHERE id = ? FOR UPDATE', [itemId]);
         if (itemRows.length === 0) {
             await connection.rollback();
@@ -727,6 +728,73 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
     }
 });
 
+router.delete('/estoque/movimento/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { userId, nome: nomeUsuario, perfil } = req.user;
+
+    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
+    if (!allowedProfiles.includes(perfil)) {
+        return res.status(403).json({ error: 'Você não tem permissão para esta ação.' });
+    }
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        await connection.beginTransaction();
+
+        const [movimentoRows] = await connection.execute('SELECT * FROM estoque_movimentos WHERE id = ?', [id]);
+        if (movimentoRows.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Movimento de estoque não encontrado.' });
+        }
+        const movimento = movimentoRows[0];
+        const { id_item, tipo_movimento, quantidade, id_veiculo } = movimento;
+
+        if (tipo_movimento === 'Saída') {
+            await connection.execute(
+                'UPDATE itens_estoque SET quantidade_atual = quantidade_atual + ? WHERE id = ?',
+                [quantidade, id_item]
+            );
+            await connection.execute(
+                "DELETE FROM veiculo_manutencoes WHERE id_veiculo = ? AND tipo_manutencao = 'Abastecimento' AND data_manutencao = ? AND quantidade = ?",
+                 [id_veiculo, movimento.data_movimento, quantidade]
+            );
+
+        } else if (tipo_movimento === 'Entrada') {
+             await connection.execute(
+                'UPDATE itens_estoque SET quantidade_atual = quantidade_atual - ? WHERE id = ?',
+                [quantidade, id_item]
+            );
+             await connection.execute(
+                "DELETE FROM custos_frota WHERE descricao LIKE 'Compra de%' AND data_custo = ? AND custo = ?",
+                 [movimento.data_movimento.toISOString().slice(0, 10), quantidade] 
+             );
+        }
+
+        await connection.execute('DELETE FROM estoque_movimentos WHERE id = ?', [id]);
+
+        await registrarLog({
+            usuario_id: userId,
+            usuario_nome: nomeUsuario,
+            tipo_entidade: 'Estoque',
+            id_entidade: id_item,
+            tipo_acao: 'Estorno',
+            descricao: `Estornou o movimento ID ${id} (Tipo: ${tipo_movimento}, Quantidade: ${quantidade}).`
+        });
+        
+        await connection.commit();
+        res.json({ message: 'Lançamento estornado com sucesso!' });
+
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error("Erro ao estornar movimento:", error);
+        res.status(500).json({ error: 'Erro interno ao processar o estorno.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+
 // --- ROTAS DE MANUTENÇÃO, CUSTOS E FORNECEDORES ---
 
 router.get('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
@@ -765,7 +833,6 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
 
-        // NOVO: Busca o ID da filial do veículo que está a receber a manutenção
         const [vehicleData] = await connection.execute('SELECT id_filial FROM veiculos WHERE id = ?', [id_veiculo]);
         if (vehicleData.length === 0) {
             await connection.rollback();
@@ -773,7 +840,6 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
         }
         const id_filial_veiculo = vehicleData[0].id_filial;
 
-        // ATUALIZADO: Query de inserção agora inclui id_filial e a descrição
         const sqlInsert = `
             INSERT INTO veiculo_manutencoes 
             (id_veiculo, id_filial, data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_user_lanc, id_fornecedor, status)
@@ -781,7 +847,6 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
         
         await connection.execute(sqlInsert, [id_veiculo, id_filial_veiculo, data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, userId, id_fornecedor]);
         
-        // Lógica para atualizar a data da próxima manutenção preventiva (preservada do arquivo original)
         if (classificacao_custo === 'Preventiva') {
             const proximaManutencao = new Date(data_manutencao);
             proximaManutencao.setMonth(proximaManutencao.getMonth() + 3);
@@ -793,7 +858,6 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
             await connection.execute(sqlUpdateVeiculo, [data_manutencao, proximaManutencao, id_veiculo]);
         }
         
-        // Lógica de registrar log (preservada do arquivo original)
         await registrarLog({
             usuario_id: userId,
             usuario_nome: nomeUsuario,
@@ -880,9 +944,8 @@ router.post('/fornecedores/cnpj', authenticateToken, async (req, res) => {
     }
 });
 
-// =================================================================
-// SEÇÃO DE CUSTOS DE FROTA (COM A CORREÇÃO)
-// =================================================================
+
+// --- SEÇÃO DE CUSTOS DE FROTA ---
 
 router.post('/custos-frota', authenticateToken, async (req, res) => {
     const { descricao, custo, data_custo, id_fornecedor, filiais_rateio } = req.body;
@@ -1049,7 +1112,6 @@ router.put('/custos-frota/:id/excluir', authenticateToken, async (req, res) => {
 // --- ROTAS DE RELATÓRIOS ---
 
 router.get('/relatorios/listaVeiculos', authenticateToken, async (req, res) => {
-    // Adicionados 'seguro' e 'rastreador'
     const { filial, status, limit, seguro, rastreador } = req.query; 
     let connection;
     try {
@@ -1060,7 +1122,6 @@ router.get('/relatorios/listaVeiculos', authenticateToken, async (req, res) => {
 
         if (filial) { conditions.push('v.id_filial = ?'); params.push(filial); }
         if (status) { conditions.push('v.status = ?'); params.push(status); }
-        // Adiciona as novas condições se os checkboxes estiverem marcados
         if (seguro === 'true') { conditions.push('v.seguro = 1'); }
         if (rastreador === 'true') { conditions.push('v.rastreador = 1'); }
 
@@ -1155,7 +1216,6 @@ router.get('/relatorios/custoRateado', authenticateToken, async (req, res) => {
 });
 
 router.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) => {
-    // Para simplificar e evitar paginação incorreta, este relatório busca todos os dados
     const { filial, dataInicio, dataFim } = req.query;
     let connection;
     try {
@@ -1207,7 +1267,6 @@ router.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) =
     }
 });
 
-// NOVA ROTA PARA RELATÓRIO 5
 router.get('/relatorios/despesaVeiculo', authenticateToken, async (req, res) => {
     const { veiculoId, dataInicio, dataFim, limit } = req.query;
     if (!veiculoId || !dataInicio || !dataFim) {
@@ -1244,6 +1303,8 @@ router.get('/relatorios/despesaVeiculo', authenticateToken, async (req, res) => 
     }
 });
 
+// --- DASHBOARD E ALERTAS ---
+
 router.get('/dashboard-summary', authenticateToken, async (req, res) => {
     const { dataInicio, dataFim, filial } = req.query;
     let connection;
@@ -1251,7 +1312,6 @@ router.get('/dashboard-summary', authenticateToken, async (req, res) => {
     try {
         connection = await mysql.createConnection(dbConfig);
 
-        // Constrói cláusulas WHERE dinâmicas
         const params = [];
         let whereClauseVeiculos = "WHERE status IN ('Ativo', 'Em Manutenção')";
         if (filial) {
@@ -1266,19 +1326,17 @@ router.get('/dashboard-summary', authenticateToken, async (req, res) => {
         if (filial) { whereClauseCustos += " AND v.id_filial = ?"; paramsCustos.push(filial); }
         
         const paramsDocs = [new Date(), new Date(new Date().setDate(new Date().getDate() + 30))];
-        let whereClauseDocs = "WHERE d.data_validade BETWEEN ? AND ?";
+        let whereClauseDocs = "WHERE d.data_validade BETWEEN ? AND ? AND d.status = 'Ativo'";
         if (filial) { whereClauseDocs += " AND v.id_filial = ?"; paramsDocs.push(filial); }
 
 
-        // Definição das queries
         const kpiVeiculosQuery = `SELECT COUNT(*) as total, status FROM veiculos ${whereClauseVeiculos} GROUP BY status`;
-        const kpiCustoTotalQuery = `SELECT SUM(custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos.replace('vm.status', 'v.status')}`;
+        const kpiCustoTotalQuery = `SELECT SUM(custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos}`;
         const kpiDocsQuery = `SELECT COUNT(*) as total FROM veiculo_documentos d JOIN veiculos v ON d.id_veiculo = v.id ${whereClauseDocs}`;
         
         const chartCustoClassificacaoQuery = `SELECT classificacao_custo, SUM(custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos} GROUP BY classificacao_custo`;
         const chartTop5VeiculosQuery = `SELECT CONCAT(v.modelo, ' - ', v.placa) as veiculo, SUM(vm.custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos} GROUP BY vm.id_veiculo ORDER BY total DESC LIMIT 5`;
 
-        // Execução em paralelo
         const [
             veiculosResult,
             custoTotalResult,
@@ -1287,13 +1345,12 @@ router.get('/dashboard-summary', authenticateToken, async (req, res) => {
             top5VeiculosResult,
         ] = await Promise.all([
             connection.execute(kpiVeiculosQuery, params),
-            connection.execute(kpiCustoTotalQuery, paramsCustos.filter(p => p !== undefined)), // Filtra params indefinidos
+            connection.execute(kpiCustoTotalQuery, paramsCustos),
             connection.execute(kpiDocsQuery, paramsDocs),
             connection.execute(chartCustoClassificacaoQuery, paramsCustos),
             connection.execute(chartTop5VeiculosQuery, paramsCustos)
         ]);
 
-        // Montagem do objeto de resposta
         const summary = {
             kpis: {
                 veiculosAtivos: (veiculosResult[0].find(r => r.status === 'Ativo')?.total || 0),
@@ -1358,13 +1415,14 @@ router.get('/veiculos/manutencao/a-vencer', authenticateToken, async (req, res) 
     }
 });
 
+// --- OUTRAS ROTAS ---
+
 router.get('/cnpj/:cnpj', authenticateToken, async (req, res) => {
     const { cnpj } = req.params;
     if (!cnpj) {
         return res.status(400).json({ error: 'CNPJ é obrigatório.' });
     }
     try {
-        // O fetch agora é feito do lado do servidor
         const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
         if (!response.ok) {
             throw new Error('CNPJ não encontrado ou serviço indisponível.');
@@ -1378,7 +1436,7 @@ router.get('/cnpj/:cnpj', authenticateToken, async (req, res) => {
 });
 
 router.get('/abastecimentos', authenticateToken, async (req, res) => {
-    const { filial } = req.query; // Pega o filtro da URL
+    const { filial } = req.query;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
@@ -1421,97 +1479,6 @@ router.get('/abastecimentos', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error("Erro ao buscar histórico de abastecimentos:", error);
         res.status(500).json({ error: 'Erro ao buscar histórico de abastecimentos.' });
-    } finally {
-        if (connection) await connection.end();
-    }
-});
-
-// NOVA ROTA para buscar a lista de itens de estoque
-router.get('/itens-estoque', authenticateToken, async (req, res) => {
-    let connection;
-    try {
-        connection = await mysql.createConnection(dbConfig);
-        const [rows] = await connection.execute(
-            'SELECT id, nome_item FROM itens_estoque ORDER BY nome_item'
-        );
-        res.json(rows);
-    } catch (error) {
-        console.error("Erro ao buscar itens de estoque:", error);
-        res.status(500).json({ error: 'Erro ao buscar itens de estoque.' });
-    } finally {
-        if (connection) await connection.end();
-    }
-});
-
-router.delete('/estoque/movimento/:id', authenticateToken, async (req, res) => {
-    const { id } = req.params;
-    const { userId, nome: nomeUsuario, perfil } = req.user;
-
-    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
-    if (!allowedProfiles.includes(perfil)) {
-        return res.status(403).json({ error: 'Você não tem permissão para esta ação.' });
-    }
-
-    let connection;
-    try {
-        connection = await mysql.createConnection(dbConfig);
-        await connection.beginTransaction();
-
-        // 1. Busca os detalhes do movimento a ser estornado
-        const [movimentoRows] = await connection.execute('SELECT * FROM estoque_movimentos WHERE id = ?', [id]);
-        if (movimentoRows.length === 0) {
-            await connection.rollback();
-            return res.status(404).json({ error: 'Movimento de estoque não encontrado.' });
-        }
-        const movimento = movimentoRows[0];
-        const { id_item, tipo_movimento, quantidade, id_veiculo } = movimento;
-
-        // 2. Executa a operação inversa no saldo de estoque
-        if (tipo_movimento === 'Saída') { // Estorno de um consumo
-            await connection.execute(
-                'UPDATE itens_estoque SET quantidade_atual = quantidade_atual + ? WHERE id = ?',
-                [quantidade, id_item]
-            );
-            // Apaga a despesa correspondente em veiculo_manutencoes
-            await connection.execute(
-                "DELETE FROM veiculo_manutencoes WHERE id_veiculo = ? AND tipo_manutencao = 'Abastecimento' AND data_manutencao = ? AND quantidade = ?",
-                 [id_veiculo, movimento.data_movimento, quantidade] // Usa uma combinação de campos para segurança
-            );
-
-        } else if (tipo_movimento === 'Entrada') { // Estorno de uma compra
-             await connection.execute(
-                'UPDATE itens_estoque SET quantidade_atual = quantidade_atual - ? WHERE id = ?',
-                [quantidade, id_item]
-            );
-             // Apaga os custos de frota rateados correspondentes
-             // Esta lógica assume que podemos identificar a compra pela data e quantidade
-             // Uma lógica mais robusta exigiria um ID de compra no movimento.
-             await connection.execute(
-                "DELETE FROM custos_frota WHERE descricao LIKE 'Compra de%' AND data_custo = ? AND custo = ?",
-                 [movimento.data_movimento.toISOString().slice(0, 10), quantidade] 
-             );
-        }
-
-        // 3. Apaga o registo do movimento
-        await connection.execute('DELETE FROM estoque_movimentos WHERE id = ?', [id]);
-
-        // 4. Regista o log do estorno
-        await registrarLog({
-            usuario_id: userId,
-            usuario_nome: nomeUsuario,
-            tipo_entidade: 'Estoque',
-            id_entidade: id_item,
-            tipo_acao: 'Estorno',
-            descricao: `Estornou o movimento ID ${id} (Tipo: ${tipo_movimento}, Quantidade: ${quantidade}).`
-        });
-        
-        await connection.commit();
-        res.json({ message: 'Lançamento estornado com sucesso!' });
-
-    } catch (error) {
-        if (connection) await connection.rollback();
-        console.error("Erro ao estornar movimento:", error);
-        res.status(500).json({ error: 'Erro interno ao processar o estorno.' });
     } finally {
         if (connection) await connection.end();
     }
