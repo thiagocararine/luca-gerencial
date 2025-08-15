@@ -201,8 +201,12 @@ function setupEventListeners() {
     captureModal.querySelector('#use-photo-btn').addEventListener('click', useCapturedPhoto);
     captureModal.querySelector('#retake-photo-btn').addEventListener('click', retakePhoto);
 
-    // LISTENERS PARA O MÓDULO DE COMBUSTÍVEL
-    document.getElementById('open-fuel-modal-btn')?.addEventListener('click', openFuelModal);
+    // LISTENERS PARA O MÓDULO DE COMBUSTÍVEL (COM VERIFICAÇÃO DE SEGURANÇA)
+    const openFuelBtn = document.getElementById('open-fuel-modal-btn');
+    if (openFuelBtn) {
+        openFuelBtn.addEventListener('click', openFuelModal);
+    }
+
     const fuelModal = document.getElementById('fuel-management-modal');
     if (fuelModal) {
         fuelModal.querySelector('#close-fuel-modal-btn').addEventListener('click', () => fuelModal.classList.add('hidden'));
@@ -213,7 +217,11 @@ function setupEventListeners() {
         });
         fuelModal.querySelector('#fuel-purchase-form').addEventListener('submit', handleFuelPurchaseSubmit);
         fuelModal.querySelector('#fuel-consumption-form').addEventListener('submit', handleFuelConsumptionSubmit);
-        fuelModal.querySelector('#purchase-lookup-cnpj-btn')?.addEventListener('click', () => lookupCnpj('purchase'));
+        
+        const purchaseCnpjBtn = fuelModal.querySelector('#purchase-lookup-cnpj-btn');
+        if (purchaseCnpjBtn) {
+            purchaseCnpjBtn.addEventListener('click', () => lookupCnpj('purchase'));
+        }
     }
     
     // LISTENERS PARA PAGINAÇÃO
@@ -244,17 +252,19 @@ function setupEventListeners() {
         loadActiveHistoryTab();
     });
 
-    // Adiciona o listener para a nova tabela de histórico
+    // Listener para a tabela de histórico de abastecimentos
     document.getElementById('costs-tab-content-abastecimentos')?.addEventListener('click', handleDeleteAbastecimentoClick);
     
-    // Listeners para o novo modal de estorno
+    // Listeners para o modal de estorno
     const estornoModal = document.getElementById('confirm-estorno-modal');
-    estornoModal.querySelector('#cancel-estorno-btn').addEventListener('click', () => estornoModal.classList.add('hidden'));
-    estornoModal.querySelector('#confirm-estorno-btn').addEventListener('click', () => {
-        if (estornoMovimentoId) {
-            executeEstornoMovimento(estornoMovimentoId);
-        }
-    });
+    if (estornoModal) {
+        estornoModal.querySelector('#cancel-estorno-btn').addEventListener('click', () => estornoModal.classList.add('hidden'));
+        estornoModal.querySelector('#confirm-estorno-btn').addEventListener('click', () => {
+            if (estornoMovimentoId) {
+                executeEstornoMovimento(estornoMovimentoId);
+            }
+        });
+    }
 }
 
 
