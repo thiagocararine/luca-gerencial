@@ -1316,12 +1316,14 @@ async function handleVehicleCostFormSubmit(event) {
 
 function openFleetCostModal() {
     const modal = document.getElementById('fleet-cost-modal');
-    modal.querySelector('form').reset();
-    document.getElementById('fleet-cost-fornecedor-id').value = '';
-    document.getElementById('fleet-cost-date').value = new Date().toISOString().split('T')[0];
-    document.querySelectorAll('#fleet-cost-filiais-checkboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
-    modal.classList.remove('hidden');
-    feather.replace();
+    if(modal) {
+        modal.querySelector('form').reset();
+        document.getElementById('fleet-cost-fornecedor-id').value = '';
+        document.getElementById('fleet-cost-date').value = new Date().toISOString().split('T')[0];
+        document.querySelectorAll('#fleet-cost-filiais-checkboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
+        modal.classList.remove('hidden');
+        feather.replace();
+    }
 }
 
 async function handleFleetCostFormSubmit(event) {
