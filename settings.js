@@ -517,9 +517,10 @@ async function loadAndPopulateVinculacao(codParametroPai) {
         
         selectVinculacao.innerHTML = '<option value="">-- Nenhum --</option>';
         currentParentList.forEach(item => {
-            if (item.KEY_PARAMETRO) {
+            // ALTERADO PARA USAR A COLUNA CORRETA (KEY_VINCULACAO)
+            if (item.KEY_VINCULACAO) { 
                 const option = document.createElement('option');
-                option.value = item.KEY_PARAMETRO;
+                option.value = item.KEY_VINCULACAO; // <-- Corrigido aqui
                 option.textContent = item.NOME_PARAMETRO;
                 selectVinculacao.appendChild(option);
             }
@@ -543,7 +544,8 @@ function setupParametrosTable() {
                 formatter: (cell) => {
                     const key = cell.getValue();
                     if (!key) return "";
-                    const pai = currentParentList.find(p => p.KEY_PARAMETRO == key);
+                    // ALTERADO PARA COMPARAR COM A COLUNA CORRETA (KEY_VINCULACAO)
+                    const pai = currentParentList.find(p => p.KEY_VINCULACAO == key); // <-- Corrigido aqui
                     return pai ? pai.NOME_PARAMETRO : `<span style="color:red;">Inválido</span>`;
                 }
             },
@@ -648,7 +650,11 @@ async function executeSaveParam(id, body) {
         if (response.status >= 400) return handleApiError(response);
         alert(`Parâmetro ${id ? 'atualizado' : 'criado'} com sucesso!`);
         resetParamForm();
-        parametrosTable.setData(); 
+
+        // LINHA CORRIGIDA: Agora a tabela recarrega com a autenticação correta
+        const refreshUrl = `${apiUrlBase}/settings/parametros?cod=${encodeURIComponent(currentParamCode)}`;
+        parametrosTable.setData(refreshUrl, {}, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+
     } catch (error) {
         alert(`Falha ao salvar o parâmetro: ${error.message}`);
     }
