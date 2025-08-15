@@ -476,7 +476,8 @@ router.get('/itens-estoque', authenticateToken, async (req, res) => {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        const [rows] = await connection.execute('SELECT id, nome_item FROM itens_estoque ORDER BY nome_item');
+        // CORRIGIDO: Seleciona todas as colunas necessárias da tabela correta.
+        const [rows] = await connection.execute('SELECT id, nome_item, unidade_medida, descricao, quantidade_atual FROM itens_estoque ORDER BY nome_item');
         res.json(rows);
     } catch (error) {
         console.error("Erro ao buscar itens de estoque:", error);
@@ -493,7 +494,8 @@ router.post('/itens-estoque', authenticateToken, authorizeAdmin, async (req, res
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        const sql = 'INSERT INTO estoque_itens (nome_item, unidade_medida, descricao, quantidade_atual) VALUES (?, ?, ?, 0)';
+        // CORRIGIDO: Insere na tabela correta "itens_estoque".
+        const sql = 'INSERT INTO itens_estoque (nome_item, unidade_medida, descricao, quantidade_atual) VALUES (?, ?, ?, 0)';
         await connection.execute(sql, [nome_item, unidade_medida, descricao || null]);
         res.status(201).json({ message: 'Item criado com sucesso.' });
     } catch (error) {
@@ -512,7 +514,8 @@ router.put('/itens-estoque/:id', authenticateToken, authorizeAdmin, async (req, 
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        const sql = 'UPDATE estoque_itens SET nome_item = ?, unidade_medida = ?, descricao = ? WHERE id = ?';
+        // CORRIGIDO: Atualiza a tabela correta "itens_estoque".
+        const sql = 'UPDATE itens_estoque SET nome_item = ?, unidade_medida = ?, descricao = ? WHERE id = ?';
         await connection.execute(sql, [nome_item, unidade_medida, descricao || null, id]);
         res.json({ message: 'Item atualizado com sucesso.' });
     } catch (error) {
@@ -529,7 +532,8 @@ router.delete('/itens-estoque/:id', authenticateToken, authorizeAdmin, async (re
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        await connection.execute('DELETE FROM estoque_itens WHERE id = ?', [id]);
+        // CORRIGIDO: Apaga da tabela correta "itens_estoque".
+        await connection.execute('DELETE FROM itens_estoque WHERE id = ?', [id]);
         res.json({ message: 'Item apagado com sucesso.' });
     } catch (error) {
         if (error.code === 'ER_ROW_IS_REFERENCED_2') return res.status(409).json({ error: 'Não é possível apagar este item, pois ele já possui movimentos de estoque registados.' });
