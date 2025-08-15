@@ -1,4 +1,4 @@
-// routes/routes_auth.js
+// routes/routes_auth.js (ATUALIZADO PARA GERIR FILIAL DO UTILIZADOR)
 
 const express = require('express');
 const router = express.Router();
@@ -6,12 +6,11 @@ const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { authenticateToken, authorizeAdmin } = require('../middlewares');
-const dbConfig = require('../dbConfig'); // Assumindo que a config do DB foi extraída
+const dbConfig = require('../dbConfig');
 
 // =================================================================
-// NOVA ROTA PÚBLICA PARA BUSCAR PARÂMETROS
+// ROTA PÚBLICA PARA BUSCAR PARÂMETROS
 // =================================================================
-// Esta rota é pública (não tem 'authenticateToken') para que a página de registo possa acedê-la.
 router.get('/parametros', async (req, res) => {
     const { cod } = req.query;
     if (!cod) {
@@ -85,7 +84,7 @@ router.post('/login', async (req, res) => {
             nome: user.nome_user, 
             email: user.email_user, 
             cargo: user.cargo_user, 
-            unidade: user.nome_unidade, // Usa o nome limpo vindo do JOIN
+            unidade: user.nome_unidade,
             departamento: user.depart_user,
             perfil: user.perfil_acesso,
             dashboard: user.dashboard_type,
@@ -148,13 +147,14 @@ router.post('/signup', async (req, res) => {
     }
 });
 
-// GET /api/auth/users
+// GET /api/auth/users (ATUALIZADO)
 router.get('/users', authenticateToken, authorizeAdmin, async (req, res) => {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
+        // ADICIONADO u.id_filial ao SELECT
         const sql = `
-            SELECT u.ID, u.nome_user, u.email_user, u.cargo_user, u.unidade_user, u.status_user, p.nome_perfil as perfil_acesso, u.id_perfil
+            SELECT u.ID, u.nome_user, u.email_user, u.cargo_user, u.unidade_user, u.status_user, p.nome_perfil as perfil_acesso, u.id_perfil, u.id_filial
             FROM cad_user u
             LEFT JOIN perfis_acesso p ON u.id_perfil = p.id
             ORDER BY u.nome_user`;
@@ -168,10 +168,11 @@ router.get('/users', authenticateToken, authorizeAdmin, async (req, res) => {
     }
 });
 
-// PUT /api/auth/users/:id/manage
+// PUT /api/auth/users/:id/manage (ATUALIZADO)
 router.put('/users/:id/manage', authenticateToken, authorizeAdmin, async (req, res) => {
     const { id } = req.params;
-    const { status, id_perfil, senha } = req.body;
+    // ADICIONADO id_filial
+    const { status, id_perfil, senha, id_filial } = req.body;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
@@ -185,6 +186,11 @@ router.put('/users/:id/manage', authenticateToken, authorizeAdmin, async (req, r
         if (id_perfil) {
             fieldsToUpdate.push('id_perfil = ?');
             params.push(id_perfil);
+        }
+        // NOVA LÓGICA PARA ATUALIZAR A FILIAL
+        if (id_filial) {
+            fieldsToUpdate.push('id_filial = ?');
+            params.push(id_filial);
         }
         if (senha) {
             const salt = await bcrypt.genSalt(10);

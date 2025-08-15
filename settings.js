@@ -1,4 +1,4 @@
-// settings.js (COMPLETO E ATUALIZADO COM CADASTRO DE ITENS)
+// settings.js (COMPLETO E ATUALIZADO COM ALTERAÇÃO DE FILIAL)
 
 document.addEventListener('DOMContentLoaded', () => {
     if (document.querySelector('.tabs')) {
@@ -8,14 +8,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // --- Constantes e Variáveis de Estado Globais ---
 const apiUrlBase = 'http://10.113.0.17:3000/api';
-let parametrosTable, usersTable, perfisTable, itensEstoqueTable; // Variável para a nova tabela de itens
+let parametrosTable, usersTable, perfisTable, itensEstoqueTable;
 let currentParamCode = null;
 let currentParentList = []; 
 let todosOsPerfis = [];
 let actionToConfirm = null;
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 
-// NOVO: Mapeamento central dos módulos com chaves simples para evitar erros de codificação
 const ALL_MODULES = {
     'lancamentos': 'Lançamentos',
     'logistica': 'Logística',
@@ -45,7 +44,7 @@ async function initSettingsPage() {
         await preCarregarPerfisDeAcesso();
         setupUsersTable();
         setupPerfisTable();
-        setupItensEstoqueTable(); // Nova chamada para configurar a tabela de itens
+        setupItensEstoqueTable();
     }
     
     await popularSeletorDeCodigos();
@@ -71,7 +70,7 @@ function setupEventListenersSettings() {
 
             if(tab === 'usuarios' && usersTable) usersTable.setData();
             if(tab === 'perfis' && perfisTable) perfisTable.setData();
-            if(tab === 'itens_estoque' && itensEstoqueTable) itensEstoqueTable.setData(); // Atualiza dados ao clicar na aba
+            if(tab === 'itens_estoque' && itensEstoqueTable) itensEstoqueTable.setData();
         }
     });
     
@@ -103,7 +102,6 @@ function setupEventListenersSettings() {
         document.getElementById('confirm-action-modal').style.display = 'none';
     });
     
-    // NOVOS LISTENERS PARA O CADASTRO DE ITENS
     document.getElementById('item-estoque-form')?.addEventListener('submit', handleItemEstoqueFormSubmit);
     document.getElementById('cancel-edit-item-btn')?.addEventListener('click', resetItemEstoqueForm);
 }
@@ -111,7 +109,38 @@ function setupEventListenersSettings() {
 // --- GESTÃO DE UTILIZADORES ---
 
 /**
- * Carrega e exibe as permissões de um perfil específico usando as chaves simples.
+ * NOVA FUNÇÃO: Carrega e popula o seletor de filiais (unidades).
+ * @param {HTMLSelectElement} selectElement O elemento select a ser populado.
+ * @param {number} valorAtual O ID da filial atual do utilizador para pré-seleção.
+ */
+async function popularSelectFiliais(selectElement, valorAtual) {
+    selectElement.innerHTML = '<option value="">A carregar...</option>';
+    try {
+        // Usamos a rota pública de parâmetros que já existe
+        const response = await fetch(`${apiUrlBase}/auth/parametros?cod=Unidades`);
+        if (!response.ok) throw new Error('Falha ao buscar filiais');
+        
+        const filiais = await response.json();
+        
+        selectElement.innerHTML = '<option value="">-- Selecione uma Filial --</option>';
+        filiais.forEach(filial => {
+            const option = document.createElement('option');
+            option.value = filial.ID; // O valor é o ID do parâmetro
+            option.textContent = filial.NOME_PARAMETRO;
+            if (filial.ID === valorAtual) {
+                option.selected = true;
+            }
+            selectElement.appendChild(option);
+        });
+    } catch (error) {
+        console.error("Erro ao popular filiais:", error);
+        selectElement.innerHTML = '<option value="">Erro ao carregar</option>';
+    }
+}
+
+
+/**
+ * Carrega e exibe as permissões de um perfil específico.
  * @param {number} profileId O ID do perfil.
  */
 async function loadPermissionsForProfile(profileId) {
@@ -168,6 +197,9 @@ function setupUsersTable() {
     });
 }
 
+/**
+ * ATUALIZADO: para popular o novo seletor de filial.
+ */
 async function openUserSettingsModal(userData) {
     const modal = document.getElementById('user-settings-modal');
     document.getElementById('user-modal-name').textContent = userData.nome_user;
@@ -187,23 +219,29 @@ async function openUserSettingsModal(userData) {
         perfilSelect.appendChild(option);
     });
     
+    // NOVA CHAMADA para popular o seletor de filiais
+    const filialSelect = document.getElementById('user-modal-filial');
+    await popularSelectFiliais(filialSelect, userData.id_filial);
+    
     await loadPermissionsForProfile(userData.id_perfil);
     
     modal.classList.remove('hidden');
 }
 
 /**
- * Salva os dados do usuário E as permissões do perfil usando as chaves simples.
+ * ATUALIZADO: para enviar o novo id_filial para o backend.
  */
 async function handleSaveUserSettings() {
     const userId = document.getElementById('user-modal-id').value;
     const newPassword = document.getElementById('user-modal-password').value;
     const newStatus = document.getElementById('user-modal-status').value;
     const newProfileId = document.getElementById('user-modal-perfil').value;
+    const newFilialId = document.getElementById('user-modal-filial').value; // NOVO
 
     const userPayload = {
         status: newStatus,
         id_perfil: newProfileId,
+        id_filial: newFilialId, // NOVO
     };
 
     if (newPassword.trim() !== '') {
@@ -223,7 +261,7 @@ async function handleSaveUserSettings() {
         const permissionsContainer = document.getElementById('user-modal-permissions');
         permissionsContainer.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
             permissionsPayload.push({
-                nome_modulo: checkbox.name, // Salva a chave simples, ex: 'lancamentos'
+                nome_modulo: checkbox.name,
                 permitido: checkbox.checked
             });
         });
@@ -347,13 +385,13 @@ async function handleDeletePerfil(id) {
    }
 }
 
-// --- NOVAS FUNÇÕES PARA ITENS DE ESTOQUE ---
+// --- FUNÇÕES PARA ITENS DE ESTOQUE ---
 
 function setupItensEstoqueTable() {
     itensEstoqueTable = new Tabulator("#itens-estoque-table", {
         layout: "fitColumns",
         placeholder: "A carregar itens...",
-        ajaxURL: `${apiUrlBase}/logistica/itens-estoque`, // Nova rota
+        ajaxURL: `${apiUrlBase}/logistica/itens-estoque`,
         ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
         columns: [
             { title: "ID", field: "id", width: 60 },
@@ -479,7 +517,7 @@ async function loadAndPopulateVinculacao(codParametroPai) {
         
         selectVinculacao.innerHTML = '<option value="">-- Nenhum --</option>';
         currentParentList.forEach(item => {
-            if (item.KEY_PARAMETRO) { // Corrigido para usar a chave correta para o vínculo
+            if (item.KEY_PARAMETRO) {
                 const option = document.createElement('option');
                 option.value = item.KEY_PARAMETRO;
                 option.textContent = item.NOME_PARAMETRO;
