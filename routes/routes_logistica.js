@@ -1431,7 +1431,9 @@ router.get('/itens-estoque', authenticateToken, async (req, res) => {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        const [rows] = await connection.execute('SELECT id, nome_item FROM itens_estoque ORDER BY nome_item');
+        const [rows] = await connection.execute(
+            'SELECT id, nome_item FROM itens_estoque ORDER BY nome_item'
+        );
         res.json(rows);
     } catch (error) {
         console.error("Erro ao buscar itens de estoque:", error);
