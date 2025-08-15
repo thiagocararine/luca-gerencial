@@ -1,5 +1,3 @@
-// logistica.js (COMPLETO com funcionalidade de estorno de abastecimento)
-
 document.addEventListener('DOMContentLoaded', initLogisticaPage);
 
 // --- Constantes e Variáveis de Estado Globais ---
@@ -23,7 +21,7 @@ let maintenanceExportDatepicker = null;
 let LOGO_BASE_64 = null;
 let costToDelete = { id: null, type: null };
 let documentToDelete = { id: null, name: null };
-let estornoMovimentoId = null; // Nova variável global
+let estornoMovimentoId = null; 
 let photoCaptureState = {
     stream: null,
     targetInputId: null,
@@ -201,12 +199,8 @@ function setupEventListeners() {
     captureModal.querySelector('#use-photo-btn').addEventListener('click', useCapturedPhoto);
     captureModal.querySelector('#retake-photo-btn').addEventListener('click', retakePhoto);
 
-    // LISTENERS PARA O MÓDULO DE COMBUSTÍVEL (COM VERIFICAÇÃO DE SEGURANÇA)
-    const openFuelBtn = document.getElementById('open-fuel-modal-btn');
-    if (openFuelBtn) {
-        openFuelBtn.addEventListener('click', openFuelModal);
-    }
-
+    // LISTENERS PARA O MÓDULO DE COMBUSTÍVEL
+    document.getElementById('open-fuel-modal-btn')?.addEventListener('click', openFuelModal);
     const fuelModal = document.getElementById('fuel-management-modal');
     if (fuelModal) {
         fuelModal.querySelector('#close-fuel-modal-btn').addEventListener('click', () => fuelModal.classList.add('hidden'));
@@ -217,11 +211,7 @@ function setupEventListeners() {
         });
         fuelModal.querySelector('#fuel-purchase-form').addEventListener('submit', handleFuelPurchaseSubmit);
         fuelModal.querySelector('#fuel-consumption-form').addEventListener('submit', handleFuelConsumptionSubmit);
-        
-        const purchaseCnpjBtn = fuelModal.querySelector('#purchase-lookup-cnpj-btn');
-        if (purchaseCnpjBtn) {
-            purchaseCnpjBtn.addEventListener('click', () => lookupCnpj('purchase'));
-        }
+        fuelModal.querySelector('#purchase-lookup-cnpj-btn')?.addEventListener('click', () => lookupCnpj('purchase'));
     }
     
     // LISTENERS PARA PAGINAÇÃO
@@ -302,11 +292,12 @@ async function executeEstornoMovimento(id) {
         alert('Lançamento estornado com sucesso!');
         modal.classList.add('hidden');
         
-        // Recarrega os dados relevantes
-        await loadCurrentStock();
-        await loadAbastecimentosHistory();
-        await loadFleetCosts(); // Recarrega para refletir a exclusão de compras
-        await loadRecentIndividualCosts(); // Recarrega para refletir a exclusão de abastecimentos
+        await Promise.all([
+            loadCurrentStock(),
+            loadAbastecimentosHistory(),
+            loadFleetCosts(),
+            loadRecentIndividualCosts()
+        ]);
 
     } catch (error) {
         alert(`Erro: ${error.message}`);
@@ -797,8 +788,16 @@ async function openVehicleModal(vehicle = null) {
             document.getElementById('vehicle-chassi').value = vehicle.chassi || '';
             document.getElementById('vehicle-filial').value = vehicle.id_filial || '';
             document.getElementById('vehicle-status').value = vehicle.status || 'Ativo';
-            document.getElementById('vehicle-seguro').checked = !!vehicle.seguro;
-            document.getElementById('vehicle-rastreador').checked = !!vehicle.rastreador;
+            
+            const seguroCheckbox = document.getElementById('vehicle-seguro');
+            if (seguroCheckbox) {
+                seguroCheckbox.checked = !!vehicle.seguro;
+            }
+            const rastreadorCheckbox = document.getElementById('vehicle-rastreador');
+            if (rastreadorCheckbox) {
+                rastreadorCheckbox.checked = !!vehicle.rastreador;
+            }
+
             document.getElementById('vehicle-tipo-combustivel').value = vehicle.tipo_combustivel || '';
             const hasPlaca = vehicle.placa && vehicle.placa.toUpperCase() !== 'SEM PLACA';
             document.getElementById('has-placa-checkbox').checked = hasPlaca;
