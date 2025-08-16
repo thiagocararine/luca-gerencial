@@ -544,7 +544,6 @@ router.delete('/itens-estoque/:id', authenticateToken, authorizeAdmin, async (re
     }
 });
 
-
 // --- ROTAS PARA O MÓDULO DE COMBUSTÍVEL ---
 
 router.get('/estoque/saldo/:itemId', authenticateToken, async (req, res) => {
