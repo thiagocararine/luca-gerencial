@@ -8,7 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // A variável que guarda o endereço da API para todo o projeto.
-const apiUrlBase = 'http://10.113.0.17:3000/api';
+//const apiUrlBase = 'http://10.113.0.17:3000/api';
+const apiUrlBase = '/api';
 
 /**
  * Lida com a submissão do formulário de login.
