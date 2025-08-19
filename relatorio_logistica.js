@@ -124,7 +124,6 @@ async function exportarRelatorioLogisticaPDF() {
         switch (reportType) {
             case 'custoTotalFilial':
             case 'custoRateado':
-            case 'custoDireto':
                 head = [['Data', 'Filial', 'Descrição', 'Valor (R$)']];
                 body = data.map(item => {
                     totalGeral += parseFloat(item.valor);
@@ -136,9 +135,33 @@ async function exportarRelatorioLogisticaPDF() {
                     ];
                 });
                 break;
+            
+            // NOVO BLOCO APENAS PARA O CUSTO DIRETO
+            case 'custoDireto':
+                head = [['Data', 'Filial', 'Veículo', 'Tipo', 'Fornecedor', 'Valor (R$)']];
+                body = data.map(item => {
+                    totalGeral += parseFloat(item.valor);
+                    return [
+                        new Date(item.data_despesa).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
+                        item.filial_nome,
+                        item.descricao, // Contém modelo e placa
+                        item.tipo_despesa,
+                        item.fornecedor_nome || 'N/A',
+                        parseFloat(item.valor).toFixed(2)
+                    ];
+                });
+                break;
             case 'listaVeiculos':
-                head = [['Placa', 'Marca/Modelo', 'Ano', 'Filial', 'Status']];
-                body = data.map(v => [v.placa, `${v.marca} / ${v.modelo}`, `${v.ano_fabricacao}/${v.ano_modelo}`, v.nome_filial, v.status]);
+                head = [['Placa', 'Marca/Modelo', 'Ano', 'Filial', 'Status', 'Seguro', 'Rastreador']];
+                body = data.map(v => [
+                    v.placa,
+                    `${v.marca} / ${v.modelo}`,
+                    `${v.ano_fabricacao}/${v.ano_modelo}`,
+                    v.nome_filial,
+                    v.status,
+                    v.seguro ? 'Sim' : 'Não', // <-- Dado adicionado
+                    v.rastreador ? 'Sim' : 'Não' // <-- Dado adicionado
+                ]);
                 break;
             case 'despesaVeiculo':
                 head = [['Data', 'Tipo', 'Descrição', 'Fornecedor', 'Valor (R$)']];
