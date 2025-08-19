@@ -138,18 +138,20 @@ async function exportarRelatorioLogisticaPDF() {
             
             // NOVO BLOCO APENAS PARA O CUSTO DIRETO
             case 'custoDireto':
-                head = [['Data', 'Filial', 'Veículo', 'Serviço Realizado', 'Tipo', 'Fornecedor', 'Valor (R$)']]; // Cabeçalho atualizado
+                // Cabeçalho corrigido com a nova coluna
+                head = [['Data', 'Filial', 'Veículo', 'Serviço Realizado', 'Tipo', 'Fornecedor', 'Valor (R$)']];
                 body = data.map(item => {
                     totalGeral += parseFloat(item.valor);
+                    // Correção da data e uso dos novos campos do backend
+                    const dataFormatada = item.data_despesa ? new Date(item.data_despesa.replace(/-/g, '\/')).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A';
                     return [
-                        // CORRIGIDO: Tratamento de data mais robusto
-                        new Date(item.data_despesa.replace(/-/g, '\/')).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
+                        dataFormatada,
                         item.filial_nome,
-                        item.veiculo_descricao, // Usa a nova descrição do veículo
-                        item.servico_descricao || 'N/A', // Usa a nova descrição do serviço
+                        item.veiculo_info,
+                        item.servico_info || 'N/A',
                         item.tipo_despesa,
                         item.fornecedor_nome || 'N/A',
-                        parseFloat(item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) // Formatação de moeda
+                        parseFloat(item.valor).toFixed(2)
                     ];
                 });
                 break;
@@ -358,13 +360,15 @@ function renderDirectCostReport(data, container) {
     container.innerHTML = '';
     const table = document.createElement('table');
     table.className = 'min-w-full divide-y divide-gray-200 text-sm bg-white rounded-lg shadow';
+    // Adicionamos a coluna "Serviço" ao cabeçalho
     table.innerHTML = `
         <thead class="bg-gray-50">
             <tr>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Filial</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo</th>
-                <th class="px-4 py-2 text-left font-medium text-gray-500">Tipo de Despesa</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Serviço</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Tipo</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Fornecedor</th>
                 <th class="px-4 py-2 text-right font-medium text-gray-500">Valor (R$)</th>
             </tr>
@@ -372,7 +376,7 @@ function renderDirectCostReport(data, container) {
         <tbody class="bg-white divide-y divide-gray-200"></tbody>
         <tfoot class="bg-gray-100 font-bold">
             <tr>
-                <td colspan="5" class="px-4 py-2 text-right">TOTAL GERAL</td>
+                <td colspan="6" class="px-4 py-2 text-right">TOTAL GERAL</td>
                 <td id="total-geral" class="px-4 py-2 text-right"></td>
             </tr>
         </tfoot>`;
@@ -382,10 +386,13 @@ function renderDirectCostReport(data, container) {
         const tr = tbody.insertRow();
         const valor = parseFloat(item.valor);
         totalGeral += valor;
+        // Correção da data e uso dos novos campos de descrição
+        const dataFormatada = item.data_despesa ? new Date(item.data_despesa.replace(/-/g, '\/')).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A';
         tr.innerHTML = `
-            <td class="px-4 py-2">${new Date(item.data_despesa).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+            <td class="px-4 py-2">${dataFormatada}</td>
             <td class="px-4 py-2">${item.filial_nome}</td>
-            <td class="px-4 py-2">${item.descricao}</td>
+            <td class="px-4 py-2">${item.veiculo_info}</td>
+            <td class="px-4 py-2">${item.servico_info || 'N/A'}</td>
             <td class="px-4 py-2">${item.tipo_despesa}</td>
             <td class="px-4 py-2">${item.fornecedor_nome || 'N/A'}</td>
             <td class="px-4 py-2 text-right">${valor.toFixed(2).replace('.', ',')}</td>
