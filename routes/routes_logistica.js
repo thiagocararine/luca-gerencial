@@ -1165,8 +1165,8 @@ router.get('/relatorios/custoDireto', authenticateToken, async (req, res) => {
             SELECT 
                 p.NOME_PARAMETRO as filial_nome, 
                 DATE_FORMAT(vm.data_manutencao, '%Y-%m-%d') as data_despesa,
-                CONCAT(v.modelo, ' (', v.placa, ')') as veiculo_descricao, 
-                vm.descricao as servico_descricao, -- ADICIONADO: Pega a descrição do serviço
+                CONCAT(v.modelo, ' (', v.placa, ')') as veiculo_info, 
+                vm.descricao as servico_info,
                 vm.tipo_manutencao as tipo_despesa,
                 f.razao_social as fornecedor_nome, 
                 vm.custo as valor
@@ -1242,8 +1242,13 @@ router.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) =
 
         const sqlDireto = `
             SELECT 
-                p.NOME_PARAMETRO as filial_nome, p.ID as filial_id, 'Despesa Direta' as tipo_custo,
-                CONCAT(v.modelo, ' (', v.placa, ')') as descricao, vm.custo as valor
+                p.NOME_PARAMETRO as filial_nome, 
+                p.ID as filial_id, 
+                vm.tipo_manutencao as tipo_custo,
+                CONCAT(v.modelo, ' (', v.placa, ')') as veiculo_info,
+                vm.descricao as descricao_servico,
+                vm.custo as valor,
+                DATE_FORMAT(vm.data_manutencao, '%Y-%m-%d') as data_despesa
             FROM veiculo_manutencoes vm
             JOIN veiculos v ON vm.id_veiculo = v.id
             LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
@@ -1251,9 +1256,13 @@ router.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) =
 
         const sqlRateado = `
             SELECT 
-                p.NOME_PARAMETRO as filial_nome, p.ID as filial_id, 'Despesa Rateada' as tipo_custo,
-                cf.descricao,
-                cf.custo as valor
+                p.NOME_PARAMETRO as filial_nome, 
+                p.ID as filial_id, 
+                'Despesa Rateada' as tipo_custo,
+                NULL as veiculo_info,
+                cf.descricao as descricao_servico,
+                cf.custo as valor,
+                DATE_FORMAT(cf.data_custo, '%Y-%m-%d') as data_despesa
             FROM custos_frota cf
             LEFT JOIN parametro p ON cf.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
             ${whereCustoRateado}`;

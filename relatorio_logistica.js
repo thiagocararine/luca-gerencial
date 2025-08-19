@@ -123,6 +123,20 @@ async function exportarRelatorioLogisticaPDF() {
         // Formata os dados de acordo com o tipo de relatório
         switch (reportType) {
             case 'custoTotalFilial':
+                head = [['Data', 'Filial', 'Tipo de Custo', 'Veículo', 'Descrição do Serviço', 'Valor (R$)']];
+                body = data.map(item => {
+                    totalGeral += parseFloat(item.valor);
+                    const dataFormatada = item.data_despesa ? new Date(item.data_despesa.replace(/-/g, '\/')).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A';
+                    return [
+                        dataFormatada,
+                        item.filial_nome,
+                        item.tipo_custo,
+                        item.veiculo_info || 'N/A (Rateio)',
+                        item.descricao_servico,
+                        parseFloat(item.valor).toFixed(2)
+                    ];
+                });
+                break;
             case 'custoRateado':
                 head = [['Data', 'Filial', 'Descrição', 'Valor (R$)']];
                 body = data.map(item => {
