@@ -8,8 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
 // IMPORTANTE: Para o seu ambiente de desenvolvimento, este endereço deve ser o completo.
 // Quando for para o servidor de produção, mudaremos isto para um caminho relativo ('/api').
 // const apiUrlBase = 'http://localhost:3000/api';
-const apiUrlBase = 'http://10.113.0.17:3000/api';
-//const apiUrlBase = '/api';
+//const apiUrlBase = 'http://10.113.0.17:3000/api';
+const apiUrlBase = '/api';
 
 
 /**

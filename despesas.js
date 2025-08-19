@@ -7,7 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- Constantes e Variáveis de Estado Globais ---
-const apiUrlBase = 'http://10.113.0.17:3000/api';
+//const apiUrlBase = 'http://10.113.0.17:3000/api';
+const apiUrlBase = '/api';
 const despesasApiUrl = `${apiUrlBase}/despesas`;
 const privilegedRoles = ["Administrador", "Financeiro"];
 let todosOsGrupos = [];
