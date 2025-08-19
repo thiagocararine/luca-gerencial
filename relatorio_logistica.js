@@ -138,16 +138,18 @@ async function exportarRelatorioLogisticaPDF() {
             
             // NOVO BLOCO APENAS PARA O CUSTO DIRETO
             case 'custoDireto':
-                head = [['Data', 'Filial', 'Veículo', 'Tipo', 'Fornecedor', 'Valor (R$)']];
+                head = [['Data', 'Filial', 'Veículo', 'Serviço Realizado', 'Tipo', 'Fornecedor', 'Valor (R$)']]; // Cabeçalho atualizado
                 body = data.map(item => {
                     totalGeral += parseFloat(item.valor);
                     return [
-                        new Date(item.data_despesa).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
+                        // CORRIGIDO: Tratamento de data mais robusto
+                        new Date(item.data_despesa.replace(/-/g, '\/')).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
                         item.filial_nome,
-                        item.descricao, // Contém modelo e placa
+                        item.veiculo_descricao, // Usa a nova descrição do veículo
+                        item.servico_descricao || 'N/A', // Usa a nova descrição do serviço
                         item.tipo_despesa,
                         item.fornecedor_nome || 'N/A',
-                        parseFloat(item.valor).toFixed(2)
+                        parseFloat(item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) // Formatação de moeda
                     ];
                 });
                 break;

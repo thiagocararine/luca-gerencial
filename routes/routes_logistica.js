@@ -1163,9 +1163,13 @@ router.get('/relatorios/custoDireto', authenticateToken, async (req, res) => {
         const whereClause = `WHERE ${conditions.join(' AND ')}`;
         const sql = `
             SELECT 
-                p.NOME_PARAMETRO as filial_nome, DATE_FORMAT(vm.data_manutencao, '%Y-%m-%d') as data_despesa,
-                CONCAT(v.modelo, ' (', v.placa, ')') as descricao, vm.tipo_manutencao as tipo_despesa,
-                f.razao_social as fornecedor_nome, vm.custo as valor
+                p.NOME_PARAMETRO as filial_nome, 
+                DATE_FORMAT(vm.data_manutencao, '%Y-%m-%d') as data_despesa,
+                CONCAT(v.modelo, ' (', v.placa, ')') as veiculo_descricao, 
+                vm.descricao as servico_descricao, -- ADICIONADO: Pega a descrição do serviço
+                vm.tipo_manutencao as tipo_despesa,
+                f.razao_social as fornecedor_nome, 
+                vm.custo as valor
             FROM veiculo_manutencoes vm
             JOIN veiculos v ON vm.id_veiculo = v.id
             LEFT JOIN fornecedores f ON vm.id_fornecedor = f.id
