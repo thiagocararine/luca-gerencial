@@ -92,7 +92,7 @@
             </button>
             <div class="hidden md:block"></div>
             <div class="flex items-center gap-4 ml-auto">
-                <span class="text-sm text-gray-700">Olá, <strong id="user-name" class="font-medium">Utilizador</strong>!</span>
+                <span class="text-sm text-gray-700">Olá, <strong id="user-name" class="font-medium">Usuário</strong>!</span>
                 <button id="logout-button" class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500">Sair</button>
             </div>
         </header>
@@ -104,7 +104,7 @@
                     <button class="tab-button active whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="parametros">Parâmetros</button>
                     <button class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="itens_estoque">Itens de Estoque</button>
                     <button class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="perfis" style="display: none;">Perfis de Acesso</button>
-                    <button class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="usuarios" id="user-tab-btn" style="display: none;">Utilizadores</button>
+                    <button class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="usuarios" id="user-tab-btn" style="display: none;">Usuários</button>
                     <button class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="logo">Logo</button>
                 </nav>
             </div>
@@ -180,7 +180,7 @@
                 <div id="perfis-content" class="tab-content hidden space-y-8">
                     <section class="settings-section bg-white p-6 rounded-lg shadow">
                         <h3 class="text-lg font-semibold text-gray-900">Gerir Perfis de Acesso</h3>
-                        <p class="mt-1 text-sm text-gray-600">Crie e edite os perfis que definem o que cada utilizador pode ver e fazer no sistema.</p>
+                        <p class="mt-1 text-sm text-gray-600">Crie e edite os perfis que definem o que cada usuário pode ver e acessar no sistema.</p>
                         <div id="perfis-table" class="mt-6"></div>
                     </section>
                     <section class="settings-section bg-white p-6 rounded-lg shadow">
@@ -227,8 +227,8 @@
                 </div>
                 <div id="usuarios-content" class="tab-content hidden">
                     <section class="settings-section bg-white p-6 rounded-lg shadow">
-                        <h3 class="text-lg font-semibold text-gray-900">Gestão de Utilizadores</h3>
-                        <p class="mt-1 text-sm text-gray-600">Clique em "Gerir" para editar as permissões e dados de um utilizador.</p>
+                        <h3 class="text-lg font-semibold text-gray-900">Gestão de Usuários</h3>
+                        <p class="mt-1 text-sm text-gray-600">Clique em "Gerir" para editar as permissões e dados de um usuário.</p>
                         <div id="users-table" class="mt-4"></div>
                     </section>
                 </div>
@@ -241,8 +241,8 @@
     <div class="relative mx-auto p-6 border w-full max-w-lg shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between pb-4 border-b">
             <div>
-                <h3 class="text-xl font-semibold text-gray-900">Gerir Utilizador</h3>
-                <p class="text-sm text-gray-500" id="user-modal-name">Nome do Utilizador</p>
+                <h3 class="text-xl font-semibold text-gray-900">Gerir Usuário</h3>
+                <p class="text-sm text-gray-500" id="user-modal-name">Nome do Usuário</p>
             </div>
             <button id="close-user-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center">
                  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
