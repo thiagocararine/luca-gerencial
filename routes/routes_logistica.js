@@ -1251,7 +1251,7 @@ router.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) =
                 p.ID as filial_id, 
                 vm.tipo_manutencao as tipo_custo,
                 CONCAT(v.modelo, ' (', v.placa, ')') as veiculo_info,
-                vm.descricao as dservico_info,
+                vm.descricao as servico_info,
                 vm.custo as valor,
                 DATE_FORMAT(vm.data_manutencao, '%Y-%m-%d') as data_despesa
             FROM veiculo_manutencoes vm
