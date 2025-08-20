@@ -1251,7 +1251,7 @@ router.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) =
                 p.ID as filial_id, 
                 vm.tipo_manutencao as tipo_custo,
                 CONCAT(v.modelo, ' (', v.placa, ')') as veiculo_info,
-                vm.descricao as descricao_servico,
+                vm.descricao as dservico_info,
                 vm.custo as valor,
                 DATE_FORMAT(vm.data_manutencao, '%Y-%m-%d') as data_despesa
             FROM veiculo_manutencoes vm
@@ -1265,7 +1265,7 @@ router.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) =
                 p.ID as filial_id, 
                 'Despesa Rateada' as tipo_custo,
                 NULL as veiculo_info,
-                cf.descricao as descricao_servico,
+                cf.descricao as servico_info,
                 cf.custo as valor,
                 DATE_FORMAT(cf.data_custo, '%Y-%m-%d') as data_despesa
             FROM custos_frota cf
