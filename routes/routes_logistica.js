@@ -1204,8 +1204,13 @@ router.get('/relatorios/custoRateado', authenticateToken, async (req, res) => {
         const whereClause = `WHERE ${conditions.join(' AND ')}`;
         const sql = `
             SELECT 
-                p.NOME_PARAMETRO as filial_nome, p.ID as filial_id,
-                'Despesa Rateada' as tipo_custo, cf.descricao, cf.custo as valor
+                p.NOME_PARAMETRO as filial_nome, 
+                p.ID as filial_id,
+                'Despesa Rateada' as tipo_custo,
+                NULL as veiculo_info,
+                cf.descricao as servico_info,
+                cf.custo as valor,
+                DATE_FORMAT(cf.data_custo, '%Y-%m-%d') as data_despesa
             FROM custos_frota cf
             LEFT JOIN parametro p ON cf.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
             ${whereClause}
@@ -1293,24 +1298,34 @@ router.get('/relatorios/despesaVeiculo', authenticateToken, async (req, res) => 
     try {
         connection = await mysql.createConnection(dbConfig);
         const pageLimit = parseInt(limit) || 1000;
-        const sql = `
+
+        // Query para buscar os detalhes do veículo
+        const vehicleDetailsSql = `
+            SELECT v.marca, v.modelo, v.placa, p.NOME_PARAMETRO as nome_filial
+            FROM veiculos v
+            LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
+            WHERE v.id = ?`;
+        const [vehicleDetails] = await connection.execute(vehicleDetailsSql, [veiculoId]);
+
+        // Query para buscar as despesas
+        const expensesSql = `
             SELECT 
-                vm.data_manutencao,
-                vm.tipo_manutencao,
-                vm.descricao,
-                f.razao_social as fornecedor_nome,
-                vm.custo
+                vm.data_manutencao, vm.tipo_manutencao, vm.descricao,
+                f.razao_social as fornecedor_nome, vm.custo
             FROM veiculo_manutencoes vm
             LEFT JOIN fornecedores f ON vm.id_fornecedor = f.id
-            WHERE vm.id_veiculo = ?
-              AND vm.data_manutencao >= ?
-              AND vm.data_manutencao <= ?
-              AND vm.status = 'Ativo'
+            WHERE vm.id_veiculo = ? AND vm.data_manutencao >= ? AND vm.data_manutencao <= ? AND vm.status = 'Ativo'
             ORDER BY vm.data_manutencao ASC
             LIMIT ?`;
         
-        const [data] = await connection.execute(sql, [veiculoId, dataInicio, dataFim, pageLimit]);
-        res.json(data);
+        const [expenses] = await connection.execute(expensesSql, [veiculoId, dataInicio, dataFim, pageLimit]);
+
+        // Envia um objeto com os dois resultados
+        res.json({
+            vehicle: vehicleDetails[0] || {},
+            expenses: expenses
+        });
+
     } catch (error) {
         console.error("Erro ao gerar relatório de despesa de veículo:", error);
         res.status(500).json({ error: 'Erro ao gerar relatório.' });
