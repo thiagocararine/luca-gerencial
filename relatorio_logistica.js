@@ -70,10 +70,22 @@ async function exportarRelatorioLogisticaPDF() {
     btn.textContent = 'A gerar...';
     btn.disabled = true;
 
+    // --- INÍCIO DAS ALTERAÇÕES ---
     const reportType = document.getElementById('report-type').value;
+
+    // NOVO: 1. Lógica para definir a orientação da página
+    let orientation = 'p'; // Padrão é 'p' (portrait/retrato)
+    if (reportType === 'custoTotalFilial' || reportType === 'custoDireto') {
+        orientation = 'l'; // Define 'l' (landscape/paisagem) para os relatórios especificados
+    }
+
+    // NOVO: 2. Lógica para obter e limpar o título do relatório
+    let reportTitle = document.getElementById('report-type').options[document.getElementById('report-type').selectedIndex].text;
+    reportTitle = reportTitle.replace(/^\d+\s*-\s*/, ''); // Remove o "1 - ", "2 - ", etc. do início do título
+    // --- FIM DAS ALTERAÇÕES ---
+
     let apiUrl = `${apiUrlBase}/logistica/relatorios/${reportType}?export=true`;
     
-    // Adiciona os mesmos filtros da tela principal à URL de exportação
     const filialId = document.getElementById('filter-filial').value;
     const vehicleId = document.getElementById('filter-vehicle').value;
     const status = document.getElementById('filter-status').value;
@@ -97,19 +109,20 @@ async function exportarRelatorioLogisticaPDF() {
 
         if (data.length === 0) {
             alert('Nenhum dado encontrado com os filtros atuais para gerar o relatório.');
+            btn.textContent = 'Gerar PDF';
+            btn.disabled = false;
             return;
         }
 
         const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+        // NOVO: A variável de orientação é usada aqui na criação do documento
+        const doc = new jsPDF({ orientation: orientation, unit: 'mm', format: 'a4' });
         
-        // Adiciona a Logo
         if (LOGO_BASE_64) {
             doc.addImage(LOGO_BASE_64, 'PNG', 14, 15, 25, 0);
         }
 
-        // Adiciona Título e Informações do Filtro
-        const reportTitle = document.getElementById('report-type').options[document.getElementById('report-type').selectedIndex].text;
+        // NOVO: A variável de título limpo é usada aqui
         doc.setFontSize(18);
         doc.text(reportTitle, doc.internal.pageSize.getWidth() / 2, 22, { align: 'center' });
         doc.setFontSize(11);
@@ -120,7 +133,6 @@ async function exportarRelatorioLogisticaPDF() {
         let body = [];
         let totalGeral = 0;
         
-        // Formata os dados de acordo com o tipo de relatório
         switch (reportType) {
             case 'custoTotalFilial':
                 head = [['Data', 'Filial', 'Tipo de Custo', 'Veículo', 'Descrição do Serviço', 'Valor (R$)']];
@@ -149,14 +161,10 @@ async function exportarRelatorioLogisticaPDF() {
                     ];
                 });
                 break;
-            
-            // NOVO BLOCO APENAS PARA O CUSTO DIRETO
             case 'custoDireto':
-                // Cabeçalho corrigido com a nova coluna
-                head = [['Data', 'Filial', 'Veículo', 'Serviço Realizado', 'Tipo', 'Fornecedor', 'Valor (R$)']];
+                 head = [['Data', 'Filial', 'Veículo', 'Serviço Realizado', 'Tipo', 'Fornecedor', 'Valor (R$)']];
                 body = data.map(item => {
                     totalGeral += parseFloat(item.valor);
-                    // Correção da data e uso dos novos campos do backend
                     const dataFormatada = item.data_despesa ? new Date(item.data_despesa.replace(/-/g, '\/')).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A';
                     return [
                         dataFormatada,
@@ -171,15 +179,7 @@ async function exportarRelatorioLogisticaPDF() {
                 break;
             case 'listaVeiculos':
                 head = [['Placa', 'Marca/Modelo', 'Ano', 'Filial', 'Status', 'Seguro', 'Rastreador']];
-                body = data.map(v => [
-                    v.placa,
-                    `${v.marca} / ${v.modelo}`,
-                    `${v.ano_fabricacao}/${v.ano_modelo}`,
-                    v.nome_filial,
-                    v.status,
-                    v.seguro ? 'Sim' : 'Não', // <-- Dado adicionado
-                    v.rastreador ? 'Sim' : 'Não' // <-- Dado adicionado
-                ]);
+                body = data.map(v => [v.placa, `${v.marca} / ${v.modelo}`, `${v.ano_fabricacao}/${v.ano_modelo}`, v.nome_filial, v.status, v.seguro ? 'Sim' : 'Não', v.rastreador ? 'Sim' : 'Não']);
                 break;
             case 'despesaVeiculo':
                 head = [['Data', 'Tipo', 'Descrição', 'Fornecedor', 'Valor (R$)']];
@@ -204,7 +204,6 @@ async function exportarRelatorioLogisticaPDF() {
             headStyles: { fillColor: [41, 128, 185] },
         });
 
-        // Adiciona total geral se for um relatório de custos
         if (['custoTotalFilial', 'custoRateado', 'custoDireto', 'despesaVeiculo'].includes(reportType)) {
             const finalY = doc.autoTable.previous.finalY;
             doc.setFontSize(12);
