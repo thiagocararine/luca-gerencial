@@ -134,6 +134,7 @@ async function exportarRelatorioLogisticaPDF() {
         let totalGeral = 0;
         
         switch (reportType) {
+            case 'custoRateado':
             case 'custoTotalFilial':
                 head = [['Data', 'Filial', 'Tipo de Custo', 'Veículo', 'Descrição do Serviço', 'Valor (R$)']];
                 body = data.map(item => {
@@ -144,19 +145,7 @@ async function exportarRelatorioLogisticaPDF() {
                         item.filial_nome,
                         item.tipo_custo,
                         item.veiculo_info || 'N/A (Rateio)',
-                        item.descricao_servico,
-                        parseFloat(item.valor).toFixed(2)
-                    ];
-                });
-                break;
-            case 'custoRateado':
-                head = [['Data', 'Filial', 'Descrição', 'Valor (R$)']];
-                body = data.map(item => {
-                    totalGeral += parseFloat(item.valor);
-                    return [
-                        new Date(item.data_despesa || item.data_custo).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
-                        item.filial_nome,
-                        item.descricao,
+                        item.servico_info,
                         parseFloat(item.valor).toFixed(2)
                     ];
                 });
@@ -182,8 +171,23 @@ async function exportarRelatorioLogisticaPDF() {
                 body = data.map(v => [v.placa, `${v.marca} / ${v.modelo}`, `${v.ano_fabricacao}/${v.ano_modelo}`, v.nome_filial, v.status, v.seguro ? 'Sim' : 'Não', v.rastreador ? 'Sim' : 'Não']);
                 break;
             case 'despesaVeiculo':
+                // Os dados agora vêm como data.vehicle e data.expenses
+                const vehicleData = data.vehicle;
+                const expensesData = data.expenses;
+
+                if (expensesData.length === 0) {
+                    alert('Nenhuma despesa encontrada para este veículo no período selecionado.');
+                    return; // Retorna para não gerar um PDF vazio
+                }
+
+                // Adiciona as novas informações no cabeçalho do PDF
+                doc.setFontSize(11);
+                doc.text(`Filial: ${vehicleData.nome_filial || 'N/A'}`, 14, 35);
+                doc.text(`Veículo: ${vehicleData.marca} / ${vehicleData.modelo}`, 14, 40);
+                doc.text(`Placa: ${vehicleData.placa}`, 14, 45);
+
                 head = [['Data', 'Tipo', 'Descrição', 'Fornecedor', 'Valor (R$)']];
-                body = data.map(item => {
+                body = expensesData.map(item => {
                     totalGeral += parseFloat(item.custo);
                     return [
                         new Date(item.data_manutencao).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
@@ -369,7 +373,7 @@ function renderSummaryCostReport(data, container) {
             <td class="px-4 py-2">${item.filial_nome}</td>
             <td class="px-4 py-2">${item.tipo_custo}</td>
             <td class="px-4 py-2">${item.veiculo_info || 'N/A (Rateio)'}</td>
-            <td class="px-4 py-2">${item.descricao_servico}</td>
+            <td class="px-4 py-2">${item.servico_info}</td>
             <td class="px-4 py-2 text-right">${valor.toFixed(2).replace('.', ',')}</td>
         `;
     });
