@@ -41,6 +41,7 @@ async function getFinancialSummary(connection, req) {
 }
 
 // Função para buscar dados do dashboard de Logística (ATUALIZADA)
+// Substitua a função inteira por esta:
 async function getLogisticsSummary(connection, req) {
     const { dataInicio, dataFim, filial } = req.query;
     
@@ -51,6 +52,13 @@ async function getLogisticsSummary(connection, req) {
     if (dataFim) { whereClauseCustos += " AND vm.data_manutencao <= ?"; paramsCustos.push(dataFim); }
     if (filial) { whereClauseCustos += " AND v.id_filial = ?"; paramsCustos.push(filial); }
     
+    // Cláusula WHERE para a nova query de combustível
+    const paramsCombustivel = [];
+    let whereClauseCombustivel = "WHERE em.status = 'Ativo' AND em.tipo_movimento = 'Saída'";
+    if (dataInicio) { whereClauseCombustivel += " AND em.data_movimento >= ?"; paramsCombustivel.push(dataInicio); }
+    if (dataFim) { whereClauseCombustivel += " AND em.data_movimento <= ?"; paramsCombustivel.push(dataFim); }
+    if (filial) { whereClauseCombustivel += " AND v.id_filial = ?"; paramsCombustivel.push(filial); }
+
     const paramsCustosFrota = [];
     let whereClauseCustosFrota = "WHERE cf.status = 'Ativo'";
     if (dataInicio) { whereClauseCustosFrota += " AND cf.data_custo >= ?"; paramsCustosFrota.push(dataInicio); }
@@ -63,17 +71,10 @@ async function getLogisticsSummary(connection, req) {
 
     // --- Queries ---
 
-    // NOVO: Queries de custo separadas para a nova estrutura de KPIs
+    // ALTERADO: Consulta de combustível foi dividida em duas para maior robustez
     const custoManutencaoDiretaQuery = `SELECT SUM(custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos} AND vm.tipo_manutencao != 'Abastecimento'`;
-    const custoCombustivelQuery = `
-        SELECT 
-            (SELECT SUM(em.quantidade) 
-             FROM estoque_movimentos em 
-             JOIN veiculos v ON em.id_veiculo = v.id 
-             ${whereClauseCustos.replace(/vm/g, 'em').replace('data_manutencao', 'data_movimento')} 
-             AND em.tipo_movimento = 'Saída' AND em.status = 'Ativo') 
-            * (SELECT ultimo_preco_unitario FROM itens_estoque WHERE id = 1) as total
-    `;
+    const somaCombustivelQuery = `SELECT SUM(em.quantidade) as total FROM estoque_movimentos em JOIN veiculos v ON em.id_veiculo = v.id ${whereClauseCombustivel}`;
+    const precoUnitarioQuery = `SELECT ultimo_preco_unitario as preco FROM itens_estoque WHERE id = 1`; // ID 1 = Diesel
     const custoFrotaQuery = `SELECT SUM(custo) as total FROM custos_frota cf ${whereClauseCustosFrota}`;
     
     // MANTIDO: Queries para os KPIs de veículos e para os gráficos
@@ -83,16 +84,18 @@ async function getLogisticsSummary(connection, req) {
     const chartVeiculosFilialQuery = `SELECT p.NOME_PARAMETRO as filial, COUNT(v.id) as total FROM veiculos v JOIN parametro p ON v.id_filial = p.ID WHERE v.status IN ('Ativo', 'Em Manutenção') AND p.COD_PARAMETRO = 'Unidades' GROUP BY v.id_filial`;
 
     const [
-        manutencaoDiretaResult, // Alterado
-        combustivelResult,      // Alterado
+        manutencaoDiretaResult,
+        somaCombustivelResult,  // Alterado
+        precoUnitarioResult,    // Novo
         custoFrotaResult,
         statusResult,
         custoClassificacaoResult,
         top5VeiculosResult,
         veiculosFilialResult
     ] = await Promise.all([
-        connection.execute(custoManutencaoDiretaQuery, paramsCustos), // Alterado
-        connection.execute(custoCombustivelQuery, paramsCustos),     // Alterado
+        connection.execute(custoManutencaoDiretaQuery, paramsCustos),
+        connection.execute(somaCombustivelQuery, paramsCombustivel), // Alterado
+        connection.execute(precoUnitarioQuery),                     // Novo
         connection.execute(custoFrotaQuery, paramsCustosFrota),
         connection.execute(veiculosStatusQuery, paramsVeiculos),
         connection.execute(custoClassificacaoQuery, paramsCustos),
@@ -100,30 +103,26 @@ async function getLogisticsSummary(connection, req) {
         connection.execute(chartVeiculosFilialQuery,[])
     ]);
 
-    // NOVO: Lógica de cálculo para os novos KPIs
+    // ALTERADO: Lógica de cálculo do combustível
     const totalManutencaoDireta = manutencaoDiretaResult[0][0]?.total || 0;
-    const totalCombustivel = combustivelResult[0][0]?.total || 0;
+    const totalLitrosConsumidos = somaCombustivelResult[0][0]?.total || 0;
+    const precoUnitarioDiesel = precoUnitarioResult[0][0]?.preco || 0;
+    const totalCombustivel = totalLitrosConsumidos * precoUnitarioDiesel;
     const totalCustoFrota = custoFrotaResult[0][0]?.total || 0;
 
-    // MANTIDO: Lógica para os KPIs de veículos
     const veiculosAtivos = statusResult[0].find(r => r.status === 'Ativo')?.total || 0;
     const veiculosEmManutencao = statusResult[0].find(r => r.status === 'Em Manutenção')?.total || 0;
 
-    // NOVO: Estrutura de retorno com os novos KPIs
     return {
         kpis: {
-            // MANTIDO: KPIs de Veículos
             veiculosAtivos: veiculosAtivos,
             veiculosEmManutencao: veiculosEmManutencao,
             totalVeiculos: veiculosAtivos + veiculosEmManutencao,
-
-            // NOVO: KPIs de Custo Granulares
             kpiCustoCombustivel: parseFloat(totalCombustivel),
             kpiCustoManutencao: parseFloat(totalManutencaoDireta) + parseFloat(totalCustoFrota),
             kpiCustoTotalGeral: parseFloat(totalManutencaoDireta) + parseFloat(totalCustoFrota) + parseFloat(totalCombustivel),
         },
         charts: {
-            // MANTIDO: Todos os dados para os gráficos
             statusFrota: statusResult[0],
             custoPorClassificacao: custoClassificacaoResult[0],
             top5VeiculosCusto: top5VeiculosResult[0],

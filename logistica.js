@@ -318,12 +318,16 @@ async function executeEstornoMovimento(id) {
         alert('Lançamento estornado com sucesso!');
         modal.classList.add('hidden');
         
+        // Atualiza as listas e o estoque
         await Promise.all([
             loadCurrentStock(),
-            loadAbastecimentosHistory(),
-            loadFleetCosts(),
-            loadRecentIndividualCosts()
+            loadAbastecimentosHistory()
+            // As outras chamadas não são estritamente necessárias aqui
         ]);
+
+        // LINHA CRUCIAL ADICIONADA AQUI:
+        // Força a re-verificação dos alertas de manutenção com o odômetro corrigido.
+        await verificarAlertasManutencaoParaIcone();
 
     } catch (error) {
         alert(`Erro: ${error.message}`);
