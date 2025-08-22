@@ -1499,7 +1499,7 @@ router.get('/abastecimentos', authenticateToken, async (req, res) => {
         const limit = parseInt(req.query.limit) || 20;
         const offset = (page - 1) * limit;
 
-        let conditions = ["em.tipo_movimento = 'Saída', em.status = 'Ativo'"];
+        let conditions = ["em.tipo_movimento = 'Saída'", "em.status = 'Ativo'"];
         const params = [];
         
         if (filial) {
