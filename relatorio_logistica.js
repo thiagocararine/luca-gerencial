@@ -333,7 +333,7 @@ async function generateReport() {
                 renderVehicleListReport(data, resultsArea); 
                 break;
             case 'despesaVeiculo':
-                renderVehicleExpenseReport(data, resultsArea); 
+                renderVehicleExpenseReport(data.expenses, resultsArea); 
                 break;
             default:
                  resultsArea.innerHTML = '<p class="text-center text-red-500 p-8">Tipo de relatório inválido.</p>';
