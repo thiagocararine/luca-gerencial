@@ -125,9 +125,19 @@
                         <h4 class="text-sm font-medium text-gray-500 truncate">Em Manutenção</h4>
                         <p class="mt-1 text-3xl font-semibold text-gray-900" id="kpi-veiculos-manutencao">0</p>
                     </div>
-                    <div class="bg-white rounded-lg shadow p-5 border-l-4 border-blue-500">
-                        <h4 class="text-sm font-medium text-gray-500 truncate">Custo Total no Período</h4>
-                        <p class="mt-1 text-3xl font-semibold text-gray-900" id="kpi-custo-total-logistica">R$ 0,00</p>
+                    <div class="bg-white p-4 rounded-lg shadow-md text-center">
+                        <h4 class="text-sm font-medium text-gray-500">Custo Total Geral</h4>
+                        <p id="kpi-custo-total-geral" class="text-2xl font-bold text-gray-800 mt-1">R$ 0,00</p>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-lg shadow-md text-center">
+                        <h4 class="text-sm font-medium text-gray-500">Custo Manutenção + Frota</h4>
+                        <p id="kpi-custo-manutencao" class="text-2xl font-bold text-gray-800 mt-1">R$ 0,00</p>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-lg shadow-md text-center">
+                        <h4 class="text-sm font-medium text-gray-500">Custo de Combustível</h4>
+                        <p id="kpi-custo-combustivel" class="text-2xl font-bold text-gray-800 mt-1">R$ 0,00</p>
                     </div>
                     <div id="kpi-manutencoes-vencidas-card" class="bg-white rounded-lg shadow p-5 border-l-4 border-red-600 cursor-pointer hover:bg-red-50 transition-colors duration-200">
                         <h4 class="text-sm font-medium text-gray-500 truncate">Manutenções Vencidas</h4>
@@ -187,7 +197,7 @@
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
-<script src="dashboard.js?v=2.0.15" defer></script>
+<script src="dashboard.js?v=2.0.16" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();

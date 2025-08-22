@@ -693,10 +693,11 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
             [itemId, 'Saída', quantidade, veiculoId, odometro, userId]
         );
 
+        /* ----- ABASTECIMENTO APENAS NA ABA DE HISTORICO DE ABASTECIMENTO -----
         await connection.execute(
             'INSERT INTO veiculo_manutencoes (id_veiculo, id_filial, data_manutencao, custo, tipo_manutencao, classificacao_custo, id_user_lanc, id_fornecedor, status, descricao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [veiculoId, id_filial_veiculo, data, custoCalculado, 'Abastecimento', 'Custo Operacional', userId, fornecedorCombustivelId, 'Ativo', `Abastecimento de ${quantidade}L`]
-        );
+        ); */
 
         const [ultimoAbastecimento] = await connection.execute(
             'SELECT odometro_no_momento, quantidade FROM estoque_movimentos WHERE id_veiculo = ? AND tipo_movimento = "Saída" ORDER BY data_movimento DESC LIMIT 1, 1',
@@ -1115,7 +1116,7 @@ router.put('/custos-frota/:id/excluir', authenticateToken, async (req, res) => {
 // --- ROTAS DE RELATÓRIOS ---
 
 router.get('/relatorios/listaVeiculos', authenticateToken, async (req, res) => {
-    const { filial, status, limit, seguro, rastreador } = req.query; 
+    const { filial, status, limit, seguro, rastreador } = req.query;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
@@ -1124,12 +1125,17 @@ router.get('/relatorios/listaVeiculos', authenticateToken, async (req, res) => {
         const pageLimit = parseInt(limit) || 1000;
 
         if (filial) { conditions.push('v.id_filial = ?'); params.push(filial); }
-        if (status) { conditions.push('v.status = ?'); params.push(status); }
-        if (seguro === 'true') { conditions.push('v.seguro = 1'); }
-        if (rastreador === 'true') { conditions.push('v.rastreador = 1'); }
+        if (status) {
+            conditions.push('v.status = ?');
+            params.push(status);
+        } else {
+            // Se nenhum status for enviado, o padrão é mostrar apenas os Ativos.
+            conditions.push("v.status = 'Ativo'");
+            if (seguro === 'true') { conditions.push('v.seguro = 1'); }
+            if (rastreador === 'true') { conditions.push('v.rastreador = 1'); }
 
-        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-        const sql = `
+            const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+            const sql = `
             SELECT 
                 v.placa, v.marca, v.modelo, v.ano_fabricacao, v.ano_modelo, v.status,
                 p.NOME_PARAMETRO as nome_filial, v.seguro, v.rastreador, v.odometro_atual,
@@ -1141,9 +1147,10 @@ router.get('/relatorios/listaVeiculos', authenticateToken, async (req, res) => {
             ${whereClause}
             ORDER BY p.NOME_PARAMETRO, v.modelo
             LIMIT ?`;
-        
-        const [data] = await connection.execute(sql, [...params, pageLimit]);
-        res.json(data);
+
+            const [data] = await connection.execute(sql, [...params, pageLimit]);
+            res.json(data);
+        }
     } catch (error) {
         console.error("Erro ao gerar relatório de lista de veículos:", error);
         res.status(500).json({ error: 'Erro ao gerar relatório.' });
@@ -1545,32 +1552,36 @@ router.get('/veiculos/manutencao/alertas', authenticateToken, async (req, res) =
         // 3. Para cada veículo, verificar cada plano
         for (const veiculo of veiculos) {
             for (const plano of planos) {
-                // 4. Buscar a última manutenção daquele tipo para o veículo
+                
+                // LINHA CRUCIAL QUE ESTAVA FALTANDO:
+                // Buscar a última manutenção daquele tipo para o veículo ATUAL
                 const [ultimaManutencao] = await connection.execute(
                     `SELECT odometro_manutencao FROM veiculo_manutencoes 
-                     WHERE id_veiculo = ? AND item_servico = ? AND odometro_manutencao IS NOT NULL
-                     ORDER BY data_manutencao DESC, id DESC LIMIT 1`,
+                    WHERE id_veiculo = ? AND item_servico = ? AND odometro_manutencao IS NOT NULL
+                    ORDER BY data_manutencao DESC, id DESC LIMIT 1`,
                     [veiculo.id, plano.item_servico]
                 );
 
-                const odometroUltimoServico = ultimaManutencao.length > 0 ? ultimaManutencao[0].odometro_manutencao : 0;
-                const kmDesdeUltimoServico = veiculo.odometro_atual - odometroUltimoServico;
-                const intervaloKmPlano = parseInt(plano.intervalo_km, 10);
-                
-                const percentualUtilizado = (kmDesdeUltimoServico / intervaloKmPlano);
-                const proximaManutencaoKm = odometroUltimoServico + intervaloKmPlano;
+                // A SUA LÓGICA DE VERIFICAÇÃO (QUE ESTÁ CORRETA) VEM AQUI:
+                if (ultimaManutencao.length > 0) {
+                    const odometroUltimoServico = ultimaManutencao[0].odometro_manutencao;
+                    const kmDesdeUltimoServico = veiculo.odometro_atual - odometroUltimoServico;
+                    const intervaloKmPlano = parseInt(plano.intervalo_km, 10);
+                    
+                    const percentualUtilizado = (kmDesdeUltimoServico / intervaloKmPlano);
+                    const proximaManutencaoKm = odometroUltimoServico + intervaloKmPlano;
 
-                // 5. Se usou 80% ou mais do intervalo, gera o alerta
-                if (percentualUtilizado >= 0.8) {
-                    alertas.push({
-                        veiculoId: veiculo.id,
-                        veiculoDesc: `${veiculo.modelo} (${veiculo.placa})`,
-                        itemServico: plano.item_servico,
-                        kmAtual: veiculo.odometro_atual,
-                        kmProxima: proximaManutencaoKm,
-                        kmRestantes: proximaManutencaoKm - veiculo.odometro_atual,
-                        status: (veiculo.odometro_atual >= proximaManutencaoKm) ? 'Vencida' : 'Próxima'
-                    });
+                    if (percentualUtilizado >= 0.8) {
+                        alertas.push({
+                            veiculoId: veiculo.id,
+                            veiculoDesc: `${veiculo.modelo} (${veiculo.placa})`,
+                            itemServico: plano.item_servico,
+                            kmAtual: veiculo.odometro_atual,
+                            kmProxima: proximaManutencaoKm,
+                            kmRestantes: proximaManutencaoKm - veiculo.odometro_atual,
+                            status: (veiculo.odometro_atual >= proximaManutencaoKm) ? 'Vencida' : 'Próxima'
+                        });
+                    }
                 }
             }
         }

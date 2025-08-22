@@ -153,13 +153,20 @@ function renderFinancialDashboard(data) {
 }
 
 function renderLogisticsDashboard(data) {
+    // Função auxiliar para formatar valores como moeda
+    const formatCurrency = (value) => (parseFloat(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    // MANTIDO: Preenche os KPIs de veículos
     document.getElementById('kpi-total-veiculos').textContent = data.kpis.totalVeiculos || 0;
     document.getElementById('kpi-veiculos-ativos').textContent = data.kpis.veiculosAtivos || 0;
     document.getElementById('kpi-veiculos-manutencao').textContent = data.kpis.veiculosEmManutencao || 0;
-    document.getElementById('kpi-custo-total-logistica').textContent = (parseFloat(data.kpis.custoTotalPeriodo) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    document.getElementById('kpi-manutencoes-vencidas').textContent = data.kpis.manutencoesVencidas || 0;
-    document.getElementById('kpi-manutencoes-a-vencer').textContent = data.kpis.manutencoesPorVencerKm || 0;
+    
+    // NOVO: Preenche os três novos KPIs de custo
+    document.getElementById('kpi-custo-total-geral').textContent = formatCurrency(data.kpis.kpiCustoTotalGeral);
+    document.getElementById('kpi-custo-manutencao').textContent = formatCurrency(data.kpis.kpiCustoManutencao);
+    document.getElementById('kpi-custo-combustivel').textContent = formatCurrency(data.kpis.kpiCustoCombustivel);
 
+    // MANTIDO: Lógica para renderizar os gráficos (nenhuma alteração aqui)
     const statusData = {
         labels: data.charts.statusFrota.map(d => d.status),
         datasets: [{ data: data.charts.statusFrota.map(d => d.total), backgroundColor: ['rgba(22, 163, 74, 0.8)', 'rgba(234, 179, 8, 0.8)'] }]
