@@ -31,12 +31,17 @@ function setupDashboardEventListeners() {
     if(grupoSelect) {
         grupoSelect.addEventListener('change', loadDashboardData);
     }
-    document.getElementById('kpi-manutencoes-vencidas-card')?.addEventListener('click', () => openMaintenanceAlertModal('vencidas'));
-    document.getElementById('kpi-manutencoes-a-vencer-card')?.addEventListener('click', () => {
+    // Função auxiliar para abrir o modal de alertas por KM
+    const openKmAlertsModal = () => {
         document.getElementById('maintenance-alert-title').textContent = 'Manutenções Próximas ou Vencidas por KM';
-        carregarEExibirAlertasDeManutencao(); // Garante que o conteúdo está atualizado
+        // A função abaixo agora preenche a tabela do modal com os dados mais recentes
+        carregarEExibirAlertasDeManutencao(); 
         document.getElementById('maintenance-alert-modal').classList.remove('hidden');
-    });
+    };
+
+    // Ambos os cards agora chamam a mesma função
+    document.getElementById('kpi-manutencoes-vencidas-card')?.addEventListener('click', openKmAlertsModal);
+    document.getElementById('kpi-manutencoes-a-vencer-card')?.addEventListener('click', openKmAlertsModal);
     document.getElementById('close-maintenance-alert-modal')?.addEventListener('click', () => {
         document.getElementById('maintenance-alert-modal').classList.add('hidden');
     });
@@ -314,13 +319,22 @@ async function carregarEExibirAlertasDeManutencao() {
 
         const alertas = await response.json();
         
-        // Atualiza o KPI no dashboard
-        const kpiElement = document.getElementById('kpi-manutencoes-a-vencer');
-        if (kpiElement) {
-            kpiElement.textContent = alertas.length;
+        // NOVO: Separa os alertas em dois grupos
+        const alertasVencidos = alertas.filter(a => a.status === 'Vencida');
+        const alertasProximos = alertas.filter(a => a.status === 'Próxima');
+
+        // Atualiza AMBOS os KPIs no dashboard
+        const kpiVencidasElement = document.getElementById('kpi-manutencoes-vencidas');
+        const kpiProximasElement = document.getElementById('kpi-manutencoes-a-vencer');
+
+        if (kpiVencidasElement) {
+            kpiVencidasElement.textContent = alertasVencidos.length;
+        }
+        if (kpiProximasElement) {
+            kpiProximasElement.textContent = alertasProximos.length;
         }
 
-        // Prepara o conteúdo do modal
+        // Prepara o conteúdo do modal (continua mostrando a lista completa)
         const modalContent = document.getElementById('maintenance-alert-content');
         if (alertas.length === 0) {
             modalContent.innerHTML = '<p class="text-center text-gray-500">Nenhum veículo com manutenção próxima ou vencida por KM.</p>';
@@ -341,6 +355,7 @@ async function carregarEExibirAlertasDeManutencao() {
             </thead>
             <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
         const tbody = table.querySelector('tbody');
+        // Ordena para mostrar os mais urgentes (vencidos) primeiro
         alertas.sort((a, b) => a.kmRestantes - b.kmRestantes).forEach(alerta => {
             const tr = tbody.insertRow();
             const statusClass = alerta.status === 'Vencida' ? 'text-red-600 font-bold' : 'text-yellow-600';
