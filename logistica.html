@@ -543,6 +543,16 @@
                     <label for="maintenance-description" class="block font-medium">Descrição</label>
                     <textarea id="maintenance-description" rows="2" class="form-input mt-1 block w-full rounded-md border-gray-300" placeholder="Ex: Troca de óleo e filtros..."></textarea>
                 </div>
+                <div>
+                    <label for="maintenance-item-servico" class="block text-sm font-medium text-gray-700">Item de Serviço (Plano)</label>
+                    <select id="maintenance-item-servico" name="maintenance-item-servico" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                        <option value="">-- Nenhum (Serviço Geral) --</option>
+                    </select>
+                </div>
+                <div id="odometer-field-container">
+                    <label for="maintenance-odometer" class="block text-sm font-medium text-gray-700">Odômetro no Momento do Serviço</label>
+                    <input type="number" id="maintenance-odometer" name="maintenance-odometer" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                </div>
             </div>
             <div class="border-t pt-4">
                  <h4 class="text-lg font-medium text-gray-800 mb-2">Fornecedor</h4>

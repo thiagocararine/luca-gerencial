@@ -1192,6 +1192,26 @@ function openMaintenanceModal(vehicleId) {
 
     populateMaintenanceTypes();
     populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Classificação Despesa Veiculo`, 'maintenance-classification', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Selecione a Classificação --');
+    populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Itens de Manutenção`, 'maintenance-item-servico', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Nenhum (Serviço Geral) --');
+
+    const classificationSelect = document.getElementById('maintenance-classification');
+    const odometerInput = document.getElementById('maintenance-odometer');
+    const odometerLabel = odometerInput.previousElementSibling;
+
+    const toggleOdometerRequirement = () => {
+        if (classificationSelect.value === 'Preventiva') {
+            odometerInput.required = true;
+            odometerLabel.innerHTML = 'Odômetro no Momento do Serviço <span class="text-red-500">*</span>';
+        } else {
+            odometerInput.required = false;
+            odometerLabel.innerHTML = 'Odômetro no Momento do Serviço';
+        }
+    };
+    // Garante que o listener seja adicionado apenas uma vez
+    classificationSelect.removeEventListener('change', toggleOdometerRequirement);
+    classificationSelect.addEventListener('change', toggleOdometerRequirement);
+
+    toggleOdometerRequirement(); // Executa para definir o estado inicial do formulário
 
     modal.classList.remove('hidden');
     feather.replace();
@@ -1210,6 +1230,8 @@ async function handleMaintenanceFormSubmit(event) {
         classificacao_custo: document.getElementById('maintenance-classification').value,
         descricao: document.getElementById('maintenance-description').value,
         id_fornecedor: document.getElementById('maintenance-fornecedor-id').value,
+        item_servico: document.getElementById('maintenance-item-servico').value,
+        odometro_manutencao: document.getElementById('maintenance-odometer').value
     };
 
     if (!maintenanceData.id_fornecedor) {

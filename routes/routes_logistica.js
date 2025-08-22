@@ -824,7 +824,7 @@ router.get('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
 
 router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
     const { id: id_veiculo } = req.params;
-    const { data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_fornecedor } = req.body;
+    const { data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_fornecedor, item_servico, odometro_manutencao } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
 
     if (!data_manutencao || !custo || !tipo_manutencao || !classificacao_custo || !id_fornecedor) {
@@ -845,10 +845,10 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
 
         const sqlInsert = `
             INSERT INTO veiculo_manutencoes 
-            (id_veiculo, id_filial, data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_user_lanc, id_fornecedor, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
-        
-        await connection.execute(sqlInsert, [id_veiculo, id_filial_veiculo, data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, userId, id_fornecedor]);
+            (id_veiculo, id_filial, data_manutencao, descricao, custo, tipo_manutencao, item_servico, odometro_manutencao, classificacao_custo, id_user_lanc, id_fornecedor, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
+
+        await connection.execute(sqlInsert, [id_veiculo, id_filial_veiculo, data_manutencao, descricao, custo, tipo_manutencao, item_servico || null, odometro_manutencao || null, classificacao_custo, userId, id_fornecedor]);
         
         if (classificacao_custo === 'Preventiva') {
             const proximaManutencao = new Date(data_manutencao);
