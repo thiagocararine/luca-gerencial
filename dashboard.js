@@ -160,13 +160,13 @@ function renderLogisticsDashboard(data) {
     document.getElementById('kpi-total-veiculos').textContent = data.kpis.totalVeiculos || 0;
     document.getElementById('kpi-veiculos-ativos').textContent = data.kpis.veiculosAtivos || 0;
     document.getElementById('kpi-veiculos-manutencao').textContent = data.kpis.veiculosEmManutencao || 0;
-    
+
     // NOVO: Preenche os três novos KPIs de custo
     document.getElementById('kpi-custo-total-geral').textContent = formatCurrency(data.kpis.kpiCustoTotalGeral);
     document.getElementById('kpi-custo-manutencao').textContent = formatCurrency(data.kpis.kpiCustoManutencao);
     document.getElementById('kpi-custo-combustivel').textContent = formatCurrency(data.kpis.kpiCustoCombustivel);
 
-    // MANTIDO: Lógica para renderizar os gráficos (nenhuma alteração aqui)
+    // MANTIDO: Lógica para renderizar os gráficos
     const statusData = {
         labels: data.charts.statusFrota.map(d => d.status),
         datasets: [{ data: data.charts.statusFrota.map(d => d.total), backgroundColor: ['rgba(22, 163, 74, 0.8)', 'rgba(234, 179, 8, 0.8)'] }]
@@ -184,7 +184,7 @@ function renderLogisticsDashboard(data) {
         datasets: [{ data: data.charts.custoPorClassificacao.map(d => d.total), backgroundColor: ['rgba(34, 197, 94, 0.8)', 'rgba(239, 68, 68, 0.8)', 'rgba(59, 130, 246, 0.8)'] }]
     };
     renderChart(classificacaoData, 'logistica-classificacao-chart', 'pie', {}, currencyTooltipCallback);
-    
+
     renderVeiculosPorFilialChart(data.charts.veiculosPorFilial || []);
 }
 
