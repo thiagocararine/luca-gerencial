@@ -353,7 +353,7 @@ async function openFuelModal() {
     try {
         // Busca o último preço do diesel (ID = 1)
         try {
-            const priceResponse = await fetch(`${apiUrlBase}/logistica/estoque/saldo/1`, { headers: { 'Authorization': `Bearer getToken()` } });
+            const priceResponse = await fetch(`${apiUrlBase}/logistica/estoque/saldo/1`, { headers: { 'Authorization': `Bearer ${getToken()}` } }); // <-- CORRIGIDO AQUI
             if (priceResponse.ok) {
                 const priceData = await priceResponse.json();
                 ultimoPrecoDiesel = parseFloat(priceData.ultimo_preco_unitario) || 0;
@@ -371,8 +371,8 @@ async function openFuelModal() {
         }
 
         const [itemsResponse, vehiclesResponse] = await Promise.all([
-            fetch(`${apiUrlBase}/logistica/itens-estoque`, { headers: { 'Authorization': `Bearer getToken()` } }),
-            fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer getToken()` } })
+            fetch(`${apiUrlBase}/logistica/itens-estoque`, { headers: { 'Authorization': `Bearer ${getToken()}` } }), // <-- CORRIGIDO AQUI
+            fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } })      // <-- CORRIGIDO AQUI
         ]);
 
         if (!itemsResponse.ok || !vehiclesResponse.ok) {
