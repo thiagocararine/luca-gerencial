@@ -866,7 +866,20 @@
         </div>
     </div>
 </div>
-
+<div id="confirm-estorno-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-[70] flex items-center justify-center p-4">
+    <div class="relative mx-auto p-6 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <div class="text-center">
+            <span data-feather="alert-triangle" class="mx-auto mb-4 w-12 h-12 text-yellow-500"></span>
+            <h3 class="text-lg font-medium text-gray-900">Confirmar Estorno</h3>
+            <p class="mt-2 text-sm text-gray-500">Tem a certeza de que quer estornar (excluir) este lançamento de abastecimento? Esta ação irá devolver o volume ao estoque.</p>
+            <p id="estorno-info" class="mt-2 text-sm font-bold text-gray-700"></p>
+        </div>
+        <div class="mt-6 flex justify-center gap-4">
+            <button id="cancel-estorno-btn" class="action-btn bg-gray-200 hover:bg-gray-300 text-gray-800">Cancelar</button>
+            <button id="confirm-estorno-btn" class="action-btn bg-red-600 hover:bg-red-700">Confirmar Estorno</button>
+        </div>
+    </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
