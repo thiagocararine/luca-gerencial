@@ -65,7 +65,15 @@ async function getLogisticsSummary(connection, req) {
 
     // NOVO: Queries de custo separadas para a nova estrutura de KPIs
     const custoManutencaoDiretaQuery = `SELECT SUM(custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos} AND vm.tipo_manutencao != 'Abastecimento'`;
-    const custoCombustivelQuery = `SELECT SUM(custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos} AND vm.tipo_manutencao = 'Abastecimento'`;
+    const custoCombustivelQuery = `
+        SELECT 
+            (SELECT SUM(em.quantidade) 
+             FROM estoque_movimentos em 
+             JOIN veiculos v ON em.id_veiculo = v.id 
+             ${whereClauseCustos.replace(/vm/g, 'em').replace('data_manutencao', 'data_movimento')} 
+             AND em.tipo_movimento = 'Saída' AND em.status = 'Ativo') 
+            * (SELECT ultimo_preco_unitario FROM itens_estoque WHERE id = 1) as total
+    `;
     const custoFrotaQuery = `SELECT SUM(custo) as total FROM custos_frota cf ${whereClauseCustosFrota}`;
     
     // MANTIDO: Queries para os KPIs de veículos e para os gráficos

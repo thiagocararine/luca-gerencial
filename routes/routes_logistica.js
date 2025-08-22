@@ -732,6 +732,7 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
     }
 });
 
+
 router.delete('/estoque/movimento/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { userId, nome: nomeUsuario, perfil } = req.user;
@@ -746,36 +747,34 @@ router.delete('/estoque/movimento/:id', authenticateToken, async (req, res) => {
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
 
-        const [movimentoRows] = await connection.execute('SELECT * FROM estoque_movimentos WHERE id = ?', [id]);
+        const [movimentoRows] = await connection.execute("SELECT * FROM estoque_movimentos WHERE id = ? FOR UPDATE", [id]);
         if (movimentoRows.length === 0) {
             await connection.rollback();
             return res.status(404).json({ error: 'Movimento de estoque não encontrado.' });
         }
         const movimento = movimentoRows[0];
-        const { id_item, tipo_movimento, quantidade, id_veiculo } = movimento;
+        const { id_item, tipo_movimento, quantidade, status } = movimento;
 
-        if (tipo_movimento === 'Saída') {
+        if (status === 'Estornado') {
+            await connection.rollback();
+            return res.status(400).json({ error: 'Este lançamento já foi estornado.' });
+        }
+
+        if (tipo_movimento === 'Saída') { // Estorno de um abastecimento
             await connection.execute(
                 'UPDATE itens_estoque SET quantidade_atual = quantidade_atual + ? WHERE id = ?',
                 [quantidade, id_item]
             );
+        } else if (tipo_movimento === 'Entrada') { // Estorno de uma compra
+            // Adicionar lógica para estornar o rateio de custos_frota se necessário no futuro
             await connection.execute(
-                "DELETE FROM veiculo_manutencoes WHERE id_veiculo = ? AND tipo_manutencao = 'Abastecimento' AND data_manutencao = ? AND quantidade = ?",
-                 [id_veiculo, movimento.data_movimento, quantidade]
-            );
-
-        } else if (tipo_movimento === 'Entrada') {
-             await connection.execute(
                 'UPDATE itens_estoque SET quantidade_atual = quantidade_atual - ? WHERE id = ?',
                 [quantidade, id_item]
             );
-             await connection.execute(
-                "DELETE FROM custos_frota WHERE descricao LIKE 'Compra de%' AND data_custo = ? AND custo = ?",
-                 [movimento.data_movimento.toISOString().slice(0, 10), quantidade] 
-             );
         }
 
-        await connection.execute('DELETE FROM estoque_movimentos WHERE id = ?', [id]);
+        // Em vez de DELETAR, agora ATUALIZAMOS o status
+        await connection.execute("UPDATE estoque_movimentos SET status = 'Estornado' WHERE id = ?", [id]);
 
         await registrarLog({
             usuario_id: userId,
@@ -797,7 +796,6 @@ router.delete('/estoque/movimento/:id', authenticateToken, async (req, res) => {
         if (connection) await connection.end();
     }
 });
-
 
 // --- ROTAS DE MANUTENÇÃO, CUSTOS E FORNECEDORES ---
 
@@ -1311,7 +1309,7 @@ router.get('/relatorios/despesaVeiculo', authenticateToken, async (req, res) => 
         connection = await mysql.createConnection(dbConfig);
         const pageLimit = parseInt(limit) || 1000;
 
-        // Query para buscar os detalhes do veículo
+        // Query 1: Buscar os detalhes do veículo (como já fizemos)
         const vehicleDetailsSql = `
             SELECT v.marca, v.modelo, v.placa, p.NOME_PARAMETRO as nome_filial
             FROM veiculos v
@@ -1319,23 +1317,37 @@ router.get('/relatorios/despesaVeiculo', authenticateToken, async (req, res) => 
             WHERE v.id = ?`;
         const [vehicleDetails] = await connection.execute(vehicleDetailsSql, [veiculoId]);
 
-        // Query para buscar as despesas
-        const expensesSql = `
+        // Query 2: Buscar as MANUTENÇÕES (exceto abastecimentos)
+        const maintenanceSql = `
             SELECT 
-                vm.data_manutencao, vm.tipo_manutencao, vm.descricao,
-                f.razao_social as fornecedor_nome, vm.custo
+                data_manutencao as data_evento, tipo_manutencao as tipo, descricao,
+                f.razao_social as fornecedor_nome, custo
             FROM veiculo_manutencoes vm
             LEFT JOIN fornecedores f ON vm.id_fornecedor = f.id
-            WHERE vm.id_veiculo = ? AND vm.data_manutencao >= ? AND vm.data_manutencao <= ? AND vm.status = 'Ativo'
-            ORDER BY vm.data_manutencao ASC
-            LIMIT ?`;
+            WHERE vm.id_veiculo = ? AND vm.data_manutencao >= ? AND vm.data_manutencao <= ? 
+              AND vm.status = 'Ativo' AND vm.tipo_manutencao != 'Abastecimento'`;
         
-        const [expenses] = await connection.execute(expensesSql, [veiculoId, dataInicio, dataFim, pageLimit]);
+        // Query 3: Buscar os ABASTECIMENTOS e calcular o custo
+        const fuelingSql = `
+            SELECT 
+                em.data_movimento as data_evento, 'Abastecimento' as tipo, 
+                CONCAT(em.quantidade, 'L') as descricao, 'Posto Interno' as fornecedor_nome,
+                (em.quantidade * ie.ultimo_preco_unitario) as custo
+            FROM estoque_movimentos em
+            JOIN itens_estoque ie ON em.id_item = ie.id
+            WHERE em.id_veiculo = ? AND em.data_movimento >= ? AND em.data_movimento <= ?
+              AND em.status = 'Ativo' AND em.tipo_movimento = 'Saída'`;
 
-        // Envia um objeto com os dois resultados
+        const [manutencoes] = await connection.execute(maintenanceSql, [veiculoId, dataInicio, dataFim]);
+        const [abastecimentos] = await connection.execute(fuelingSql, [veiculoId, dataInicio, dataFim]);
+
+        // Juntar e ordenar os resultados por data
+        const expenses = [...manutencoes, ...abastecimentos];
+        expenses.sort((a, b) => new Date(a.data_evento) - new Date(b.data_evento));
+
         res.json({
             vehicle: vehicleDetails[0] || {},
-            expenses: expenses
+            expenses: expenses.slice(0, pageLimit) // Aplica o limite após ordenar
         });
 
     } catch (error) {
@@ -1487,7 +1499,7 @@ router.get('/abastecimentos', authenticateToken, async (req, res) => {
         const limit = parseInt(req.query.limit) || 20;
         const offset = (page - 1) * limit;
 
-        let conditions = ["em.tipo_movimento = 'Saída'"];
+        let conditions = ["em.tipo_movimento = 'Saída', em.status = 'Ativo'"];
         const params = [];
         
         if (filial) {
