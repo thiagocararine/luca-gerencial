@@ -1515,4 +1515,69 @@ router.get('/abastecimentos', authenticateToken, async (req, res) => {
     }
 });
 
+// ROTA PARA BUSCAR ALERTAS DE MANUTENÇÃO POR KM
+router.get('/veiculos/manutencao/alertas', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+
+        // 1. Buscar os planos de manutenção por KM
+        const [planos] = await connection.execute(
+            "SELECT NOME_PARAMETRO as item_servico, KEY_PARAMETRO as intervalo_km FROM parametro WHERE COD_PARAMETRO = 'Plano Manutencao KM' AND KEY_PARAMETRO > 0"
+        );
+
+        if (planos.length === 0) {
+            return res.json([]); // Se não há planos, não há alertas
+        }
+
+        // 2. Buscar todos os veículos ativos
+        const [veiculos] = await connection.execute(
+            "SELECT id, modelo, placa, odometro_atual, id_filial FROM veiculos WHERE status = 'Ativo'"
+        );
+
+        const alertas = [];
+
+        // 3. Para cada veículo, verificar cada plano
+        for (const veiculo of veiculos) {
+            for (const plano of planos) {
+                // 4. Buscar a última manutenção daquele tipo para o veículo
+                const [ultimaManutencao] = await connection.execute(
+                    `SELECT odometro_manutencao FROM veiculo_manutencoes 
+                     WHERE id_veiculo = ? AND item_servico = ? AND odometro_manutencao IS NOT NULL
+                     ORDER BY data_manutencao DESC, id DESC LIMIT 1`,
+                    [veiculo.id, plano.item_servico]
+                );
+
+                const odometroUltimoServico = ultimaManutencao.length > 0 ? ultimaManutencao[0].odometro_manutencao : 0;
+                const kmDesdeUltimoServico = veiculo.odometro_atual - odometroUltimoServico;
+                const intervaloKmPlano = parseInt(plano.intervalo_km, 10);
+                
+                const percentualUtilizado = (kmDesdeUltimoServico / intervaloKmPlano);
+                const proximaManutencaoKm = odometroUltimoServico + intervaloKmPlano;
+
+                // 5. Se usou 80% ou mais do intervalo, gera o alerta
+                if (percentualUtilizado >= 0.8) {
+                    alertas.push({
+                        veiculoId: veiculo.id,
+                        veiculoDesc: `${veiculo.modelo} (${veiculo.placa})`,
+                        itemServico: plano.item_servico,
+                        kmAtual: veiculo.odometro_atual,
+                        kmProxima: proximaManutencaoKm,
+                        kmRestantes: proximaManutencaoKm - veiculo.odometro_atual,
+                        status: (veiculo.odometro_atual >= proximaManutencaoKm) ? 'Vencida' : 'Próxima'
+                    });
+                }
+            }
+        }
+
+        res.json(alertas);
+
+    } catch (error) {
+        console.error("Erro ao buscar alertas de manutenção:", error);
+        res.status(500).json({ error: 'Erro ao buscar alertas de manutenção.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
 module.exports = router;

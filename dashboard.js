@@ -21,6 +21,7 @@ async function initDashboardPage() {
     setupDashboardEventListeners();
     await setupSharedDashboardFilters();
     loadDashboardData();
+    carregarEExibirAlertasDeManutencao();
 }
 
 function setupDashboardEventListeners() {
@@ -31,7 +32,11 @@ function setupDashboardEventListeners() {
         grupoSelect.addEventListener('change', loadDashboardData);
     }
     document.getElementById('kpi-manutencoes-vencidas-card')?.addEventListener('click', () => openMaintenanceAlertModal('vencidas'));
-    document.getElementById('kpi-manutencoes-a-vencer-card')?.addEventListener('click', () => openMaintenanceAlertModal('a-vencer'));
+    document.getElementById('kpi-manutencoes-a-vencer-card')?.addEventListener('click', () => {
+        document.getElementById('maintenance-alert-title').textContent = 'Manutenções Próximas ou Vencidas por KM';
+        carregarEExibirAlertasDeManutencao(); // Garante que o conteúdo está atualizado
+        document.getElementById('maintenance-alert-modal').classList.remove('hidden');
+    });
     document.getElementById('close-maintenance-alert-modal')?.addEventListener('click', () => {
         document.getElementById('maintenance-alert-modal').classList.add('hidden');
     });
@@ -148,7 +153,7 @@ function renderLogisticsDashboard(data) {
     document.getElementById('kpi-veiculos-manutencao').textContent = data.kpis.veiculosEmManutencao || 0;
     document.getElementById('kpi-custo-total-logistica').textContent = (parseFloat(data.kpis.custoTotalPeriodo) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     document.getElementById('kpi-manutencoes-vencidas').textContent = data.kpis.manutencoesVencidas || 0;
-    document.getElementById('kpi-manutencoes-a-vencer').textContent = data.kpis.manutencoesAVencer || 0;
+    document.getElementById('kpi-manutencoes-a-vencer').textContent = data.kpis.manutencoesPorVencerKm || 0;
 
     const statusData = {
         labels: data.charts.statusFrota.map(d => d.status),
@@ -297,5 +302,61 @@ function gerenciarAcessoModulos() {
                 link.parentElement.style.display = 'none';
             }
         }
+    }
+}
+
+async function carregarEExibirAlertasDeManutencao() {
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/veiculos/manutencao/alertas`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (!response.ok) return;
+
+        const alertas = await response.json();
+        
+        // Atualiza o KPI no dashboard
+        const kpiElement = document.getElementById('kpi-manutencoes-a-vencer');
+        if (kpiElement) {
+            kpiElement.textContent = alertas.length;
+        }
+
+        // Prepara o conteúdo do modal
+        const modalContent = document.getElementById('maintenance-alert-content');
+        if (alertas.length === 0) {
+            modalContent.innerHTML = '<p class="text-center text-gray-500">Nenhum veículo com manutenção próxima ou vencida por KM.</p>';
+            return;
+        }
+
+        const table = document.createElement('table');
+        table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+        table.innerHTML = `
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo</th>
+                    <th class="px-4 py-2 text-left font-medium text-gray-500">Serviço</th>
+                    <th class="px-4 py-2 text-right font-medium text-gray-500">KM Próxima</th>
+                    <th class="px-4 py-2 text-right font-medium text-gray-500">KM Restantes</th>
+                    <th class="px-4 py-2 text-center font-medium text-gray-500">Status</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
+        const tbody = table.querySelector('tbody');
+        alertas.sort((a, b) => a.kmRestantes - b.kmRestantes).forEach(alerta => {
+            const tr = tbody.insertRow();
+            const statusClass = alerta.status === 'Vencida' ? 'text-red-600 font-bold' : 'text-yellow-600';
+            const kmRestantesFormatado = alerta.kmRestantes.toLocaleString('pt-BR');
+            tr.innerHTML = `
+                <td class="px-4 py-2">${alerta.veiculoDesc}</td>
+                <td class="px-4 py-2">${alerta.itemServico}</td>
+                <td class="px-4 py-2 text-right">${alerta.kmProxima.toLocaleString('pt-BR')}</td>
+                <td class="px-4 py-2 text-right ${statusClass}">${kmRestantesFormatado}</td>
+                <td class="px-4 py-2 text-center ${statusClass}">${alerta.status}</td>
+            `;
+        });
+        modalContent.innerHTML = '';
+        modalContent.appendChild(table);
+
+    } catch (error) {
+        console.error("Erro ao carregar alertas de manutenção por KM:", error);
     }
 }

@@ -81,6 +81,7 @@ async function initLogisticaPage() {
         ]);
 
         await loadVehicles();
+        await verificarAlertasManutencaoParaIcone();
         
         if (document.getElementById('costs-tabs')) {
             loadActiveHistoryTab();
@@ -104,6 +105,12 @@ function setupEventListeners() {
     document.getElementById('add-vehicle-cost-button')?.addEventListener('click', openVehicleCostModal);
     document.getElementById('filter-button').addEventListener('click', applyFilters);
     document.getElementById('clear-filter-button').addEventListener('click', clearFilters);
+    document.getElementById('maintenance-alert-icon')?.addEventListener('click', () => {
+        // Reutiliza a lógica e o modal do dashboard
+        document.getElementById('maintenance-alert-title').textContent = 'Manutenções Próximas ou Vencidas por KM';
+        carregarEExibirAlertasDeManutencao(); // Função que criamos no dashboard.js
+        document.getElementById('maintenance-alert-modal').classList.remove('hidden');
+    });
 
     const vehicleModal = document.getElementById('vehicle-modal');
     vehicleModal.querySelector('#close-vehicle-modal-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
@@ -2200,5 +2207,30 @@ function gerenciarAcessoModulos() {
                 link.parentElement.style.display = 'none';
             }
         }
+    }
+}
+
+async function verificarAlertasManutencaoParaIcone() {
+    const icon = document.getElementById('maintenance-alert-icon');
+    const badge = document.getElementById('maintenance-alert-badge');
+    if (!icon || !badge) return;
+
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/veiculos/manutencao/alertas`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error('Falha ao buscar alertas');
+        
+        const alertas = await response.json();
+
+        if (alertas.length > 0) {
+            badge.textContent = alertas.length;
+            icon.classList.remove('hidden');
+        } else {
+            icon.classList.add('hidden');
+        }
+    } catch (error) {
+        console.error("Erro ao verificar alertas para o ícone:", error);
+        icon.classList.add('hidden');
     }
 }
