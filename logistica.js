@@ -7,6 +7,7 @@ const privilegedAccessProfiles = ["Administrador", "Financeiro", "Logistica"];
 let allVehicles = [];
 let filteredVehicles = []; // Lista para veículos filtrados
 let currentVehiclePage = 1;
+let ultimoPrecoDiesel = 0;  
 const VEHICLES_PER_PAGE = 5; // Itens por página para a lista de veículos
 let historyPages = {
     gerais: 1,
@@ -263,6 +264,16 @@ function setupEventListeners() {
             }
         });
     }
+
+    const quantityInput = document.getElementById('consumption-quantity');
+    const estimatedCostInput = document.getElementById('consumption-estimated-cost');
+    if (quantityInput && estimatedCostInput) {
+        quantityInput.addEventListener('input', () => {
+            const quantity = parseFloat(quantityInput.value) || 0;
+            const estimatedCost = quantity * ultimoPrecoDiesel;
+            estimatedCostInput.value = estimatedCost.toFixed(2).replace('.', ',');
+        });
+    }
 }
 
 
@@ -332,6 +343,14 @@ async function loadCurrentStock() {
 async function openFuelModal() {
     const modal = document.getElementById('fuel-management-modal');
     showLoader();
+    try {
+            const priceResponse = await fetch(`${apiUrlBase}/logistica/estoque/saldo/1`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+            const priceData = await priceResponse.json();
+            ultimoPrecoDiesel = parseFloat(priceData.ultimo_preco_unitario) || 0;
+        } catch (e) {
+            console.error("Não foi possível buscar o último preço do diesel.");
+            ultimoPrecoDiesel = 0;
+        }
     try {
         const consumptionVehicleSelect = document.getElementById('consumption-vehicle');
         if (consumptionVehicleSelect.tomselect) {
@@ -1021,6 +1040,7 @@ function renderDetailsTab(vehicle) {
             <div><strong class="block text-gray-500">Modelo</strong><span>${vehicle.modelo}</span></div>
             <div><strong class="block text-gray-500">Ano Fab./Mod.</strong><span>${vehicle.ano_fabricacao || 'N/A'}/${vehicle.ano_modelo || 'N/A'}</span></div>
             <div><strong class="block text-gray-500">RENAVAM</strong><span>${vehicle.renavam || 'N/A'}</span></div>
+            <div><strong class="block text-gray-500">Odômetro Atual</strong><span>${(vehicle.odometro_atual || 0).toLocaleString('pt-BR')} km</span></div>
             <div class="md:col-span-2"><strong class="block text-gray-500">Chassi</strong><span>${vehicle.chassi || 'N/A'}</span></div>
             <div><strong class="block text-gray-500">Filial</strong><span>${vehicle.nome_filial || 'N/A'}</span></div>
             <div><strong class="block text-gray-500">Status</strong><span>${vehicle.status}</span></div>

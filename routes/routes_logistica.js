@@ -552,7 +552,7 @@ router.get('/estoque/saldo/:itemId', authenticateToken, async (req, res) => {
     try {
         connection = await mysql.createConnection(dbConfig);
         const [rows] = await connection.execute(
-            "SELECT quantidade_atual, unidade_medida FROM itens_estoque WHERE id = ?",
+            "SELECT quantidade_atual, unidade_medida, ultimo_preco_unitario FROM itens_estoque WHERE id = ?",
             [itemId]
         );
 
@@ -1130,7 +1130,12 @@ router.get('/relatorios/listaVeiculos', authenticateToken, async (req, res) => {
 
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
         const sql = `
-            SELECT v.placa, v.marca, v.modelo, v.ano_fabricacao, v.ano_modelo, v.status, p.NOME_PARAMETRO as nome_filial, v.seguro, v.rastreador
+            SELECT 
+                v.placa, v.marca, v.modelo, v.ano_fabricacao, v.ano_modelo, v.status,
+                p.NOME_PARAMETRO as nome_filial, v.seguro, v.rastreador, v.odometro_atual,
+                (SELECT MAX(data_manutencao) 
+                 FROM veiculo_manutencoes 
+                 WHERE id_veiculo = v.id AND classificacao_custo = 'Preventiva') as ultima_preventiva
             FROM veiculos v
             LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
             ${whereClause}

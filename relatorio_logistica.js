@@ -75,7 +75,7 @@ async function exportarRelatorioLogisticaPDF() {
 
     // NOVO: 1. Lógica para definir a orientação da página
     let orientation = 'p'; // Padrão é 'p' (portrait/retrato)
-    if (reportType === 'custoTotalFilial' || reportType === 'custoDireto') {
+    if (reportType === 'custoTotalFilial' || reportType === 'custoDireto' || reportType === 'listaVeiculos') {
         orientation = 'l'; // Define 'l' (landscape/paisagem) para os relatórios especificados
     }
 
@@ -167,8 +167,23 @@ async function exportarRelatorioLogisticaPDF() {
                 });
                 break;
             case 'listaVeiculos':
-                head = [['Placa', 'Marca/Modelo', 'Ano', 'Filial', 'Status', 'Seguro', 'Rastreador']];
-                body = data.map(v => [v.placa, `${v.marca} / ${v.modelo}`, `${v.ano_fabricacao}/${v.ano_modelo}`, v.nome_filial, v.status, v.seguro ? 'Sim' : 'Não', v.rastreador ? 'Sim' : 'Não']);
+                head = [['Placa', 'Marca/Modelo', 'Filial', 'Status', 'Odômetro', 'Última Preventiva', 'Seguro', 'Rastreador']];
+                body = data.map(v => {
+                    const ultimaPreventivaFmt = v.ultima_preventiva 
+                        ? new Date(v.ultima_preventiva).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) 
+                        : 'Nenhuma';
+
+                    return [
+                        v.placa, 
+                        `${v.marca} / ${v.modelo}`,
+                        v.nome_filial, 
+                        v.status,
+                        (v.odometro_atual || 0).toLocaleString('pt-BR'),
+                        ultimaPreventivaFmt,
+                        v.seguro ? '✅' : '❌',
+                        v.rastreador ? '✅' : '❌'
+                    ];
+                });
                 break;
             case 'despesaVeiculo':
                 // Os dados agora vêm como data.vehicle e data.expenses
