@@ -735,13 +735,8 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
 
 router.delete('/estoque/movimento/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
-    const { userId, nome: nomeUsuario, perfil } = req.user;
-
-    const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
-    if (!allowedProfiles.includes(perfil)) {
-        return res.status(403).json({ error: 'Você não tem permissão para esta ação.' });
-    }
-
+    const { userId, nome: nomeUsuario } = req.user;
+    
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
@@ -752,8 +747,9 @@ router.delete('/estoque/movimento/:id', authenticateToken, async (req, res) => {
             await connection.rollback();
             return res.status(404).json({ error: 'Movimento de estoque não encontrado.' });
         }
+        
         const movimento = movimentoRows[0];
-        const { id_item, tipo_movimento, quantidade, status } = movimento;
+        const { id_item, tipo_movimento, quantidade, status, id_veiculo } = movimento;
 
         if (status === 'Estornado') {
             await connection.rollback();
@@ -761,19 +757,38 @@ router.delete('/estoque/movimento/:id', authenticateToken, async (req, res) => {
         }
 
         if (tipo_movimento === 'Saída') { // Estorno de um abastecimento
+            // Devolve a quantidade ao estoque
             await connection.execute(
                 'UPDATE itens_estoque SET quantidade_atual = quantidade_atual + ? WHERE id = ?',
                 [quantidade, id_item]
             );
-        } else if (tipo_movimento === 'Entrada') { // Estorno de uma compra
-            // Adicionar lógica para estornar o rateio de custos_frota se necessário no futuro
+
+            // NOVO: Lógica para reverter o odômetro do veículo
+            // 1. Buscar o último abastecimento VÁLIDO (penúltimo no geral) para este veículo
+            const [penultimoAbastecimento] = await connection.execute(
+                `SELECT odometro_no_momento FROM estoque_movimentos 
+                 WHERE id_veiculo = ? AND status = 'Ativo' AND id != ?
+                 ORDER BY data_movimento DESC, id DESC LIMIT 1`,
+                [id_veiculo, id]
+            );
+
+            // 2. Definir o novo odômetro. Se não houver anterior, pode-se optar por 0 ou manter.
+            //    Vamos usar o do penúltimo, ou 0 se não houver mais nenhum.
+            const novoOdometro = penultimoAbastecimento.length > 0 ? penultimoAbastecimento[0].odometro_no_momento : 0;
+
+            // 3. Atualizar o odômetro na tabela de veículos
+            await connection.execute(
+                "UPDATE veiculos SET odometro_atual = ? WHERE id = ?",
+                [novoOdometro, id_veiculo]
+            );
+
+        } else if (tipo_movimento === 'Entrada') {
             await connection.execute(
                 'UPDATE itens_estoque SET quantidade_atual = quantidade_atual - ? WHERE id = ?',
                 [quantidade, id_item]
             );
         }
 
-        // Em vez de DELETAR, agora ATUALIZAMOS o status
         await connection.execute("UPDATE estoque_movimentos SET status = 'Estornado' WHERE id = ?", [id]);
 
         await registrarLog({
@@ -782,11 +797,11 @@ router.delete('/estoque/movimento/:id', authenticateToken, async (req, res) => {
             tipo_entidade: 'Estoque',
             id_entidade: id_item,
             tipo_acao: 'Estorno',
-            descricao: `Estornou o movimento ID ${id} (Tipo: ${tipo_movimento}, Quantidade: ${quantidade}).`
+            descricao: `Estornou o movimento ID ${id} (Tipo: ${tipo_movimento}, Quantidade: ${quantidade}). Odômetro revertido.`
         });
         
         await connection.commit();
-        res.json({ message: 'Lançamento estornado com sucesso!' });
+        res.json({ message: 'Lançamento estornado e odômetro atualizado com sucesso!' });
 
     } catch (error) {
         if (connection) await connection.rollback();
@@ -796,7 +811,6 @@ router.delete('/estoque/movimento/:id', authenticateToken, async (req, res) => {
         if (connection) await connection.end();
     }
 });
-
 // --- ROTAS DE MANUTENÇÃO, CUSTOS E FORNECEDORES ---
 
 router.get('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
