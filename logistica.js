@@ -1201,10 +1201,10 @@ function openMaintenanceModal(vehicleId) {
     const toggleOdometerRequirement = () => {
         if (classificationSelect.value === 'Preventiva') {
             odometerInput.required = true;
-            odometerLabel.innerHTML = 'Odômetro no Momento do Serviço <span class="text-red-500">*</span>';
+            odometerLabel.innerHTML = 'Odômetro do Veículo <span class="text-red-500">*</span>';
         } else {
             odometerInput.required = false;
-            odometerLabel.innerHTML = 'Odômetro no Momento do Serviço';
+            odometerLabel.innerHTML = 'Odômetro do Veículo';
         }
     };
     // Garante que o listener seja adicionado apenas uma vez
