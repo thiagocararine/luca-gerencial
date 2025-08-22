@@ -905,11 +905,23 @@
         }
     });
 </script>
-<div id="maintenance-alert-icon" class="hidden fixed bottom-6 right-6 z-50">
-    <button class="bg-red-600 text-white rounded-full h-14 w-14 flex items-center justify-center shadow-lg hover:bg-red-700 transition-colors relative">
-        <i data-feather="tool" class="h-7 w-7"></i>
-        <span id="maintenance-alert-badge" class="absolute -top-1 -right-1 bg-yellow-400 text-black text-xs font-bold rounded-full h-6 w-6 flex items-center justify-center border-2 border-white"></span>
-    </button>
-</div>
+    <div id="maintenance-alert-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 hidden flex items-center justify-center p-4">
+        <div class="relative mx-auto p-6 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+            <div class="flex items-start justify-between pb-4 border-b">
+                <h3 id="maintenance-alert-title" class="text-xl font-semibold text-gray-900">Lista de Veículos</h3>
+                <button id="close-maintenance-alert-modal" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center">
+                    <span data-feather="x"></span>
+                </button>
+            </div>
+            <div id="maintenance-alert-content" class="py-4 max-h-[60vh] overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <div id="maintenance-alert-icon" class="hidden fixed bottom-6 right-6 z-50">
+        <button class="bg-red-600 text-white rounded-full h-14 w-14 flex items-center justify-center shadow-lg hover:bg-red-700 transition-colors relative">
+            <i data-feather="tool" class="h-7 w-7"></i>
+            <span id="maintenance-alert-badge" class="absolute -top-1 -right-1 bg-yellow-400 text-black text-xs font-bold rounded-full h-6 w-6 flex items-center justify-center border-2 border-white"></span>
+        </button>
+    </div>
 </body>
 </html>

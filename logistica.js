@@ -143,6 +143,13 @@ function setupEventListeners() {
         }
     });
 
+    const closeAlertModalButton = document.getElementById('close-maintenance-alert-modal');
+    if (closeAlertModalButton) {
+        closeAlertModalButton.addEventListener('click', () => {
+            document.getElementById('maintenance-alert-modal').classList.add('hidden');
+        });
+    }
+
     const maintenanceModal = document.getElementById('maintenance-modal');
     maintenanceModal.querySelector('#close-maintenance-modal-btn').addEventListener('click', () => maintenanceModal.classList.add('hidden'));
     maintenanceModal.querySelector('#cancel-maintenance-form-btn').addEventListener('click', () => maintenanceModal.classList.add('hidden'));
