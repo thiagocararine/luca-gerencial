@@ -266,12 +266,12 @@ function setupEventListeners() {
     }
 
     const quantityInput = document.getElementById('consumption-quantity');
-    const estimatedCostInput = document.getElementById('consumption-estimated-cost');
-    if (quantityInput && estimatedCostInput) {
+    const costInput = document.getElementById('consumption-cost'); // Usando o ID correto
+    if (quantityInput && costInput) {
         quantityInput.addEventListener('input', () => {
             const quantity = parseFloat(quantityInput.value) || 0;
             const estimatedCost = quantity * ultimoPrecoDiesel;
-            estimatedCostInput.value = estimatedCost.toFixed(2).replace('.', ',');
+            costInput.value = estimatedCost.toFixed(2); // Formato para input number
         });
     }
 }
@@ -344,22 +344,28 @@ async function openFuelModal() {
     const modal = document.getElementById('fuel-management-modal');
     showLoader();
     try {
-            const priceResponse = await fetch(`${apiUrlBase}/logistica/estoque/saldo/1`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-            const priceData = await priceResponse.json();
-            ultimoPrecoDiesel = parseFloat(priceData.ultimo_preco_unitario) || 0;
+        // Busca o último preço do diesel (ID = 1)
+        try {
+            const priceResponse = await fetch(`${apiUrlBase}/logistica/estoque/saldo/1`, { headers: { 'Authorization': `Bearer getToken()` } });
+            if (priceResponse.ok) {
+                const priceData = await priceResponse.json();
+                ultimoPrecoDiesel = parseFloat(priceData.ultimo_preco_unitario) || 0;
+            } else {
+                ultimoPrecoDiesel = 0;
+            }
         } catch (e) {
             console.error("Não foi possível buscar o último preço do diesel.");
             ultimoPrecoDiesel = 0;
         }
-    try {
+
         const consumptionVehicleSelect = document.getElementById('consumption-vehicle');
         if (consumptionVehicleSelect.tomselect) {
             consumptionVehicleSelect.tomselect.destroy();
         }
 
         const [itemsResponse, vehiclesResponse] = await Promise.all([
-            fetch(`${apiUrlBase}/logistica/itens-estoque`, { headers: { 'Authorization': `Bearer ${getToken()}` } }),
-            fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
+            fetch(`${apiUrlBase}/logistica/itens-estoque`, { headers: { 'Authorization': `Bearer getToken()` } }),
+            fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer getToken()` } })
         ]);
 
         if (!itemsResponse.ok || !vehiclesResponse.ok) {
@@ -382,6 +388,7 @@ async function openFuelModal() {
         document.getElementById('fuel-purchase-form').reset();
         document.getElementById('fuel-consumption-form').reset();
         document.getElementById('consumption-date').value = new Date().toISOString().split('T')[0];
+        document.getElementById('consumption-cost').disabled = true; // Desabilita o campo de custo
         
         switchFuelTab('compra');
         modal.classList.remove('hidden');
@@ -1313,6 +1320,27 @@ function openVehicleCostModal() {
 
     populateMaintenanceTypes('vehicle-cost-type');
     populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Classificação Despesa Veiculo`, 'vehicle-cost-classification', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Selecione a Classificação --');
+    
+    // ADICIONAR ESTA LINHA: Popula o novo campo de Item de Serviço
+    populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Itens de Manutenção`, 'vehicle-cost-item-servico', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Nenhum (Serviço Geral) --');
+
+    // ADICIONAR ESTE BLOCO: Controla a obrigatoriedade do odômetro
+    const classificationSelect = document.getElementById('vehicle-cost-classification');
+    const odometerInput = document.getElementById('vehicle-cost-odometer');
+    const odometerLabel = odometerInput.previousElementSibling;
+
+    const toggleOdometerRequirement = () => {
+        if (classificationSelect.value === 'Preventiva') {
+            odometerInput.required = true;
+            odometerLabel.innerHTML = 'Odômetro no Momento do Serviço <span class="text-red-500">*</span>';
+        } else {
+            odometerInput.required = false;
+            odometerLabel.innerHTML = 'Odômetro no Momento do Serviço';
+        }
+    };
+    classificationSelect.removeEventListener('change', toggleOdometerRequirement); // Previne duplicatas
+    classificationSelect.addEventListener('change', toggleOdometerRequirement);
+    toggleOdometerRequirement();
 
     modal.classList.remove('hidden');
     feather.replace();
@@ -1331,12 +1359,21 @@ async function handleVehicleCostFormSubmit(event) {
         classificacao_custo: document.getElementById('vehicle-cost-classification').value,
         descricao: document.getElementById('vehicle-cost-description').value,
         id_fornecedor: document.getElementById('vehicle-cost-fornecedor-id').value,
+        // ADICIONAR ESTES DOIS CAMPOS
+        item_servico: document.getElementById('vehicle-cost-item-servico').value,
+        odometro_manutencao: document.getElementById('vehicle-cost-odometer').value
     };
 
     if (!costData.id_veiculo) { alert('Por favor, selecione um veículo.'); saveBtn.disabled = false; return; }
     if (!costData.id_fornecedor) { alert('Por favor, associe um fornecedor ou marque como despesa interna.'); saveBtn.disabled = false; return; }
     if (!costData.tipo_manutencao || !costData.classificacao_custo) {
         alert('Por favor, selecione um tipo e uma classificação para a despesa.');
+        saveBtn.disabled = false;
+        return;
+    }
+    // Lógica de validação do odômetro obrigatório
+    if (costData.classificacao_custo === 'Preventiva' && !costData.odometro_manutencao) {
+        alert('O odômetro é obrigatório para manutenções preventivas.');
         saveBtn.disabled = false;
         return;
     }
@@ -1351,7 +1388,7 @@ async function handleVehicleCostFormSubmit(event) {
 
         document.getElementById('vehicle-cost-modal').classList.add('hidden');
         alert('Despesa do veículo registada com sucesso!');
-        await loadRecentIndividualCosts();
+        await loadRecentIndividualCosts(); // Atualiza a aba de histórico
 
         if (costData.tipo_manutencao.toLowerCase().includes('manutenção')) {
             await loadVehicles();

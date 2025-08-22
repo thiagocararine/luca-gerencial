@@ -172,7 +172,7 @@ async function exportarRelatorioLogisticaPDF() {
                     const ultimaPreventivaFmt = v.ultima_preventiva 
                         ? new Date(v.ultima_preventiva).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) 
                         : 'Nenhuma';
-
+                    
                     return [
                         v.placa, 
                         `${v.marca} / ${v.modelo}`,
@@ -180,8 +180,8 @@ async function exportarRelatorioLogisticaPDF() {
                         v.status,
                         (v.odometro_atual || 0).toLocaleString('pt-BR'),
                         ultimaPreventivaFmt,
-                        v.seguro ? '✅' : '❌',
-                        v.rastreador ? '✅' : '❌'
+                        v.seguro ? 'Sim' : 'Não',      // <-- ALTERADO AQUI
+                        v.rastreador ? 'Sim' : 'Não'   // <-- ALTERADO AQUI
                     ];
                 });
                 break;
