@@ -1546,7 +1546,7 @@ async function executeDeleteCost(id, type) {
 }
 
 // Funções de Fotos e Documentos
-function handlePhotoAreaClick(event) {
+async function handlePhotoAreaClick(event) {
     const target = event.target;
     const button = target.closest('button');
 
@@ -1560,21 +1560,44 @@ function handlePhotoAreaClick(event) {
             return;
         }
 
+        // --- LÓGICA DE UPLOAD ALTERADA AQUI ---
         if (button.classList.contains('upload-photo-btn') && photoTypeRaw) {
-            const photoType = photoTypeRaw;
-            const typeKey = photoType.toLowerCase().replace(/ /g, '-');
-            const fileInput = document.getElementById(`photo-input-${typeKey}`);
-            const file = fileInput.files[0];
+            showLoader();
+            try {
+                const photoType = photoTypeRaw;
+                const typeKey = photoType.toLowerCase().replace(/ /g, '-');
+                const fileInput = document.getElementById(`photo-input-${typeKey}`);
+                const file = fileInput.files[0];
 
-            if (!file) {
-                alert(`Por favor, selecione ou capture um ficheiro para a foto: ${photoType}`);
-                return;
+                if (!file) {
+                    alert(`Por favor, selecione ou capture um ficheiro para a foto: ${photoType}`);
+                    return;
+                }
+                
+                // Chama a nova função de compressão ANTES de fazer o upload
+                const compressedFile = await compressImage(file);
+                
+                // Envia o arquivo já comprimido
+                await uploadFile(currentVehicleId, compressedFile, photoType, null, 'photo');
+
+            } catch (error) {
+                alert(`Ocorreu um erro ao processar a imagem: ${error.message}`);
+            } finally {
+                hideLoader();
             }
-            uploadFile(currentVehicleId, file, photoType, null, 'photo');
             return;
         }
         return;
     }
+
+    const photoContainer = target.closest('.group');
+    if (photoContainer) {
+        const previewImg = photoContainer.querySelector('img[id^="photo-preview-"]');
+        if (previewImg && !previewImg.src.includes('placehold.co')) {
+            openImageViewer(previewImg.src);
+        }
+    }
+}
 
     const photoContainer = target.closest('.group');
     if (photoContainer) {
@@ -2357,4 +2380,44 @@ async function carregarEExibirAlertasDeManutencao() {
     } catch (error) {
         console.error("Erro ao carregar alertas de manutenção por KM:", error);
     }
+}
+
+function compressImage(file, maxWidth = 800, maxHeight = 600, quality = 0.7) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth) {
+                height *= maxWidth / width;
+                width = maxWidth;
+            }
+
+            if (height > maxHeight) {
+                width *= maxHeight / height;
+                height = maxHeight;
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            canvas.toBlob(
+                (blob) => {
+                    if (blob) {
+                        resolve(new File([blob], file.name, { type: file.type, lastModified: Date.now() }));
+                    } else {
+                        reject(new Error('Falha ao comprimir a imagem.'));
+                    }
+                },
+                file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png', // Mantém o tipo original
+                quality
+            );
+        };
+        img.onerror = reject;
+        img.src = URL.createObjectURL(file);
+    });
 }
