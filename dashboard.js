@@ -134,22 +134,43 @@ function renderFinancialDashboard(data) {
     document.getElementById('kpi-total-despesas').textContent = (parseFloat(data.totalDespesas) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     document.getElementById('kpi-lancamentos-periodo').textContent = data.lancamentosNoPeriodo || 0;
     document.getElementById('kpi-despesas-canceladas').textContent = data.despesasCanceladas || 0;
+
     const pendentesCard = document.getElementById('kpi-utilizadores-pendentes-card');
-    if (privilegedAccessProfiles.includes(getUserProfile()) && data.utilizadoresPendentes !== undefined) {
-        pendentesCard.style.display = 'block';
+    if (data.utilizadoresPendentes > 0) {
         document.getElementById('kpi-utilizadores-pendentes').textContent = data.utilizadoresPendentes;
+        pendentesCard.classList.remove('hidden');
     } else {
-        pendentesCard.style.display = 'none';
+        pendentesCard.classList.add('hidden');
     }
-    const chartData = {
-        labels: data.despesasPorGrupo.map(item => item.dsp_grupo),
-        datasets: [{
-            label: 'Total de Despesas (R$)',
-            data: data.despesasPorGrupo.map(item => item.total),
-            backgroundColor: 'rgba(79, 70, 229, 0.7)',
-        }]
-    };
-    renderChart(chartData, 'despesas-por-grupo-chart', 'bar', {}, currencyTooltipCallback);
+
+    // --- GRÁFICO DE DESPESAS POR GRUPO ---
+    if (data.despesasPorGrupo && data.despesasPorGrupo.length > 0) {
+        
+        // CORREÇÃO APLICADA AQUI: Usando .slice(0, 7) para pegar os 7 maiores
+        const top7Despesas = data.despesasPorGrupo.slice(0, 7);
+
+        const despesasPorGrupoData = {
+            labels: top7Despesas.map(d => d.dsp_grupo || 'Não Agrupado'),
+            datasets: [{
+                label: 'Total Gasto',
+                data: top7Despesas.map(d => d.total),
+                backgroundColor: ['rgba(79, 70, 229, 0.7)', 'rgba(34, 197, 94, 0.7)', 'rgba(234, 179, 8, 0.7)', 'rgba(239, 68, 68, 0.7)', 'rgba(59, 130, 246, 0.7)', 'rgba(14, 165, 233, 0.7)', 'rgba(139, 92, 246, 0.7)'],
+                borderColor: ['#4F46E5', '#22C55E', '#EAB308', '#EF4444', '#3B82F6', '#0EA5E9', '#8B5CF6'],
+                borderWidth: 1
+            }]
+        };
+        renderChart(despesasPorGrupoData, 'despesas-por-grupo-chart', 'bar', {
+            indexAxis: 'y',
+            scales: { x: { ticks: { callback: value => `R$ ${value.toLocaleString('pt-BR')}` } } },
+            plugins: { legend: { display: false } }
+        }, currencyTooltipCallback);
+    } else {
+        const chartCanvas = document.getElementById('despesas-por-grupo-chart');
+        const ctx = chartCanvas.getContext('2d');
+        ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+        ctx.textAlign = 'center';
+        ctx.fillText('Nenhum dado de despesa por grupo para exibir.', chartCanvas.width / 2, chartCanvas.height / 2);
+    }
 }
 
 function renderLogisticsDashboard(data) {
