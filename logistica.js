@@ -656,26 +656,31 @@ async function loadFleetCosts() {
         if (custos.length === 0 && result.currentPage === 1) {
             container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo geral registado.</p>';
         } else {
-            const table = createCostTable('gerais');
-            const tbody = table.querySelector('tbody');
-            custos.forEach(c => {
-                const tr = tbody.insertRow();
-                tr.innerHTML = `
-                    <td class="px-4 py-2 font-mono text-xs">${c.sequencial_rateio || 'N/A'}</td>
-                    <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                    <td class="px-4 py-2">${c.descricao}</td>
-                    <td class="px-4 py-2">${c.nome_filial || 'N/A'}</td>
-                    <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
-                    <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
-                    <td class="px-4 py-2 text-center">
-                        <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="geral" data-cost-desc="${c.descricao}">
-                            <span data-feather="trash-2" class="w-4 h-4"></span>
-                        </button>
-                    </td>
-                `;
-            });
-            container.innerHTML = '';
-            container.appendChild(table);
+            // Verifica o tamanho da tela para decidir como renderizar
+            if (window.innerWidth < 768) {
+                renderHistoryAsCards(custos, container, 'gerais');
+            } else {
+                const table = createCostTable('gerais');
+                const tbody = table.querySelector('tbody');
+                custos.forEach(c => {
+                    const tr = tbody.insertRow();
+                    tr.innerHTML = `
+                        <td class="px-4 py-2 font-mono text-xs">${c.sequencial_rateio || 'N/A'}</td>
+                        <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                        <td class="px-4 py-2">${c.descricao}</td>
+                        <td class="px-4 py-2">${c.nome_filial || 'N/A'}</td>
+                        <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
+                        <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
+                        <td class="px-4 py-2 text-center">
+                            <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="geral" data-cost-desc="${c.descricao}">
+                                <span data-feather="trash-2" class="w-4 h-4"></span>
+                            </button>
+                        </td>
+                    `;
+                });
+                container.innerHTML = '';
+                container.appendChild(table);
+            }
             feather.replace();
         }
         renderHistoryPagination('gerais', result);
@@ -705,24 +710,29 @@ async function loadRecentIndividualCosts() {
         if (custos.length === 0 && result.currentPage === 1) {
             container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum custo individual registado.</p>';
         } else {
-            const table = createCostTable('individuais');
-            const tbody = table.querySelector('tbody');
-            custos.forEach(c => {
-                const tr = tbody.insertRow();
-                tr.innerHTML = `
-                    <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                    <td class="px-4 py-2">${c.modelo} (${c.placa})</td>
-                    <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
-                    <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
-                    <td class="px-4 py-2 text-center">
-                        <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="individual" data-cost-desc="${c.descricao || `Manutenção em ${c.modelo}`}">
-                            <span data-feather="trash-2" class="w-4 h-4"></span>
-                        </button>
-                    </td>
-                `;
-            });
-            container.innerHTML = '';
-            container.appendChild(table);
+            // Verifica o tamanho da tela para decidir como renderizar
+            if (window.innerWidth < 768) {
+                renderHistoryAsCards(custos, container, 'individuais');
+            } else {
+                const table = createCostTable('individuais');
+                const tbody = table.querySelector('tbody');
+                custos.forEach(c => {
+                    const tr = tbody.insertRow();
+                    tr.innerHTML = `
+                        <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                        <td class="px-4 py-2">${c.modelo} (${c.placa})</td>
+                        <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
+                        <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
+                        <td class="px-4 py-2 text-center">
+                            <button class="text-red-500 hover:text-red-700" data-cost-id="${c.id}" data-cost-type="individual" data-cost-desc="Manutenção em ${c.modelo}">
+                                <span data-feather="trash-2" class="w-4 h-4"></span>
+                            </button>
+                        </td>
+                    `;
+                });
+                container.innerHTML = '';
+                container.appendChild(table);
+            }
             feather.replace();
         }
         renderHistoryPagination('individuais', result);
@@ -761,42 +771,48 @@ async function loadAbastecimentosHistory() {
             return;
         }
 
-        const table = document.createElement('table');
-        table.className = 'min-w-full divide-y divide-gray-200 text-sm';
-        table.innerHTML = `
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
-                    <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo</th>
-                    <th class="px-4 py-2 text-right font-medium text-gray-500">Quantidade (L)</th>
-                    <th class="px-4 py-2 text-right font-medium text-gray-500">Odómetro (km)</th>
-                    <th class="px-4 py-2 text-left font-medium text-gray-500">Utilizador</th>
-                    <th class="px-4 py-2 text-center font-medium text-gray-500">Ações</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
-            
-        const tbody = table.querySelector('tbody');
-        const isPrivileged = privilegedAccessProfiles.includes(getUserProfile());
+        // Verifica o tamanho da tela para decidir como renderizar
+        if (window.innerWidth < 768) {
+            renderHistoryAsCards(abastecimentos, container, 'abastecimentos');
+        } else {
+            const table = document.createElement('table');
+            table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+            table.innerHTML = `
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
+                        <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo</th>
+                        <th class="px-4 py-2 text-right font-medium text-gray-500">Quantidade (L)</th>
+                        <th class="px-4 py-2 text-right font-medium text-gray-500">Odómetro (km)</th>
+                        <th class="px-4 py-2 text-left font-medium text-gray-500">Utilizador</th>
+                        <th class="px-4 py-2 text-center font-medium text-gray-500">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200"></tbody>`;
+                
+            const tbody = table.querySelector('tbody');
+            const isPrivileged = privilegedAccessProfiles.includes(getUserProfile());
 
-        abastecimentos.forEach(item => {
-            const tr = tbody.insertRow();
-            const infoText = `Abastecimento de ${parseFloat(item.quantidade).toFixed(2)}L para ${item.modelo} (${item.placa})`;
-            tr.innerHTML = `
-                <td class="px-4 py-2">${new Date(item.data_movimento).toLocaleString('pt-BR', { timeZone: 'UTC' })}</td>
-                <td class="px-4 py-2">${item.modelo} (${item.placa})</td>
-                <td class="px-4 py-2 text-right">${parseFloat(item.quantidade).toFixed(2)}</td>
-                <td class="px-4 py-2 text-right">${item.odometro_no_momento.toLocaleString('pt-BR')}</td>
-                <td class="px-4 py-2">${item.nome_usuario}</td>
-                <td class="px-4 py-2 text-center">
-                    ${isPrivileged ? `<button class="text-red-500 hover:text-red-700 delete-abastecimento-btn" data-movimento-id="${item.id}" data-info="${infoText}">
-                        <span data-feather="trash-2" class="w-4 h-4"></span>
-                    </button>` : ''}
-                </td>
-            `;
-        });
-        container.innerHTML = '';
-        container.appendChild(table);
+            abastecimentos.forEach(item => {
+                const tr = tbody.insertRow();
+                const infoText = `Abastecimento de ${parseFloat(item.quantidade).toFixed(2)}L para ${item.modelo} (${item.placa})`;
+                tr.innerHTML = `
+                    <td class="px-4 py-2">${new Date(item.data_movimento).toLocaleString('pt-BR', { timeZone: 'UTC' })}</td>
+                    <td class="px-4 py-2">${item.modelo} (${item.placa})</td>
+                    <td class="px-4 py-2 text-right">${parseFloat(item.quantidade).toFixed(2)}</td>
+                    <td class="px-4 py-2 text-right">${item.odometro_no_momento.toLocaleString('pt-BR')}</td>
+                    <td class="px-4 py-2">${item.nome_usuario}</td>
+                    <td class="px-4 py-2 text-center">
+                        ${isPrivileged ? `<button class="text-red-500 hover:text-red-700 delete-abastecimento-btn" data-movimento-id="${item.id}" data-info="${infoText}">
+                            <span data-feather="trash-2" class="w-4 h-4"></span>
+                        </button>` : ''}
+                    </td>
+                `;
+            });
+            container.innerHTML = '';
+            container.appendChild(table);
+        }
+        
         feather.replace();
         renderHistoryPagination('abastecimentos', result);
     } catch (error) {
@@ -2411,4 +2427,72 @@ function compressImage(file, maxWidth = 800, maxHeight = 600, quality = 0.7) {
         img.onerror = reject;
         img.src = URL.createObjectURL(file);
     });
+}
+
+// ADICIONE ESTA NOVA FUNÇÃO EM logistica.js
+function renderHistoryAsCards(data, container, type) {
+    container.innerHTML = ''; // Limpa o container
+    const cardsContainer = document.createElement('div');
+    cardsContainer.className = 'p-4 grid grid-cols-1 sm:grid-cols-2 gap-4';
+
+    const isPrivileged = privilegedAccessProfiles.includes(getUserProfile());
+
+    data.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-lg shadow p-4 space-y-2 border-l-4';
+        
+        let title = '';
+        let detailsHtml = '';
+        let buttonHtml = '';
+
+        if (type === 'gerais') {
+            card.style.borderColor = '#14b8a6'; // Teal
+            title = item.descricao;
+            detailsHtml = `
+                <p class="text-xs text-gray-500">${new Date(item.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
+                <div><strong class="font-medium text-gray-700">Filial:</strong> ${item.nome_filial || 'N/A'}</div>
+                <div><strong class="font-medium text-gray-700">Fornecedor:</strong> ${item.nome_fornecedor || 'N/A'}</div>
+            `;
+            if (isPrivileged) {
+                buttonHtml = `<button class="text-red-500 hover:text-red-700 absolute top-3 right-3" data-cost-id="${item.id}" data-cost-type="geral" data-cost-desc="${item.descricao}"><span data-feather="trash-2" class="w-4 h-4"></span></button>`;
+            }
+        } else if (type === 'individuais') {
+            card.style.borderColor = '#0ea5e9'; // Cyan
+            title = `${item.modelo} (${item.placa})`;
+            detailsHtml = `
+                <p class="text-xs text-gray-500">${new Date(item.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
+                <div><strong class="font-medium text-gray-700">Fornecedor:</strong> ${item.nome_fornecedor || 'N/A'}</div>
+            `;
+            if (isPrivileged) {
+                buttonHtml = `<button class="text-red-500 hover:text-red-700 absolute top-3 right-3" data-cost-id="${item.id}" data-cost-type="individual" data-cost-desc="Manutenção em ${item.modelo}"><span data-feather="trash-2" class="w-4 h-4"></span></button>`;
+            }
+        } else if (type === 'abastecimentos') {
+            card.style.borderColor = '#f59e0b'; // Yellow
+            title = `${item.modelo} (${item.placa})`;
+            const infoText = `Abastecimento de ${parseFloat(item.quantidade).toFixed(2)}L para ${item.modelo} (${item.placa})`;
+            detailsHtml = `
+                <p class="text-xs text-gray-500">${new Date(item.data_movimento).toLocaleString('pt-BR', { timeZone: 'UTC' })}</p>
+                <div><strong class="font-medium text-gray-700">Odômetro:</strong> ${item.odometro_no_momento.toLocaleString('pt-BR')} km</div>
+                <div><strong class="font-medium text-gray-700">Usuário:</strong> ${item.nome_usuario}</div>
+            `;
+            if (isPrivileged) {
+                buttonHtml = `<button class="text-red-500 hover:text-red-700 absolute top-3 right-3 delete-abastecimento-btn" data-movimento-id="${item.id}" data-info="${infoText}"><span data-feather="trash-2" class="w-4 h-4"></span></button>`;
+            }
+        }
+
+        const valor = item.custo !== undefined ? item.custo : item.quantidade;
+        const unidade = item.custo !== undefined ? 'R$' : 'L';
+        
+        card.innerHTML = `
+            <div class="relative">
+                <h4 class="font-bold text-gray-800 pr-8">${title}</h4>
+                <div class="text-lg font-bold text-gray-900">${unidade} ${parseFloat(valor).toFixed(2)}</div>
+                <div class="mt-2 text-sm space-y-1">${detailsHtml}</div>
+                ${buttonHtml}
+            </div>
+        `;
+        cardsContainer.appendChild(card);
+    });
+    container.appendChild(cardsContainer);
+    feather.replace();
 }
