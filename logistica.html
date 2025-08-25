@@ -19,6 +19,23 @@
         body { font-family: 'Inter', sans-serif; }
         [data-feather] { width: 1.25rem; height: 1.25rem; }
         .modal.hidden { display: none; }
+
+        /* Estilos do fundo abstrato (copiado do login.html) */
+        .page-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden; /* Correção para o overflow aqui, apenas no fundo */
+        }
+        .abstract-background {
+            width: 100%;
+            height: 100%;
+            border-radius: 0;
+            aspect-ratio: auto;
+        }
         
         #sidebar { width: 16rem; }
         #sidebar.collapsed { width: 5rem; }
@@ -91,6 +108,19 @@
     </style>
 </head>
 <body class="h-full">
+
+   <div class="page-background">
+        <div class="abstract-background">
+            <div class="tube tube-1"></div>
+            <div class="tube tube-2"></div>
+            <div class="tube tube-3"></div>
+            <div class="tube tube-4"></div>
+            <div class="tube tube-5"></div>
+            <div class="tube tube-6"></div>
+            <div class="tube tube-7"></div>
+            <div class="tube tube-8"></div>
+        </div>
+    </div>  
 
 <div id="global-loader" class="fixed inset-0 bg-gray-900 bg-opacity-50 z-[100] flex-col items-center justify-center hidden">
     <div style="border-top-color: #4f46e5;" class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4 animate-spin"></div>
