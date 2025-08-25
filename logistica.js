@@ -1599,15 +1599,6 @@ async function handlePhotoAreaClick(event) {
     }
 }
 
-    const photoContainer = target.closest('.group');
-    if (photoContainer) {
-        const previewImg = photoContainer.querySelector('img[id^="photo-preview-"]');
-        if (previewImg && !previewImg.src.includes('placehold.co')) {
-            openImageViewer(previewImg.src);
-        }
-    }
-}
-
 async function switchTab(tabName, vehicleId) {
     document.querySelectorAll('#details-modal .tab-content').forEach(content => content.classList.remove('active'));
     document.querySelectorAll('#details-tabs .tab-button').forEach(button => button.classList.remove('active'));
