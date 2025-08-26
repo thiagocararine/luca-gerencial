@@ -1883,8 +1883,15 @@ function takePhoto() {
     const canvas = document.getElementById('photo-canvas');
     const context = canvas.getContext('2d');
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Define uma largura máxima para a imagem de preview (ex: 800 pixels)
+    const maxWidth = 800;
+
+    // Calcula a altura proporcional para não distorcer a imagem
+    const scale = maxWidth / video.videoWidth;
+    canvas.width = maxWidth;
+    canvas.height = video.videoHeight * scale;
+
+    // Desenha a imagem no canvas com o novo tamanho reduzido
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     video.classList.add('hidden');
