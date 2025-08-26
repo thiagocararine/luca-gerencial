@@ -1894,9 +1894,11 @@ function takePhoto() {
     // Desenha a imagem no canvas com o novo tamanho reduzido
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
+    // Esconde o vídeo e mostra o canvas
     video.classList.add('hidden');
     canvas.classList.remove('hidden');
 
+    // Alterna a visibilidade dos botões
     document.getElementById('take-photo-btn').classList.add('hidden');
     document.getElementById('use-photo-btn').classList.remove('hidden');
     document.getElementById('retake-photo-btn').classList.remove('hidden');

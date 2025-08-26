@@ -104,6 +104,11 @@
         .icon-action-btn:hover {
             color: #a5b4fc;
         }
+         #photo-canvas {
+            max-width: 100%;
+            height: auto;
+            border-radius: 0.375rem; /* 6px */
+        }
     </style>
 </head>
 <body class="h-full">
@@ -228,9 +233,9 @@
                 <h3 class="text-xl font-bold text-gray-900 mb-4">Histórico de Custos Recentes</h3>
                 <div class="border-b border-gray-200">
                     <nav id="costs-tabs" class="-mb-px flex space-x-6" aria-label="Tabs">
-                        <button class="tab-button active" data-cost-tab="gerais">Custos Gerais da Frota</button>
-                        <button class="tab-button" data-cost-tab="individuais">Custos Individuais de Veículos</button>
-                        <button class="tab-button" data-cost-tab="abastecimentos">Histórico de Abastecimentos</button>
+                        <button class="tab-button active" data-cost-tab="gerais">Custos de Frota</button>
+                        <button class="tab-button" data-cost-tab="individuais">Custos  de Veículos</button>
+                        <button class="tab-button" data-cost-tab="abastecimentos">Hist. de Abastecimento</button>
                     </nav>
                 </div>
                 <div class="mt-4">
