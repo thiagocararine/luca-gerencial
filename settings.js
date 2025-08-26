@@ -188,7 +188,7 @@ function setupUsersTable() {
         desktopContainer.style.display = 'block';
         mobileContainer.style.display = 'none';
         usersTable = new Tabulator(desktopContainer, {
-            layout: "fitDataStretch",
+            layout: "fitColumns",
             placeholder: "A carregar utilizadores...",
             ajaxURL: `${apiUrlBase}/auth/users`,
             ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
@@ -325,7 +325,7 @@ function setupPerfisTable() {
         desktopContainer.style.display = 'block';
         mobileContainer.style.display = 'none';
         perfisTable = new Tabulator(desktopContainer, {
-            layout: "fitDataStretch",
+            layout: "fitColumns",
             placeholder: "A carregar perfis...",
             ajaxURL: `${apiUrlBase}/settings/perfis-acesso`,
             ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
@@ -429,7 +429,7 @@ function setupItensEstoqueTable() {
         desktopContainer.style.display = 'block';
         mobileContainer.style.display = 'none';
         itensEstoqueTable = new Tabulator(desktopContainer, {
-            layout: "fitDataStretch",
+            layout: "fitColumns",
             placeholder: "A carregar itens...",
             ajaxURL: `${apiUrlBase}/logistica/itens-estoque`,
             ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
@@ -584,7 +584,7 @@ function setupParametrosTable() {
         desktopContainer.style.display = 'block';
         mobileContainer.style.display = 'none';
         parametrosTable = new Tabulator(desktopContainer, {
-            layout: "fitDataStretch",
+            layout: "fitColumns",
             placeholder: "Selecione um tipo de parâmetro para ver os dados.",
             columns: [
                 { title: "ID", field: "ID", width: 60 },
@@ -624,14 +624,14 @@ async function handleParamCodeChange(e) {
     const mobileContainer = document.getElementById('parametros-table-mobile');
     
     resetParamForm();
-    desktopContainer.innerHTML = '';
-    mobileContainer.innerHTML = '';
+    // A linha que limpava os containers foi removida para não destruir a tabela
 
     if (currentParamCode) {
         paramForm.style.display = 'grid';
         let tipoPai = null;
         if (currentParamCode === 'Tipo Despesa') tipoPai = 'Grupo Despesa';
         else if (currentParamCode === 'Modelo - Veículo') tipoPai = 'Marca - Veículo';
+        
         if (tipoPai) {
             await loadAndPopulateVinculacao(tipoPai);
             vinculacaoGroup.style.display = 'block';
@@ -648,11 +648,16 @@ async function handleParamCodeChange(e) {
                 .then(res => res.json())
                 .then(data => renderSettingsCards(data, 'parametros-table-mobile', 'parametros'));
         } else {
-            parametrosTable.setData(url, {}, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+            // Agora a tabela será recarregada corretamente
+            if(parametrosTable) {
+                parametrosTable.setData(url, {}, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+            }
         }
 
     } else {
         paramForm.style.display = 'none';
+        if(parametrosTable) parametrosTable.clearData();
+        mobileContainer.innerHTML = '<p class="text-center p-4 text-gray-500">Selecione um tipo de parâmetro para ver os dados.</p>';
     }
 }
 
