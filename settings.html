@@ -10,11 +10,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
     <link rel="stylesheet" href="assets/style.css">
-
     <style>
-        body { font-family: 'Inter', sans-serif; } /* Removido overflow-x: hidden */
+        body { font-family: 'Inter', sans-serif; }
         [data-feather] { width: 1.25rem; height: 1.25rem; }
         .tabulator { border: 1px solid #e5e7eb; border-radius: 0.5rem; background-color: #fff; font-size: 0.875rem; }
         .tabulator .tabulator-header { background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; font-weight: 600; }
@@ -37,37 +35,15 @@
         #sidebar.collapsed .sidebar-link { justify-content: center; }
         #sidebar.collapsed .sidebar-text, #sidebar.collapsed #company-logo, #sidebar.collapsed #toggle-icon-collapse { display: none; }
         #sidebar.collapsed #toggle-icon-expand { display: block; }
-
-        /* ADICIONADO: CSS para o fundo */
-        .page-background {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-            overflow: hidden;
-        }
-        .abstract-background {
-            width: 100%;
-            height: 100%;
-            border-radius: 0;
-            aspect-ratio: auto;
-        }
+        .page-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
+        .abstract-background { width: 100%; height: 100%; border-radius: 0; aspect-ratio: auto; }
     </style>
 </head>
 <body class="h-full">
 
     <div class="page-background">
         <div class="abstract-background">
-            <div class="tube tube-1"></div>
-            <div class="tube tube-2"></div>
-            <div class="tube tube-3"></div>
-            <div class="tube tube-4"></div>
-            <div class="tube tube-5"></div>
-            <div class="tube tube-6"></div>
-            <div class="tube tube-7"></div>
-            <div class="tube tube-8"></div>
+            <div class="tube tube-1"></div><div class="tube tube-2"></div><div class="tube tube-3"></div><div class="tube tube-4"></div><div class="tube tube-5"></div><div class="tube tube-6"></div><div class="tube tube-7"></div><div class="tube tube-8"></div>
         </div>
     </div>
 
@@ -111,9 +87,9 @@
             <h2 class="text-2xl font-bold text-gray-900 mb-6">Configurações do Sistema</h2>
             <div class="tabs border-b border-gray-200">
                 <nav class="-mb-px flex flex-wrap space-x-6" aria-label="Tabs">
-                    <button class="tab-button active whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="parametros">Parâmetros do Sistema</button>
+                    <button class="tab-button active whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="parametros">Parâmetros</button>
                     <button class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="itens_estoque">Itens de Estoque</button>
-                    <button class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="perfis" style="display: none;">Perfi de Acesso</button>
+                    <button class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="perfis" style="display: none;">Perfis de Acesso</button>
                     <button class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="usuarios" id="user-tab-btn" style="display: none;">Usuários</button>
                     <button class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="logo">Logo</button>
                 </nav>
@@ -127,7 +103,8 @@
                             <label for="select-param-code" class="block text-sm font-medium text-gray-700">Selecione o Tipo de Parâmetro:</label>
                             <select id="select-param-code" class="mt-1 block w-full max-w-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select>
                         </div>
-                        <div id="parametros-table" class="mt-6"></div>
+                        <div id="parametros-table-desktop" class="mt-6"></div>
+                        <div id="parametros-table-mobile" class="mt-6"></div>
                     </section>
                     <section class="settings-section bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow">
                         <h4 id="form-title" class="text-lg font-semibold text-gray-900">Adicionar Novo Parâmetro</h4>
@@ -161,7 +138,8 @@
                     <section class="settings-section bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow">
                         <h3 class="text-lg font-semibold text-gray-900">Itens de Estoque</h3>
                         <p class="mt-1 text-sm text-gray-600">Gira os insumos que serão controlados pelo sistema (combustíveis, óleos, pneus, etc.).</p>
-                        <div id="itens-estoque-table" class="mt-6"></div>
+                        <div id="itens-estoque-table-desktop" class="mt-6"></div>
+                        <div id="itens-estoque-table-mobile" class="mt-6"></div>
                     </section>
                     <section class="settings-section bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow">
                         <h4 id="item-form-title" class="text-lg font-semibold text-gray-900">Adicionar Novo Item</h4>
@@ -191,7 +169,8 @@
                     <section class="settings-section bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow">
                         <h3 class="text-lg font-semibold text-gray-900">Gerir Perfis de Acesso</h3>
                         <p class="mt-1 text-sm text-gray-600">Crie e edite os perfis que definem o que cada usuário pode ver e acessar no sistema.</p>
-                        <div id="perfis-table" class="mt-6"></div>
+                        <div id="perfis-table-desktop" class="mt-6"></div>
+                        <div id="perfis-table-mobile" class="mt-6"></div>
                     </section>
                     <section class="settings-section bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow">
                         <h4 id="perfil-form-title" class="text-lg font-semibold text-gray-900">Adicionar Novo Perfil</h4>
@@ -239,7 +218,8 @@
                     <section class="settings-section bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow">
                         <h3 class="text-lg font-semibold text-gray-900">Gestão de Usuários</h3>
                         <p class="mt-1 text-sm text-gray-600">Clique em "Gerir" para editar as permissões e dados de um usuário.</p>
-                        <div id="users-table" class="mt-4"></div>
+                        <div id="users-table-desktop" class="mt-4"></div>
+                        <div id="users-table-mobile" class="mt-4"></div>
                     </section>
                 </div>
             </div>

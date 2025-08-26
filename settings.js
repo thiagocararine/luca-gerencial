@@ -36,6 +36,7 @@ async function initSettingsPage() {
     gerenciarAcessoModulos();
     
     setupEventListenersSettings();
+    setupCardEventListeners();
     setupParametrosTable(); 
     
     if (privilegedAccessProfiles.includes(getUserProfile())) {
@@ -174,21 +175,22 @@ async function loadPermissionsForProfile(profileId) {
 }
 
 function setupUsersTable() {
-    const tableId = "#users-table";
-    const containerId = "users-table"; // ID do DIV
+    const desktopContainer = document.getElementById('users-table-desktop');
+    const mobileContainer = document.getElementById('users-table-mobile');
     const url = `${apiUrlBase}/auth/users`;
 
     if (window.innerWidth < 768) {
-        // Versão Mobile: Busca dados e renderiza como cards
+        desktopContainer.style.display = 'none';
+        mobileContainer.style.display = 'block';
         fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } })
-            .then(res => res.json())
-            .then(data => renderTabulatorAsCards(data, containerId, 'usuarios'));
+            .then(res => res.json()).then(data => renderSettingsCards(data, 'users-table-mobile', 'usuarios'));
     } else {
-        // Versão Desktop: Renderiza com Tabulator
-        usersTable = new Tabulator(tableId, {
+        desktopContainer.style.display = 'block';
+        mobileContainer.style.display = 'none';
+        usersTable = new Tabulator(desktopContainer, {
             layout: "fitDataStretch",
             placeholder: "A carregar utilizadores...",
-            ajaxURL: url,
+            ajaxURL: `${apiUrlBase}/auth/users`,
             ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
             columns: [
                 { title: "ID", field: "ID", width: 60 },
@@ -310,19 +312,22 @@ async function preCarregarPerfisDeAcesso() {
 }
 
 function setupPerfisTable() {
-    const tableId = "#perfis-table";
-    const containerId = "perfis-table";
+    const desktopContainer = document.getElementById('perfis-table-desktop');
+    const mobileContainer = document.getElementById('perfis-table-mobile');
     const url = `${apiUrlBase}/settings/perfis-acesso`;
 
     if (window.innerWidth < 768) {
+        desktopContainer.style.display = 'none';
+        mobileContainer.style.display = 'block';
         fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } })
-            .then(res => res.json())
-            .then(data => renderTabulatorAsCards(data, containerId, 'perfis'));
+            .then(res => res.json()).then(data => renderSettingsCards(data, 'perfis-table-mobile', 'perfis'));
     } else {
-        perfisTable = new Tabulator(tableId, {
+        desktopContainer.style.display = 'block';
+        mobileContainer.style.display = 'none';
+        perfisTable = new Tabulator(desktopContainer, {
             layout: "fitDataStretch",
             placeholder: "A carregar perfis...",
-            ajaxURL: url,
+            ajaxURL: `${apiUrlBase}/settings/perfis-acesso`,
             ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
             columns: [
                 { title: "ID", field: "id", width: 60 },
@@ -411,19 +416,22 @@ async function handleDeletePerfil(id) {
 // --- FUNÇÕES PARA ITENS DE ESTOQUE ---
 
 function setupItensEstoqueTable() {
-    const tableId = "#itens-estoque-table";
-    const containerId = "itens-estoque-table";
+    const desktopContainer = document.getElementById('itens-estoque-table-desktop');
+    const mobileContainer = document.getElementById('itens-estoque-table-mobile');
     const url = `${apiUrlBase}/logistica/itens-estoque`;
 
     if (window.innerWidth < 768) {
+        desktopContainer.style.display = 'none';
+        mobileContainer.style.display = 'block';
         fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } })
-            .then(res => res.json())
-            .then(data => renderTabulatorAsCards(data, containerId, 'itens_estoque'));
+            .then(res => res.json()).then(data => renderSettingsCards(data, 'itens-estoque-table-mobile', 'itens_estoque'));
     } else {
-        itensEstoqueTable = new Tabulator(tableId, {
+        desktopContainer.style.display = 'block';
+        mobileContainer.style.display = 'none';
+        itensEstoqueTable = new Tabulator(desktopContainer, {
             layout: "fitDataStretch",
             placeholder: "A carregar itens...",
-            ajaxURL: url,
+            ajaxURL: `${apiUrlBase}/logistica/itens-estoque`,
             ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
             columns: [
                 { title: "ID", field: "id", width: 60 },
@@ -565,19 +573,21 @@ async function loadAndPopulateVinculacao(codParametroPai) {
 }
 
 function setupParametrosTable() {
-    const tableId = "#parametros-table";
-    const containerId = "parametros-table";
+    const desktopContainer = document.getElementById('parametros-table-desktop');
+    const mobileContainer = document.getElementById('parametros-table-mobile');
 
-    // No mobile, a tabela fica vazia até o usuário selecionar um tipo
     if (window.innerWidth < 768) {
-        document.getElementById(containerId).innerHTML = '<p class="text-center p-8 text-gray-500">Selecione um tipo de parâmetro para ver os dados.</p>';
-        // A lógica de carregar os cards já está em handleParamCodeChange
+        desktopContainer.style.display = 'none';
+        mobileContainer.style.display = 'block';
+        mobileContainer.innerHTML = '<p class="text-center p-4 text-gray-500">Selecione um tipo de parâmetro para ver os dados.</p>';
     } else {
-        parametrosTable = new Tabulator(tableId, {
+        desktopContainer.style.display = 'block';
+        mobileContainer.style.display = 'none';
+        parametrosTable = new Tabulator(desktopContainer, {
             layout: "fitDataStretch",
             placeholder: "Selecione um tipo de parâmetro para ver os dados.",
             columns: [
-                 { title: "ID", field: "ID", width: 60 },
+                { title: "ID", field: "ID", width: 60 },
                 { title: "Nome", field: "NOME_PARAMETRO", minWidth: 200 },
                 { title: "Key", field: "KEY_PARAMETRO", hozAlign: "center", width: 80 },
                 { 
@@ -610,10 +620,12 @@ async function handleParamCodeChange(e) {
     currentParamCode = e.target.value;
     const paramForm = document.getElementById('param-form');
     const vinculacaoGroup = document.getElementById('vinculacao-group');
-    const tableContainer = document.getElementById('parametros-table');
+    const desktopContainer = document.getElementById('parametros-table-desktop');
+    const mobileContainer = document.getElementById('parametros-table-mobile');
     
     resetParamForm();
-    tableContainer.innerHTML = '';
+    desktopContainer.innerHTML = '';
+    mobileContainer.innerHTML = '';
 
     if (currentParamCode) {
         paramForm.style.display = 'grid';
@@ -631,10 +643,10 @@ async function handleParamCodeChange(e) {
         const url = `${apiUrlBase}/settings/parametros?cod=${encodeURIComponent(currentParamCode)}`;
         
         if (window.innerWidth < 768) {
-            tableContainer.innerHTML = '<p class="text-center p-8 text-gray-500">A carregar...</p>';
+            mobileContainer.innerHTML = '<p class="text-center p-4 text-gray-500">A carregar...</p>';
             fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } })
                 .then(res => res.json())
-                .then(data => renderTabulatorAsCards(data, 'parametros-table', 'parametros'));
+                .then(data => renderSettingsCards(data, 'parametros-table-mobile', 'parametros'));
         } else {
             parametrosTable.setData(url, {}, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         }
@@ -818,60 +830,83 @@ function gerenciarAcessoModulos() {
 }
 
 // ADICIONE ESTA NOVA FUNÇÃO EM settings.js
-function renderTabulatorAsCards(data, containerId, type) {
+function renderSettingsCards(data, containerId, type) {
     const container = document.getElementById(containerId);
-    container.innerHTML = ''; // Limpa a tabela ou cards antigos
+    if (!container) return;
+    container.innerHTML = '';
 
     const cardsGrid = document.createElement('div');
-    cardsGrid.className = 'grid grid-cols-1 sm:grid-cols-2 gap-4 p-4';
+    cardsGrid.className = 'grid grid-cols-1 sm:grid-cols-2 gap-4';
 
     if (data.length === 0) {
-        container.innerHTML = '<p class="text-center p-8 text-gray-500">Nenhum item encontrado.</p>';
+        container.innerHTML = '<p class="text-center p-4 text-gray-500">Nenhum item encontrado.</p>';
         return;
     }
 
     data.forEach(item => {
         const card = document.createElement('div');
         card.className = 'bg-white/80 backdrop-blur-sm rounded-lg shadow p-4 space-y-2 border-l-4 border-indigo-500';
-        
+        card.dataset.item = JSON.stringify(item); // Armazena os dados no próprio card
+
         let title = '';
         let detailsHtml = '';
         let buttonHtml = '';
 
-        // Define como cada tipo de dado será exibido no card
         if (type === 'usuarios') {
             title = item.nome_user;
-            detailsHtml = `
-                <div><strong class="font-medium text-gray-700">Perfil:</strong> ${item.perfil_acesso || 'N/A'}</div>
-                <div><strong class="font-medium text-gray-700">Unidade:</strong> ${item.unidade_user || 'N/A'}</div>
-                <div><strong class="font-medium text-gray-700">Status:</strong> ${item.status_user}</div>
-            `;
-            buttonHtml = `<button class="action-btn mt-2 w-full" onclick='openUserSettingsModal(${JSON.stringify(item)})'>Gerir</button>`;
+            detailsHtml = `<div><strong class="font-medium text-gray-700">Perfil:</strong> ${item.perfil_acesso || 'N/A'}</div><div><strong class="font-medium text-gray-700">Unidade:</strong> ${item.unidade_user || 'N/A'}</div><div><strong class="font-medium text-gray-700">Status:</strong> ${item.status_user}</div>`;
+            buttonHtml = `<button data-action="gerir-usuario" class="action-btn mt-2 w-full">Gerir</button>`;
         } else if (type === 'perfis') {
             title = item.nome_perfil;
             detailsHtml = `<div><strong class="font-medium text-gray-700">Dashboard:</strong> ${item.dashboard_type}</div>`;
-            buttonHtml = `<div class="flex gap-2 mt-2"><button class="edit-btn" onclick='preencherFormularioParaEdicaoPerfil(${JSON.stringify(item)})'>Editar</button><button class="delete-btn" onclick='openConfirmModal("apagar", () => handleDeletePerfil(${item.id}), "Tem certeza?")'>Apagar</button></div>`;
+            buttonHtml = `<div class="flex gap-2 mt-2"><button data-action="editar-perfil" class="edit-btn">Editar</button><button data-action="apagar-perfil" class="delete-btn">Apagar</button></div>`;
         } else if (type === 'itens_estoque') {
             title = item.nome_item;
-            detailsHtml = `
-                <div><strong class="font-medium text-gray-700">Unidade:</strong> ${item.unidade_medida}</div>
-                <div><strong class="font-medium text-gray-700">Saldo:</strong> ${item.quantidade_atual}</div>
-            `;
-            buttonHtml = `<div class="flex gap-2 mt-2"><button class="edit-btn" onclick='preencherFormularioParaEdicaoItem(${JSON.stringify(item)})'>Editar</button><button class="delete-btn" onclick='openConfirmModal("apagar", () => handleDeleteItem(${item.id}), "Tem certeza?")'>Apagar</button></div>`;
+            detailsHtml = `<div><strong class="font-medium text-gray-700">Unidade:</strong> ${item.unidade_medida}</div><div><strong class="font-medium text-gray-700">Saldo:</strong> ${item.quantidade_atual}</div>`;
+            buttonHtml = `<div class="flex gap-2 mt-2"><button data-action="editar-item" class="edit-btn">Editar</button><button data-action="apagar-item" class="delete-btn">Apagar</button></div>`;
         } else if (type === 'parametros') {
             title = item.NOME_PARAMETRO;
-            detailsHtml = `
-                <div><strong class="font-medium text-gray-700">Key:</strong> ${item.KEY_PARAMETRO || 'N/A'}</div>
-            `;
-            buttonHtml = `<div class="flex gap-2 mt-2"><button class="edit-btn" onclick='preencherFormularioParaEdicaoParam(${JSON.stringify(item)})'>Editar</button><button class="delete-btn" onclick='openConfirmModal("apagar", () => handleDeleteParam(${item.ID}), "Tem certeza?")'>Apagar</button></div>`;
+            detailsHtml = `<div><strong class="font-medium text-gray-700">Key:</strong> ${item.KEY_PARAMETRO || 'N/A'}</div>`;
+            buttonHtml = `<div class="flex gap-2 mt-2"><button data-action="editar-param" class="edit-btn">Editar</button><button data-action="apagar-param" class="delete-btn">Apagar</button></div>`;
         }
 
-        card.innerHTML = `
-            <h4 class="font-bold text-gray-800">${title}</h4>
-            <div class="text-sm space-y-1">${detailsHtml}</div>
-            <div class="border-t mt-2 pt-2">${buttonHtml}</div>
-        `;
+        card.innerHTML = `<h4 class="font-bold text-gray-800">${title}</h4><div class="text-sm space-y-1">${detailsHtml}</div><div class="border-t mt-2 pt-2">${buttonHtml}</div>`;
         cardsGrid.appendChild(card);
     });
     container.appendChild(cardsGrid);
+}
+
+function setupCardEventListeners() {
+    document.querySelector('.tab-content-container').addEventListener('click', (e) => {
+        const button = e.target.closest('button[data-action]');
+        if (!button) return;
+
+        const card = button.closest('[data-item]');
+        const itemData = JSON.parse(card.dataset.item);
+        const action = button.dataset.action;
+
+        switch (action) {
+            case 'gerir-usuario':
+                openUserSettingsModal(itemData);
+                break;
+            case 'editar-perfil':
+                preencherFormularioParaEdicaoPerfil(itemData);
+                break;
+            case 'apagar-perfil':
+                openConfirmModal('apagar', () => handleDeletePerfil(itemData.id), `Tem a certeza que deseja apagar o perfil "${itemData.nome_perfil}"?`);
+                break;
+            case 'editar-item':
+                preencherFormularioParaEdicaoItem(itemData);
+                break;
+            case 'apagar-item':
+                openConfirmModal('apagar', () => handleDeleteItem(itemData.id), `Tem a certeza que deseja apagar o item "${itemData.nome_item}"?`);
+                break;
+            case 'editar-param':
+                preencherFormularioParaEdicaoParam(itemData);
+                break;
+            case 'apagar-param':
+                openConfirmModal('apagar', () => handleDeleteParam(itemData.ID), `Tem a certeza que deseja apagar o parâmetro "${itemData.NOME_PARAMETRO}"?`);
+                break;
+        }
+    });
 }
