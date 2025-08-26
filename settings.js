@@ -176,6 +176,7 @@ async function loadPermissionsForProfile(profileId) {
 function setupUsersTable() {
     usersTable = new Tabulator("#users-table", {
         layout: "fitColumns",
+        responsiveLayout: "collapse",
         placeholder: "A carregar utilizadores...",
         ajaxURL: `${apiUrlBase}/auth/users`,
         ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
@@ -300,6 +301,7 @@ async function preCarregarPerfisDeAcesso() {
 function setupPerfisTable() {
     perfisTable = new Tabulator("#perfis-table", {
         layout: "fitColumns",
+        responsiveLayout: "collapse",
         placeholder: "A carregar perfis...",
         ajaxURL: `${apiUrlBase}/settings/perfis-acesso`,
         ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
@@ -391,6 +393,7 @@ async function handleDeletePerfil(id) {
 function setupItensEstoqueTable() {
     itensEstoqueTable = new Tabulator("#itens-estoque-table", {
         layout: "fitColumns",
+        responsiveLayout: "collapse",
         placeholder: "A carregar itens...",
         ajaxURL: `${apiUrlBase}/logistica/itens-estoque`,
         ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
@@ -535,6 +538,7 @@ async function loadAndPopulateVinculacao(codParametroPai) {
 function setupParametrosTable() {
     parametrosTable = new Tabulator("#parametros-table", {
         layout: "fitColumns",
+        responsiveLayout: "collapse",
         placeholder: "Selecione um tipo de parâmetro para ver os dados.",
         columns: [
             { title: "ID", field: "ID", width: 60 },
