@@ -49,7 +49,7 @@
             overflow: hidden; /* Garante que nada saia dos limites */
         }
 
-        #camera-stream, #photo-canvas {
+        #camera-stream, #photo-canvas, #photo-preview-capture {
             position: absolute;
             top: 0;
             left: 0;
@@ -251,8 +251,8 @@
                 <div class="border-b border-gray-200">
                     <nav id="costs-tabs" class="-mb-px flex space-x-6" aria-label="Tabs">
                         <button class="tab-button active" data-cost-tab="gerais">Custos de Frota</button>
-                        <button class="tab-button" data-cost-tab="individuais">Custos  de Veículos</button>
-                        <button class="tab-button" data-cost-tab="abastecimentos">Hist. de Abastecimento</button>
+                        <button class="tab-button" data-cost-tab="individuais">Custos de Veículos</button>
+                        <button class="tab-button" data-cost-tab="abastecimentos">Histórico de Abastec.</button>
                     </nav>
                 </div>
                 <div class="mt-4">
@@ -527,6 +527,7 @@
             <div id="camera-container">
                 <video id="camera-stream" autoplay playsinline></video>
                 <canvas id="photo-canvas" class="hidden"></canvas>
+                <img id="photo-preview-capture" class="hidden" alt="Foto Capturada"> 
             </div>
             <p id="camera-error" class="text-red-500 my-2 hidden"></p>
         </div>

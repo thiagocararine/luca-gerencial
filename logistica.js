@@ -1881,22 +1881,21 @@ function closeCaptureModal() {
 function takePhoto() {
     const video = document.getElementById('camera-stream');
     const canvas = document.getElementById('photo-canvas');
+    const previewImg = document.getElementById('photo-preview-capture'); // Novo
     const context = canvas.getContext('2d');
 
-    // Define uma largura máxima para a imagem de preview (ex: 800 pixels)
     const maxWidth = 800;
-
-    // Calcula a altura proporcional para não distorcer a imagem
     const scale = maxWidth / video.videoWidth;
     canvas.width = maxWidth;
     canvas.height = video.videoHeight * scale;
-
-    // Desenha a imagem no canvas com o novo tamanho reduzido
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Esconde o vídeo e mostra o canvas
+    // Converte o canvas para uma imagem e a exibe no elemento <img>
+    previewImg.src = canvas.toDataURL('image/jpeg');
+
+    // Esconde o vídeo e mostra o preview da imagem
     video.classList.add('hidden');
-    canvas.classList.remove('hidden');
+    previewImg.classList.remove('hidden');
 
     // Alterna a visibilidade dos botões
     document.getElementById('take-photo-btn').classList.add('hidden');
@@ -1905,8 +1904,15 @@ function takePhoto() {
 }
 
 function retakePhoto() {
-    document.getElementById('camera-stream').classList.remove('hidden');
-    document.getElementById('photo-canvas').classList.add('hidden');
+    const video = document.getElementById('camera-stream');
+    const previewImg = document.getElementById('photo-preview-capture'); // Novo
+
+    // Esconde o preview da imagem e mostra o vídeo novamente
+    previewImg.classList.add('hidden');
+    video.classList.remove('hidden');
+    previewImg.src = ''; // Limpa a imagem anterior
+
+    // Alterna a visibilidade dos botões
     document.getElementById('take-photo-btn').classList.remove('hidden');
     document.getElementById('use-photo-btn').classList.add('hidden');
     document.getElementById('retake-photo-btn').classList.add('hidden');
