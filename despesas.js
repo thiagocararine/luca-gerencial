@@ -183,8 +183,8 @@ function setupEventListeners() {
     document.getElementById('modal-tipo-despesa')?.addEventListener('change', handleTipoDespesaChange);
     document.getElementById('filter-tipo')?.addEventListener('change', handleFilterTipoChange);
     
-    // ALTERAÇÃO APLICADA AQUI:
-    // O mesmo handler de clique agora é aplicado à tabela e ao container de cards.
+    // CORREÇÃO APLICADA AQUI:
+    // O mesmo handler de clique agora é aplicado aos contêineres corretos.
     document.getElementById('tabela-despesas-container')?.addEventListener('click', handleCancelClick);
     document.getElementById('cards-despesas-container')?.addEventListener('click', handleCancelClick);
 
@@ -416,6 +416,7 @@ function renderPagination({ totalItems, totalPages, currentPage: page }) {
 }
 
 function handleCancelClick(event) {
+    // Procura pelo botão .cancel-btn mais próximo do local onde o usuário clicou
     const target = event.target.closest('.cancel-btn');
     if (target) {
         const despesaId = parseInt(target.dataset.id, 10);
