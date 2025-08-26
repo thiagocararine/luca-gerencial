@@ -174,29 +174,40 @@ async function loadPermissionsForProfile(profileId) {
 }
 
 function setupUsersTable() {
-    usersTable = new Tabulator("#users-table", {
-        layout: "fitDataStretch",
-        responsiveLayout: "collapse",
-        placeholder: "A carregar utilizadores...",
-        ajaxURL: `${apiUrlBase}/auth/users`,
-        ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
-        columns: [
-            { title: "ID", field: "ID", width: 60 },
-            { title: "Nome", field: "nome_user", minWidth: 200, tooltip: true },
-            { title: "Perfil", field: "perfil_acesso", width: 120 },
-            { title: "Unidade", field: "unidade_user" },
-            { title: "Status", field: "status_user", width: 100, hozAlign: "center" },
-            { 
-                title: "Ações", hozAlign: "center", width: 100,
-                formatter: () => `<button class="action-btn">Gerir</button>`,
-                cellClick: (e, cell) => {
-                    if (e.target.classList.contains('action-btn')) {
-                        openUserSettingsModal(cell.getRow().getData());
+    const tableId = "#users-table";
+    const containerId = "users-table"; // ID do DIV
+    const url = `${apiUrlBase}/auth/users`;
+
+    if (window.innerWidth < 768) {
+        // Versão Mobile: Busca dados e renderiza como cards
+        fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } })
+            .then(res => res.json())
+            .then(data => renderTabulatorAsCards(data, containerId, 'usuarios'));
+    } else {
+        // Versão Desktop: Renderiza com Tabulator
+        usersTable = new Tabulator(tableId, {
+            layout: "fitDataStretch",
+            placeholder: "A carregar utilizadores...",
+            ajaxURL: url,
+            ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
+            columns: [
+                { title: "ID", field: "ID", width: 60 },
+                { title: "Nome", field: "nome_user", minWidth: 200, tooltip: true },
+                { title: "Perfil", field: "perfil_acesso", width: 120 },
+                { title: "Unidade", field: "unidade_user" },
+                { title: "Status", field: "status_user", width: 100, hozAlign: "center" },
+                { 
+                    title: "Ações", hozAlign: "center", width: 100,
+                    formatter: () => `<button class="action-btn">Gerir</button>`,
+                    cellClick: (e, cell) => {
+                        if (e.target.classList.contains('action-btn')) {
+                            openUserSettingsModal(cell.getRow().getData());
+                        }
                     }
-                }
-            },
-        ],
-    });
+                },
+            ],
+        });
+    }
 }
 
 /**
@@ -299,30 +310,39 @@ async function preCarregarPerfisDeAcesso() {
 }
 
 function setupPerfisTable() {
-    perfisTable = new Tabulator("#perfis-table", {
-        layout: "fitDataStretch",
-        responsiveLayout: "collapse",
-        placeholder: "A carregar perfis...",
-        ajaxURL: `${apiUrlBase}/settings/perfis-acesso`,
-        ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
-        columns: [
-            { title: "ID", field: "id", width: 60 },
-            { title: "Nome do Perfil", field: "nome_perfil" },
-            { title: "Dashboard Padrão", field: "dashboard_type" },
-            {
-                title: "Ações", hozAlign: "center", width: 180,
-                formatter: () => `<button class="edit-btn">Editar</button><button class="delete-btn ml-2">Apagar</button>`,
-                cellClick: (e, cell) => {
-                    const data = cell.getRow().getData();
-                    if (e.target.classList.contains('edit-btn')) {
-                        preencherFormularioParaEdicaoPerfil(data);
-                    } else if (e.target.classList.contains('delete-btn')) {
-                        openConfirmModal('apagar', () => handleDeletePerfil(data.id), `Tem a certeza que deseja apagar o perfil "${data.nome_perfil}"? Esta ação não pode ser desfeita.`);
+    const tableId = "#perfis-table";
+    const containerId = "perfis-table";
+    const url = `${apiUrlBase}/settings/perfis-acesso`;
+
+    if (window.innerWidth < 768) {
+        fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } })
+            .then(res => res.json())
+            .then(data => renderTabulatorAsCards(data, containerId, 'perfis'));
+    } else {
+        perfisTable = new Tabulator(tableId, {
+            layout: "fitDataStretch",
+            placeholder: "A carregar perfis...",
+            ajaxURL: url,
+            ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
+            columns: [
+                { title: "ID", field: "id", width: 60 },
+                { title: "Nome do Perfil", field: "nome_perfil" },
+                { title: "Dashboard Padrão", field: "dashboard_type" },
+                {
+                    title: "Ações", hozAlign: "center", width: 180,
+                    formatter: () => `<button class="edit-btn">Editar</button><button class="delete-btn ml-2">Apagar</button>`,
+                    cellClick: (e, cell) => {
+                        const data = cell.getRow().getData();
+                        if (e.target.classList.contains('edit-btn')) {
+                            preencherFormularioParaEdicaoPerfil(data);
+                        } else if (e.target.classList.contains('delete-btn')) {
+                            openConfirmModal('apagar', () => handleDeletePerfil(data.id), `Tem a certeza que deseja apagar o perfil "${data.nome_perfil}"?`);
+                        }
                     }
                 }
-            }
-        ],
-    });
+            ],
+        });
+    }
 }
 
 function preencherFormularioParaEdicaoPerfil(data) {
@@ -391,31 +411,40 @@ async function handleDeletePerfil(id) {
 // --- FUNÇÕES PARA ITENS DE ESTOQUE ---
 
 function setupItensEstoqueTable() {
-    itensEstoqueTable = new Tabulator("#itens-estoque-table", {
-        layout: "fitDataStretch",
-        responsiveLayout: "collapse",
-        placeholder: "A carregar itens...",
-        ajaxURL: `${apiUrlBase}/logistica/itens-estoque`,
-        ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
-        columns: [
-            { title: "ID", field: "id", width: 60 },
-            { title: "Nome do Item", field: "nome_item", minWidth: 200 },
-            { title: "Unidade", field: "unidade_medida", width: 120 },
-            { title: "Saldo Atual", field: "quantidade_atual", hozAlign: "right", width: 120 },
-            {
-                title: "Ações", hozAlign: "center", width: 180,
-                formatter: () => `<button class="edit-btn">Editar</button><button class="delete-btn ml-2">Apagar</button>`,
-                cellClick: (e, cell) => {
-                    const data = cell.getRow().getData();
-                    if (e.target.classList.contains('edit-btn')) {
-                        preencherFormularioParaEdicaoItem(data);
-                    } else if (e.target.classList.contains('delete-btn')) {
-                        openConfirmModal('apagar', () => handleDeleteItem(data.id), `Tem a certeza que deseja apagar o item "${data.nome_item}"?`);
+    const tableId = "#itens-estoque-table";
+    const containerId = "itens-estoque-table";
+    const url = `${apiUrlBase}/logistica/itens-estoque`;
+
+    if (window.innerWidth < 768) {
+        fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } })
+            .then(res => res.json())
+            .then(data => renderTabulatorAsCards(data, containerId, 'itens_estoque'));
+    } else {
+        itensEstoqueTable = new Tabulator(tableId, {
+            layout: "fitDataStretch",
+            placeholder: "A carregar itens...",
+            ajaxURL: url,
+            ajaxConfig: { method: "GET", headers: { 'Authorization': `Bearer ${getToken()}` }},
+            columns: [
+                { title: "ID", field: "id", width: 60 },
+                { title: "Nome do Item", field: "nome_item", minWidth: 200 },
+                { title: "Unidade", field: "unidade_medida", width: 120 },
+                { title: "Saldo Atual", field: "quantidade_atual", hozAlign: "right", width: 120 },
+                {
+                    title: "Ações", hozAlign: "center", width: 180,
+                    formatter: () => `<button class="edit-btn">Editar</button><button class="delete-btn ml-2">Apagar</button>`,
+                    cellClick: (e, cell) => {
+                        const data = cell.getRow().getData();
+                        if (e.target.classList.contains('edit-btn')) {
+                            preencherFormularioParaEdicaoItem(data);
+                        } else if (e.target.classList.contains('delete-btn')) {
+                            openConfirmModal('apagar', () => handleDeleteItem(data.id), `Tem a certeza que deseja apagar o item "${data.nome_item}"?`);
+                        }
                     }
                 }
-            }
-        ],
-    });
+            ],
+        });
+    }
 }
 
 function preencherFormularioParaEdicaoItem(data) {
@@ -536,57 +565,61 @@ async function loadAndPopulateVinculacao(codParametroPai) {
 }
 
 function setupParametrosTable() {
-    parametrosTable = new Tabulator("#parametros-table", {
-        layout: "fitDataStretch",
-        responsiveLayout: "collapse",
-        placeholder: "Selecione um tipo de parâmetro para ver os dados.",
-        columns: [
-            { title: "ID", field: "ID", width: 60 },
-            { title: "Nome", field: "NOME_PARAMETRO", minWidth: 200 },
-            { title: "Key", field: "KEY_PARAMETRO", hozAlign: "center", width: 80 },
-            { 
-                title: "Vínculo", field: "KEY_VINCULACAO", hozAlign: "left",
-                formatter: (cell) => {
-                    const key = cell.getValue();
-                    if (!key) return "";
-                    // ALTERADO PARA COMPARAR COM A COLUNA CORRETA (KEY_VINCULACAO)
-                    const pai = currentParentList.find(p => p.KEY_VINCULACAO == key); // <-- Corrigido aqui
-                    return pai ? pai.NOME_PARAMETRO : `<span style="color:red;">Inválido</span>`;
-                }
-            },
-            {
-                title: "Ações", hozAlign: "center", width: 180,
-                formatter: () => `<button class="edit-btn">Editar</button><button class="delete-btn ml-2">Apagar</button>`,
-                cellClick: (e, cell) => {
-                    const data = cell.getRow().getData();
-                    if (e.target.classList.contains('edit-btn')) {
-                        preencherFormularioParaEdicaoParam(data);
-                    } else if (e.target.classList.contains('delete-btn')) {
-                        openConfirmModal('apagar', () => handleDeleteParam(data.ID), `Tem a certeza que deseja apagar o parâmetro "${data.NOME_PARAMETRO}"?`);
+    const tableId = "#parametros-table";
+    const containerId = "parametros-table";
+
+    // No mobile, a tabela fica vazia até o usuário selecionar um tipo
+    if (window.innerWidth < 768) {
+        document.getElementById(containerId).innerHTML = '<p class="text-center p-8 text-gray-500">Selecione um tipo de parâmetro para ver os dados.</p>';
+        // A lógica de carregar os cards já está em handleParamCodeChange
+    } else {
+        parametrosTable = new Tabulator(tableId, {
+            layout: "fitDataStretch",
+            placeholder: "Selecione um tipo de parâmetro para ver os dados.",
+            columns: [
+                 { title: "ID", field: "ID", width: 60 },
+                { title: "Nome", field: "NOME_PARAMETRO", minWidth: 200 },
+                { title: "Key", field: "KEY_PARAMETRO", hozAlign: "center", width: 80 },
+                { 
+                    title: "Vínculo", field: "KEY_VINCULACAO", hozAlign: "left",
+                    formatter: (cell) => {
+                        const key = cell.getValue();
+                        if (!key) return "";
+                        const pai = currentParentList.find(p => p.KEY_VINCULACAO == key);
+                        return pai ? pai.NOME_PARAMETRO : `<span style="color:red;">Inválido</span>`;
+                    }
+                },
+                {
+                    title: "Ações", hozAlign: "center", width: 180,
+                    formatter: () => `<button class="edit-btn">Editar</button><button class="delete-btn ml-2">Apagar</button>`,
+                    cellClick: (e, cell) => {
+                        const data = cell.getRow().getData();
+                        if (e.target.classList.contains('edit-btn')) {
+                            preencherFormularioParaEdicaoParam(data);
+                        } else if (e.target.classList.contains('delete-btn')) {
+                            openConfirmModal('apagar', () => handleDeleteParam(data.ID), `Tem a certeza que deseja apagar o parâmetro "${data.NOME_PARAMETRO}"?`);
+                        }
                     }
                 }
-            }
-        ],
-    });
+            ],
+        });
+    }
 }
 
 async function handleParamCodeChange(e) {
     currentParamCode = e.target.value;
     const paramForm = document.getElementById('param-form');
     const vinculacaoGroup = document.getElementById('vinculacao-group');
+    const tableContainer = document.getElementById('parametros-table');
+    
     resetParamForm();
-    parametrosTable.clearData();
+    tableContainer.innerHTML = '';
 
     if (currentParamCode) {
         paramForm.style.display = 'grid';
-        
         let tipoPai = null;
-        if (currentParamCode === 'Tipo Despesa') {
-            tipoPai = 'Grupo Despesa';
-        } else if (currentParamCode === 'Modelo - Veículo') {
-            tipoPai = 'Marca - Veículo';
-        }
-
+        if (currentParamCode === 'Tipo Despesa') tipoPai = 'Grupo Despesa';
+        else if (currentParamCode === 'Modelo - Veículo') tipoPai = 'Marca - Veículo';
         if (tipoPai) {
             await loadAndPopulateVinculacao(tipoPai);
             vinculacaoGroup.style.display = 'block';
@@ -596,7 +629,15 @@ async function handleParamCodeChange(e) {
         }
         
         const url = `${apiUrlBase}/settings/parametros?cod=${encodeURIComponent(currentParamCode)}`;
-        parametrosTable.setData(url, {}, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        
+        if (window.innerWidth < 768) {
+            tableContainer.innerHTML = '<p class="text-center p-8 text-gray-500">A carregar...</p>';
+            fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } })
+                .then(res => res.json())
+                .then(data => renderTabulatorAsCards(data, 'parametros-table', 'parametros'));
+        } else {
+            parametrosTable.setData(url, {}, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        }
 
     } else {
         paramForm.style.display = 'none';
@@ -774,4 +815,63 @@ function gerenciarAcessoModulos() {
             }
         }
     }
+}
+
+// ADICIONE ESTA NOVA FUNÇÃO EM settings.js
+function renderTabulatorAsCards(data, containerId, type) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = ''; // Limpa a tabela ou cards antigos
+
+    const cardsGrid = document.createElement('div');
+    cardsGrid.className = 'grid grid-cols-1 sm:grid-cols-2 gap-4 p-4';
+
+    if (data.length === 0) {
+        container.innerHTML = '<p class="text-center p-8 text-gray-500">Nenhum item encontrado.</p>';
+        return;
+    }
+
+    data.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'bg-white/80 backdrop-blur-sm rounded-lg shadow p-4 space-y-2 border-l-4 border-indigo-500';
+        
+        let title = '';
+        let detailsHtml = '';
+        let buttonHtml = '';
+
+        // Define como cada tipo de dado será exibido no card
+        if (type === 'usuarios') {
+            title = item.nome_user;
+            detailsHtml = `
+                <div><strong class="font-medium text-gray-700">Perfil:</strong> ${item.perfil_acesso || 'N/A'}</div>
+                <div><strong class="font-medium text-gray-700">Unidade:</strong> ${item.unidade_user || 'N/A'}</div>
+                <div><strong class="font-medium text-gray-700">Status:</strong> ${item.status_user}</div>
+            `;
+            buttonHtml = `<button class="action-btn mt-2 w-full" onclick='openUserSettingsModal(${JSON.stringify(item)})'>Gerir</button>`;
+        } else if (type === 'perfis') {
+            title = item.nome_perfil;
+            detailsHtml = `<div><strong class="font-medium text-gray-700">Dashboard:</strong> ${item.dashboard_type}</div>`;
+            buttonHtml = `<div class="flex gap-2 mt-2"><button class="edit-btn" onclick='preencherFormularioParaEdicaoPerfil(${JSON.stringify(item)})'>Editar</button><button class="delete-btn" onclick='openConfirmModal("apagar", () => handleDeletePerfil(${item.id}), "Tem certeza?")'>Apagar</button></div>`;
+        } else if (type === 'itens_estoque') {
+            title = item.nome_item;
+            detailsHtml = `
+                <div><strong class="font-medium text-gray-700">Unidade:</strong> ${item.unidade_medida}</div>
+                <div><strong class="font-medium text-gray-700">Saldo:</strong> ${item.quantidade_atual}</div>
+            `;
+            buttonHtml = `<div class="flex gap-2 mt-2"><button class="edit-btn" onclick='preencherFormularioParaEdicaoItem(${JSON.stringify(item)})'>Editar</button><button class="delete-btn" onclick='openConfirmModal("apagar", () => handleDeleteItem(${item.id}), "Tem certeza?")'>Apagar</button></div>`;
+        } else if (type === 'parametros') {
+            title = item.NOME_PARAMETRO;
+            detailsHtml = `
+                <div><strong class="font-medium text-gray-700">Key:</strong> ${item.KEY_PARAMETRO || 'N/A'}</div>
+            `;
+            buttonHtml = `<div class="flex gap-2 mt-2"><button class="edit-btn" onclick='preencherFormularioParaEdicaoParam(${JSON.stringify(item)})'>Editar</button><button class="delete-btn" onclick='openConfirmModal("apagar", () => handleDeleteParam(${item.ID}), "Tem certeza?")'>Apagar</button></div>`;
+        }
+
+        card.innerHTML = `
+            <h4 class="font-bold text-gray-800">${title}</h4>
+            <div class="text-sm space-y-1">${detailsHtml}</div>
+            <div class="border-t mt-2 pt-2">${buttonHtml}</div>
+        `;
+        cardsGrid.appendChild(card);
+    });
+    container.appendChild(cardsGrid);
 }
