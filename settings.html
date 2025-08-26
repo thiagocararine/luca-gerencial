@@ -10,8 +10,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="assets/style.css">
+
     <style>
-        body { font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        body { font-family: 'Inter', sans-serif; } /* Removido overflow-x: hidden */
         [data-feather] { width: 1.25rem; height: 1.25rem; }
         .tabulator { border: 1px solid #e5e7eb; border-radius: 0.5rem; background-color: #fff; font-size: 0.875rem; }
         .tabulator .tabulator-header { background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; font-weight: 600; }
@@ -27,7 +30,6 @@
         .action-btn { background-color: #10b981; }
         .action-btn:hover { background-color: #059669; }
         
-        /* Lógica de CSS para a Sidebar */
         #sidebar { width: 16rem; }
         #sidebar .sidebar-text, #sidebar #toggle-icon-collapse { display: inline; }
         #sidebar #toggle-icon-expand { display: none; }
@@ -35,48 +37,58 @@
         #sidebar.collapsed .sidebar-link { justify-content: center; }
         #sidebar.collapsed .sidebar-text, #sidebar.collapsed #company-logo, #sidebar.collapsed #toggle-icon-collapse { display: none; }
         #sidebar.collapsed #toggle-icon-expand { display: block; }
+
+        /* ADICIONADO: CSS para o fundo */
+        .page-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+        }
+        .abstract-background {
+            width: 100%;
+            height: 100%;
+            border-radius: 0;
+            aspect-ratio: auto;
+        }
     </style>
 </head>
 <body class="h-full">
 
+    <div class="page-background">
+        <div class="abstract-background">
+            <div class="tube tube-1"></div>
+            <div class="tube tube-2"></div>
+            <div class="tube tube-3"></div>
+            <div class="tube tube-4"></div>
+            <div class="tube tube-5"></div>
+            <div class="tube tube-6"></div>
+            <div class="tube tube-7"></div>
+            <div class="tube tube-8"></div>
+        </div>
+    </div>
+
 <div class="flex h-full">
     <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
     
-    <nav id="sidebar" class="fixed inset-y-0 left-0 bg-white shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
+    <nav id="sidebar" class="fixed inset-y-0 left-0 bg-white/80 backdrop-blur-sm shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
         <div class="flex flex-col h-full">
-            <div class="h-16 flex items-center justify-center border-b px-4 gap-2">
+            <div class="h-16 flex items-center justify-center border-b border-gray-200/50 px-4 gap-2">
                 <img id="company-logo" src="" alt="Logo da Empresa" style="display: none; max-height: 40px; max-width: 40px;">
                 <h1 class="text-xl font-bold text-indigo-600 overflow-hidden"><span class="sidebar-text">Luca Gerencial</span></h1>
             </div>
             <div class="flex-grow p-4">
                 <ul class="space-y-2">
-                    <li>
-                        <a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">
-                            <span data-feather="home"></span>
-                            <span class="sidebar-text">Início / Dashboard</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">
-                            <span data-feather="dollar-sign"></span>
-                            <span class="sidebar-text">Lançamentos</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">
-                            <span data-feather="truck"></span>
-                            <span class="sidebar-text">Logística</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium bg-indigo-50 text-indigo-700" aria-current="page">
-                            <span data-feather="settings"></span>
-                            <span class="sidebar-text">Configurações</span>
-                        </a>
-                    </li>
+                    <li><a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="home"></span><span class="sidebar-text">Início / Dashboard</span></a></li>
+                    <li><a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="dollar-sign"></span><span class="sidebar-text">Lançamentos</span></a></li>
+                    <li><a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="truck"></span><span class="sidebar-text">Logística</span></a></li>
+                    <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium bg-indigo-50 text-indigo-700" aria-current="page"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
                 </ul>
             </div>
-            <div class="p-2 border-t">
+            <div class="p-2 border-t border-gray-200/50">
                 <button id="sidebar-toggle" class="w-full hidden md:flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none">
                     <svg id="toggle-icon-collapse" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" /></svg>
                     <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
@@ -85,11 +97,9 @@
         </div>
     </nav>
 
-    <div class="flex-1 flex flex-col">
-        <header class="bg-white shadow-sm border-b h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
-            <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900">
-                <span data-feather="menu"></span>
-            </button>
+    <div class="flex-1 flex flex-col min-w-0">
+        <header class="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
+            <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900"><span data-feather="menu"></span></button>
             <div class="hidden md:block"></div>
             <div class="flex items-center gap-4 ml-auto">
                 <span class="text-sm text-gray-700">Olá, <strong id="user-name" class="font-medium">Usuário</strong>!</span>
@@ -111,7 +121,7 @@
             
             <div class="tab-content-container mt-6">
                 <div id="parametros-content" class="tab-content space-y-8">
-                    <section class="settings-section bg-white p-6 rounded-lg shadow">
+                    <section class="settings-section bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow">
                         <h3 class="text-lg font-semibold text-gray-900">Gerir Parâmetros</h3>
                         <div class="filter-group mt-4">
                             <label for="select-param-code" class="block text-sm font-medium text-gray-700">Selecione o Tipo de Parâmetro:</label>
@@ -119,7 +129,7 @@
                         </div>
                         <div id="parametros-table" class="mt-6"></div>
                     </section>
-                    <section class="settings-section bg-white p-6 rounded-lg shadow">
+                    <section class="settings-section bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow">
                         <h4 id="form-title" class="text-lg font-semibold text-gray-900">Adicionar Novo Parâmetro</h4>
                         <form id="param-form" class="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2">
                             <input type="hidden" id="param-id">
@@ -148,12 +158,12 @@
                 </div>
                 
                 <div id="itens_estoque-content" class="tab-content hidden space-y-8">
-                    <section class="settings-section bg-white p-6 rounded-lg shadow">
+                    <section class="settings-section bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow">
                         <h3 class="text-lg font-semibold text-gray-900">Itens de Estoque</h3>
                         <p class="mt-1 text-sm text-gray-600">Gira os insumos que serão controlados pelo sistema (combustíveis, óleos, pneus, etc.).</p>
                         <div id="itens-estoque-table" class="mt-6"></div>
                     </section>
-                    <section class="settings-section bg-white p-6 rounded-lg shadow">
+                    <section class="settings-section bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow">
                         <h4 id="item-form-title" class="text-lg font-semibold text-gray-900">Adicionar Novo Item</h4>
                         <form id="item-estoque-form" class="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2">
                             <input type="hidden" id="item-id">
@@ -178,12 +188,12 @@
                 </div>
 
                 <div id="perfis-content" class="tab-content hidden space-y-8">
-                    <section class="settings-section bg-white p-6 rounded-lg shadow">
+                    <section class="settings-section bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow">
                         <h3 class="text-lg font-semibold text-gray-900">Gerir Perfis de Acesso</h3>
                         <p class="mt-1 text-sm text-gray-600">Crie e edite os perfis que definem o que cada usuário pode ver e acessar no sistema.</p>
                         <div id="perfis-table" class="mt-6"></div>
                     </section>
-                    <section class="settings-section bg-white p-6 rounded-lg shadow">
+                    <section class="settings-section bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow">
                         <h4 id="perfil-form-title" class="text-lg font-semibold text-gray-900">Adicionar Novo Perfil</h4>
                         <form id="perfil-form" class="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2">
                             <input type="hidden" id="perfil-id">
@@ -209,7 +219,7 @@
                 </div>
 
                 <div id="logo-content" class="tab-content hidden">
-                    <section class="settings-section bg-white p-6 rounded-lg shadow">
+                    <section class="settings-section bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow">
                          <h3 class="text-lg font-semibold text-gray-900">Logo da Empresa</h3>
                          <p class="mt-1 text-sm text-gray-600">Esta logo será utilizada nos cabeçalhos dos relatórios em PDF.</p>
                          <div class="form-group mt-4">
@@ -226,7 +236,7 @@
                     </section>
                 </div>
                 <div id="usuarios-content" class="tab-content hidden">
-                    <section class="settings-section bg-white p-6 rounded-lg shadow">
+                    <section class="settings-section bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow">
                         <h3 class="text-lg font-semibold text-gray-900">Gestão de Usuários</h3>
                         <p class="mt-1 text-sm text-gray-600">Clique em "Gerir" para editar as permissões e dados de um usuário.</p>
                         <div id="users-table" class="mt-4"></div>
@@ -298,7 +308,8 @@
 
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
 <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
-<script src="settings.js?v=2.0.15" defer></script> <script>
+<script src="settings.js?v=2.0.15" defer></script> 
+<script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
 
