@@ -304,10 +304,15 @@ function renderTable(despesas) {
 }
 
 async function carregarDespesas() {
-    const tabelaDespesasBody = document.getElementById('tabela-despesas')?.querySelector('tbody');
-    if (!tabelaDespesasBody) return;
-    tabelaDespesasBody.innerHTML = `<tr><td colspan="10" class="text-center p-8 text-gray-500">A carregar...</td></tr>`;
-    document.getElementById('no-data-message').classList.add('hidden');
+    const tabelaContainer = document.getElementById('tabela-despesas-container');
+    const cardsContainer = document.getElementById('cards-despesas-container');
+    const noDataMessage = document.getElementById('no-data-message');
+    
+    // Mostra uma mensagem de carregamento em ambos os containers para evitar saltos no layout
+    const loadingHtml = '<p class="text-center p-8 text-gray-500">A carregar...</p>';
+    tabelaContainer.innerHTML = loadingHtml;
+    cardsContainer.innerHTML = loadingHtml;
+    noDataMessage.classList.add('hidden');
     
     const token = getToken();
     if (!token) return logout();
@@ -341,10 +346,43 @@ async function carregarDespesas() {
         const responseData = await response.json();
         despesasNaPagina = responseData.data;
         
-        renderTable(despesasNaPagina);
+        // LÓGICA RESPONSIVA ADICIONADA AQUI
+        if (window.innerWidth < 768) {
+            // Mobile: esconde a tabela e mostra os cards
+            tabelaContainer.style.display = 'none';
+            cardsContainer.style.display = 'block';
+            renderDespesasAsCards(despesasNaPagina);
+        } else {
+            // Desktop: mostra a tabela e esconde os cards
+            tabelaContainer.style.display = 'block';
+            cardsContainer.style.display = 'none';
+            // Recria a estrutura da tabela antes de renderizar
+            tabelaContainer.innerHTML = `
+                <table id="tabela-despesas" class="min-w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Despesa</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor (R$)</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grupo</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Filial</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Lanç.</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Utilizador</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white text-sm divide-y divide-gray-200"></tbody>
+                </table>
+            `;
+            renderTable(despesasNaPagina);
+        }
+        
         renderPagination(responseData);
     } catch (error) {
-        tabelaDespesasBody.innerHTML = `<tr><td colspan="10" class="text-center p-8 text-red-500">Falha ao carregar despesas.</td></tr>`;
+        tabelaContainer.innerHTML = `<p class="text-center p-8 text-red-500">Falha ao carregar despesas.</p>`;
+        cardsContainer.innerHTML = `<p class="text-center p-8 text-red-500">Falha ao carregar despesas.</p>`;
     }
 }
 
@@ -657,4 +695,53 @@ function gerenciarAcessoModulos() {
             }
         }
     }
+}
+
+// ADICIONE ESTA NOVA FUNÇÃO EM despesas.js
+function renderDespesasAsCards(despesas) {
+    const container = document.getElementById('cards-despesas-container'); // O container que vamos criar no HTML
+    container.innerHTML = ''; // Limpa o conteúdo anterior
+
+    if (despesas.length === 0) {
+        document.getElementById('no-data-message').classList.remove('hidden');
+        return;
+    }
+    
+    document.getElementById('no-data-message').classList.add('hidden');
+
+    const cardsGrid = document.createElement('div');
+    cardsGrid.className = 'grid grid-cols-1 sm:grid-cols-2 gap-4';
+    
+    despesas.forEach(despesa => {
+        const card = document.createElement('div');
+        card.className = 'bg-white/80 backdrop-blur-sm rounded-lg shadow p-4 space-y-3 border-l-4';
+
+        const statusText = despesa.dsp_status === 1 ? 'Efetuado' : 'Cancelado';
+        const statusClass = despesa.dsp_status === 1 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+        const borderColor = despesa.dsp_status === 1 ? 'border-green-500' : 'border-red-500';
+        card.classList.add(borderColor);
+
+        const dataDespesaFmt = new Date(despesa.dsp_datadesp).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+        const valorFmt = parseFloat(despesa.dsp_valordsp).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+
+        card.innerHTML = `
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="font-bold text-gray-800 break-words">${despesa.dsp_descricao}</p>
+                    <p class="text-sm text-gray-600">${despesa.dsp_grupo} / ${despesa.dsp_tipo}</p>
+                </div>
+                <span class="px-2 py-1 text-xs font-semibold rounded-full ${statusClass}">${statusText}</span>
+            </div>
+            <div class="text-2xl font-bold text-gray-900 text-right">${valorFmt}</div>
+            <div class="text-xs text-gray-500 border-t pt-2 mt-2 space-y-1">
+                <div class="flex justify-between"><span>Filial:</span> <span class="font-medium">${despesa.dsp_filial}</span></div>
+                <div class="flex justify-between"><span>Data da Despesa:</span> <span class="font-medium">${dataDespesaFmt}</span></div>
+                <div class="flex justify-between"><span>Usuário:</span> <span class="font-medium">${despesa.dsp_userlanc}</span></div>
+            </div>
+            ${despesa.dsp_status === 1 ? `<button class="cancel-btn w-full mt-2" data-id="${despesa.ID}">Cancelar Lançamento</button>` : ''}
+        `;
+        cardsGrid.appendChild(card);
+    });
+
+    container.appendChild(cardsGrid);
 }
