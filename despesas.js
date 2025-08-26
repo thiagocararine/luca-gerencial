@@ -182,7 +182,12 @@ function setupEventListeners() {
     document.getElementById('form-despesa-modal')?.addEventListener('submit', handleFormSubmit);
     document.getElementById('modal-tipo-despesa')?.addEventListener('change', handleTipoDespesaChange);
     document.getElementById('filter-tipo')?.addEventListener('change', handleFilterTipoChange);
-    document.getElementById('tabela-despesas')?.querySelector('tbody').addEventListener('click', handleTableClick);
+    
+    // ALTERAÇÃO APLICADA AQUI:
+    // O mesmo handler de clique agora é aplicado à tabela e ao container de cards.
+    document.getElementById('tabela-despesas-container')?.addEventListener('click', handleCancelClick);
+    document.getElementById('cards-despesas-container')?.addEventListener('click', handleCancelClick);
+
     document.getElementById('items-per-page')?.addEventListener('change', (event) => { itemsPerPage = parseInt(event.target.value); currentPage = 1; carregarDespesas(); });
     document.getElementById('prev-page-btn')?.addEventListener('click', () => { if (currentPage > 1) { currentPage--; carregarDespesas(); } });
     document.getElementById('next-page-btn')?.addEventListener('click', () => { currentPage++; carregarDespesas(); });
@@ -410,7 +415,7 @@ function renderPagination({ totalItems, totalPages, currentPage: page }) {
     nextBtn.disabled = page >= totalPages;
 }
 
-function handleTableClick(event) {
+function handleCancelClick(event) {
     const target = event.target.closest('.cancel-btn');
     if (target) {
         const despesaId = parseInt(target.dataset.id, 10);
