@@ -439,79 +439,80 @@
 </div>
 
 <div id="vehicle-cost-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
-    <div class="relative mx-auto border w-full max-w-2xl shadow-lg rounded-md bg-white">
-        <div class="flex items-start justify-between p-4 border-b">
+    <div class="relative mx-auto border w-full max-w-2xl shadow-lg rounded-md bg-white flex flex-col">
+        <div class="flex items-start justify-between p-4 border-b flex-shrink-0">
             <h3 class="text-xl font-semibold">Adicionar Despesa ao Veículo</h3>
             <button id="close-vehicle-cost-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center">
                 <span data-feather="x"></span>
             </button>
         </div>
-        <form id="vehicle-cost-form" class="p-6">
-            <input type="hidden" id="vehicle-cost-fornecedor-id">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-6">
-                <div class="md:col-span-3">
-                    <label for="vehicle-cost-vehicle-select" class="block font-medium">Veículo</label>
-                    <select id="vehicle-cost-vehicle-select" required class="form-input mt-1 block w-full rounded-md border-gray-300"></select>
+        <div class="max-h-[70vh] overflow-y-auto">
+            <form id="vehicle-cost-form" class="p-6">
+                <input type="hidden" id="vehicle-cost-fornecedor-id">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-6">
+                    <div class="md:col-span-3">
+                        <label for="vehicle-cost-vehicle-select" class="block font-medium">Veículo</label>
+                        <select id="vehicle-cost-vehicle-select" required class="form-input mt-1 block w-full rounded-md border-gray-300"></select>
+                    </div>
+                    <div>
+                        <label for="vehicle-cost-date" class="block font-medium">Data</label>
+                        <input type="date" id="vehicle-cost-date" required class="form-input mt-1 block w-full rounded-md border-gray-300">
+                    </div>
+                    <div>
+                        <label for="vehicle-cost-value" class="block font-medium">Custo (R$)</label>
+                        <input type="number" step="0.01" id="vehicle-cost-value" required placeholder="150.00" class="form-input mt-1 block w-full rounded-md border-gray-300">
+                    </div>
+                    <div>
+                        <label for="vehicle-cost-type" class="block font-medium">Tipo</label>
+                        <select id="vehicle-cost-type" required class="form-input mt-1 block w-full rounded-md border-gray-300">
+                        </select>
+                    </div>
+                    <div class="md:col-span-3">
+                        <label for="vehicle-cost-classification" class="block font-medium">Classificação</label>
+                        <select id="vehicle-cost-classification" required class="form-input mt-1 block w-full rounded-md border-gray-300"></select>
+                    </div>
+                    <div class="md:col-span-3">
+                        <label for="vehicle-cost-description" class="block font-medium">Descrição</label>
+                        <textarea id="vehicle-cost-description" rows="2" class="form-input mt-1 block w-full rounded-md border-gray-300" placeholder="Ex: Troca de óleo e filtros..."></textarea>
+                    </div>
+                    <div>
+                        <label for="vehicle-cost-item-servico" class="block text-sm font-medium text-gray-700">Item de Serviço (Plano)</label>
+                        <select id="vehicle-cost-item-servico" name="vehicle-cost-item-servico" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <option value="">-- Nenhum (Serviço Geral) --</option>
+                        </select>
+                    </div>
+                    <div id="vehicle-cost-odometer-container">
+                        <label for="vehicle-cost-odometer" class="block text-sm font-medium text-gray-700">Odômetro do Veículo</label>
+                        <input type="number" id="vehicle-cost-odometer" name="vehicle-cost-odometer" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
                 </div>
-                <div>
-                    <label for="vehicle-cost-date" class="block font-medium">Data</label>
-                    <input type="date" id="vehicle-cost-date" required class="form-input mt-1 block w-full rounded-md border-gray-300">
-                </div>
-                <div>
-                    <label for="vehicle-cost-value" class="block font-medium">Custo (R$)</label>
-                    <input type="number" step="0.01" id="vehicle-cost-value" required placeholder="150.00" class="form-input mt-1 block w-full rounded-md border-gray-300">
-                </div>
-                <div>
-                    <label for="vehicle-cost-type" class="block font-medium">Tipo</label>
-                    <select id="vehicle-cost-type" required class="form-input mt-1 block w-full rounded-md border-gray-300">
-                    </select>
-                </div>
-                <div class="md:col-span-3">
-                    <label for="vehicle-cost-classification" class="block font-medium">Classificação</label>
-                    <select id="vehicle-cost-classification" required class="form-input mt-1 block w-full rounded-md border-gray-300"></select>
-                </div>
-                <div class="md:col-span-3">
-                    <label for="vehicle-cost-description" class="block font-medium">Descrição</label>
-                    <textarea id="vehicle-cost-description" rows="2" class="form-input mt-1 block w-full rounded-md border-gray-300" placeholder="Ex: Troca de óleo e filtros..."></textarea>
-                </div>
-                <div>
-                    <label for="vehicle-cost-item-servico" class="block text-sm font-medium text-gray-700">Plano de Preventiva</label>
-                    <select id="vehicle-cost-item-servico" name="vehicle-cost-item-servico" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                        <option value="">-- Nenhum (Serviço Geral) --</option>
-                    </select>
-                </div>
-
-                <div id="vehicle-cost-odometer-container">
-                    <label for="vehicle-cost-odometer" class="block text-sm font-medium text-gray-700">Odômetro do Veiículo</label>
-                    <input type="number" id="vehicle-cost-odometer" name="vehicle-cost-odometer" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                </div>
-            </div>
-            <div class="border-t pt-4">
-                 <h4 class="text-lg font-medium text-gray-800 mb-2">Fornecedor</h4>
-                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                    <div class="md:col-span-1">
-                        <label for="vehicle-cost-cnpj" class="block font-medium">CNPJ</label>
-                        <div class="flex">
-                            <input type="text" id="vehicle-cost-cnpj" class="form-input mt-1 block w-full rounded-l-md" placeholder="Digite o CNPJ">
-                            <button type="button" id="vehicle-cost-lookup-cnpj-btn" class="bg-indigo-600 text-white p-2 mt-1 rounded-r-md hover:bg-indigo-700">
-                                <span data-feather="search" class="w-4 h-4"></span>
-                            </button>
+                <div class="border-t pt-4">
+                     <h4 class="text-lg font-medium text-gray-800 mb-2">Fornecedor</h4>
+                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div class="md:col-span-1">
+                            <label for="vehicle-cost-cnpj" class="block font-medium">CNPJ</label>
+                            <div class="flex">
+                                <input type="text" id="vehicle-cost-cnpj" class="form-input mt-1 block w-full rounded-l-md" placeholder="Digite o CNPJ">
+                                <button type="button" id="vehicle-cost-lookup-cnpj-btn" class="bg-indigo-600 text-white p-2 mt-1 rounded-r-md hover:bg-indigo-700">
+                                    <span data-feather="search" class="w-4 h-4"></span>
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                    <div class="md:col-span-2">
-                        <label for="vehicle-cost-razao-social" class="block font-medium">Razão Social</label>
-                        <input type="text" id="vehicle-cost-razao-social" required class="form-input mt-1 block w-full bg-gray-200" readonly>
-                    </div>
-                 </div>
-                 <div class="mt-2 text-right">
-                     <button type="button" id="vehicle-cost-despesa-interna-btn" class="text-sm text-indigo-600 hover:underline">É uma despesa interna?</button>
-                 </div>
-            </div>
-            <div class="flex justify-end items-center pt-6 border-t mt-6 gap-4">
-                <button type="button" id="cancel-vehicle-cost-form-btn" class="action-btn bg-gray-500 hover:bg-gray-600">Cancelar</button>
-                <button type="submit" id="save-vehicle-cost-btn" class="action-btn bg-green-600 hover:bg-green-700">Salvar Despesa</button>
-            </div>
-        </form>
+                        <div class="md:col-span-2">
+                            <label for="vehicle-cost-razao-social" class="block font-medium">Razão Social</label>
+                            <input type="text" id="vehicle-cost-razao-social" required class="form-input mt-1 block w-full bg-gray-200" readonly>
+                        </div>
+                     </div>
+                     <div class="mt-2 text-right">
+                         <button type="button" id="vehicle-cost-despesa-interna-btn" class="text-sm text-indigo-600 hover:underline">É uma despesa interna?</button>
+                     </div>
+                </div>
+            </form>
+        </div>
+        <div class="flex justify-end items-center p-4 border-t gap-4 bg-gray-50 rounded-b-md flex-shrink-0">
+            <button type="button" id="cancel-vehicle-cost-form-btn" class="action-btn bg-gray-500 hover:bg-gray-600">Cancelar</button>
+            <button type="submit" form="vehicle-cost-form" id="save-vehicle-cost-btn" class="action-btn bg-green-600 hover:bg-green-700">Salvar Despesa</button>
+        </div>
     </div>
 </div>
 
@@ -670,146 +671,150 @@
 </div>
 
 <div id="fleet-cost-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
-    <div class="relative mx-auto border w-full max-w-3xl shadow-lg rounded-md bg-white">
-        <div class="flex items-start justify-between p-4 border-b">
+    <div class="relative mx-auto border w-full max-w-3xl shadow-lg rounded-md bg-white flex flex-col">
+        <div class="flex items-start justify-between p-4 border-b flex-shrink-0">
             <h3 class="text-xl font-semibold">Lançar Custo Geral de Frota</h3>
             <button id="close-fleet-cost-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center">
                 <span data-feather="x"></span>
             </button>
         </div>
-        <form id="fleet-cost-form" class="p-6">
-            <input type="hidden" id="fleet-cost-fornecedor-id">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6">
-                <div class="md:col-span-2">
-                    <label for="fleet-cost-description" class="block font-medium">Descrição do Custo</label>
-                    <input type="text" id="fleet-cost-description" required class="form-input mt-1 block w-full" placeholder="Ex: Seguro Anual da Frota">
-                </div>
-                <div>
-                    <label for="fleet-cost-date" class="block font-medium">Data</label>
-                    <input type="date" id="fleet-cost-date" required class="form-input mt-1 block w-full">
-                </div>
-                <div>
-                    <label for="fleet-cost-value" class="block font-medium">Custo Total (R$)</label>
-                    <input type="number" step="0.01" id="fleet-cost-value" required placeholder="5000.00" class="form-input mt-1 block w-full">
-                </div>
-                <div class="md:col-span-2">
-                    <label for="fleet-cost-filiais-checkboxes" class="block font-medium">Ratear entre as Filiais</label>
-                    <div id="fleet-cost-filiais-checkboxes" class="checkbox-container mt-1 space-y-2">
+        <div class="max-h-[70vh] overflow-y-auto">
+            <form id="fleet-cost-form" class="p-6">
+                <input type="hidden" id="fleet-cost-fornecedor-id">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6">
+                    <div class="md:col-span-2">
+                        <label for="fleet-cost-description" class="block font-medium">Descrição do Custo</label>
+                        <input type="text" id="fleet-cost-description" required class="form-input mt-1 block w-full" placeholder="Ex: Seguro Anual da Frota">
                     </div>
-                </div>
-            </div>
-            <div class="border-t pt-4">
-                 <h4 class="text-lg font-medium text-gray-800 mb-2">Fornecedor</h4>
-                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                    <div class="md:col-span-1">
-                        <label for="fleet-cost-cnpj" class="block font-medium">CNPJ</label>
-                        <div class="flex">
-                            <input type="text" id="fleet-cost-cnpj" class="form-input mt-1 block w-full rounded-l-md" placeholder="Digite o CNPJ">
-                            <button type="button" id="fleet-cost-lookup-cnpj-btn" class="bg-indigo-600 text-white p-2 mt-1 rounded-r-md hover:bg-indigo-700">
-                                <span data-feather="search" class="w-4 h-4"></span>
-                            </button>
-                        </div>
-                         <div id="fleet-cost-cnpj-loader" class="hidden mt-1 text-xs text-blue-600">A procurar...</div>
+                    <div>
+                        <label for="fleet-cost-date" class="block font-medium">Data</label>
+                        <input type="date" id="fleet-cost-date" required class="form-input mt-1 block w-full">
+                    </div>
+                    <div>
+                        <label for="fleet-cost-value" class="block font-medium">Custo Total (R$)</label>
+                        <input type="number" step="0.01" id="fleet-cost-value" required placeholder="5000.00" class="form-input mt-1 block w-full">
                     </div>
                     <div class="md:col-span-2">
-                        <label for="fleet-cost-razao-social" class="block font-medium">Razão Social</label>
-                        <input type="text" id="fleet-cost-razao-social" required class="form-input mt-1 block w-full bg-gray-200" readonly>
+                        <label for="fleet-cost-filiais-checkboxes" class="block font-medium">Ratear entre as Filiais</label>
+                        <div id="fleet-cost-filiais-checkboxes" class="checkbox-container mt-1 space-y-2">
+                        </div>
                     </div>
-                 </div>
-                 <div class="mt-2 text-right">
-                     <button type="button" id="fleet-cost-despesa-interna-btn" class="text-sm text-indigo-600 hover:underline">É uma despesa interna?</button>
-                 </div>
-            </div>
-            <div class="flex justify-end items-center pt-6 border-t mt-6 gap-4">
-                <button type="button" id="cancel-fleet-cost-form-btn" class="action-btn bg-gray-500 hover:bg-gray-600">Cancelar</button>
-                <button type="submit" id="save-fleet-cost-btn" class="action-btn bg-teal-600 hover:bg-teal-700">Salvar Custo</button>
-            </div>
-        </form>
+                </div>
+                <div class="border-t pt-4">
+                     <h4 class="text-lg font-medium text-gray-800 mb-2">Fornecedor</h4>
+                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div class="md:col-span-1">
+                            <label for="fleet-cost-cnpj" class="block font-medium">CNPJ</label>
+                            <div class="flex">
+                                <input type="text" id="fleet-cost-cnpj" class="form-input mt-1 block w-full rounded-l-md" placeholder="Digite o CNPJ">
+                                <button type="button" id="fleet-cost-lookup-cnpj-btn" class="bg-indigo-600 text-white p-2 mt-1 rounded-r-md hover:bg-indigo-700">
+                                    <span data-feather="search" class="w-4 h-4"></span>
+                                </button>
+                            </div>
+                             <div id="fleet-cost-cnpj-loader" class="hidden mt-1 text-xs text-blue-600">A procurar...</div>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label for="fleet-cost-razao-social" class="block font-medium">Razão Social</label>
+                            <input type="text" id="fleet-cost-razao-social" required class="form-input mt-1 block w-full bg-gray-200" readonly>
+                        </div>
+                     </div>
+                     <div class="mt-2 text-right">
+                         <button type="button" id="fleet-cost-despesa-interna-btn" class="text-sm text-indigo-600 hover:underline">É uma despesa interna?</button>
+                     </div>
+                </div>
+            </form>
+        </div>
+        <div class="flex justify-end items-center p-4 border-t gap-4 bg-gray-50 rounded-b-md flex-shrink-0">
+            <button type="button" id="cancel-fleet-cost-form-btn" class="action-btn bg-gray-500 hover:bg-gray-600">Cancelar</button>
+            <button type="submit" form="fleet-cost-form" id="save-fleet-cost-btn" class="action-btn bg-teal-600 hover:bg-teal-700">Salvar Custo</button>
+        </div>
     </div>
 </div>
 
-<div id="vehicle-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
-    <div class="relative mx-auto p-6 border w-full max-w-3xl shadow-lg rounded-md bg-white">
-        <div class="flex items-start justify-between pb-4 border-b">
+<div id="vehicle-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+    <div class="relative mx-auto border w-full max-w-3xl shadow-lg rounded-md bg-white flex flex-col">
+        <div class="flex items-start justify-between p-4 border-b flex-shrink-0">
             <h3 id="vehicle-modal-title" class="text-xl font-semibold">Adicionar Veículo</h3>
             <button id="close-vehicle-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center">
                 <span data-feather="x"></span>
             </button>
         </div>
-        <form id="vehicle-form" class="mt-6">
-            <input type="hidden" id="vehicle-id">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-5 text-sm">
-                <div class="lg:col-span-3 grid grid-cols-3 gap-4 items-end">
-                    <div class="col-span-2">
-                        <label for="vehicle-placa" class="block font-medium text-gray-700">Placa</label>
-                        <input type="text" id="vehicle-placa" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 transition-all" maxlength="7">
-                        <div id="placa-error" class="validation-error">Formato de placa inválido.</div>
+        <div class="max-h-[70vh] overflow-y-auto">
+            <form id="vehicle-form" class="p-6">
+                <input type="hidden" id="vehicle-id">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-5 text-sm">
+                    <div class="lg:col-span-3 grid grid-cols-3 gap-4 items-end">
+                        <div class="col-span-2">
+                            <label for="vehicle-placa" class="block font-medium text-gray-700">Placa</label>
+                            <input type="text" id="vehicle-placa" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 transition-all" maxlength="7">
+                            <div id="placa-error" class="validation-error">Formato de placa inválido.</div>
+                        </div>
+                        <div class="flex items-center h-10">
+                            <input id="has-placa-checkbox" type="checkbox" checked class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <label for="has-placa-checkbox" class="ml-2 block text-sm text-gray-900">Possui placa</label>
+                        </div>
                     </div>
-                    <div class="flex items-center h-10">
-                        <input id="has-placa-checkbox" type="checkbox" checked class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                        <label for="has-placa-checkbox" class="ml-2 block text-sm text-gray-900">Possui placa</label>
+                    <div>
+                        <label for="vehicle-marca" class="block font-medium text-gray-700">Marca</label>
+                        <input type="text" id="vehicle-marca" list="marcas-list" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <datalist id="marcas-list"></datalist>
+                    </div>
+                    <div>
+                        <label for="vehicle-modelo" class="block font-medium text-gray-700">Modelo</label>
+                        <input type="text" id="vehicle-modelo" list="modelos-list" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" disabled>
+                        <datalist id="modelos-list"></datalist>
+                    </div>
+                    <div>
+                        <label for="vehicle-ano-fabricacao" class="block font-medium text-gray-700">Ano Fab.</label>
+                        <input type="number" id="vehicle-ano-fabricacao" class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label for="vehicle-ano-modelo" class="block font-medium text-gray-700">Ano Mod.</label>
+                        <input type="number" id="vehicle-ano-modelo" class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label for="vehicle-renavam" class="block font-medium text-gray-700">RENAVAM</label>
+                        <input type="text" id="vehicle-renavam" class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" maxlength="11">
+                        <div id="renavam-error" class="validation-error">RENAVAM deve ter 11 números.</div>
+                    </div>
+                    <div class="lg:col-span-2">
+                        <label for="vehicle-chassi" class="block font-medium text-gray-700">Chassi</label>
+                        <input type="text" id="vehicle-chassi" class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                     <div>
+                        <label for="vehicle-filial" class="block font-medium text-gray-700">Filial</label>
+                        <select id="vehicle-filial" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></select>
+                    </div>
+                    <div>
+                        <label for="vehicle-status" class="block font-medium text-gray-700">Status</label>
+                        <select id="vehicle-status" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            <option>Ativo</option>
+                            <option>Em Manutenção</option>
+                            <option>Inativo</option>
+                            <option>Vendido</option>
+                        </select>
+                    </div>
+                     <div class="lg:col-span-2">
+                        <label for="vehicle-tipo-combustivel" class="block font-medium text-gray-700">Tipo de Combustível Principal</label>
+                        <select id="vehicle-tipo-combustivel" class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></select>
+                    </div>
+                    <div class="lg:col-span-3 grid grid-cols-2 gap-4 items-center pt-4 border-t">
+                        <div class="flex items-center">
+                            <input id="vehicle-seguro" name="seguro" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <label for="vehicle-seguro" class="ml-2 block text-sm text-gray-900">Possui Seguro</label>
+                        </div>
+                        <div class="flex items-center">
+                             <input id="vehicle-rastreador" name="rastreador" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <label for="vehicle-rastreador" class="ml-2 block text-sm text-gray-900">Possui Rastreador</label>
+                        </div>
                     </div>
                 </div>
-                <div>
-                    <label for="vehicle-marca" class="block font-medium text-gray-700">Marca</label>
-                    <input type="text" id="vehicle-marca" list="marcas-list" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                    <datalist id="marcas-list"></datalist>
-                </div>
-                <div>
-                    <label for="vehicle-modelo" class="block font-medium text-gray-700">Modelo</label>
-                    <input type="text" id="vehicle-modelo" list="modelos-list" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" disabled>
-                    <datalist id="modelos-list"></datalist>
-                </div>
-                <div>
-                    <label for="vehicle-ano-fabricacao" class="block font-medium text-gray-700">Ano Fab.</label>
-                    <input type="number" id="vehicle-ano-fabricacao" class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                </div>
-                <div>
-                    <label for="vehicle-ano-modelo" class="block font-medium text-gray-700">Ano Mod.</label>
-                    <input type="number" id="vehicle-ano-modelo" class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                </div>
-                <div>
-                    <label for="vehicle-renavam" class="block font-medium text-gray-700">RENAVAM</label>
-                    <input type="text" id="vehicle-renavam" class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" maxlength="11">
-                    <div id="renavam-error" class="validation-error">RENAVAM deve ter 11 números.</div>
-                </div>
-                <div class="lg:col-span-2">
-                    <label for="vehicle-chassi" class="block font-medium text-gray-700">Chassi</label>
-                    <input type="text" id="vehicle-chassi" class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                </div>
-                 <div>
-                    <label for="vehicle-filial" class="block font-medium text-gray-700">Filial</label>
-                    <select id="vehicle-filial" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></select>
-                </div>
-                <div>
-                    <label for="vehicle-status" class="block font-medium text-gray-700">Status</label>
-                    <select id="vehicle-status" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                        <option>Ativo</option>
-                        <option>Em Manutenção</option>
-                        <option>Inativo</option>
-                        <option>Vendido</option>
-                    </select>
-                </div>
-                 <div class="lg:col-span-2">
-                    <label for="vehicle-tipo-combustivel" class="block font-medium text-gray-700">Tipo de Combustível Principal</label>
-                    <select id="vehicle-tipo-combustivel" class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></select>
-                </div>
-                <div class="lg:col-span-3 grid grid-cols-2 gap-4 items-center pt-4 border-t">
-                    <div class="flex items-center">
-                        <input id="vehicle-seguro" name="seguro" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                        <label for="vehicle-seguro" class="ml-2 block text-sm text-gray-900">Possui Seguro</label>
-                    </div>
-                    <div class="flex items-center">
-                         <input id="vehicle-rastreador" name="rastreador" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                        <label for="vehicle-rastreador" class="ml-2 block text-sm text-gray-900">Possui Rastreador</label>
-                    </div>
-                </div>
-            </div>
-            <div class="flex justify-end items-center pt-6 border-t mt-6 gap-4">
-                <button type="button" id="cancel-vehicle-form-btn" class="action-btn bg-gray-500 hover:bg-gray-600">Cancelar</button>
-                <button type="submit" id="save-vehicle-btn" class="action-btn bg-indigo-600 hover:bg-indigo-700">Salvar Veículo</button>
-            </div>
-        </form>
+            </form>
+        </div>
+        <div class="flex justify-end items-center p-4 border-t gap-4 bg-gray-50 rounded-b-md flex-shrink-0">
+            <button type="button" id="cancel-vehicle-form-btn" class="action-btn bg-gray-500 hover:bg-gray-600">Cancelar</button>
+            <button type="submit" form="vehicle-form" id="save-vehicle-btn" class="action-btn bg-indigo-600 hover:bg-indigo-700">Salvar Veículo</button>
+        </div>
     </div>
 </div>
 
