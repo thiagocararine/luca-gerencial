@@ -94,32 +94,47 @@ async function loadVehiclesForChecklist() {
 function setupChecklistEventListeners() {
     const vehicleList = document.getElementById('checklist-vehicle-list');
     const modal = document.getElementById('checklist-modal');
+    const form = document.getElementById('checklist-form');
 
     // Listener para os botões "Iniciar Checklist" nos cards
-    vehicleList.addEventListener('click', (event) => {
-        const button = event.target.closest('.start-checklist-btn');
-        if (button) {
-            const card = button.closest('[data-vehicle]');
-            const vehicleData = JSON.parse(card.dataset.vehicle);
-            openChecklistModal(vehicleData);
-        }
-    });
-    
-    // Listeners para fechar o modal
-    modal.querySelector('#close-checklist-modal-btn').addEventListener('click', () => {
-        modal.classList.add('hidden');
-    });
-    modal.querySelector('#cancel-checklist-btn').addEventListener('click', () => {
-        modal.classList.add('hidden');
-    });
+    if (vehicleList) {
+        vehicleList.addEventListener('click', (event) => {
+            const button = event.target.closest('.start-checklist-btn');
+            if (button) {
+                const card = button.closest('[data-vehicle]');
+                if (card && card.dataset.vehicle) {
+                    const vehicleData = JSON.parse(card.dataset.vehicle);
+                    openChecklistModal(vehicleData);
+                }
+            }
+        });
+    }
 
-    // Listener para o formulário (a ser implementado)
-    const form = document.getElementById('checklist-form');
-    form.addEventListener('submit', (event) => {
-        event.preventDefault();
-        alert('Lógica para salvar o checklist a ser implementada.');
-        // Aqui virá a chamada para a função que envia os dados para o backend
-    });
+    if (modal) {
+        // Listeners para fechar o modal
+        const closeModalBtn = modal.querySelector('#close-checklist-modal-btn');
+        const cancelModalBtn = modal.querySelector('#cancel-checklist-btn');
+
+        if (closeModalBtn) {
+            closeModalBtn.addEventListener('click', () => {
+                modal.classList.add('hidden');
+            });
+        }
+        if (cancelModalBtn) {
+            cancelModalBtn.addEventListener('click', () => {
+                modal.classList.add('hidden');
+            });
+        }
+    }
+    
+    // Listener para o formulário
+    if (form) {
+        form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            alert('Lógica para salvar o checklist a ser implementada.');
+            // Aqui virá a chamada para a função que envia os dados para o backend
+        });
+    }
 }
 
 /**
