@@ -18,7 +18,7 @@
         .modal.hidden { display: none; }
         .page-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
         .abstract-background { width: 100%; height: 100%; border-radius: 0; aspect-ratio: auto; }
-        /* Outros estilos como .action-btn, sidebar, etc. podem ser adicionados aqui */
+        /* Adicione aqui outros estilos globais como .action-btn, etc, se necessário */
     </style>
 </head>
 <body class="h-full">
@@ -29,25 +29,56 @@
         </div>
     </div>
 
+    <div id="global-loader" class="fixed inset-0 bg-gray-900 bg-opacity-50 z-[100] flex-col items-center justify-center hidden">
+        <div style="border-top-color: #4f46e5;" class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4 animate-spin"></div>
+        <h2 class="text-center text-white text-xl font-semibold">Aguarde...</h2>
+    </div>
+
 <div class="flex h-full">
-    <nav id="sidebar" class="fixed inset-y-0 left-0 bg-white/80 backdrop-blur-sm shadow-lg z-30 ...">
-        </nav>
+    <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
+    
+    <nav id="sidebar" class="fixed inset-y-0 left-0 bg-white/80 backdrop-blur-sm shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
+        <div class="flex flex-col h-full">
+            <div class="h-16 flex items-center justify-center border-b border-gray-200/50 px-4 gap-2">
+                <img id="company-logo" src="" alt="Logo da Empresa" style="display: none;" class="max-h-10 max-w-10">
+                <h1 class="text-xl font-bold text-indigo-600 overflow-hidden"><span class="sidebar-text">Luca Gerencial</span></h1>
+            </div>
+            <div class="flex-grow p-4">
+                <ul class="space-y-2">
+                    <li><a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="home"></span><span class="sidebar-text">Início / Dashboard</span></a></li>
+                    <li><a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="dollar-sign"></span><span class="sidebar-text">Lançamentos</span></a></li>
+                    <li><a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="truck"></span><span class="sidebar-text">Logística</span></a></li>
+                    <li><a href="checklist.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium bg-indigo-50 text-indigo-700" aria-current="page"><span data-feather="check-square"></span><span class="sidebar-text">Checklist Veículos</span></a></li>
+                    <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
+                </ul>
+            </div>
+            <div class="p-2 border-t border-gray-200/50">
+                <button id="sidebar-toggle" class="w-full hidden md:flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100"></button>
+            </div>
+        </div>
+    </nav>
 
     <div class="flex-1 flex flex-col min-w-0">
-        <header class="bg-white/80 backdrop-blur-sm shadow-sm ...">
-            </header>
+        <header class="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
+            <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900"><span data-feather="menu"></span></button>
+            <div class="hidden md:block"></div>
+            <div class="flex items-center gap-4 ml-auto">
+                <span class="text-sm text-gray-700">Olá, <strong id="user-name" class="font-medium">Utilizador</strong>!</span>
+                <button id="logout-button" class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500">Sair</button>
+            </div>
+        </header>
 
         <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
             <h2 class="text-2xl font-bold text-gray-900 mb-6">Checklist de Saída de Veículos</h2>
             
-            <div id="vehicle-list-for-checklist" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div id="checklist-vehicle-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 <p class="text-gray-500 col-span-full text-center p-8">A carregar veículos...</p>
             </div>
         </main>
     </div>
 </div>
 
-<div id="checklist-modal" class="modal hidden ...">
+<div id="checklist-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
     </div>
 
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
@@ -55,7 +86,56 @@
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
-        // Cole aqui o script de inicialização do sidebar e logo
+
+        const sidebar = document.getElementById('sidebar');
+        
+        const setupDesktopSidebar = () => {
+            const desktopToggleButton = document.getElementById('sidebar-toggle');
+            if (!desktopToggleButton) return;
+            
+            const setDesktopSidebarState = (collapsed) => {
+                sidebar.classList.toggle('collapsed', collapsed);
+                localStorage.setItem('sidebar_collapsed', collapsed);
+            };
+
+            const isDesktopCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+            setDesktopSidebarState(isDesktopCollapsed);
+
+            desktopToggleButton.addEventListener('click', () => {
+                const currentlyCollapsed = sidebar.classList.contains('collapsed');
+                setDesktopSidebarState(!currentlyCollapsed);
+            });
+        };
+
+        const setupMobileSidebar = () => {
+            const mobileMenuButton = document.getElementById('mobile-menu-button');
+            const overlay = document.getElementById('mobile-menu-overlay');
+            if (!mobileMenuButton || !overlay) return;
+
+            mobileMenuButton.addEventListener('click', () => {
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.remove('hidden');
+            });
+            
+            overlay.addEventListener('click', () => {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+            });
+        };
+        
+        const loadCompanyLogo = () => {
+            const companyLogo = document.getElementById('company-logo');
+            if (!companyLogo) return;
+            const logoBase64 = localStorage.getItem('company_logo');
+            if (logoBase64) {
+                companyLogo.src = logoBase64;
+                companyLogo.style.display = 'block';
+            }
+        };
+
+        loadCompanyLogo();
+        setupDesktopSidebar();
+        setupMobileSidebar();
     });
 </script>
 

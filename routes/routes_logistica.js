@@ -1660,4 +1660,43 @@ router.post('/checklist', authenticateToken, async (req, res) => {
     }
 });
 
+router.get('/veiculos-para-checklist', authenticateToken, async (req, res) => {
+    const { perfil, unidade } = req.user;
+    const privilegedProfiles = ["Administrador", "Logistica"]; // Perfis que podem ver todos
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        
+        let sql;
+        let params = [];
+
+        if (privilegedProfiles.includes(perfil)) {
+            // Usuário privilegiado: vê todos os veículos ativos
+            sql = `
+                SELECT v.id, v.modelo, v.placa, p.NOME_PARAMETRO as nome_filial 
+                FROM veiculos v
+                LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
+                WHERE v.status = 'Ativo' ORDER BY v.modelo`;
+        } else {
+            // Usuário comum: vê apenas os veículos da sua filial
+            sql = `
+                SELECT v.id, v.modelo, v.placa, p.NOME_PARAMETRO as nome_filial 
+                FROM veiculos v
+                LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
+                WHERE v.status = 'Ativo' AND p.NOME_PARAMETRO = ? ORDER BY v.modelo`;
+            params.push(unidade);
+        }
+
+        const [vehicles] = await connection.execute(sql, params);
+        res.json(vehicles);
+
+    } catch (error) {
+        console.error("Erro ao buscar veículos para checklist:", error);
+        res.status(500).json({ error: 'Erro ao buscar a lista de veículos.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
 module.exports = router;
