@@ -49,6 +49,35 @@ const vehicleUpload = multer({
     limits: { fileSize: 3 * 1024 * 1024 } // 3MB
 }).single('ficheiro');
 
+const checklistStorage = multer.diskStorage({
+    destination: async (req, file, cb) => {
+        const { id_veiculo } = req.body;
+        const dataHoje = new Date().toISOString().slice(0, 10); // Formato AAAA-MM-DD
+        let connection;
+        try {
+            connection = await mysql.createConnection(dbConfig);
+            const [rows] = await connection.execute('SELECT placa FROM veiculos WHERE id = ?', [id_veiculo]);
+            if (rows.length === 0) return cb(new Error('Veículo não encontrado.'));
+            
+            const placaSanitizada = sanitizeForPath(rows[0].placa);
+            const destPath = path.join(UPLOADS_BASE_PATH, 'veiculos', placaSanitizada, 'checklist', dataHoje);
+
+            await fs.mkdir(destPath, { recursive: true });
+            cb(null, destPath);
+        } catch (err) {
+            cb(err);
+        } finally {
+            if (connection) await connection.end();
+        }
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const extension = path.extname(file.originalname);
+        cb(null, `${file.fieldname}-${uniqueSuffix}${extension}`);
+    }
+});
+
+const checklistUpload = multer({ storage: checklistStorage }).any(); // .any() para aceitar todos os files
 
 /**
  * Função Auxiliar para registrar logs de logística.
@@ -1619,45 +1648,77 @@ router.get('/veiculos/manutencao/alertas', authenticateToken, async (req, res) =
 });
 
 // ROTA PARA SALVAR UM NOVO CHECKLIST DE VEÍCULO
-router.post('/checklist', authenticateToken, async (req, res) => {
-    const { id_veiculo, odometro_saida, observacoes_gerais } = req.body;
-    const { userId } = req.user;
+router.post('/checklist', authenticateToken, (req, res) => {
+    checklistUpload(req, res, async (err) => {
+        if (err) {
+            console.error("Erro no Multer (checklist):", err);
+            return res.status(500).json({ error: "Ocorreu um erro durante o upload das imagens." });
+        }
 
-    if (!id_veiculo || !odometro_saida) {
-        return res.status(400).json({ error: 'Veículo e Odômetro de Saída são obrigatórios.' });
-    }
+        const { id_veiculo, odometro_saida, observacoes_gerais, avarias } = req.body;
+        const { userId } = req.user;
 
-    let connection;
-    try {
-        connection = await mysql.createConnection(dbConfig);
-        await connection.beginTransaction();
+        if (!id_veiculo || !odometro_saida) {
+            return res.status(400).json({ error: 'Veículo e Odômetro de Saída são obrigatórios.' });
+        }
 
-        // 1. Insere o registro principal do checklist
-        const checklistSql = `
-            INSERT INTO veiculo_checklists 
-            (id_veiculo, id_usuario, data_checklist, odometro_saida, observacoes_gerais)
-            VALUES (?, ?, NOW(), ?, ?)`;
-        const [checklistResult] = await connection.execute(checklistSql, [id_veiculo, userId, odometro_saida, observacoes_gerais]);
-        const newChecklistId = checklistResult.insertId;
+        let connection;
+        try {
+            connection = await mysql.createConnection(dbConfig);
+            await connection.beginTransaction();
 
-        // 2. ATUALIZA o odômetro principal do veículo (como combinado)
-        await connection.execute(
-            'UPDATE veiculos SET odometro_atual = ? WHERE id = ?',
-            [odometro_saida, id_veiculo]
-        );
+            const checklistSql = `
+                INSERT INTO veiculo_checklists (id_veiculo, id_usuario, data_checklist, odometro_saida, observacoes_gerais)
+                VALUES (?, ?, NOW(), ?, ?)`;
+            const [checklistResult] = await connection.execute(checklistSql, [id_veiculo, userId, odometro_saida, observacoes_gerais]);
+            const newChecklistId = checklistResult.insertId;
 
-        // Lógica futura para salvar itens avariados e fotos iria aqui.
+            await connection.execute(
+                'UPDATE veiculos SET odometro_atual = ? WHERE id = ?',
+                [odometro_saida, id_veiculo]
+            );
 
-        await connection.commit();
-        res.status(201).json({ message: 'Checklist salvo com sucesso!', checklistId: newChecklistId });
+            // Salva as fotos obrigatórias
+            const fotosObrigatorias = {};
+            req.files.forEach(file => {
+                if(['foto_frente', 'foto_traseira', 'foto_lateral_direita', 'foto_lateral_esquerda'].includes(file.fieldname)) {
+                    fotosObrigatorias[file.fieldname] = file.filename;
+                }
+            });
 
-    } catch (error) {
-        if (connection) await connection.rollback();
-        console.error("Erro ao salvar checklist:", error);
-        res.status(500).json({ error: 'Erro interno ao salvar o checklist.' });
-    } finally {
-        if (connection) await connection.end();
-    }
+            await connection.execute(
+                `UPDATE veiculo_checklists SET foto_frente = ?, foto_traseira = ?, foto_lateral_direita = ?, foto_lateral_esquerda = ? WHERE id = ?`,
+                [fotosObrigatorias.foto_frente, fotosObrigatorias.foto_traseira, fotosObrigatorias.foto_lateral_direita, fotosObrigatorias.foto_lateral_esquerda, newChecklistId]
+            );
+
+            // Salva os itens com avaria
+            if (avarias && avarias.length > 0) {
+                const avariasParsed = JSON.parse(avarias);
+                const avariaSql = `INSERT INTO checklist_itens_avariados (id_checklist, item_verificado, descricao_avaria, caminho_foto) VALUES (?, ?, ?, ?)`;
+
+                for (let i = 0; i < avariasParsed.length; i++) {
+                    const avaria = avariasParsed[i];
+                    const fotoAvaria = req.files.find(f => f.fieldname === `avaria_foto_${i}`);
+                    await connection.execute(avariaSql, [
+                        newChecklistId,
+                        avaria.item,
+                        avaria.descricao,
+                        fotoAvaria ? fotoAvaria.filename : null
+                    ]);
+                }
+            }
+            
+            await connection.commit();
+            res.status(201).json({ message: 'Checklist salvo com sucesso!', checklistId: newChecklistId });
+
+        } catch (error) {
+            if (connection) await connection.rollback();
+            console.error("Erro ao salvar checklist:", error);
+            res.status(500).json({ error: 'Erro interno ao salvar o checklist.' });
+        } finally {
+            if (connection) await connection.end();
+        }
+    });
 });
 
 router.get('/veiculos-para-checklist', authenticateToken, async (req, res) => {
