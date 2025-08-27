@@ -1662,7 +1662,7 @@ router.post('/checklist', authenticateToken, async (req, res) => {
 
 router.get('/veiculos-para-checklist', authenticateToken, async (req, res) => {
     const { perfil, unidade } = req.user;
-    const privilegedProfiles = ["Administrador", "Logistica"]; // Perfis que podem ver todos
+    const privilegedProfiles = ["Administrador", "Logistica"];
 
     let connection;
     try {
@@ -1671,20 +1671,21 @@ router.get('/veiculos-para-checklist', authenticateToken, async (req, res) => {
         let sql;
         let params = [];
 
+        // A consulta SQL agora inclui um campo 'checklist_hoje'
+        const baseQuery = `
+            SELECT 
+                v.id, v.modelo, v.placa, p.NOME_PARAMETRO as nome_filial,
+                (SELECT COUNT(*) 
+                 FROM veiculo_checklists vc 
+                 WHERE vc.id_veiculo = v.id AND DATE(vc.data_checklist) = CURDATE()) as checklist_hoje
+            FROM veiculos v
+            LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
+        `;
+
         if (privilegedProfiles.includes(perfil)) {
-            // Usuário privilegiado: vê todos os veículos ativos
-            sql = `
-                SELECT v.id, v.modelo, v.placa, p.NOME_PARAMETRO as nome_filial 
-                FROM veiculos v
-                LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
-                WHERE v.status = 'Ativo' ORDER BY v.modelo`;
+            sql = `${baseQuery} WHERE v.status = 'Ativo' ORDER BY v.modelo`;
         } else {
-            // Usuário comum: vê apenas os veículos da sua filial
-            sql = `
-                SELECT v.id, v.modelo, v.placa, p.NOME_PARAMETRO as nome_filial 
-                FROM veiculos v
-                LEFT JOIN parametro p ON v.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
-                WHERE v.status = 'Ativo' AND p.NOME_PARAMETRO = ? ORDER BY v.modelo`;
+            sql = `${baseQuery} WHERE v.status = 'Ativo' AND p.NOME_PARAMETRO = ? ORDER BY v.modelo`;
             params.push(unidade);
         }
 
