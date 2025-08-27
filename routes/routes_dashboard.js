@@ -145,6 +145,8 @@ router.get('/dashboard-summary', authenticateToken, async (req, res) => {
             responseData.logisticsData = await getLogisticsSummary(connection, req);
         } else if (dashboardType === 'Caixa/Loja') {
             responseData.financialData = await getFinancialSummary(connection, req);
+        } else if (dashboardType === 'Checklist') {
+            responseData.checklistData = await getChecklistSummary(connection, req);
         } else if (dashboardType === 'Todos') {
             // Se for 'Todos', busca os dois conjuntos de dados em paralelo
             const [financial, logistics] = await Promise.all([

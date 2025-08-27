@@ -69,6 +69,12 @@
                     <li><a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium bg-indigo-50 text-indigo-700" aria-current="page"><span data-feather="home"></span><span class="sidebar-text">Início / Dashboard</span></a></li>
                     <li><a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="dollar-sign"></span><span class="sidebar-text">Lançamentos</span></a></li>
                     <li><a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="truck"></span><span class="sidebar-text">Logística</span></a></li>
+                    <li>
+                        <a href="checklist.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">
+                            <span data-feather="check-square"></span>
+                            <span class="sidebar-text">Checklist Veículos</span>
+                        </a>
+                    </li>
                     <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
                 </ul>
             </div>
@@ -147,6 +153,14 @@
                     <div class="lg:col-span-1 bg-white/80 backdrop-blur-sm rounded-lg shadow p-5"><h4 class="text-lg font-medium text-gray-800">Veículos por Filial</h4><div class="mt-4" style="height: 300px;"><canvas id="logistica-filial-chart"></canvas></div></div>
                     <div class="lg:col-span-2 bg-white/80 backdrop-blur-sm rounded-lg shadow p-5"><h4 class="text-lg font-medium text-gray-800">Top 5 Veículos por Custo</h4><div class="mt-4" style="height: 300px;"><canvas id="logistica-top-veiculos-chart"></canvas></div></div>
                     <div class="lg:col-span-2 bg-white/80 backdrop-blur-sm rounded-lg shadow p-5"><h4 class="text-lg font-medium text-gray-800">Custos por Classificação</h4><div class="mt-4" style="height: 300px;"><canvas id="logistica-classificacao-chart"></canvas></div></div>
+                </div>
+            </div>
+
+            <div id="dashboard-checklist" class="hidden space-y-6">
+                <h2 class="text-xl font-semibold text-gray-800">Checklist de Saída de Veículos</h2>
+                
+                <div class="bg-white/80 backdrop-blur-sm rounded-lg shadow p-6">
+                    <p class="text-center text-gray-700">A funcionalidade de checklist será exibida aqui.</p>
                 </div>
             </div>
 

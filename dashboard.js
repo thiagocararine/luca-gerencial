@@ -105,25 +105,44 @@ async function loadDashboardData() {
 async function updateDashboardUI(data) {
     const dashFinanceiro = document.getElementById('dashboard-financeiro');
     const dashLogistica = document.getElementById('dashboard-logistica');
+    const dashChecklist = document.getElementById('dashboard-checklist'); // Novo
     const accessDenied = document.getElementById('dashboard-access-denied');
+    
+    // Esconde todas as seções primeiro
     if (dashFinanceiro) dashFinanceiro.classList.add('hidden');
     if (dashLogistica) dashLogistica.classList.add('hidden');
+    if (dashChecklist) dashChecklist.classList.add('hidden'); // Novo
     if (accessDenied) accessDenied.classList.add('hidden');
 
-    if (data.dashboardType === 'Caixa/Loja' || data.dashboardType === 'Todos') {
+    // Agora, mostra apenas a seção correta
+    if (data.dashboardType === 'Checklist') {
+        if (dashChecklist) {
+            dashChecklist.classList.remove('hidden');
+            // Futuramente, aqui chamaremos a função para carregar a lista de veículos do checklist
+            // ex: carregarVeiculosParaChecklist();
+        }
+    } else if (data.dashboardType === 'Caixa/Loja') {
         if (dashFinanceiro) {
             dashFinanceiro.classList.remove('hidden');
             await popularSelect(document.getElementById('dashboard-filter-grupo'), 'Grupo Despesa', getToken(), 'Todos os Grupos');
-            renderFinancialDashboard(data.financialData || data);
+            renderFinancialDashboard(data.financialData);
         }
-    }
-    if (data.dashboardType === 'Logistica' || data.dashboardType === 'Todos') {
+    } else if (data.dashboardType === 'Logistica') {
         if (dashLogistica) {
             dashLogistica.classList.remove('hidden');
-            renderLogisticsDashboard(data.logisticsData || data);
+            renderLogisticsDashboard(data.logisticsData);
         }
-    }
-    if (data.dashboardType === 'Nenhum' || (!data.financialData && !data.logisticsData && data.dashboardType === 'Todos')) {
+    } else if (data.dashboardType === 'Todos') {
+        if (dashFinanceiro) {
+            dashFinanceiro.classList.remove('hidden');
+            await popularSelect(document.getElementById('dashboard-filter-grupo'), 'Grupo Despesa', getToken(), 'Todos os Grupos');
+            renderFinancialDashboard(data.financialData);
+        }
+        if (dashLogistica) {
+            dashLogistica.classList.remove('hidden');
+            renderLogisticsDashboard(data.logisticsData);
+        }
+    } else { // 'Nenhum' ou outro caso
         if (accessDenied) accessDenied.classList.remove('hidden');
     }
 }

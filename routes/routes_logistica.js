@@ -1618,4 +1618,46 @@ router.get('/veiculos/manutencao/alertas', authenticateToken, async (req, res) =
     }
 });
 
+// ROTA PARA SALVAR UM NOVO CHECKLIST DE VEÍCULO
+router.post('/checklist', authenticateToken, async (req, res) => {
+    const { id_veiculo, odometro_saida, observacoes_gerais } = req.body;
+    const { userId } = req.user;
+
+    if (!id_veiculo || !odometro_saida) {
+        return res.status(400).json({ error: 'Veículo e Odômetro de Saída são obrigatórios.' });
+    }
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        await connection.beginTransaction();
+
+        // 1. Insere o registro principal do checklist
+        const checklistSql = `
+            INSERT INTO veiculo_checklists 
+            (id_veiculo, id_usuario, data_checklist, odometro_saida, observacoes_gerais)
+            VALUES (?, ?, NOW(), ?, ?)`;
+        const [checklistResult] = await connection.execute(checklistSql, [id_veiculo, userId, odometro_saida, observacoes_gerais]);
+        const newChecklistId = checklistResult.insertId;
+
+        // 2. ATUALIZA o odômetro principal do veículo (como combinado)
+        await connection.execute(
+            'UPDATE veiculos SET odometro_atual = ? WHERE id = ?',
+            [odometro_saida, id_veiculo]
+        );
+
+        // Lógica futura para salvar itens avariados e fotos iria aqui.
+
+        await connection.commit();
+        res.status(201).json({ message: 'Checklist salvo com sucesso!', checklistId: newChecklistId });
+
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error("Erro ao salvar checklist:", error);
+        res.status(500).json({ error: 'Erro interno ao salvar o checklist.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
 module.exports = router;
