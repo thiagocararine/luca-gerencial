@@ -1553,6 +1553,7 @@ router.get('/abastecimentos', authenticateToken, async (req, res) => {
         const params = [];
         
         if (filial) {
+            // Agora o filtro é aplicado na coluna id_filial do próprio movimento
             conditions.push("em.id_filial = ?");
             params.push(filial);
         }
