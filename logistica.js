@@ -104,6 +104,7 @@ function setupEventListeners() {
     document.getElementById('add-vehicle-button')?.addEventListener('click', () => openVehicleModal());
     document.getElementById('add-fleet-cost-button')?.addEventListener('click', openFleetCostModal);
     document.getElementById('add-vehicle-cost-button')?.addEventListener('click', openVehicleCostModal);
+    document.getElementById('open-fuel-modal-btn')?.addEventListener('click', openFuelModal);
     document.getElementById('filter-button').addEventListener('click', applyFilters);
     document.getElementById('clear-filter-button').addEventListener('click', clearFilters);
     document.getElementById('maintenance-alert-icon')?.addEventListener('click', () => {
@@ -362,9 +363,9 @@ async function openFuelModal() {
     const modal = document.getElementById('fuel-management-modal');
     showLoader();
     try {
-        // Busca o último preço do diesel (ID = 1)
         try {
-            const priceResponse = await fetch(`${apiUrlBase}/logistica/estoque/saldo/1`, { headers: { 'Authorization': `Bearer ${getToken()}` } }); // <-- CORRIGIDO AQUI
+            // CORRIGIDO: Usa a sintaxe correta para o token
+            const priceResponse = await fetch(`${apiUrlBase}/logistica/estoque/saldo/1`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
             if (priceResponse.ok) {
                 const priceData = await priceResponse.json();
                 ultimoPrecoDiesel = parseFloat(priceData.ultimo_preco_unitario) || 0;
@@ -382,8 +383,9 @@ async function openFuelModal() {
         }
 
         const [itemsResponse, vehiclesResponse] = await Promise.all([
-            fetch(`${apiUrlBase}/logistica/itens-estoque`, { headers: { 'Authorization': `Bearer ${getToken()}` } }), // <-- CORRIGIDO AQUI
-            fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } })      // <-- CORRIGIDO AQUI
+            // CORRIGIDO: Usa a sintaxe correta para o token
+            fetch(`${apiUrlBase}/logistica/itens-estoque`, { headers: { 'Authorization': `Bearer ${getToken()}` } }),
+            fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
         ]);
 
         if (!itemsResponse.ok || !vehiclesResponse.ok) {
@@ -397,8 +399,7 @@ async function openFuelModal() {
 
         const dieselVehicles = veiculos.filter(v => v.tipo_combustivel === 'Óleo Diesel S10');
         populateSelectWithOptions(dieselVehicles, 'consumption-vehicle', 'id', 'modelo', '-- Selecione um Veículo --', (v) => `${v.modelo} - ${v.placa}`);
-
-        // Popula o select de filial para o galão (adicionado anteriormente)
+        
         await populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Unidades`, 'consumption-filial-select', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Selecione a Filial --');
 
         new TomSelect('#consumption-vehicle',{
@@ -409,8 +410,13 @@ async function openFuelModal() {
         document.getElementById('fuel-purchase-form').reset();
         document.getElementById('fuel-consumption-form').reset();
         document.getElementById('consumption-date').value = new Date().toISOString().split('T')[0];
-        document.getElementById('consumption-cost').disabled = true;
         
+        // Reseta o estado do checkbox
+        const galaoCheckbox = document.getElementById('consumption-galao-checkbox');
+        galaoCheckbox.checked = false;
+        // Dispara o evento 'change' para garantir que a UI volte ao estado inicial
+        galaoCheckbox.dispatchEvent(new Event('change'));
+
         switchFuelTab('compra');
         modal.classList.remove('hidden');
         feather.replace();
