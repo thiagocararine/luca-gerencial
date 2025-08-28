@@ -897,7 +897,21 @@
 
             <div id="consumo-tab-content" class="tab-content hidden">
                 <form id="fuel-consumption-form">
-                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-6"></div>  
+                            <div class="md:col-span-3 flex items-center">
+                                <input id="consumption-galao-checkbox" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                <label for="consumption-galao-checkbox" class="ml-2 block text-sm text-gray-900">Retirada para Galão (sem veículo)</label>
+                            </div>
+
+                            <div id="consumption-vehicle-container" class="md:col-span-3">
+                                <label for="consumption-vehicle" class="block font-medium">Veículo</label>
+                                <select id="consumption-vehicle" required class="form-input mt-1 block w-full"></select>
+                            </div>
+
+                            <div id="consumption-filial-container" class="md:col-span-3 hidden">
+                                <label for="consumption-filial-select" class="block font-medium">Filial de Destino</label>
+                                <select id="consumption-filial-select" class="form-input mt-1 block w-full"></select>
+                            </div>                        
                          <div class="md:col-span-3">
                              <label for="consumption-vehicle" class="block font-medium">Veículo</label>
                              <select id="consumption-vehicle" required class="form-input mt-1 block w-full"></select>
@@ -912,7 +926,7 @@
                          </div>
                          <div>
                              <label for="consumption-odometer" class="block font-medium">Odómetro Atual (km)</label>
-                             <input type="number" id="consumption-odometer" required placeholder="123456" class="form-input mt-1 block w-full">
+                             <input type="number" id="consumption-odometer" placeholder="123456" class="form-input mt-1 block w-full">
                          </div>
                          <div class="md:col-span-3">
                               <label for="consumption-cost" class="block font-medium">Custo do Abastecimento (R$)</label>

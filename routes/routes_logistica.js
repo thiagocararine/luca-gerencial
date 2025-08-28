@@ -670,7 +670,7 @@ router.post('/estoque/entrada', authenticateToken, async (req, res) => {
 });
 
 router.post('/estoque/consumo', authenticateToken, async (req, res) => {
-    const { veiculoId, data, quantidade, odometro } = req.body;
+    const { veiculoId, data, quantidade, odometro, isGalao, filialDestino } = req.body;
     const { userId, nome: nomeUsuario, perfil } = req.user;
     
     const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
@@ -678,8 +678,9 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Você não tem permissão para esta ação.' });
     }
 
-    if (!veiculoId || !data || !quantidade || !odometro) {
-        return res.status(400).json({ error: 'Todos os campos são obrigatórios.' });
+    // Nova validação flexível
+    if ((!isGalao && !veiculoId) || (isGalao && !filialDestino) || !data || !quantidade) {
+        return res.status(400).json({ error: 'Campos obrigatórios não preenchidos. Verifique se o veículo ou a filial de destino foi selecionado.' });
     }
 
     let connection;
@@ -688,7 +689,6 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         await connection.beginTransaction();
         
         const itemId = 1; // ID do Óleo Diesel
-        const fornecedorCombustivelId = 3; // Fornecedor fixo para combustível
         
         const [itemRows] = await connection.execute('SELECT quantidade_atual, ultimo_preco_unitario FROM itens_estoque WHERE id = ? FOR UPDATE', [itemId]);
         if (itemRows.length === 0) {
@@ -706,52 +706,52 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Preço por litro não definido. Registe uma compra primeiro para estabelecer o preço.' });
         }
 
-        const custoCalculado = parseFloat(quantidade) * parseFloat(item.ultimo_preco_unitario);
-
-        const [vehicleData] = await connection.execute('SELECT id_filial FROM veiculos WHERE id = ?', [veiculoId]);
-        if (vehicleData.length === 0) {
-            await connection.rollback();
-            return res.status(404).json({ error: 'Veículo não encontrado.' });
-        }
-        const id_filial_veiculo = vehicleData[0].id_filial;
-
         await connection.execute('UPDATE itens_estoque SET quantidade_atual = quantidade_atual - ? WHERE id = ?', [quantidade, itemId]);
         
-        await connection.execute(
-            'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_veiculo, odometro_no_momento, id_usuario) VALUES (?, ?, ?, ?, ?, ?)',
-            [itemId, 'Saída', quantidade, veiculoId, odometro, userId]
-        );
-
-        /* ----- ABASTECIMENTO APENAS NA ABA DE HISTORICO DE ABASTECIMENTO -----
-        await connection.execute(
-            'INSERT INTO veiculo_manutencoes (id_veiculo, id_filial, data_manutencao, custo, tipo_manutencao, classificacao_custo, id_user_lanc, id_fornecedor, status, descricao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [veiculoId, id_filial_veiculo, data, custoCalculado, 'Abastecimento', 'Custo Operacional', userId, fornecedorCombustivelId, 'Ativo', `Abastecimento de ${quantidade}L`]
-        ); */
-
-        const [ultimoAbastecimento] = await connection.execute(
-            'SELECT odometro_no_momento, quantidade FROM estoque_movimentos WHERE id_veiculo = ? AND tipo_movimento = "Saída" ORDER BY data_movimento DESC LIMIT 1, 1',
-            [veiculoId]
-        );
-        let consumoMedio = null;
-        if (ultimoAbastecimento.length > 0) {
-            const odometroAnterior = ultimoAbastecimento[0].odometro_no_momento;
-            const litrosAnteriores = ultimoAbastecimento[0].quantidade;
-            const distancia = odometro - odometroAnterior;
-            if (distancia > 0 && litrosAnteriores > 0) {
-                consumoMedio = (distancia / litrosAnteriores).toFixed(2);
-            }
+        let observacao;
+        let logDescription;
+        if (isGalao) {
+            observacao = `Retirada de ${quantidade}L para galão (Destino: ${filialDestino}).`;
+            logDescription = `Retirou ${quantidade}L para galão (Destino: ${filialDestino}).`;
+        } else {
+            observacao = `Abastecimento de ${quantidade}L.`;
+            logDescription = `Abasteceu ${quantidade}L no veículo ID ${veiculoId}. Odómetro: ${odometro || 'Não informado'}.`;
         }
         
-        await connection.execute('UPDATE veiculos SET odometro_atual = ? WHERE id = ?', [odometro, veiculoId]);
+        await connection.execute(
+            'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_veiculo, odometro_no_momento, id_usuario, observacao, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [itemId, 'Saída', quantidade, veiculoId || null, odometro || null, userId, observacao, 'Ativo']
+        );
+
+        let consumoMedio = null;
+        // Lógica de odômetro e consumo médio só executa se for para um veículo e se o odômetro for informado
+        if (!isGalao && veiculoId && odometro) {
+            const [ultimoAbastecimento] = await connection.execute(
+                'SELECT odometro_no_momento, quantidade FROM estoque_movimentos WHERE id_veiculo = ? AND tipo_movimento = "Saída" AND status = "Ativo" ORDER BY data_movimento DESC LIMIT 1, 1',
+                [veiculoId]
+            );
+            
+            if (ultimoAbastecimento.length > 0) {
+                const odometroAnterior = ultimoAbastecimento[0].odometro_no_momento;
+                const litrosAbastecidosNaquelaVez = quantidade; // Usa a quantidade do abastecimento atual
+                const distancia = odometro - odometroAnterior;
+                if (distancia > 0 && litrosAbastecidosNaquelaVez > 0) {
+                    consumoMedio = (distancia / litrosAbastecidosNaquelaVez).toFixed(2);
+                }
+            }
+            
+            await connection.execute('UPDATE veiculos SET odometro_atual = ? WHERE id = ?', [odometro, veiculoId]);
+        }
         
         await registrarLog({
             usuario_id: userId, usuario_nome: nomeUsuario,
-            tipo_entidade: 'Consumo', id_entidade: veiculoId,
-            tipo_acao: 'Saída de Estoque', descricao: `Abasteceu ${quantidade}L no veículo ID ${veiculoId}. Odómetro: ${odometro}.`
+            tipo_entidade: 'Consumo', id_entidade: veiculoId || null,
+            tipo_acao: 'Saída de Estoque', descricao: logDescription
         });
         
         await connection.commit();
         res.status(201).json({ message: 'Consumo registado com sucesso!', consumoMedio: consumoMedio });
+
     } catch (error) {
         if (connection) await connection.rollback();
         console.error("Erro ao registar consumo:", error);

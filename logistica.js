@@ -150,6 +150,33 @@ function setupEventListeners() {
         });
     }
 
+    const galaoCheckbox = document.getElementById('consumption-galao-checkbox');
+    if (galaoCheckbox) {
+        galaoCheckbox.addEventListener('change', (e) => {
+            const isChecked = e.target.checked;
+            const vehicleContainer = document.getElementById('consumption-vehicle-container');
+            const filialContainer = document.getElementById('consumption-filial-container');
+            const vehicleSelect = document.getElementById('consumption-vehicle');
+            const filialSelect = document.getElementById('consumption-filial-select');
+            const odometerInput = document.getElementById('consumption-odometer');
+
+            if (isChecked) {
+                vehicleContainer.classList.add('hidden');
+                vehicleSelect.required = false;
+                filialContainer.classList.remove('hidden');
+                filialSelect.required = true;
+                odometerInput.disabled = true; // Desabilita odômetro
+                odometerInput.value = '';
+            } else {
+                vehicleContainer.classList.remove('hidden');
+                vehicleSelect.required = true;
+                filialContainer.classList.add('hidden');
+                filialSelect.required = false;
+                odometerInput.disabled = false; // Habilita odômetro
+            }
+        });
+    }
+
     const maintenanceModal = document.getElementById('maintenance-modal');
     maintenanceModal.querySelector('#close-maintenance-modal-btn').addEventListener('click', () => maintenanceModal.classList.add('hidden'));
     maintenanceModal.querySelector('#cancel-maintenance-form-btn').addEventListener('click', () => maintenanceModal.classList.add('hidden'));
@@ -385,6 +412,7 @@ async function openFuelModal() {
 
         const itens = await itemsResponse.json();
         const veiculos = await vehiclesResponse.json();
+        await populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Unidades`, 'consumption-filial-select', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Selecione a Filial --')
         
         populateSelectWithOptions(itens, 'purchase-item', 'id', 'nome_item', '-- Selecione um Item --');
 
@@ -470,12 +498,21 @@ async function handleFuelPurchaseSubmit(event) {
 async function handleFuelConsumptionSubmit(event) {
     event.preventDefault();
     showLoader();
-    const consumptionData = {
-        veiculoId: document.getElementById('consumption-vehicle').value,
+    
+    const isGalao = document.getElementById('consumption-galao-checkbox').checked;
+    let consumptionData = {
+        isGalao: isGalao,
         data: document.getElementById('consumption-date').value,
         quantidade: document.getElementById('consumption-quantity').value,
         odometro: document.getElementById('consumption-odometer').value,
     };
+
+    if (isGalao) {
+        consumptionData.filialDestino = document.getElementById('consumption-filial-select').value;
+    } else {
+        consumptionData.veiculoId = document.getElementById('consumption-vehicle').value;
+    }
+
     try {
         const response = await fetch(`${apiUrlBase}/logistica/estoque/consumo`, {
             method: 'POST',
