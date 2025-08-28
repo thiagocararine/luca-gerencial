@@ -107,41 +107,47 @@ function setupEventListeners() {
     document.getElementById('filter-button').addEventListener('click', applyFilters);
     document.getElementById('clear-filter-button').addEventListener('click', clearFilters);
     document.getElementById('maintenance-alert-icon')?.addEventListener('click', () => {
-        // Reutiliza a lógica e o modal do dashboard
         document.getElementById('maintenance-alert-title').textContent = 'Manutenções Próximas ou Vencidas por KM';
-        carregarEExibirAlertasDeManutencao(); // Função que criamos no dashboard.js
+        carregarEExibirAlertasDeManutencao();
         document.getElementById('maintenance-alert-modal').classList.remove('hidden');
     });
 
     const vehicleModal = document.getElementById('vehicle-modal');
-    vehicleModal.querySelector('#close-vehicle-modal-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
-    vehicleModal.querySelector('#cancel-vehicle-form-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
-    vehicleModal.querySelector('#vehicle-form').addEventListener('submit', handleVehicleFormSubmit);
-    vehicleModal.querySelector('#has-placa-checkbox').addEventListener('change', handleHasPlacaChange);
-    vehicleModal.querySelector('#vehicle-marca').addEventListener('input', handleMarcaChange);
-
-    const placaInput = vehicleModal.querySelector('#vehicle-placa');
-    placaInput.addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase(); validatePlaca(e.target.value); });
-    const renavamInput = vehicleModal.querySelector('#vehicle-renavam');
-    renavamInput.addEventListener('input', (e) => { e.target.value = e.target.value.replace(/\D/g, ''); validateRenavam(e.target.value); });
+    if (vehicleModal) {
+        vehicleModal.querySelector('#close-vehicle-modal-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
+        vehicleModal.querySelector('#cancel-vehicle-form-btn').addEventListener('click', () => vehicleModal.classList.add('hidden'));
+        vehicleModal.querySelector('#vehicle-form').addEventListener('submit', handleVehicleFormSubmit);
+        vehicleModal.querySelector('#has-placa-checkbox').addEventListener('change', handleHasPlacaChange);
+        vehicleModal.querySelector('#vehicle-marca').addEventListener('input', handleMarcaChange);
+        const placaInput = vehicleModal.querySelector('#vehicle-placa');
+        placaInput.addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase(); validatePlaca(e.target.value); });
+        const renavamInput = vehicleModal.querySelector('#vehicle-renavam');
+        renavamInput.addEventListener('input', (e) => { e.target.value = e.target.value.replace(/\D/g, ''); validateRenavam(e.target.value); });
+    }
 
     const deleteModal = document.getElementById('confirm-delete-modal');
-    deleteModal.querySelector('#cancel-delete-btn').addEventListener('click', () => deleteModal.classList.add('hidden'));
-    deleteModal.querySelector('#confirm-delete-btn').addEventListener('click', () => { if (vehicleToDeleteId) deleteVehicle(vehicleToDeleteId); });
+    if (deleteModal) {
+        deleteModal.querySelector('#cancel-delete-btn').addEventListener('click', () => deleteModal.classList.add('hidden'));
+        deleteModal.querySelector('#confirm-delete-btn').addEventListener('click', () => { if (vehicleToDeleteId) deleteVehicle(vehicleToDeleteId); });
+    }
 
     const detailsModal = document.getElementById('details-modal');
-    detailsModal.querySelector('#close-details-modal-btn').addEventListener('click', () => detailsModal.classList.add('hidden'));
-    detailsModal.querySelector('#details-tabs').addEventListener('click', (e) => { if (e.target.matches('.tab-button')) { switchTab(e.target.dataset.tab, currentVehicleId); } });
+    if (detailsModal) {
+        detailsModal.querySelector('#close-details-modal-btn').addEventListener('click', () => detailsModal.classList.add('hidden'));
+        detailsModal.querySelector('#details-tabs').addEventListener('click', (e) => { if (e.target.matches('.tab-button')) { switchTab(e.target.dataset.tab, currentVehicleId); } });
+    }
 
     const maintenanceTab = document.getElementById('maintenance-tab-content');
-    maintenanceTab.addEventListener('click', (e) => {
-        if (e.target.closest('#add-maintenance-btn')) {
-            openMaintenanceModal(currentVehicleId);
-        }
-        if (e.target.closest('#export-maintenance-report-btn')) {
-            openMaintenanceExportModal();
-        }
-    });
+    if (maintenanceTab) {
+        maintenanceTab.addEventListener('click', (e) => {
+            if (e.target.closest('#add-maintenance-btn')) {
+                openMaintenanceModal(currentVehicleId);
+            }
+            if (e.target.closest('#export-maintenance-report-btn')) {
+                openMaintenanceExportModal();
+            }
+        });
+    }
 
     const closeAlertModalButton = document.getElementById('close-maintenance-alert-modal');
     if (closeAlertModalButton) {
@@ -150,40 +156,15 @@ function setupEventListeners() {
         });
     }
 
-    const galaoCheckbox = document.getElementById('consumption-galao-checkbox');
-    if (galaoCheckbox) {
-        galaoCheckbox.addEventListener('change', (e) => {
-            const isChecked = e.target.checked;
-            const vehicleContainer = document.getElementById('consumption-vehicle-container');
-            const filialContainer = document.getElementById('consumption-filial-container');
-            const vehicleSelect = document.getElementById('consumption-vehicle');
-            const filialSelect = document.getElementById('consumption-filial-select');
-            const odometerInput = document.getElementById('consumption-odometer');
-
-            if (isChecked) {
-                vehicleContainer.classList.add('hidden');
-                vehicleSelect.required = false;
-                filialContainer.classList.remove('hidden');
-                filialSelect.required = true;
-                odometerInput.disabled = true; // Desabilita odômetro
-                odometerInput.value = '';
-            } else {
-                vehicleContainer.classList.remove('hidden');
-                vehicleSelect.required = true;
-                filialContainer.classList.add('hidden');
-                filialSelect.required = false;
-                odometerInput.disabled = false; // Habilita odômetro
-            }
-        });
-    }
-
     const maintenanceModal = document.getElementById('maintenance-modal');
-    maintenanceModal.querySelector('#close-maintenance-modal-btn').addEventListener('click', () => maintenanceModal.classList.add('hidden'));
-    maintenanceModal.querySelector('#cancel-maintenance-form-btn').addEventListener('click', () => maintenanceModal.classList.add('hidden'));
-    maintenanceModal.querySelector('#lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('maintenance'));
-    maintenanceModal.querySelector('#maintenance-despesa-interna-btn').addEventListener('click', () => useInternalExpense('maintenance'));
-    maintenanceModal.querySelector('#maintenance-form').addEventListener('submit', handleMaintenanceFormSubmit);
-
+    if (maintenanceModal) {
+        maintenanceModal.querySelector('#close-maintenance-modal-btn').addEventListener('click', () => maintenanceModal.classList.add('hidden'));
+        maintenanceModal.querySelector('#cancel-maintenance-form-btn').addEventListener('click', () => maintenanceModal.classList.add('hidden'));
+        maintenanceModal.querySelector('#lookup-cnpj-btn').addEventListener('click', () => lookupCnpj('maintenance'));
+        maintenanceModal.querySelector('#maintenance-despesa-interna-btn').addEventListener('click', () => useInternalExpense('maintenance'));
+        maintenanceModal.querySelector('#maintenance-form').addEventListener('submit', handleMaintenanceFormSubmit);
+    }
+    
     const fleetCostModal = document.getElementById('fleet-cost-modal');
     if (fleetCostModal) {
         fleetCostModal.querySelector('#close-fleet-cost-modal-btn').addEventListener('click', () => fleetCostModal.classList.add('hidden'));
@@ -196,8 +177,8 @@ function setupEventListeners() {
     document.getElementById('content-area').addEventListener('click', handleContentClick);
     window.addEventListener('resize', () => renderContent(filteredVehicles));
 
-    document.getElementById('close-maintenance-export-modal-btn').addEventListener('click', () => document.getElementById('maintenance-export-modal').classList.add('hidden'));
-    document.getElementById('generate-maintenance-pdf-btn').addEventListener('click', exportMaintenanceReportPDF);
+    document.getElementById('close-maintenance-export-modal-btn')?.addEventListener('click', () => document.getElementById('maintenance-export-modal').classList.add('hidden'));
+    document.getElementById('generate-maintenance-pdf-btn')?.addEventListener('click', exportMaintenanceReportPDF);
 
     const costsTabs = document.getElementById('costs-tabs');
     if (costsTabs) {
@@ -217,11 +198,10 @@ function setupEventListeners() {
         document.getElementById('costs-tab-content-individuais')?.addEventListener('click', handleDeleteCostClick);
     }
 
-    document.getElementById('photos-tab-content').addEventListener('change', handlePhotoInputChange);
-    document.getElementById('photos-tab-content').addEventListener('click', handlePhotoAreaClick);
-
-    document.getElementById('document-upload-form').addEventListener('submit', handleDocumentUploadSubmit);
-    document.getElementById('document-list-container').addEventListener('click', handleDeleteDocumentClick);
+    document.getElementById('photos-tab-content')?.addEventListener('change', handlePhotoInputChange);
+    document.getElementById('photos-tab-content')?.addEventListener('click', handlePhotoAreaClick);
+    document.getElementById('document-upload-form')?.addEventListener('submit', handleDocumentUploadSubmit);
+    document.getElementById('document-list-container')?.addEventListener('click', handleDeleteDocumentClick);
 
     const vehicleCostModal = document.getElementById('vehicle-cost-modal');
     if (vehicleCostModal) {
@@ -233,17 +213,19 @@ function setupEventListeners() {
     }
 
     const deleteDocModal = document.getElementById('confirm-delete-document-modal');
-    deleteDocModal.querySelector('#cancel-delete-document-btn').addEventListener('click', () => deleteDocModal.classList.add('hidden'));
-    deleteDocModal.querySelector('#confirm-delete-document-btn').addEventListener('click', executeDeleteDocument);
+    if (deleteDocModal) {
+        deleteDocModal.querySelector('#cancel-delete-document-btn').addEventListener('click', () => deleteDocModal.classList.add('hidden'));
+        deleteDocModal.querySelector('#confirm-delete-document-btn').addEventListener('click', executeDeleteDocument);
+    }
 
     const captureModal = document.getElementById('photo-capture-modal');
-    captureModal.querySelector('#close-capture-modal-btn').addEventListener('click', closeCaptureModal);
-    captureModal.querySelector('#take-photo-btn').addEventListener('click', takePhoto);
-    captureModal.querySelector('#use-photo-btn').addEventListener('click', useCapturedPhoto);
-    captureModal.querySelector('#retake-photo-btn').addEventListener('click', retakePhoto);
+    if (captureModal) {
+        captureModal.querySelector('#close-capture-modal-btn').addEventListener('click', closeCaptureModal);
+        captureModal.querySelector('#take-photo-btn').addEventListener('click', takePhoto);
+        captureModal.querySelector('#use-photo-btn').addEventListener('click', useCapturedPhoto);
+        captureModal.querySelector('#retake-photo-btn').addEventListener('click', retakePhoto);
+    }
 
-    // LISTENERS PARA O MÓDULO DE COMBUSTÍVEL
-    document.getElementById('open-fuel-modal-btn')?.addEventListener('click', openFuelModal);
     const fuelModal = document.getElementById('fuel-management-modal');
     if (fuelModal) {
         fuelModal.querySelector('#close-fuel-modal-btn').addEventListener('click', () => fuelModal.classList.add('hidden'));
@@ -257,55 +239,53 @@ function setupEventListeners() {
         fuelModal.querySelector('#purchase-lookup-cnpj-btn')?.addEventListener('click', () => lookupCnpj('purchase'));
     }
     
-    // LISTENERS PARA PAGINAÇÃO
-    document.getElementById('vehicle-prev-page-btn').addEventListener('click', () => {
-        if (currentVehiclePage > 1) {
-            currentVehiclePage--;
-            renderContent(filteredVehicles);
-        }
-    });
-    document.getElementById('vehicle-next-page-btn').addEventListener('click', () => {
-        const totalPages = Math.ceil(filteredVehicles.length / VEHICLES_PER_PAGE);
-        if (currentVehiclePage < totalPages) {
-            currentVehiclePage++;
-            renderContent(filteredVehicles);
-        }
-    });
-
-    document.getElementById('history-prev-page-btn').addEventListener('click', () => {
-        const activeTab = document.querySelector('#costs-tabs .tab-button.active').dataset.costTab;
-        if (historyPages[activeTab] > 1) {
-            historyPages[activeTab]--;
-            loadActiveHistoryTab();
-        }
-    });
-    document.getElementById('history-next-page-btn').addEventListener('click', () => {
-        const activeTab = document.querySelector('#costs-tabs .tab-button.active').dataset.costTab;
-        historyPages[activeTab]++;
-        loadActiveHistoryTab();
-    });
-
-    // Listener para a tabela de histórico de abastecimentos
+    document.getElementById('vehicle-prev-page-btn')?.addEventListener('click', () => { if (currentVehiclePage > 1) { currentVehiclePage--; renderContent(filteredVehicles); } });
+    document.getElementById('vehicle-next-page-btn')?.addEventListener('click', () => { const totalPages = Math.ceil(filteredVehicles.length / VEHICLES_PER_PAGE); if (currentVehiclePage < totalPages) { currentVehiclePage++; renderContent(filteredVehicles); } });
+    document.getElementById('history-prev-page-btn')?.addEventListener('click', () => { const activeTab = document.querySelector('#costs-tabs .tab-button.active').dataset.costTab; if (historyPages[activeTab] > 1) { historyPages[activeTab]--; loadActiveHistoryTab(); } });
+    document.getElementById('history-next-page-btn')?.addEventListener('click', () => { const activeTab = document.querySelector('#costs-tabs .tab-button.active').dataset.costTab; historyPages[activeTab]++; loadActiveHistoryTab(); });
     document.getElementById('costs-tab-content-abastecimentos')?.addEventListener('click', handleDeleteAbastecimentoClick);
     
-    // Listeners para o modal de estorno
     const estornoModal = document.getElementById('confirm-estorno-modal');
     if (estornoModal) {
         estornoModal.querySelector('#cancel-estorno-btn').addEventListener('click', () => estornoModal.classList.add('hidden'));
-        estornoModal.querySelector('#confirm-estorno-btn').addEventListener('click', () => {
-            if (estornoMovimentoId) {
-                executeEstornoMovimento(estornoMovimentoId);
+        estornoModal.querySelector('#confirm-estorno-btn').addEventListener('click', () => { if (estornoMovimentoId) { executeEstornoMovimento(estornoMovimentoId); } });
+    }
+
+    // --- LÓGICA CORRIGIDA PARA O CHECKBOX E CÁLCULO DE CUSTO ---
+    const galaoCheckbox = document.getElementById('consumption-galao-checkbox');
+    if (galaoCheckbox) {
+        galaoCheckbox.addEventListener('change', (e) => {
+            const isChecked = e.target.checked;
+            const vehicleSection = document.getElementById('consumption-vehicle-section');
+            const galaoSection = document.getElementById('consumption-galao-section');
+            const vehicleSelect = document.getElementById('consumption-vehicle');
+            const filialSelect = document.getElementById('consumption-filial-select');
+            const odometerInput = document.getElementById('consumption-odometer');
+
+            if (isChecked) {
+                vehicleSection.classList.add('hidden');
+                vehicleSelect.required = false;
+                galaoSection.classList.remove('hidden');
+                filialSelect.required = true;
+                odometerInput.disabled = true;
+                odometerInput.value = '';
+            } else {
+                vehicleSection.classList.remove('hidden');
+                vehicleSelect.required = true;
+                galaoSection.classList.add('hidden');
+                filialSelect.required = false;
+                odometerInput.disabled = false;
             }
         });
     }
 
     const quantityInput = document.getElementById('consumption-quantity');
-    const costInput = document.getElementById('consumption-cost'); // Usando o ID correto
+    const costInput = document.getElementById('consumption-cost');
     if (quantityInput && costInput) {
         quantityInput.addEventListener('input', () => {
             const quantity = parseFloat(quantityInput.value) || 0;
             const estimatedCost = quantity * ultimoPrecoDiesel;
-            costInput.value = estimatedCost.toFixed(2); // Formato para input number
+            costInput.value = estimatedCost.toLocaleString('pt-BR', {style:'currency', currency: 'BRL'});
         });
     }
 }
