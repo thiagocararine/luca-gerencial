@@ -79,57 +79,75 @@
 </div>
 
 <div id="checklist-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
-    <div class="relative mx-auto border w-full max-w-3xl shadow-lg rounded-md bg-white flex flex-col">
+    <div class="relative mx-auto border w-full max-w-2xl shadow-lg rounded-md bg-white flex flex-col">
         <div class="flex items-start justify-between p-4 border-b flex-shrink-0">
             <div>
                 <h3 class="text-xl font-semibold">Checklist de Saída de Veículo</h3>
                 <p id="checklist-vehicle-info" class="text-sm text-gray-500"></p>
             </div>
-            <button id="close-checklist-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center">
-                <span data-feather="x"></span>
-            </button>
+            <button id="close-checklist-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center"><span data-feather="x"></span></button>
         </div>
         
         <div class="max-h-[70vh] overflow-y-auto">
-            <form id="checklist-form" class="p-6 space-y-6">
+            <form id="checklist-form" class="p-6 space-y-1">
                 <input type="hidden" id="checklist-vehicle-id">
 
-                <div>
-                    <label for="checklist-odometer" class="block text-sm font-medium text-gray-900">Odômetro de Saída (km) <span class="text-red-500">*</span></label>
-                    <input type="number" id="checklist-odometer" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                </div>
-
-                <div class="border-t pt-4">
-                    <h4 class="text-lg font-medium text-gray-800 mb-2">Itens de Verificação</h4>
-                    <div id="checklist-items-container" class="space-y-4">
-                        </div>
-                </div>
-
-                <div class="border-t pt-4">
-                    <h4 class="text-lg font-medium text-gray-800 mb-2">Fotos Obrigatórias</h4>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <!-- REGRA 2: Seções Expansíveis -->
+                <!-- Seção 1: Informações Gerais -->
+                <div class="accordion-item border rounded-md">
+                    <button type="button" class="accordion-header flex justify-between items-center w-full p-3 font-semibold text-left bg-gray-50 hover:bg-gray-100">
+                        <span>1. Informações Gerais</span>
+                        <span class="transform transition-transform duration-200" data-feather="chevron-down"></span>
+                    </button>
+                    <div class="accordion-content p-4 space-y-4">
                         <div>
-                            <label class="block text-sm font-medium">Frente do Veículo</label>
-                            <input type="file" name="foto_frente" class="mt-1 text-sm" accept="image/*" capture="environment">
+                            <label for="checklist-odometer" class="block text-sm font-medium text-gray-900">Odômetro de Saída (km) <span class="text-red-500">*</span></label>
+                            <input type="number" id="checklist-odometer" required class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium">Traseira do Veículo</label>
-                            <input type="file" name="foto_traseira" class="mt-1 text-sm" accept="image/*" capture="environment">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium">Lateral Direita</label>
-                            <input type="file" name="foto_lateral_direita" class="mt-1 text-sm" accept="image/*" capture="environment">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium">Lateral Esquerda</label>
-                            <input type="file" name="foto_lateral_esquerda" class="mt-1 text-sm" accept="image/*" capture="environment">
+                            <label for="checklist-observacoes" class="block text-sm font-medium text-gray-900">Observações Gerais</label>
+                            <textarea id="checklist-observacoes" rows="3" class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm"></textarea>
                         </div>
                     </div>
                 </div>
 
-                <div>
-                    <label for="checklist-observacoes" class="block text-sm font-medium text-gray-900">Observações Gerais</label>
-                    <textarea id="checklist-observacoes" rows="3" class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm"></textarea>
+                <!-- Seção 2: Itens de Verificação -->
+                <div class="accordion-item border rounded-md">
+                    <button type="button" class="accordion-header flex justify-between items-center w-full p-3 font-semibold text-left bg-gray-50 hover:bg-gray-100">
+                        <span>2. Itens de Verificação</span>
+                        <span class="transform transition-transform duration-200" data-feather="chevron-down"></span>
+                    </button>
+                    <div class="accordion-content hidden p-4">
+                        <div id="checklist-items-container" class="space-y-4"></div>
+                    </div>
+                </div>
+
+                <!-- Seção 3: Fotos Obrigatórias -->
+                <div class="accordion-item border rounded-md">
+                    <button type="button" class="accordion-header flex justify-between items-center w-full p-3 font-semibold text-left bg-gray-50 hover:bg-gray-100">
+                        <span>3. Fotos Obrigatórias</span>
+                        <span class="transform transition-transform duration-200" data-feather="chevron-down"></span>
+                    </button>
+                    <div class="accordion-content hidden p-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium">Frente do Veículo</label>
+                                <input type="file" name="foto_frente" class="mt-1 text-sm" accept="image/*" capture="environment">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium">Traseira do Veículo</label>
+                                <input type="file" name="foto_traseira" class="mt-1 text-sm" accept="image/*" capture="environment">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium">Lateral Direita</label>
+                                <input type="file" name="foto_lateral_direita" class="mt-1 text-sm" accept="image/*" capture="environment">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium">Lateral Esquerda</label>
+                                <input type="file" name="foto_lateral_esquerda" class="mt-1 text-sm" accept="image/*" capture="environment">
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </form>
         </div>
