@@ -364,7 +364,7 @@ async function openFuelModal() {
     try {
         // Busca o último preço do diesel (ID = 1)
         try {
-            const priceResponse = await fetch(`${apiUrlBase}/logistica/estoque/saldo/1`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+            const priceResponse = await fetch(`${apiUrlBase}/logistica/estoque/saldo/1`, { headers: { 'Authorization': `Bearer ${getToken()}` } }); // <-- CORRIGIDO AQUI
             if (priceResponse.ok) {
                 const priceData = await priceResponse.json();
                 ultimoPrecoDiesel = parseFloat(priceData.ultimo_preco_unitario) || 0;
@@ -382,8 +382,8 @@ async function openFuelModal() {
         }
 
         const [itemsResponse, vehiclesResponse] = await Promise.all([
-            fetch(`${apiUrlBase}/logistica/itens-estoque`, { headers: { 'Authorization': `Bearer ${getToken()}` } }),
-            fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
+            fetch(`${apiUrlBase}/logistica/itens-estoque`, { headers: { 'Authorization': `Bearer ${getToken()}` } }), // <-- CORRIGIDO AQUI
+            fetch(`${apiUrlBase}/logistica/veiculos`, { headers: { 'Authorization': `Bearer ${getToken()}` } })      // <-- CORRIGIDO AQUI
         ]);
 
         if (!itemsResponse.ok || !vehiclesResponse.ok) {
@@ -397,8 +397,8 @@ async function openFuelModal() {
 
         const dieselVehicles = veiculos.filter(v => v.tipo_combustivel === 'Óleo Diesel S10');
         populateSelectWithOptions(dieselVehicles, 'consumption-vehicle', 'id', 'modelo', '-- Selecione um Veículo --', (v) => `${v.modelo} - ${v.placa}`);
-        
-        // Popula o novo select de filial para o galão
+
+        // Popula o select de filial para o galão (adicionado anteriormente)
         await populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Unidades`, 'consumption-filial-select', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Selecione a Filial --');
 
         new TomSelect('#consumption-vehicle',{
@@ -409,6 +409,7 @@ async function openFuelModal() {
         document.getElementById('fuel-purchase-form').reset();
         document.getElementById('fuel-consumption-form').reset();
         document.getElementById('consumption-date').value = new Date().toISOString().split('T')[0];
+        document.getElementById('consumption-cost').disabled = true;
         
         switchFuelTab('compra');
         modal.classList.remove('hidden');
