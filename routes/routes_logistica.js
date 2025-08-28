@@ -670,6 +670,7 @@ router.post('/estoque/entrada', authenticateToken, async (req, res) => {
 });
 
 router.post('/estoque/consumo', authenticateToken, async (req, res) => {
+    // Odômetro agora é opcional, filialDestino é nova
     const { veiculoId, data, quantidade, odometro, isGalao, filialDestino } = req.body;
     const { userId, nome: nomeUsuario, perfil } = req.user;
     
@@ -701,33 +702,39 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
             await connection.rollback();
             return res.status(400).json({ error: 'Saldo de diesel insuficiente em estoque.' });
         }
-        if (!item.ultimo_preco_unitario || item.ultimo_preco_unitario <= 0) {
-            await connection.rollback();
-            return res.status(400).json({ error: 'Preço por litro não definido. Registe uma compra primeiro para estabelecer o preço.' });
-        }
 
         await connection.execute('UPDATE itens_estoque SET quantidade_atual = quantidade_atual - ? WHERE id = ?', [quantidade, itemId]);
         
+        let id_filial_movimento = null;
         let observacao;
         let logDescription;
+
         if (isGalao) {
+            // Se for galão, busca o ID da filial pelo nome
+            const [filialRows] = await connection.execute("SELECT ID FROM parametro WHERE NOME_PARAMETRO = ? AND COD_PARAMETRO = 'Unidades'", [filialDestino]);
+            if (filialRows.length === 0) throw new Error(`Filial "${filialDestino}" não encontrada.`);
+            id_filial_movimento = filialRows[0].ID;
             observacao = `Retirada de ${quantidade}L para galão (Destino: ${filialDestino}).`;
-            logDescription = `Retirou ${quantidade}L para galão (Destino: ${filialDestino}).`;
+            logDescription = observacao;
         } else {
+            // Se for veículo, busca a filial atual do veículo
+            const [vehicleData] = await connection.execute('SELECT id_filial FROM veiculos WHERE id = ?', [veiculoId]);
+            if (vehicleData.length === 0) throw new Error('Veículo não encontrado.');
+            id_filial_movimento = vehicleData[0].id_filial;
             observacao = `Abastecimento de ${quantidade}L.`;
             logDescription = `Abasteceu ${quantidade}L no veículo ID ${veiculoId}. Odómetro: ${odometro || 'Não informado'}.`;
         }
         
         await connection.execute(
-            'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_veiculo, odometro_no_momento, id_usuario, observacao, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [itemId, 'Saída', quantidade, veiculoId || null, odometro || null, userId, observacao, 'Ativo']
+            'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_veiculo, id_filial, odometro_no_momento, id_usuario, observacao, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [itemId, 'Saída', quantidade, veiculoId || null, id_filial_movimento, odometro || null, userId, observacao, 'Ativo']
         );
 
         let consumoMedio = null;
         // Lógica de odômetro e consumo médio só executa se for para um veículo e se o odômetro for informado
         if (!isGalao && veiculoId && odometro) {
             const [ultimoAbastecimento] = await connection.execute(
-                'SELECT odometro_no_momento, quantidade FROM estoque_movimentos WHERE id_veiculo = ? AND tipo_movimento = "Saída" AND status = "Ativo" ORDER BY data_movimento DESC LIMIT 1, 1',
+                'SELECT odometro_no_momento, quantidade FROM estoque_movimentos WHERE id_veiculo = ? AND tipo_movimento = "Saída" AND status = "Ativo" AND id != LAST_INSERT_ID() ORDER BY data_movimento DESC, id DESC LIMIT 1',
                 [veiculoId]
             );
             
@@ -1546,34 +1553,32 @@ router.get('/abastecimentos', authenticateToken, async (req, res) => {
         const params = [];
         
         if (filial) {
-            conditions.push("v.id_filial = ?");
+            conditions.push("em.id_filial = ?");
             params.push(filial);
         }
         
         const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
-        const countQuery = `SELECT COUNT(*) as total FROM estoque_movimentos em JOIN veiculos v ON em.id_veiculo = v.id ${whereClause}`;
+        const countQuery = `SELECT COUNT(*) as total FROM estoque_movimentos em ${whereClause}`;
+            
         const dataQuery = `
             SELECT 
                 em.id, em.data_movimento, em.quantidade, em.odometro_no_momento,
-                v.placa, v.modelo, u.nome_user as nome_usuario
+                v.placa, v.modelo, u.nome_user as nome_usuario, em.observacao,
+                p.NOME_PARAMETRO as nome_filial
             FROM estoque_movimentos em
-            JOIN veiculos v ON em.id_veiculo = v.id
+            LEFT JOIN veiculos v ON em.id_veiculo = v.id
+            LEFT JOIN parametro p ON em.id_filial = p.ID
             JOIN cad_user u ON em.id_usuario = u.ID
             ${whereClause}
-            ORDER BY em.data_movimento DESC
+            ORDER BY em.data_movimento DESC, em.id DESC
             LIMIT ? OFFSET ?`;
         
         const [totalResult] = await connection.execute(countQuery, params);
         const totalItems = totalResult[0].total;
         const [data] = await connection.execute(dataQuery, [...params, limit, offset]);
         
-        res.json({
-            totalItems,
-            totalPages: Math.ceil(totalItems / limit),
-            currentPage: page,
-            data
-        });
+        res.json({ totalItems, totalPages: Math.ceil(totalItems / limit), currentPage: page, data });
     } catch (error) {
         console.error("Erro ao buscar histórico de abastecimentos:", error);
         res.status(500).json({ error: 'Erro ao buscar histórico de abastecimentos.' });

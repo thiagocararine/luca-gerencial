@@ -897,39 +897,48 @@
 
             <div id="consumo-tab-content" class="tab-content hidden">
                 <form id="fuel-consumption-form">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-6"></div>               
-                            <div id="consumption-vehicle-container" class="md:col-span-3">
-                                <label for="consumption-vehicle" class="block font-medium">Veículo</label>
-                                <select id="consumption-vehicle" required class="form-input mt-1 block w-full"></select>                                
-                            </div>
-                            <div class="md:col-span-3 flex items-center">
+                    <div class="space-y-4 text-sm">
+
+                        <div class="border-b pb-4">
+                            <label class="block font-medium mb-2">Tipo de Retirada</label>
+                            <div class="flex items-center">
                                 <input id="consumption-galao-checkbox" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
                                 <label for="consumption-galao-checkbox" class="ml-2 block text-sm text-gray-900">Retirada para Galão (sem veículo)</label>
                             </div>
+                        </div>
 
-                            <div id="consumption-filial-container" class="md:col-span-3 hidden">
-                                <label for="consumption-filial-select" class="block font-medium">Filial de Destino</label>
-                                <select id="consumption-filial-select" class="form-input mt-1 block w-full"></select>
-                            </div>                        
-                         <div>
-                             <label for="consumption-date" class="block font-medium">Data do Abastecimento</label>
-                             <input type="date" id="consumption-date" required class="form-input mt-1 block w-full">
-                         </div>
-                         <div>
-                             <label for="consumption-quantity" class="block font-medium">Quantidade Abastecida (Litros)</label>
-                             <input type="number" step="0.01" id="consumption-quantity" required placeholder="50.00" class="form-input mt-1 block w-full">
-                         </div>
-                         <div>
-                             <label for="consumption-odometer" class="block font-medium">Odómetro Atual (km)</label>
-                             <input type="number" id="consumption-odometer" placeholder="123456" class="form-input mt-1 block w-full">
-                         </div>
-                         <div class="md:col-span-3">
-                              <label for="consumption-cost" class="block font-medium">Custo do Abastecimento (R$)</label>
-                              <input type="number" step="0.01" id="consumption-cost" required placeholder="250.00" class="form-input mt-1 block w-full">
-                         </div>
-                         </div>
+                        <div id="consumption-vehicle-section">
+                            <label for="consumption-vehicle" class="block font-medium">Veículo</label>
+                            <select id="consumption-vehicle" required class="form-input mt-1 block w-full"></select>
+                        </div>
+                        
+                        <div id="consumption-galao-section" class="hidden">
+                            <label for="consumption-filial-select" class="block font-medium">Filial de Destino</label>
+                            <select id="consumption-filial-select" class="form-input mt-1 block w-full"></select>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t">
+                            <div>
+                                <label for="consumption-date" class="block font-medium">Data</label>
+                                <input type="date" id="consumption-date" required class="form-input mt-1 block w-full">
+                            </div>
+                            <div>
+                                <label for="consumption-quantity" class="block font-medium">Quantidade (Litros)</label>
+                                <input type="number" step="0.01" id="consumption-quantity" required placeholder="50.00" class="form-input mt-1 block w-full">
+                            </div>
+                            <div>
+                                <label for="consumption-odometer" class="block font-medium">Odômetro (km)</label>
+                                <input type="number" id="consumption-odometer" placeholder="Opcional" class="form-input mt-1 block w-full">
+                            </div>
+                            <div class="md:col-span-3">
+                                 <label for="consumption-cost" class="block font-medium">Custo Estimado (R$)</label>
+                                 <input type="text" id="consumption-cost" placeholder="R$ 0,00" class="form-input mt-1 block w-full bg-gray-100" disabled>
+                            </div>
+                        </div>
+
+                    </div>
                      <div class="flex justify-end pt-6 border-t mt-6 gap-4">
-                         <button type="submit" class="action-btn bg-blue-600 hover:bg-blue-700">Registar Consumo</button>
+                         <button type="submit" class="action-btn bg-blue-600 hover:bg-blue-700 text-white">Registar Consumo</button>
                      </div>
                 </form>
             </div>
