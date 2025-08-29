@@ -1647,7 +1647,8 @@ router.post('/checklist', authenticateToken, (req, res) => {
             return res.status(500).json({ error: "Ocorreu um erro durante o upload das imagens." });
         }
 
-        const { id_veiculo, odometro_saida, observacoes_gerais, avarias } = req.body;
+        // Alterado: 'avarias' agora é 'checklist_items'
+        const { id_veiculo, odometro_saida, observacoes_gerais, checklist_items } = req.body;
         const { userId } = req.user;
 
         if (!id_veiculo || !odometro_saida) {
@@ -1671,7 +1672,7 @@ router.post('/checklist', authenticateToken, (req, res) => {
                 return res.status(400).json({ error: `Odômetro inválido. O valor informado (${odometro_saida} km) é inferior ao último registrado (${odometroAtual} km).` });
             }
 
-            const dataHoje = new Date("2025-08-29T17:18:40.865Z").toISOString().slice(0, 10);
+            const dataHoje = new Date("2025-08-29T17:43:31.919Z").toISOString().slice(0, 10);
             const placaSanitizada = sanitizeForPath(placa);
             const finalDestPath = path.join(UPLOADS_BASE_PATH, 'veiculos', placaSanitizada, 'checklist', dataHoje);
             
@@ -1683,6 +1684,7 @@ router.post('/checklist', authenticateToken, (req, res) => {
                 await fs.rename(tempPath, finalPath);
             }
 
+            // Salva o "cabeçalho" do checklist (sem alterações aqui)
             const checklistSql = `
                 INSERT INTO veiculo_checklists (id_veiculo, id_usuario, id_filial, data_checklist, odometro_saida, observacoes_gerais)
                 VALUES (?, ?, ?, NOW(), ?, ?)`;
@@ -1690,7 +1692,8 @@ router.post('/checklist', authenticateToken, (req, res) => {
             const newChecklistId = checklistResult.insertId;
 
             await connection.execute('UPDATE veiculos SET odometro_atual = ? WHERE id = ?', [odometro_saida, id_veiculo]);
-
+            
+            // ... (código para salvar fotos obrigatórias permanece o mesmo) ...
             const fotosObrigatorias = {};
             req.files.forEach(file => {
                 if (['foto_frente', 'foto_traseira', 'foto_lateral_direita', 'foto_lateral_esquerda'].includes(file.fieldname)) {
@@ -1702,32 +1705,44 @@ router.post('/checklist', authenticateToken, (req, res) => {
                 [fotosObrigatorias.foto_frente, fotosObrigatorias.foto_traseira, fotosObrigatorias.foto_lateral_direita, fotosObrigatorias.foto_lateral_esquerda, newChecklistId]
             );
 
-            if (avarias && avarias.length > 0) {
-                const avariasParsed = JSON.parse(avarias);
-                const avariaSql = `INSERT INTO checklist_itens_avariados (id_checklist, id_filial, item_verificado, descricao_avaria, caminho_foto) VALUES (?, ?, ?, ?, ?)`;
+            // --- LÓGICA ALTERADA PARA SALVAR NA NOVA TABELA 'checklist_itens' ---
+            if (checklist_items) {
+                const itemsParsed = JSON.parse(checklist_items);
+                const itemSql = `
+                    INSERT INTO checklist_itens 
+                    (id_checklist, data_checklist, id_filial, id_veiculo, placa, id_usuario, item_verificado, status, descricao_avaria, caminho_foto) 
+                    VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-                for (const avaria of avariasParsed) {
-                    // ### LINHA CORRIGIDA ABAIXO ###
-                    // Usamos a mesma regra de sanitização do frontend para encontrar o arquivo corretamente
-                    const itemSanitized = avaria.item.replace(/\s+/g, '_').replace(/[^\w-]/g, '');
-
-                    const fotoAvaria = req.files.find(f => f.fieldname === `avaria_foto_${itemSanitized}`);
-                    await connection.execute(avariaSql, [
+                for (const item of itemsParsed) {
+                    let fotoFilename = null;
+                    if (item.status === 'Avaria') {
+                        const itemSanitized = item.item.replace(/\s+/g, '_').replace(/[^\w-]/g, '');
+                        const fotoAvaria = req.files.find(f => f.fieldname === `avaria_foto_${itemSanitized}`);
+                        if (fotoAvaria) {
+                            fotoFilename = fotoAvaria.filename;
+                        }
+                    }
+                    
+                    await connection.execute(itemSql, [
                         newChecklistId,
                         id_filial_veiculo,
-                        avaria.item,
-                        avaria.descricao,
-                        fotoAvaria ? fotoAvaria.filename : null
+                        id_veiculo,
+                        placa,
+                        userId,
+                        item.item,
+                        item.status,
+                        item.descricao || null,
+                        fotoFilename
                     ]);
                 }
             }
+            // --- FIM DA LÓGICA ALTERADA ---
             
             await connection.commit();
             res.status(201).json({ message: 'Checklist salvo com sucesso!', checklistId: newChecklistId });
 
         } catch (error) {
             for (const file of req.files) {
-                // Tenta limpar o arquivo temporário, mas não quebra se não conseguir
                 if(file && file.path) {
                     await fs.unlink(file.path).catch(e => console.error("Falha ao limpar arquivo temporário:", e.path));
                 }

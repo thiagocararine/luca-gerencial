@@ -244,27 +244,40 @@ async function handleChecklistSubmit(event) {
 
     const formData = new FormData(form);
 
-    const avarias = [];
+    // --- LÓGICA ALTERADA PARA ENVIAR TODOS OS ITENS ---
+    const checklistItems = [];
     document.querySelectorAll('#checklist-items-container .checklist-item').forEach((itemDiv) => {
-        const activeButton = itemDiv.querySelector('.checklist-status-btn.bg-red-500');
-        if (activeButton) {
-            const itemNome = activeButton.dataset.item;
+        const itemName = itemDiv.dataset.itemName;
+        const okButton = itemDiv.querySelector('.checklist-status-btn[data-status="OK"].bg-green-500');
+        const avariaButton = itemDiv.querySelector('.checklist-status-btn[data-status="Avaria"].bg-red-500');
+        
+        let status = '';
+        let descricao = '';
 
-            // ### LINHA CORRIGIDA ABAIXO ###
-            // Usamos a mesma regra de sanitização da função openChecklistModal
-            const itemSanitizedName = itemNome.replace(/\s+/g, '_').replace(/[^\w-]/g, '');
-            
+        if (okButton) {
+            status = 'OK';
+        } else if (avariaButton) {
+            status = 'Avaria';
+            const itemSanitizedName = itemName.replace(/\s+/g, '_').replace(/[^\w-]/g, '');
             const descricaoInput = itemDiv.querySelector(`textarea[name="avaria_descricao_${itemSanitizedName}"]`);
-            const descricao = descricaoInput ? descricaoInput.value : ''; // Adicionada verificação de segurança
-            
-            avarias.push({ item: itemNome, descricao: descricao });
+            descricao = descricaoInput ? descricaoInput.value : '';
         }
+
+        // Adiciona o item à lista, independentemente do status
+        checklistItems.push({
+            item: itemName,
+            status: status,
+            descricao: descricao
+        });
     });
+
+    // Adiciona a nova lista completa ao formulário
+    formData.append('checklist_items', JSON.stringify(checklistItems));
+    // --- FIM DA LÓGICA ALTERADA ---
 
     formData.append('id_veiculo', document.getElementById('checklist-vehicle-id').value);
     formData.append('odometro_saida', document.getElementById('checklist-odometer').value);
     formData.append('observacoes_gerais', document.getElementById('checklist-observacoes').value);
-    formData.append('avarias', JSON.stringify(avarias));
 
     try {
         const response = await fetch(`${apiUrlBase}/logistica/checklist`, {
@@ -279,7 +292,7 @@ async function handleChecklistSubmit(event) {
         alert('Checklist registado com sucesso!');
         document.getElementById('checklist-modal').classList.add('hidden');
         
-        await loadVehiclesForChecklist(); // Atualiza a lista de veículos
+        await loadVehiclesForChecklist();
 
     } catch (error) {
         alert(`Erro: ${error.message}`);
