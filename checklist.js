@@ -128,20 +128,18 @@ async function openChecklistModal(vehicle) {
     const form = document.getElementById('checklist-form');
     form.reset();
     
-    // Reseta o estado do acordeão
     modal.querySelectorAll('.accordion-content').forEach((content, index) => {
-        if (index === 0) content.classList.remove('hidden'); // Deixa o primeiro aberto
+        if (index === 0) content.classList.remove('hidden');
         else content.classList.add('hidden');
     });
     modal.querySelectorAll('.accordion-header [data-feather]').forEach(icon => icon.classList.remove('rotate-180'));
 
     const itemsContainer = document.getElementById('checklist-items-container');
-    itemsContainer.innerHTML = ''; // Limpa o container para garantir que não haja itens antigos
+    itemsContainer.innerHTML = '';
     
     modal.classList.remove('hidden');
     feather.replace();
 
-    // INÍCIO DA ALTERAÇÃO: Itens de verificação fixos
     const requiredItems = [
         "Lataria", 
         "Pneus", 
@@ -150,11 +148,10 @@ async function openChecklistModal(vehicle) {
     ];
 
     requiredItems.forEach((item) => {
-        // Sanitiza o nome do item para usar em atributos HTML de forma segura
         const itemSanitizedName = item.replace(/\s+/g, '_').replace(/[^\w-]/g, '');
         const itemDiv = document.createElement('div');
         itemDiv.className = 'checklist-item p-3 bg-gray-50 rounded-md';
-        itemDiv.dataset.itemName = item; // Adiciona o nome original para usar na validação
+        itemDiv.dataset.itemName = item;
 
         itemDiv.innerHTML = `
             <div class="flex justify-between items-center">
@@ -166,12 +163,12 @@ async function openChecklistModal(vehicle) {
             </div>
             <div class="avaria-details hidden mt-3 space-y-2">
                 <textarea name="avaria_descricao_${itemSanitizedName}" class="form-input w-full text-sm" placeholder="Descreva a avaria..."></textarea>
+                
                 <input type="file" name="avaria_foto_${itemSanitizedName}" class="text-sm" accept="image/*" capture="environment">
             </div>
         `;
         itemsContainer.appendChild(itemDiv);
     });
-    // FIM DA ALTERAÇÃO
 }
 
 async function handleChecklistSubmit(event) {
