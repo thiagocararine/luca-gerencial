@@ -65,8 +65,6 @@ const checklistStorage = multer.diskStorage({
 
 const checklistUpload = multer({ storage: checklistStorage }).any();
 
-const checklistUpload = multer({ storage: checklistStorage }).any(); // .any() para aceitar todos os files
-
 /**
  * Função Auxiliar para registrar logs de logística.
  */
