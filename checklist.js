@@ -136,52 +136,72 @@ async function openChecklistModal(vehicle) {
     modal.querySelectorAll('.accordion-header [data-feather]').forEach(icon => icon.classList.remove('rotate-180'));
 
     const itemsContainer = document.getElementById('checklist-items-container');
-    itemsContainer.innerHTML = '<p class="text-gray-500">A carregar itens...</p>';
+    itemsContainer.innerHTML = ''; // Limpa o container para garantir que não haja itens antigos
     
     modal.classList.remove('hidden');
     feather.replace();
 
-    try {
-        const response = await fetch(`${apiUrlBase}/settings/parametros?cod=Checklist Itens`, {
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
-        if (!response.ok) throw new Error('Falha ao carregar itens do checklist.');
-        
-        const itens = await response.json();
-        itemsContainer.innerHTML = '';
-        
-        itens.forEach((item) => {
-            const itemSanitizedName = item.NOME_PARAMETRO.replace(/\s+/g, '_');
-            const itemDiv = document.createElement('div');
-            itemDiv.className = 'checklist-item p-3 bg-gray-50 rounded-md';
-            itemDiv.innerHTML = `
-                <div class="flex justify-between items-center">
-                    <label class="font-medium text-gray-800">${item.NOME_PARAMETRO}</label>
-                    <div class="flex gap-2">
-                        <button type="button" class="checklist-status-btn bg-gray-200 px-3 py-1 text-sm rounded" data-item="${item.NOME_PARAMETRO}" data-status="OK">OK</button>
-                        <button type="button" class="checklist-status-btn bg-gray-200 px-3 py-1 text-sm rounded" data-item="${item.NOME_PARAMETRO}" data-status="Avaria">Avaria</button>
-                    </div>
+    // INÍCIO DA ALTERAÇÃO: Itens de verificação fixos
+    const requiredItems = [
+        "Lataria", 
+        "Pneus", 
+        "Nível de Óleo e Água", 
+        "Iluminação (Lanternas e Sinalização)"
+    ];
+
+    requiredItems.forEach((item) => {
+        // Sanitiza o nome do item para usar em atributos HTML de forma segura
+        const itemSanitizedName = item.replace(/\s+/g, '_').replace(/[^\w-]/g, '');
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'checklist-item p-3 bg-gray-50 rounded-md';
+        itemDiv.dataset.itemName = item; // Adiciona o nome original para usar na validação
+
+        itemDiv.innerHTML = `
+            <div class="flex justify-between items-center">
+                <label class="font-medium text-gray-800">${item} <span class="text-red-500">*</span></label>
+                <div class="flex gap-2">
+                    <button type="button" class="checklist-status-btn bg-gray-200 px-3 py-1 text-sm rounded" data-item="${item}" data-status="OK">OK</button>
+                    <button type="button" class="checklist-status-btn bg-gray-200 px-3 py-1 text-sm rounded" data-item="${item}" data-status="Avaria">Avariado</button>
                 </div>
-                <div class="avaria-details hidden mt-3 space-y-2">
-                    <textarea name="avaria_descricao_${itemSanitizedName}" class="form-input w-full text-sm" placeholder="Descreva a avaria..."></textarea>
-                    <input type="file" name="avaria_foto_${itemSanitizedName}" class="text-sm" accept="image/*" capture="environment">
-                </div>
-            `;
-            itemsContainer.appendChild(itemDiv);
-        });
-    } catch (error) {
-        itemsContainer.innerHTML = `<p class="text-red-500">${error.message}</p>`;
-    }
+            </div>
+            <div class="avaria-details hidden mt-3 space-y-2">
+                <textarea name="avaria_descricao_${itemSanitizedName}" class="form-input w-full text-sm" placeholder="Descreva a avaria..."></textarea>
+                <input type="file" name="avaria_foto_${itemSanitizedName}" class="text-sm" accept="image/*" capture="environment">
+            </div>
+        `;
+        itemsContainer.appendChild(itemDiv);
+    });
+    // FIM DA ALTERAÇÃO
 }
 
 async function handleChecklistSubmit(event) {
     event.preventDefault();
+    
+    // INÍCIO DA ALTERAÇÃO: Validação dos itens obrigatórios
+    const items = document.querySelectorAll('#checklist-items-container .checklist-item');
+    let allItemsValid = true;
+    for (const item of items) {
+        const itemName = item.dataset.itemName;
+        // Verifica se algum botão de status (OK ou Avaria) foi selecionado para o item
+        const selectedButton = item.querySelector('.checklist-status-btn.bg-green-500, .checklist-status-btn.bg-red-500');
+        
+        if (!selectedButton) {
+            allItemsValid = false;
+            alert(`Por favor, selecione o status (OK ou Avariado) para o item: ${itemName}`);
+            break; // Para a validação no primeiro item inválido encontrado
+        }
+    }
+
+    if (!allItemsValid) {
+        return; // Impede o envio do formulário se a validação falhar
+    }
+    // FIM DA ALTERAÇÃO
+
     const form = event.target;
     const saveBtn = document.getElementById('save-checklist-btn');
     saveBtn.disabled = true;
     saveBtn.textContent = 'A enviar...';
     
-    // REGRA 5: Ícone de carregamento
     const loader = document.getElementById('global-loader');
     loader.style.display = 'flex';
 
@@ -216,7 +236,7 @@ async function handleChecklistSubmit(event) {
 
         alert('Checklist registado com sucesso!');
         document.getElementById('checklist-modal').classList.add('hidden');
-        await loadVehiclesForChecklist(); // Atualiza a lista de veículos
+        await loadVehlesForChecklist(); // Atualiza a lista de veículos
 
     } catch (error) {
         alert(`Erro: ${error.message}`);
