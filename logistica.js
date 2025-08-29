@@ -84,7 +84,6 @@ async function initLogisticaPage() {
 
         await loadVehicles();
         await verificarAlertasManutencaoParaIcone();
-        await initChecklistPanel(); //inicializa o painel de Checklist
         
         if (document.getElementById('costs-tabs')) {
             loadActiveHistoryTab();
@@ -2549,135 +2548,168 @@ function renderHistoryAsCards(data, container, type) {
 let allTodaysChecklists = [];
 let checklistToUnlock = null;
 
-async function initChecklistPanel() {
-    // Popula o novo filtro de filial do painel de checklists
-    await populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Unidades`, 'checklist-filter-filial', 'ID', 'NOME_PARAMETRO', 'Todas as Filiais');
+// --- INÍCIO DA LÓGICA DO PAINEL DE CONTROLE DE CHECKLISTS ---
 
-    // Adiciona os listeners para os novos filtros e botões
-    document.getElementById('checklist-filter-search').addEventListener('input', applyChecklistFilters);
-    document.getElementById('checklist-filter-filial').addEventListener('change', applyChecklistFilters);
+let checklistControlState = {
+    allCompleted: [],
+    allPending: [],
+    datepicker: null,
+    checklistToUnlock: null
+};
+
+async function initChecklistControlPanel() {
+    const icon = document.getElementById('checklist-alert-icon');
+    const modal = document.getElementById('checklist-control-modal');
+
+    icon.addEventListener('click', () => modal.classList.remove('hidden'));
+    modal.querySelector('#close-checklist-control-modal').addEventListener('click', () => modal.classList.add('hidden'));
+
+    checklistControlState.datepicker = new Litepicker({
+        element: document.getElementById('cc-filter-date'),
+        singleMode: false,
+        lang: 'pt-BR',
+        format: 'DD/MM/YYYY',
+        setup: (picker) => {
+            // Define o período inicial como "hoje"
+            picker.setDateRange(new Date(), new Date());
+        },
+    });
+
+    await populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Unidades`, 'cc-filter-filial', 'ID', 'NOME_PARAMETRO', 'Todas as Filiais');
+
+    document.getElementById('cc-filter-btn').addEventListener('click', fetchAndRenderChecklists);
     
+    // Listeners para os botões de ação dentro do modal
+    document.getElementById('cc-completed-list').addEventListener('click', handleChecklistPanelActionClick);
+    
+    // Listeners do modal de confirmação
     const unlockModal = document.getElementById('confirm-unlock-modal');
     unlockModal.querySelector('#cancel-unlock-btn').addEventListener('click', () => unlockModal.classList.add('hidden'));
     unlockModal.querySelector('#confirm-unlock-btn').addEventListener('click', executeUnlockChecklist);
     
-    document.getElementById('todays-checklists-container').addEventListener('click', handleChecklistPanelClick);
-    
-    await loadTodaysChecklists();
+    await updateChecklistAlertIcon();
 }
 
-async function loadTodaysChecklists() {
+async function fetchAndRenderChecklists() {
     showLoader();
     try {
-        const response = await fetch(`${apiUrlBase}/logistica/checklists-do-dia`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!response.ok) throw new Error('Falha ao carregar checklists do dia.');
-        allTodaysChecklists = await response.json();
-        applyChecklistFilters();
+        const startDate = checklistControlState.datepicker.getStartDate()?.toJSDate().toISOString().slice(0, 10);
+        const endDate = checklistControlState.datepicker.getEndDate()?.toJSDate().toISOString().slice(0, 10);
+
+        if (!startDate || !endDate) {
+            alert("Por favor, selecione um período.");
+            return;
+        }
+
+        const response = await fetch(`${apiUrlBase}/logistica/checklists-por-periodo?dataInicio=${startDate}&dataFim=${endDate}`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error('Falha ao buscar dados do painel.');
+        
+        const { completed, pending } = await response.json();
+        checklistControlState.allCompleted = completed;
+        checklistControlState.allPending = pending;
+        
+        applyChecklistControlFilters();
+
     } catch (error) {
-        document.getElementById('todays-checklists-container').innerHTML = `<p class="p-4 text-red-500 text-center">${error.message}</p>`;
+        alert(error.message);
     } finally {
         hideLoader();
     }
 }
 
-function applyChecklistFilters() {
-    const searchTerm = document.getElementById('checklist-filter-search').value.toLowerCase();
-    const filialId = document.getElementById('checklist-filter-filial').value;
+function applyChecklistControlFilters() {
+    const searchTerm = document.getElementById('cc-filter-search').value.toLowerCase();
+    const filialId = document.getElementById('cc-filter-filial').value;
 
-    const filtered = allTodaysChecklists.filter(c => {
-        const searchMatch = !searchTerm ||
-            c.placa.toLowerCase().includes(searchTerm) ||
-            c.modelo.toLowerCase().includes(searchTerm);
-        const filialMatch = !filialId || c.id_filial == filialId;
+    const filterFn = (item) => {
+        const searchMatch = !searchTerm || item.placa.toLowerCase().includes(searchTerm) || item.modelo.toLowerCase().includes(searchTerm);
+        const filialMatch = !filialId || item.id_filial == filialId;
         return searchMatch && filialMatch;
-    });
+    };
 
-    renderTodaysChecklists(filtered);
+    const filteredCompleted = checklistControlState.allCompleted.filter(filterFn);
+    const filteredPending = checklistControlState.allPending.filter(filterFn);
+
+    renderChecklistControlPanel(filteredCompleted, filteredPending);
 }
 
-function renderTodaysChecklists(checklists) {
-    const container = document.getElementById('todays-checklists-container');
-    const noDataMessage = document.getElementById('no-checklists-message');
+function renderChecklistControlPanel(completed, pending) {
+    const completedContainer = document.getElementById('cc-completed-list');
+    const pendingContainer = document.getElementById('cc-pending-list');
     
-    if (checklists.length === 0) {
-        container.innerHTML = '';
-        noDataMessage.classList.remove('hidden');
-        return;
-    }
-    
-    noDataMessage.classList.add('hidden');
-    
-    const table = document.createElement('table');
-    table.className = 'min-w-full divide-y divide-gray-200 text-sm';
-    table.innerHTML = `
-        <thead class="bg-gray-50">
-            <tr>
-                <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo</th>
-                <th class="px-4 py-2 text-left font-medium text-gray-500">Filial</th>
-                <th class="px-4 py-2 text-left font-medium text-gray-500">Usuário</th>
-                <th class="px-4 py-2 text-left font-medium text-gray-500">Horário</th>
-                <th class="px-4 py-2 text-center font-medium text-gray-500">Status</th>
-                <th class="px-4 py-2 text-center font-medium text-gray-500">Ações</th>
-            </tr>
-        </thead>
-        <tbody></tbody>`;
-
-    const tbody = table.querySelector('tbody');
-    const isPrivileged = privilegedAccessProfiles.includes(getUserProfile());
-
-    checklists.forEach(c => {
-        const statusClass = c.total_avarias > 0 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800';
-        const statusText = c.total_avarias > 0 ? `${c.total_avarias} Avaria(s)` : 'OK';
-
-        const tr = tbody.insertRow();
-        tr.innerHTML = `
-            <td class="px-4 py-2 font-medium">${c.modelo} (${c.placa})</td>
-            <td class="px-4 py-2">${c.nome_filial}</td>
-            <td class="px-4 py-2">${c.nome_usuario}</td>
-            <td class="px-4 py-2">${new Date(c.data_checklist).toLocaleTimeString('pt-BR')}</td>
-            <td class="px-4 py-2 text-center">
-                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}">
-                    ${statusText}
+    completedContainer.innerHTML = completed.length > 0 ? completed.map(c => `
+        <div class="text-sm p-2 border rounded-md flex justify-between items-center ${c.total_avarias > 0 ? 'bg-red-50' : 'bg-green-50'}">
+            <div>
+                <p class="font-bold">${c.modelo} (${c.placa})</p>
+                <p class="text-xs">${c.nome_filial} - por ${c.nome_usuario} às ${new Date(c.data_checklist).toLocaleTimeString('pt-BR')}</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="px-2 text-xs font-semibold rounded-full ${c.total_avarias > 0 ? 'bg-red-200 text-red-800' : 'bg-green-200 text-green-800'}">
+                    ${c.total_avarias > 0 ? `${c.total_avarias} Avaria(s)` : 'OK'}
                 </span>
-            </td>
-            <td class="px-4 py-2 text-center space-x-2">
-                <button data-action="view" data-checklist-id="${c.id}" class="text-indigo-600 hover:underline">Ver</button>
-                ${isPrivileged ? `<button data-action="unlock" data-checklist-id="${c.id}" data-info="${c.modelo} - ${c.placa}" class="text-blue-600 hover:underline">Desbloquear</button>` : ''}
-            </td>
-        `;
-        tbody.appendChild(tr);
-    });
+                <button data-action="view" data-checklist-id="${c.id}" class="text-indigo-600 hover:underline" title="Visualizar"><i data-feather="eye" class="w-4 h-4"></i></button>
+                <button data-action="unlock" data-checklist-id="${c.id}" data-info="${c.modelo} - ${c.placa}" class="text-blue-600 hover:underline" title="Desbloquear"><i data-feather="unlock" class="w-4 h-4"></i></button>
+            </div>
+        </div>
+    `).join('') : '<p class="text-xs text-center text-gray-500 p-4">Nenhum checklist concluído para os filtros selecionados.</p>';
 
-    container.innerHTML = '';
-    container.appendChild(table);
-}
-
-function handleChecklistPanelClick(event) {
-    const button = event.target;
-    const action = button.dataset.action;
-
-    if (!action) return;
-
-    const checklistId = button.dataset.checklistId;
-    if (action === 'unlock') {
-        const info = button.dataset.info;
-        openUnlockConfirmModal(checklistId, info);
-    } else if (action === 'view') {
-        // Futuramente, podemos criar uma função de visualização aqui.
-        // Por enquanto, podemos alertar ou logar.
-        alert(`Funcionalidade "Ver" para o checklist ID ${checklistId} a ser implementada.`);
-    }
-}
-
-function openUnlockConfirmModal(id, info) {
-    checklistToUnlock = id;
-    document.getElementById('unlock-checklist-info').textContent = info;
-    document.getElementById('confirm-unlock-modal').classList.remove('hidden');
+    pendingContainer.innerHTML = pending.length > 0 ? pending.map(p => `
+        <div class="text-sm p-2 border rounded-md flex justify-between items-center bg-gray-50">
+            <div>
+                <p class="font-bold">${p.modelo} (${p.placa})</p>
+                <p class="text-xs">${p.nome_filial}</p>
+            </div>
+        </div>
+    `).join('') : '<p class="text-xs text-center text-gray-500 p-4">Nenhum veículo pendente para os filtros selecionados.</p>';
+    
     feather.replace();
 }
 
+async function updateChecklistAlertIcon() {
+    const icon = document.getElementById('checklist-alert-icon');
+    const badge = document.getElementById('checklist-alert-badge');
+    try {
+        const hoje = new Date().toISOString().slice(0, 10);
+        const response = await fetch(`${apiUrlBase}/logistica/checklists-por-periodo?dataInicio=${hoje}&dataFim=${hoje}`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error();
+        
+        const { pending } = await response.json();
+        if (pending.length > 0) {
+            badge.textContent = pending.length;
+            icon.classList.remove('hidden');
+        } else {
+            icon.classList.add('hidden');
+        }
+    } catch (error) {
+        icon.classList.add('hidden');
+    }
+}
+
+function handleChecklistPanelActionClick(event) {
+    const button = event.target.closest('button');
+    if (!button || !button.dataset.action) return;
+
+    const action = button.dataset.action;
+    const checklistId = button.dataset.checklistId;
+    const info = button.dataset.info;
+    
+    if (action === 'unlock') {
+        checklistControlState.checklistToUnlock = checklistId;
+        document.getElementById('unlock-checklist-info').textContent = info;
+        document.getElementById('confirm-unlock-modal').classList.remove('hidden');
+        feather.replace();
+    } else if (action === 'view') {
+        alert(`A visualização do checklist ID ${checklistId} será implementada aqui.`);
+    }
+}
+
 async function executeUnlockChecklist() {
-    if (!checklistToUnlock) return;
+    const id = checklistControlState.checklistToUnlock;
+    if (!id) return;
 
     const modal = document.getElementById('confirm-unlock-modal');
     const confirmBtn = modal.querySelector('#confirm-unlock-btn');
@@ -2685,24 +2717,25 @@ async function executeUnlockChecklist() {
     showLoader();
 
     try {
-        const response = await fetch(`${apiUrlBase}/logistica/checklist/${checklistToUnlock}/desbloquear`, {
+        const response = await fetch(`${apiUrlBase}/logistica/checklist/${id}/desbloquear`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Falha ao desbloquear o checklist.');
+        if (!response.ok) throw new Error(result.error);
 
-        alert('Checklist desbloqueado com sucesso!');
+        alert('Checklist desbloqueado!');
         modal.classList.add('hidden');
-        await loadTodaysChecklists(); // Atualiza a lista
-
+        
+        await fetchAndRenderChecklists(); // Atualiza a lista no modal
+        await updateChecklistAlertIcon(); // Atualiza o ícone
     } catch (error) {
         alert(`Erro: ${error.message}`);
     } finally {
         confirmBtn.disabled = false;
         hideLoader();
-        checklistToUnlock = null;
+        checklistControlState.checklistToUnlock = null;
     }
 }
 
-// --- FIM DA LÓGICA DO PAINEL DE CHECKLISTS ---
+// --- FIM DA LÓGICA DO PAINEL DE CONTROLE DE CHECKLISTS ---

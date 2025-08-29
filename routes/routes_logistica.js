@@ -1796,38 +1796,47 @@ router.get('/veiculos-para-checklist', authenticateToken, async (req, res) => {
     }
 });
 
-router.get('/logistica/checklists-do-dia', authenticateToken, async (req, res) => {
+router.get('/logistica/checklists-por-periodo', authenticateToken, async (req, res) => {
+    const { dataInicio, dataFim } = req.query;
+    if (!dataInicio || !dataFim) {
+        return res.status(400).json({ error: 'Data de início e fim são obrigatórias.' });
+    }
+
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        const sql = `
+
+        // 1. Busca os checklists que foram CONCLUÍDOS no período
+        const completedSql = `
             SELECT 
-                vc.id,
-                vc.data_checklist,
-                v.modelo,
-                v.placa,
-                p.NOME_PARAMETRO as nome_filial,
-                u.nome_user as nome_usuario,
+                vc.id, vc.id_veiculo, vc.data_checklist, v.modelo, v.placa,
+                p.NOME_PARAMETRO as nome_filial, u.nome_user as nome_usuario,
                 (SELECT COUNT(*) FROM checklist_itens ci WHERE ci.id_checklist = vc.id AND ci.status = 'Avaria') as total_avarias
-            FROM 
-                veiculo_checklists vc
-            JOIN 
-                veiculos v ON vc.id_veiculo = v.id
-            JOIN 
-                cad_user u ON vc.id_usuario = u.ID
-            LEFT JOIN 
-                parametro p ON vc.id_filial = p.ID
-            WHERE 
-                DATE(vc.data_checklist) = CURDATE()
-            ORDER BY 
-                vc.data_checklist DESC`;
+            FROM veiculo_checklists vc
+            JOIN veiculos v ON vc.id_veiculo = v.id
+            JOIN cad_user u ON vc.id_usuario = u.ID
+            LEFT JOIN parametro p ON vc.id_filial = p.ID
+            WHERE DATE(vc.data_checklist) BETWEEN ? AND ?
+            ORDER BY vc.data_checklist DESC`;
+        const [completed] = await connection.execute(completedSql, [dataInicio, dataFim]);
+
+        // 2. Busca os veículos ATIVOS que estavam PENDENTES no período
+        const pendingSql = `
+            SELECT v.id, v.modelo, v.placa, p.NOME_PARAMETRO as nome_filial
+            FROM veiculos v
+            LEFT JOIN parametro p ON v.id_filial = p.ID
+            WHERE v.status = 'Ativo' AND v.id NOT IN (
+                SELECT DISTINCT id_veiculo 
+                FROM veiculo_checklists 
+                WHERE DATE(data_checklist) BETWEEN ? AND ?
+            )`;
+        const [pending] = await connection.execute(pendingSql, [dataInicio, dataFim]);
         
-        const [checklists] = await connection.execute(sql);
-        res.json(checklists);
+        res.json({ completed, pending });
 
     } catch (error) {
-        console.error("Erro ao buscar checklists do dia:", error);
-        res.status(500).json({ error: 'Erro ao buscar os checklists do dia.' });
+        console.error("Erro ao buscar checklists por período:", error);
+        res.status(500).json({ error: 'Erro ao buscar os checklists.' });
     } finally {
         if (connection) await connection.end();
     }
