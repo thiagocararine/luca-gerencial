@@ -1643,7 +1643,6 @@ router.get('/veiculos/manutencao/alertas', authenticateToken, async (req, res) =
 router.post('/checklist', authenticateToken, (req, res) => {
     checklistUpload(req, res, async (err) => {
         if (err) {
-            // Este log agora captura o erro que você viu
             console.error("Erro no Multer (checklist):", err);
             return res.status(500).json({ error: "Ocorreu um erro durante o upload das imagens." });
         }
@@ -1672,22 +1671,17 @@ router.post('/checklist', authenticateToken, (req, res) => {
                 return res.status(400).json({ error: `Odômetro inválido. O valor informado (${odometro_saida} km) é inferior ao último registrado (${odometroAtual} km).` });
             }
 
-            // --- LÓGICA NOVA PARA MOVER ARQUIVOS ---
-            const dataHoje = new Date().toISOString().slice(0, 10);
+            const dataHoje = new Date("2025-08-29T17:18:40.865Z").toISOString().slice(0, 10);
             const placaSanitizada = sanitizeForPath(placa);
             const finalDestPath = path.join(UPLOADS_BASE_PATH, 'veiculos', placaSanitizada, 'checklist', dataHoje);
             
-            // Cria o diretório de destino final
             await fs.mkdir(finalDestPath, { recursive: true });
 
-            // Move cada arquivo da pasta temporária para o destino final
             for (const file of req.files) {
                 const tempPath = file.path;
                 const finalPath = path.join(finalDestPath, file.filename);
                 await fs.rename(tempPath, finalPath);
             }
-            // --- FIM DA LÓGICA NOVA ---
-
 
             const checklistSql = `
                 INSERT INTO veiculo_checklists (id_veiculo, id_usuario, id_filial, data_checklist, odometro_saida, observacoes_gerais)
@@ -1713,7 +1707,10 @@ router.post('/checklist', authenticateToken, (req, res) => {
                 const avariaSql = `INSERT INTO checklist_itens_avariados (id_checklist, id_filial, item_verificado, descricao_avaria, caminho_foto) VALUES (?, ?, ?, ?, ?)`;
 
                 for (const avaria of avariasParsed) {
-                    const itemSanitized = avaria.item.replace(/\s+/g, '_');
+                    // ### LINHA CORRIGIDA ABAIXO ###
+                    // Usamos a mesma regra de sanitização do frontend para encontrar o arquivo corretamente
+                    const itemSanitized = avaria.item.replace(/\s+/g, '_').replace(/[^\w-]/g, '');
+
                     const fotoAvaria = req.files.find(f => f.fieldname === `avaria_foto_${itemSanitized}`);
                     await connection.execute(avariaSql, [
                         newChecklistId,
@@ -1729,9 +1726,11 @@ router.post('/checklist', authenticateToken, (req, res) => {
             res.status(201).json({ message: 'Checklist salvo com sucesso!', checklistId: newChecklistId });
 
         } catch (error) {
-            // Limpa os arquivos temporários em caso de erro no banco de dados
             for (const file of req.files) {
-                await fs.unlink(file.path).catch(e => console.error("Falha ao limpar arquivo temporário:", e));
+                // Tenta limpar o arquivo temporário, mas não quebra se não conseguir
+                if(file && file.path) {
+                    await fs.unlink(file.path).catch(e => console.error("Falha ao limpar arquivo temporário:", e.path));
+                }
             }
             if (connection) await connection.rollback();
             console.error("Erro ao salvar checklist:", error);
