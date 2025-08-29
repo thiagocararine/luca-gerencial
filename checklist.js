@@ -73,66 +73,94 @@ function renderVehicleCardsForChecklist(vehicles) {
 }
 
 function setupChecklistEventListeners() {
-    const vehicleList = document.getElementById('checklist-vehicle-list');
     const modal = document.getElementById('checklist-modal');
+    // Verificação Crítica: Se o modal não existir, nada mais pode funcionar.
+    if (!modal) {
+        console.error("ERRO FATAL: O elemento do modal ('checklist-modal') não foi encontrado no HTML.");
+        return;
+    }
+
+    const vehicleList = document.getElementById('checklist-vehicle-list');
     const itemsContainer = document.getElementById('checklist-items-container');
+    const form = document.getElementById('checklist-form');
 
-    vehicleList.addEventListener('click', (event) => {
-        const button = event.target.closest('.start-checklist-btn');
-        if (button) {
-            const card = button.closest('[data-vehicle]');
-            const vehicleData = JSON.parse(card.dataset.vehicle);
-            openChecklistModal(vehicleData);
-        }
-    });
-    
-    modal.querySelector('#close-checklist-modal-btn').addEventListener('click', () => modal.classList.add('hidden'));
-    modal.querySelector('#cancel-checklist-btn').addEventListener('click', () => modal.classList.add('hidden'));
-
-    itemsContainer.addEventListener('click', (event) => {
-        const button = event.target.closest('.checklist-status-btn');
-        if (!button) return;
-
-        const itemDiv = button.closest('.checklist-item');
-        if (!itemDiv) return; // Verificação de segurança adicional
-
-        const detailsDiv = itemDiv.querySelector('.avaria-details');
-
-        // **CORREÇÃO PRINCIPAL ABAIXO**
-        // Se a div de detalhes não for encontrada, interrompemos a função para evitar o erro.
-        if (!detailsDiv) {
-            console.error("Elemento .avaria-details não encontrado dentro do .checklist-item.", itemDiv);
-            return;
-        }
-
-        // Reseta o estado dos botões dentro do mesmo item
-        itemDiv.querySelectorAll('.checklist-status-btn').forEach(btn => {
-            btn.classList.remove('bg-green-500', 'bg-red-500', 'text-white');
-            btn.classList.add('bg-gray-200');
+    // --- Listener para abrir o modal ---
+    if (vehicleList) {
+        vehicleList.addEventListener('click', (event) => {
+            const button = event.target.closest('.start-checklist-btn');
+            if (button) {
+                const card = button.closest('[data-vehicle]');
+                if (card && card.dataset.vehicle) {
+                    const vehicleData = JSON.parse(card.dataset.vehicle);
+                    openChecklistModal(vehicleData);
+                }
+            }
         });
+    }
 
-        // Aplica o novo estado
-        if (button.dataset.status === 'OK') {
-            button.classList.add('bg-green-500', 'text-white');
-            detailsDiv.classList.add('hidden');
-        } else { // Status é 'Avaria'
-            button.classList.add('bg-red-500', 'text-white');
-            detailsDiv.classList.remove('hidden');
-        }
-    });
+    // --- Listeners para fechar o modal ---
+    modal.querySelector('#close-checklist-modal-btn')?.addEventListener('click', () => modal.classList.add('hidden'));
+    modal.querySelector('#cancel-checklist-btn')?.addEventListener('click', () => modal.classList.add('hidden'));
 
-    // REGRA 2: Lógica do Acordeão
+    // --- Listener para os botões OK/Avaria (versão blindada) ---
+    if (itemsContainer) {
+        itemsContainer.addEventListener('click', (event) => {
+            const button = event.target.closest('.checklist-status-btn');
+            if (!button) return;
+
+            const itemDiv = button.closest('.checklist-item');
+            if (!itemDiv) {
+                console.error("Erro de Estrutura: .checklist-item não encontrado como pai do botão.", button);
+                return;
+            }
+
+            const detailsDiv = itemDiv.querySelector('.avaria-details');
+            if (!detailsDiv) {
+                console.error("Erro de Estrutura: .avaria-details não encontrado dentro do .checklist-item.", itemDiv);
+                return;
+            }
+
+            itemDiv.querySelectorAll('.checklist-status-btn').forEach(btn => {
+                btn.classList.remove('bg-green-500', 'bg-red-500', 'text-white');
+                btn.classList.add('bg-gray-200');
+            });
+
+            if (button.dataset.status === 'OK') {
+                button.classList.add('bg-green-500', 'text-white');
+                detailsDiv.classList.add('hidden');
+            } else {
+                button.classList.add('bg-red-500', 'text-white');
+                detailsDiv.classList.remove('hidden');
+            }
+        });
+    }
+
+    // --- Listener para o Acordeão (versão blindada) ---
     modal.querySelectorAll('.accordion-header').forEach(header => {
         header.addEventListener('click', () => {
             const content = header.nextElementSibling;
             const icon = header.querySelector('[data-feather]');
-            content.classList.toggle('hidden');
-            icon.classList.toggle('rotate-180');
+
+            if (content) {
+                content.classList.toggle('hidden');
+            } else {
+                console.error("Erro de Estrutura: O conteúdo do acordeão (.accordion-content) não foi encontrado após o cabeçalho.", header);
+            }
+
+            if (icon) {
+                icon.classList.toggle('rotate-180');
+            } else {
+                console.error("Erro de Estrutura: O ícone ('data-feather') não foi encontrado dentro do cabeçalho do acordeão.", header);
+            }
         });
     });
 
-    const form = document.getElementById('checklist-form');
-    form.addEventListener('submit', handleChecklistSubmit);
+    // --- Listener para o submit do formulário ---
+    if (form) {
+        form.addEventListener('submit', handleChecklistSubmit);
+    } else {
+        console.error("ERRO FATAL: O formulário do checklist ('checklist-form') não foi encontrado.");
+    }
 }
 
 async function openChecklistModal(vehicle) {
