@@ -1653,9 +1653,8 @@ router.get('/veiculos/manutencao/alertas', authenticateToken, async (req, res) =
     }
 });
 
-// ROTA PARA SALVAR UM NOVO CHECKLIST DE VEÍCULO
+// ROTA PARA SALVAR UM NOVO CHECKLIST DE VEÍCULO (VERSÃO ATUALIZADA)
 router.post('/checklist', authenticateToken, (req, res) => {
-    // Usamos o multer que já configuramos para lidar com os uploads
     checklistUpload(req, res, async (err) => {
         if (err) {
             console.error("Erro no Multer (checklist):", err);
@@ -1674,30 +1673,33 @@ router.post('/checklist', authenticateToken, (req, res) => {
             connection = await mysql.createConnection(dbConfig);
             await connection.beginTransaction();
 
-            // REGRA 1: Validação do Odômetro
-            const [veiculoRows] = await connection.execute('SELECT odometro_atual FROM veiculos WHERE id = ?', [id_veiculo]);
+            // REGRA 1: Validação do Odômetro e busca da Filial
+            // ALTERADO: A query agora também busca o id_filial do veículo
+            const [veiculoRows] = await connection.execute('SELECT odometro_atual, id_filial FROM veiculos WHERE id = ?', [id_veiculo]);
             if (veiculoRows.length === 0) {
                 await connection.rollback();
                 return res.status(404).json({ error: 'Veículo não encontrado.' });
             }
             const odometroAtual = veiculoRows[0].odometro_atual;
+            const id_filial_veiculo = veiculoRows[0].id_filial; // NOVO: Capturamos o ID da filial
+
             if (parseInt(odometro_saida) < odometroAtual) {
                 await connection.rollback();
                 return res.status(400).json({ error: `Odômetro inválido. O valor informado (${odometro_saida} km) é inferior ao último registrado (${odometroAtual} km).` });
             }
 
             // Insere o registro principal do checklist
+            // ALTERADO: Adicionamos a coluna id_filial no INSERT
             const checklistSql = `
                 INSERT INTO veiculo_checklists 
-                (id_veiculo, id_usuario, data_checklist, odometro_saida, observacoes_gerais)
-                VALUES (?, ?, NOW(), ?, ?)`;
-            const [checklistResult] = await connection.execute(checklistSql, [id_veiculo, userId, odometro_saida, observacoes_gerais]);
+                (id_veiculo, id_usuario, data_checklist, odometro_saida, observacoes_gerais, id_filial)
+                VALUES (?, ?, NOW(), ?, ?, ?)`;
+            // ALTERADO: Passamos o id_filial_veiculo como parâmetro
+            const [checklistResult] = await connection.execute(checklistSql, [id_veiculo, userId, odometro_saida, observacoes_gerais, id_filial_veiculo]);
             const newChecklistId = checklistResult.insertId;
 
-            // Atualiza o odômetro principal do veículo
             await connection.execute('UPDATE veiculos SET odometro_atual = ? WHERE id = ?', [odometro_saida, id_veiculo]);
 
-            // Salva os caminhos das fotos obrigatórias
             const fotosObrigatorias = {};
             req.files.forEach(file => {
                 if(['foto_frente', 'foto_traseira', 'foto_lateral_direita', 'foto_lateral_esquerda'].includes(file.fieldname)) {
@@ -1709,20 +1711,21 @@ router.post('/checklist', authenticateToken, (req, res) => {
                 [fotosObrigatorias.foto_frente, fotosObrigatorias.foto_traseira, fotosObrigatorias.foto_lateral_direita, fotosObrigatorias.foto_lateral_esquerda, newChecklistId]
             );
 
-            // Salva os itens com avaria e suas respectivas fotos
             if (avarias && avarias.length > 0) {
                 const avariasParsed = JSON.parse(avarias);
-                const avariaSql = `INSERT INTO checklist_itens_avariados (id_checklist, item_verificado, descricao_avaria, caminho_foto) VALUES (?, ?, ?, ?)`;
+                // ALTERADO: Adicionamos a coluna id_filial no INSERT de avarias
+                const avariaSql = `INSERT INTO checklist_itens_avariados (id_checklist, item_verificado, descricao_avaria, caminho_foto, id_filial) VALUES (?, ?, ?, ?, ?)`;
 
                 for (let i = 0; i < avariasParsed.length; i++) {
                     const avaria = avariasParsed[i];
-                    // Associa a foto pelo nome do campo que definimos no frontend
                     const fotoAvaria = req.files.find(f => f.fieldname === `avaria_foto_${avaria.item.replace(/\s+/g, '_')}`);
+                    // ALTERADO: Passamos o id_filial_veiculo também para a tabela de avarias
                     await connection.execute(avariaSql, [
                         newChecklistId,
                         avaria.item,
                         avaria.descricao,
-                        fotoAvaria ? fotoAvaria.filename : null
+                        fotoAvaria ? fotoAvaria.filename : null,
+                        id_filial_veiculo 
                     ]);
                 }
             }
