@@ -92,16 +92,30 @@ function setupChecklistEventListeners() {
     itemsContainer.addEventListener('click', (event) => {
         const button = event.target.closest('.checklist-status-btn');
         if (!button) return;
+
         const itemDiv = button.closest('.checklist-item');
+        if (!itemDiv) return; // Verificação de segurança adicional
+
         const detailsDiv = itemDiv.querySelector('.avaria-details');
+
+        // **CORREÇÃO PRINCIPAL ABAIXO**
+        // Se a div de detalhes não for encontrada, interrompemos a função para evitar o erro.
+        if (!detailsDiv) {
+            console.error("Elemento .avaria-details não encontrado dentro do .checklist-item.", itemDiv);
+            return;
+        }
+
+        // Reseta o estado dos botões dentro do mesmo item
         itemDiv.querySelectorAll('.checklist-status-btn').forEach(btn => {
             btn.classList.remove('bg-green-500', 'bg-red-500', 'text-white');
             btn.classList.add('bg-gray-200');
         });
+
+        // Aplica o novo estado
         if (button.dataset.status === 'OK') {
             button.classList.add('bg-green-500', 'text-white');
             detailsDiv.classList.add('hidden');
-        } else {
+        } else { // Status é 'Avaria'
             button.classList.add('bg-red-500', 'text-white');
             detailsDiv.classList.remove('hidden');
         }
