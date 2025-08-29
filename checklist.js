@@ -277,7 +277,7 @@ async function handleChecklistSubmit(event) {
 
         alert('Checklist registado com sucesso!');
         document.getElementById('checklist-modal').classList.add('hidden');
-        await loadVehlesForChecklist(); // Atualiza a lista de veículos
+        await loadVehiclesForChecklist(); // Atualiza a lista de veículos
 
     } catch (error) {
         alert(`Erro: ${error.message}`);
