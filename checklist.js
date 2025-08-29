@@ -217,26 +217,22 @@ async function openChecklistModal(vehicle) {
 
 async function handleChecklistSubmit(event) {
     event.preventDefault();
-    
-    // INÍCIO DA ALTERAÇÃO: Validação dos itens obrigatórios
+
     const items = document.querySelectorAll('#checklist-items-container .checklist-item');
     let allItemsValid = true;
     for (const item of items) {
         const itemName = item.dataset.itemName;
-        // Verifica se algum botão de status (OK ou Avaria) foi selecionado para o item
         const selectedButton = item.querySelector('.checklist-status-btn.bg-green-500, .checklist-status-btn.bg-red-500');
         
         if (!selectedButton) {
             allItemsValid = false;
             alert(`Por favor, selecione o status (OK ou Avariado) para o item: ${itemName}`);
-            break; // Para a validação no primeiro item inválido encontrado
+            break;
         }
     }
-
     if (!allItemsValid) {
-        return; // Impede o envio do formulário se a validação falhar
+        return;
     }
-    // FIM DA ALTERAÇÃO
 
     const form = event.target;
     const saveBtn = document.getElementById('save-checklist-btn');
@@ -253,8 +249,13 @@ async function handleChecklistSubmit(event) {
         const activeButton = itemDiv.querySelector('.checklist-status-btn.bg-red-500');
         if (activeButton) {
             const itemNome = activeButton.dataset.item;
-            const itemSanitizedName = itemNome.replace(/\s+/g, '_');
-            const descricao = itemDiv.querySelector(`textarea[name="avaria_descricao_${itemSanitizedName}"]`).value;
+
+            // ### LINHA CORRIGIDA ABAIXO ###
+            // Usamos a mesma regra de sanitização da função openChecklistModal
+            const itemSanitizedName = itemNome.replace(/\s+/g, '_').replace(/[^\w-]/g, '');
+            
+            const descricaoInput = itemDiv.querySelector(`textarea[name="avaria_descricao_${itemSanitizedName}"]`);
+            const descricao = descricaoInput ? descricaoInput.value : ''; // Adicionada verificação de segurança
             
             avarias.push({ item: itemNome, descricao: descricao });
         }
@@ -277,6 +278,7 @@ async function handleChecklistSubmit(event) {
 
         alert('Checklist registado com sucesso!');
         document.getElementById('checklist-modal').classList.add('hidden');
+        
         await loadVehiclesForChecklist(); // Atualiza a lista de veículos
 
     } catch (error) {
