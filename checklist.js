@@ -74,7 +74,6 @@ function renderVehicleCardsForChecklist(vehicles) {
 
 function setupChecklistEventListeners() {
     const modal = document.getElementById('checklist-modal');
-    // Verificação Crítica: Se o modal não existir, nada mais pode funcionar.
     if (!modal) {
         console.error("ERRO FATAL: O elemento do modal ('checklist-modal') não foi encontrado no HTML.");
         return;
@@ -102,7 +101,7 @@ function setupChecklistEventListeners() {
     modal.querySelector('#close-checklist-modal-btn')?.addEventListener('click', () => modal.classList.add('hidden'));
     modal.querySelector('#cancel-checklist-btn')?.addEventListener('click', () => modal.classList.add('hidden'));
 
-    // --- Listener para os botões OK/Avaria (versão blindada) ---
+    // --- Listener para os botões OK/Avaria ---
     if (itemsContainer) {
         itemsContainer.addEventListener('click', (event) => {
             const button = event.target.closest('.checklist-status-btn');
@@ -135,11 +134,14 @@ function setupChecklistEventListeners() {
         });
     }
 
-    // --- Listener para o Acordeão (versão blindada) ---
+    // --- Listener para o Acordeão (com a correção final) ---
     modal.querySelectorAll('.accordion-header').forEach(header => {
         header.addEventListener('click', () => {
             const content = header.nextElementSibling;
-            const icon = header.querySelector('[data-feather]');
+            
+            // ### LINHA CORRIGIDA ABAIXO ###
+            // Procuramos pela classe .feather em vez do atributo data-feather
+            const icon = header.querySelector('.feather');
 
             if (content) {
                 content.classList.toggle('hidden');
@@ -150,7 +152,7 @@ function setupChecklistEventListeners() {
             if (icon) {
                 icon.classList.toggle('rotate-180');
             } else {
-                console.error("Erro de Estrutura: O ícone ('data-feather') não foi encontrado dentro do cabeçalho do acordeão.", header);
+                console.error("Erro de Estrutura: O ícone (.feather) não foi encontrado dentro do cabeçalho do acordeão.", header);
             }
         });
     });
