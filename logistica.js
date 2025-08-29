@@ -796,7 +796,6 @@ async function loadAbastecimentosHistory() {
             return;
         }
 
-        // Verifica o tamanho da tela para decidir como renderizar
         if (window.innerWidth < 768) {
             renderHistoryAsCards(abastecimentos, container, 'abastecimentos');
         } else {
@@ -806,9 +805,9 @@ async function loadAbastecimentosHistory() {
                 <thead class="bg-gray-50">
                     <tr>
                         <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
-                        <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo</th>
+                        <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo / Destino</th>
                         <th class="px-4 py-2 text-right font-medium text-gray-500">Quantidade (L)</th>
-                        <th class="px-4 py-2 text-right font-medium text-gray-500">Odómetro (km)</th>
+                        <th class="px-4 py-2 text-right font-medium text-gray-500">Odômetro (km)</th>
                         <th class="px-4 py-2 text-left font-medium text-gray-500">Utilizador</th>
                         <th class="px-4 py-2 text-center font-medium text-gray-500">Ações</th>
                     </tr>
@@ -820,12 +819,17 @@ async function loadAbastecimentosHistory() {
 
             abastecimentos.forEach(item => {
                 const tr = tbody.insertRow();
-                const infoText = `Abastecimento de ${parseFloat(item.quantidade).toFixed(2)}L para ${item.modelo} (${item.placa})`;
+                const infoText = `Abastecimento de ${parseFloat(item.quantidade).toFixed(2)}L para ${item.modelo || 'Galão'}`;
+                
+                // CORREÇÃO APLICADA AQUI:
+                const odometroFmt = item.odometro_no_momento ? item.odometro_no_momento.toLocaleString('pt-BR') : 'N/A';
+                const veiculoFmt = item.modelo ? `${item.modelo} (${item.placa})` : 'Retirada para Galão';
+
                 tr.innerHTML = `
                     <td class="px-4 py-2">${new Date(item.data_movimento).toLocaleString('pt-BR', { timeZone: 'UTC' })}</td>
-                    <td class="px-4 py-2">${item.modelo} (${item.placa})</td>
+                    <td class="px-4 py-2">${veiculoFmt}</td>
                     <td class="px-4 py-2 text-right">${parseFloat(item.quantidade).toFixed(2)}</td>
-                    <td class="px-4 py-2 text-right">${item.odometro_no_momento.toLocaleString('pt-BR')}</td>
+                    <td class="px-4 py-2 text-right">${odometroFmt}</td>
                     <td class="px-4 py-2">${item.nome_usuario}</td>
                     <td class="px-4 py-2 text-center">
                         ${isPrivileged ? `<button class="text-red-500 hover:text-red-700 delete-abastecimento-btn" data-movimento-id="${item.id}" data-info="${infoText}">
@@ -2469,7 +2473,6 @@ function compressImage(file, maxWidth = 800, maxHeight = 600, quality = 0.7) {
     });
 }
 
-// ADICIONE ESTA NOVA FUNÇÃO EM logistica.js
 function renderHistoryAsCards(data, container, type) {
     container.innerHTML = ''; // Limpa o container
     const cardsContainer = document.createElement('div');
@@ -2484,6 +2487,7 @@ function renderHistoryAsCards(data, container, type) {
         let title = '';
         let detailsHtml = '';
         let buttonHtml = '';
+        let valor, unidade;
 
         if (type === 'gerais') {
             card.style.borderColor = '#14b8a6'; // Teal
@@ -2508,21 +2512,24 @@ function renderHistoryAsCards(data, container, type) {
             }
         } else if (type === 'abastecimentos') {
             card.style.borderColor = '#f59e0b'; // Yellow
-            title = `${item.modelo} (${item.placa})`;
-            const infoText = `Abastecimento de ${parseFloat(item.quantidade).toFixed(2)}L para ${item.modelo} (${item.placa})`;
+            title = item.modelo ? `${item.modelo} (${item.placa})` : 'Retirada para Galão';
+            const infoText = `Abastecimento de ${parseFloat(item.quantidade).toFixed(2)}L para ${item.modelo || 'Galão'}`;
+            
+            // CORREÇÃO APLICADA AQUI:
+            const odometroFmt = item.odometro_no_momento ? `${item.odometro_no_momento.toLocaleString('pt-BR')} km` : 'N/A';
+
             detailsHtml = `
                 <p class="text-xs text-gray-500">${new Date(item.data_movimento).toLocaleString('pt-BR', { timeZone: 'UTC' })}</p>
-                <div><strong class="font-medium text-gray-700">Odômetro:</strong> ${item.odometro_no_momento.toLocaleString('pt-BR')} km</div>
+                <div><strong class="font-medium text-gray-700">Odômetro:</strong> ${odometroFmt}</div>
                 <div><strong class="font-medium text-gray-700">Usuário:</strong> ${item.nome_usuario}</div>
             `;
             if (isPrivileged) {
                 buttonHtml = `<button class="text-red-500 hover:text-red-700 absolute top-3 right-3 delete-abastecimento-btn" data-movimento-id="${item.id}" data-info="${infoText}"><span data-feather="trash-2" class="w-4 h-4"></span></button>`;
             }
+            valor = item.quantidade;
+            unidade = 'L';
         }
 
-        const valor = item.custo !== undefined ? item.custo : item.quantidade;
-        const unidade = item.custo !== undefined ? 'R$' : 'L';
-        
         card.innerHTML = `
             <div class="relative">
                 <h4 class="font-bold text-gray-800 pr-8">${title}</h4>
