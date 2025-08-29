@@ -73,6 +73,7 @@ async function initLogisticaPage() {
     setupMaintenanceExportModal();
 
     showLoader();
+
     try {
         await Promise.all([
             populateFilialSelects(),
@@ -83,6 +84,7 @@ async function initLogisticaPage() {
 
         await loadVehicles();
         await verificarAlertasManutencaoParaIcone();
+        await initChecklistPanel(); //inicializa o painel de Checklist
         
         if (document.getElementById('costs-tabs')) {
             loadActiveHistoryTab();
@@ -2543,3 +2545,164 @@ function renderHistoryAsCards(data, container, type) {
     container.appendChild(cardsContainer);
     feather.replace();
 }
+
+let allTodaysChecklists = [];
+let checklistToUnlock = null;
+
+async function initChecklistPanel() {
+    // Popula o novo filtro de filial do painel de checklists
+    await populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Unidades`, 'checklist-filter-filial', 'ID', 'NOME_PARAMETRO', 'Todas as Filiais');
+
+    // Adiciona os listeners para os novos filtros e botões
+    document.getElementById('checklist-filter-search').addEventListener('input', applyChecklistFilters);
+    document.getElementById('checklist-filter-filial').addEventListener('change', applyChecklistFilters);
+    
+    const unlockModal = document.getElementById('confirm-unlock-modal');
+    unlockModal.querySelector('#cancel-unlock-btn').addEventListener('click', () => unlockModal.classList.add('hidden'));
+    unlockModal.querySelector('#confirm-unlock-btn').addEventListener('click', executeUnlockChecklist);
+    
+    document.getElementById('todays-checklists-container').addEventListener('click', handleChecklistPanelClick);
+    
+    await loadTodaysChecklists();
+}
+
+async function loadTodaysChecklists() {
+    showLoader();
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/checklists-do-dia`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao carregar checklists do dia.');
+        allTodaysChecklists = await response.json();
+        applyChecklistFilters();
+    } catch (error) {
+        document.getElementById('todays-checklists-container').innerHTML = `<p class="p-4 text-red-500 text-center">${error.message}</p>`;
+    } finally {
+        hideLoader();
+    }
+}
+
+function applyChecklistFilters() {
+    const searchTerm = document.getElementById('checklist-filter-search').value.toLowerCase();
+    const filialId = document.getElementById('checklist-filter-filial').value;
+
+    const filtered = allTodaysChecklists.filter(c => {
+        const searchMatch = !searchTerm ||
+            c.placa.toLowerCase().includes(searchTerm) ||
+            c.modelo.toLowerCase().includes(searchTerm);
+        const filialMatch = !filialId || c.id_filial == filialId;
+        return searchMatch && filialMatch;
+    });
+
+    renderTodaysChecklists(filtered);
+}
+
+function renderTodaysChecklists(checklists) {
+    const container = document.getElementById('todays-checklists-container');
+    const noDataMessage = document.getElementById('no-checklists-message');
+    
+    if (checklists.length === 0) {
+        container.innerHTML = '';
+        noDataMessage.classList.remove('hidden');
+        return;
+    }
+    
+    noDataMessage.classList.add('hidden');
+    
+    const table = document.createElement('table');
+    table.className = 'min-w-full divide-y divide-gray-200 text-sm';
+    table.innerHTML = `
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Filial</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Usuário</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Horário</th>
+                <th class="px-4 py-2 text-center font-medium text-gray-500">Status</th>
+                <th class="px-4 py-2 text-center font-medium text-gray-500">Ações</th>
+            </tr>
+        </thead>
+        <tbody></tbody>`;
+
+    const tbody = table.querySelector('tbody');
+    const isPrivileged = privilegedAccessProfiles.includes(getUserProfile());
+
+    checklists.forEach(c => {
+        const statusClass = c.total_avarias > 0 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800';
+        const statusText = c.total_avarias > 0 ? `${c.total_avarias} Avaria(s)` : 'OK';
+
+        const tr = tbody.insertRow();
+        tr.innerHTML = `
+            <td class="px-4 py-2 font-medium">${c.modelo} (${c.placa})</td>
+            <td class="px-4 py-2">${c.nome_filial}</td>
+            <td class="px-4 py-2">${c.nome_usuario}</td>
+            <td class="px-4 py-2">${new Date(c.data_checklist).toLocaleTimeString('pt-BR')}</td>
+            <td class="px-4 py-2 text-center">
+                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}">
+                    ${statusText}
+                </span>
+            </td>
+            <td class="px-4 py-2 text-center space-x-2">
+                <button data-action="view" data-checklist-id="${c.id}" class="text-indigo-600 hover:underline">Ver</button>
+                ${isPrivileged ? `<button data-action="unlock" data-checklist-id="${c.id}" data-info="${c.modelo} - ${c.placa}" class="text-blue-600 hover:underline">Desbloquear</button>` : ''}
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    container.innerHTML = '';
+    container.appendChild(table);
+}
+
+function handleChecklistPanelClick(event) {
+    const button = event.target;
+    const action = button.dataset.action;
+
+    if (!action) return;
+
+    const checklistId = button.dataset.checklistId;
+    if (action === 'unlock') {
+        const info = button.dataset.info;
+        openUnlockConfirmModal(checklistId, info);
+    } else if (action === 'view') {
+        // Futuramente, podemos criar uma função de visualização aqui.
+        // Por enquanto, podemos alertar ou logar.
+        alert(`Funcionalidade "Ver" para o checklist ID ${checklistId} a ser implementada.`);
+    }
+}
+
+function openUnlockConfirmModal(id, info) {
+    checklistToUnlock = id;
+    document.getElementById('unlock-checklist-info').textContent = info;
+    document.getElementById('confirm-unlock-modal').classList.remove('hidden');
+    feather.replace();
+}
+
+async function executeUnlockChecklist() {
+    if (!checklistToUnlock) return;
+
+    const modal = document.getElementById('confirm-unlock-modal');
+    const confirmBtn = modal.querySelector('#confirm-unlock-btn');
+    confirmBtn.disabled = true;
+    showLoader();
+
+    try {
+        const response = await fetch(`${apiUrlBase}/logistica/checklist/${checklistToUnlock}/desbloquear`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Falha ao desbloquear o checklist.');
+
+        alert('Checklist desbloqueado com sucesso!');
+        modal.classList.add('hidden');
+        await loadTodaysChecklists(); // Atualiza a lista
+
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        confirmBtn.disabled = false;
+        hideLoader();
+        checklistToUnlock = null;
+    }
+}
+
+// --- FIM DA LÓGICA DO PAINEL DE CHECKLISTS ---

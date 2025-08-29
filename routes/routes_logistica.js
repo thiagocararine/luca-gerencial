@@ -1796,4 +1796,88 @@ router.get('/veiculos-para-checklist', authenticateToken, async (req, res) => {
     }
 });
 
+router.get('/logistica/checklists-do-dia', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            SELECT 
+                vc.id,
+                vc.data_checklist,
+                v.modelo,
+                v.placa,
+                p.NOME_PARAMETRO as nome_filial,
+                u.nome_user as nome_usuario,
+                (SELECT COUNT(*) FROM checklist_itens ci WHERE ci.id_checklist = vc.id AND ci.status = 'Avaria') as total_avarias
+            FROM 
+                veiculo_checklists vc
+            JOIN 
+                veiculos v ON vc.id_veiculo = v.id
+            JOIN 
+                cad_user u ON vc.id_usuario = u.ID
+            LEFT JOIN 
+                parametro p ON vc.id_filial = p.ID
+            WHERE 
+                DATE(vc.data_checklist) = CURDATE()
+            ORDER BY 
+                vc.data_checklist DESC`;
+        
+        const [checklists] = await connection.execute(sql);
+        res.json(checklists);
+
+    } catch (error) {
+        console.error("Erro ao buscar checklists do dia:", error);
+        res.status(500).json({ error: 'Erro ao buscar os checklists do dia.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// Rota para desbloquear (excluir) um checklist
+router.delete('/logistica/checklist/:id/desbloquear', authenticateToken, async (req, res) => {
+    const { id: checklistId } = req.params;
+    const { userId, nome: nomeUsuario } = req.user;
+
+    // Apenas perfis privilegiados podem desbloquear
+    if (!privilegedAccessProfiles.includes(req.user.perfil)) {
+        return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
+    }
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        await connection.beginTransaction();
+
+        // Pega o id_veiculo para o log antes de deletar
+        const [checklist] = await connection.execute('SELECT id_veiculo FROM veiculo_checklists WHERE id = ?', [checklistId]);
+        if (checklist.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Checklist não encontrado.' });
+        }
+
+        // Deleta primeiro os itens (se houver), depois o checklist principal
+        await connection.execute('DELETE FROM checklist_itens WHERE id_checklist = ?', [checklistId]);
+        await connection.execute('DELETE FROM veiculo_checklists WHERE id = ?', [checklistId]);
+
+        await registrarLog({
+            usuario_id: userId,
+            usuario_nome: nomeUsuario,
+            tipo_entidade: 'Checklist',
+            id_entidade: checklist[0].id_veiculo,
+            tipo_acao: 'Desbloqueio',
+            descricao: `Desbloqueou (excluiu) o checklist ID ${checklistId} para permitir um novo registro.`
+        });
+
+        await connection.commit();
+        res.json({ message: 'Checklist desbloqueado com sucesso!' });
+
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error("Erro ao desbloquear checklist:", error);
+        res.status(500).json({ error: 'Erro interno ao desbloquear o checklist.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
 module.exports = router;
