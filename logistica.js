@@ -84,6 +84,7 @@ async function initLogisticaPage() {
 
         await loadVehicles();
         await verificarAlertasManutencaoParaIcone();
+        await initChecklistControlPanel();
         
         if (document.getElementById('costs-tabs')) {
             loadActiveHistoryTab();
@@ -2558,10 +2559,15 @@ let checklistControlState = {
 };
 
 async function initChecklistControlPanel() {
-    const icon = document.getElementById('checklist-alert-icon');
     const modal = document.getElementById('checklist-control-modal');
-
-    icon.addEventListener('click', () => modal.classList.remove('hidden'));
+    
+    // Conecta o novo botão da barra de ações para abrir o modal
+    document.getElementById('open-checklist-panel-btn').addEventListener('click', () => {
+        modal.classList.remove('hidden');
+        // Ao abrir, dispara a busca pelos dados do dia automaticamente
+        document.getElementById('cc-filter-btn').click(); 
+    });
+    
     modal.querySelector('#close-checklist-control-modal').addEventListener('click', () => modal.classList.add('hidden'));
 
     checklistControlState.datepicker = new Litepicker({
@@ -2569,25 +2575,17 @@ async function initChecklistControlPanel() {
         singleMode: false,
         lang: 'pt-BR',
         format: 'DD/MM/YYYY',
-        setup: (picker) => {
-            // Define o período inicial como "hoje"
-            picker.setDateRange(new Date(), new Date());
-        },
+        setup: (picker) => { picker.setDateRange(new Date(), new Date()); },
     });
 
     await populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Unidades`, 'cc-filter-filial', 'ID', 'NOME_PARAMETRO', 'Todas as Filiais');
 
     document.getElementById('cc-filter-btn').addEventListener('click', fetchAndRenderChecklists);
-    
-    // Listeners para os botões de ação dentro do modal
     document.getElementById('cc-completed-list').addEventListener('click', handleChecklistPanelActionClick);
     
-    // Listeners do modal de confirmação
     const unlockModal = document.getElementById('confirm-unlock-modal');
     unlockModal.querySelector('#cancel-unlock-btn').addEventListener('click', () => unlockModal.classList.add('hidden'));
     unlockModal.querySelector('#confirm-unlock-btn').addEventListener('click', executeUnlockChecklist);
-    
-    await updateChecklistAlertIcon();
 }
 
 async function fetchAndRenderChecklists() {
@@ -2665,28 +2663,6 @@ function renderChecklistControlPanel(completed, pending) {
     `).join('') : '<p class="text-xs text-center text-gray-500 p-4">Nenhum veículo pendente para os filtros selecionados.</p>';
     
     feather.replace();
-}
-
-async function updateChecklistAlertIcon() {
-    const icon = document.getElementById('checklist-alert-icon');
-    const badge = document.getElementById('checklist-alert-badge');
-    try {
-        const hoje = new Date().toISOString().slice(0, 10);
-        const response = await fetch(`${apiUrlBase}/logistica/checklists-por-periodo?dataInicio=${hoje}&dataFim=${hoje}`, {
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
-        if (!response.ok) throw new Error();
-        
-        const { pending } = await response.json();
-        if (pending.length > 0) {
-            badge.textContent = pending.length;
-            icon.classList.remove('hidden');
-        } else {
-            icon.classList.add('hidden');
-        }
-    } catch (error) {
-        icon.classList.add('hidden');
-    }
 }
 
 function handleChecklistPanelActionClick(event) {

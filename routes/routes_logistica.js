@@ -1806,7 +1806,7 @@ router.get('/logistica/checklists-por-periodo', authenticateToken, async (req, r
     try {
         connection = await mysql.createConnection(dbConfig);
 
-        // 1. Busca os checklists que foram CONCLUÍDOS no período
+        // 1. Busca os checklists CONCLUÍDOS no período (sem alteração aqui)
         const completedSql = `
             SELECT 
                 vc.id, vc.id_veiculo, vc.data_checklist, v.modelo, v.placa,
@@ -1820,16 +1820,13 @@ router.get('/logistica/checklists-por-periodo', authenticateToken, async (req, r
             ORDER BY vc.data_checklist DESC`;
         const [completed] = await connection.execute(completedSql, [dataInicio, dataFim]);
 
-        // 2. Busca os veículos ATIVOS que estavam PENDENTES no período
+        // 2. LÓGICA OTIMIZADA: Busca veículos PENDENTES usando LEFT JOIN
         const pendingSql = `
-            SELECT v.id, v.modelo, v.placa, p.NOME_PARAMETRO as nome_filial
+            SELECT v.id, v.modelo, v.placa, p.NOME_PARAMETRO as nome_filial, p.ID as id_filial
             FROM veiculos v
+            LEFT JOIN veiculo_checklists vc ON v.id = vc.id_veiculo AND DATE(vc.data_checklist) BETWEEN ? AND ?
             LEFT JOIN parametro p ON v.id_filial = p.ID
-            WHERE v.status = 'Ativo' AND v.id NOT IN (
-                SELECT DISTINCT id_veiculo 
-                FROM veiculo_checklists 
-                WHERE DATE(data_checklist) BETWEEN ? AND ?
-            )`;
+            WHERE v.status = 'Ativo' AND vc.id IS NULL`;
         const [pending] = await connection.execute(pendingSql, [dataInicio, dataFim]);
         
         res.json({ completed, pending });
