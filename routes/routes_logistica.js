@@ -670,6 +670,12 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         return res.status(400).json({ error: 'Campos obrigatórios não preenchidos. Verifique se o veículo ou a filial de destino foi selecionado.' });
     }
 
+    // Pega a hora atual do servidor no formato HH:MM:SS
+    const horaAtual = new Date().toTimeString().split(' ')[0]; 
+    
+    // Combina a data enviada pelo formulário com a hora atual
+    const dataHoraMovimento = `${data} ${horaAtual}`;
+
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
@@ -713,7 +719,7 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         
         await connection.execute(
             'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_veiculo, id_filial, odometro_no_momento, id_usuario, observacao, status, data_movimento) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [itemId, 'Saída', quantidade, veiculoId || null, id_filial_movimento, odometro || null, userId, observacao, 'Ativo', data]
+            [itemId, 'Saída', quantidade, veiculoId || null, id_filial_movimento, odometro || null, userId, observacao, 'Ativo', dataHoraMovimento] // <== AQUI USAMOS A NOVA VARIÁVEL
         );
 
         let consumoMedio = null;
