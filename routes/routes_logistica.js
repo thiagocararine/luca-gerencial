@@ -712,8 +712,8 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         }
         
         await connection.execute(
-            'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_veiculo, id_filial, odometro_no_momento, id_usuario, observacao, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [itemId, 'Saída', quantidade, veiculoId || null, id_filial_movimento, odometro || null, userId, observacao, 'Ativo']
+            'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_veiculo, id_filial, odometro_no_momento, id_usuario, observacao, status, data_movimento) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [itemId, 'Saída', quantidade, veiculoId || null, id_filial_movimento, odometro || null, userId, observacao, 'Ativo', data]
         );
 
         let consumoMedio = null;
