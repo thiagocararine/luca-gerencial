@@ -1892,4 +1892,57 @@ router.delete('/logistica/checklist/:id/desbloquear', authenticateToken, async (
     }
 });
 
+router.get('/relatorios/abastecimento', authenticateToken, async (req, res) => {
+    const { filial, dataInicio, dataFim, limit } = req.query;
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        
+        let conditions = ["em.tipo_movimento = 'Saída'", "em.status = 'Ativo'"];
+        const params = [];
+        const pageLimit = parseInt(limit) || 1000;
+
+        if (filial) {
+            conditions.push("em.id_filial = ?");
+            params.push(filial);
+        }
+        if (dataInicio) {
+            conditions.push("em.data_movimento >= ?");
+            params.push(dataInicio);
+        }
+        if (dataFim) {
+            conditions.push("em.data_movimento <= ?");
+            params.push(dataFim);
+        }
+        
+        const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+        const sql = `
+            SELECT 
+                em.data_movimento,
+                em.quantidade,
+                em.odometro_no_momento,
+                v.placa, 
+                v.modelo, 
+                p.NOME_PARAMETRO as nome_filial,
+                (em.quantidade * ie.ultimo_preco_unitario) as custo_estimado
+            FROM estoque_movimentos em
+            LEFT JOIN veiculos v ON em.id_veiculo = v.id
+            LEFT JOIN parametro p ON em.id_filial = p.ID
+            JOIN itens_estoque ie ON em.id_item = ie.id
+            ${whereClause}
+            ORDER BY p.NOME_PARAMETRO, em.data_movimento ASC
+            LIMIT ?`;
+        
+        const [data] = await connection.execute(sql, [...params, pageLimit]);
+        res.json(data);
+
+    } catch (error) {
+        console.error("Erro ao gerar relatório de abastecimento:", error);
+        res.status(500).json({ error: 'Erro ao gerar relatório de abastecimento.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
 module.exports = router;

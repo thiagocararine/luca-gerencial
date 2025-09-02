@@ -213,6 +213,23 @@ async function exportarRelatorioLogisticaPDF() {
                     ];
                 });
                 break;
+            case 'abastecimento':
+                head = [['Data', 'Filial', 'Veículo', 'Qtd (L)', 'Odômetro', 'Custo Estimado']];
+                body = data.map(item => {
+                    const quantidade = parseFloat(item.quantidade) || 0;
+                    const custo = parseFloat(item.custo_estimado) || 0;
+                    totalGeral += custo; // O totalGeral aqui será o custo
+
+                    return [
+                        new Date(item.data_movimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
+                        item.nome_filial,
+                        item.modelo ? `${item.modelo} (${item.placa})` : 'Galão',
+                        quantidade.toFixed(2),
+                        item.odometro_no_momento ? item.odometro_no_momento.toLocaleString('pt-BR') : 'N/A',
+                        custo.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})
+                    ];
+                });
+                break;
         }
 
         doc.autoTable({
@@ -270,9 +287,9 @@ function handleReportTypeChange() {
         container.querySelectorAll('input, select').forEach(input => input.disabled = !enabled);
     };
 
-    const needsFilial = ['custoTotalFilial', 'custoRateado', 'custoDireto', 'listaVeiculos'].includes(reportType);
+    const needsFilial = ['custoTotalFilial', 'custoRateado', 'custoDireto', 'listaVeiculos', 'abastecimento'].includes(reportType);
     const needsVehicle = ['despesaVeiculo'].includes(reportType);
-    const needsDate = ['custoTotalFilial', 'custoRateado', 'custoDireto', 'despesaVeiculo'].includes(reportType);
+    const needsDate = ['custoTotalFilial', 'custoRateado', 'custoDireto', 'despesaVeiculo', 'abastecimento'].includes(reportType);
     const needsStatus = ['listaVeiculos'].includes(reportType);
     const needsSecurity = ['listaVeiculos'].includes(reportType);
 
@@ -334,6 +351,9 @@ async function generateReport() {
                 break;
             case 'despesaVeiculo':
                 renderVehicleExpenseReport(data.expenses, resultsArea); 
+                break;
+            case 'abastecimento':
+                renderAbastecimentoReport(data, resultsArea);
                 break;
             default:
                  resultsArea.innerHTML = '<p class="text-center text-red-500 p-8">Tipo de relatório inválido.</p>';
@@ -585,4 +605,61 @@ function gerenciarAcessoModulos() {
             }
         }
     }
+}
+
+function renderAbastecimentoReport(data, container) {
+    if (data.length === 0) {
+        container.innerHTML = '<p class="text-center text-gray-500 p-8 bg-white rounded-lg shadow">Nenhum abastecimento encontrado para os filtros selecionados.</p>';
+        return;
+    }
+    container.innerHTML = '';
+    const table = document.createElement('table');
+    table.className = 'min-w-full divide-y divide-gray-200 text-sm bg-white rounded-lg shadow';
+    table.innerHTML = `
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Filial</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo</th>
+                <th class="px-4 py-2 text-right font-medium text-gray-500">Quantidade (L)</th>
+                <th class="px-4 py-2 text-right font-medium text-gray-500">Odômetro (km)</th>
+                <th class="px-4 py-2 text-right font-medium text-gray-500">Custo Estimado</th>
+            </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200"></tbody>
+        <tfoot class="bg-gray-100 font-bold">
+            <tr>
+                <td colspan="3" class="px-4 py-2 text-right">TOTAIS</td>
+                <td id="total-litros" class="px-4 py-2 text-right"></td>
+                <td class="px-4 py-2"></td>
+                <td id="total-custo" class="px-4 py-2 text-right"></td>
+            </tr>
+        </tfoot>`;
+    const tbody = table.querySelector('tbody');
+    let totalLitros = 0;
+    let totalCusto = 0;
+
+    data.forEach(item => {
+        const tr = tbody.insertRow();
+        const quantidade = parseFloat(item.quantidade) || 0;
+        const custo = parseFloat(item.custo_estimado) || 0;
+        totalLitros += quantidade;
+        totalCusto += custo;
+
+        const odometroFmt = item.odometro_no_momento ? item.odometro_no_momento.toLocaleString('pt-BR') : 'N/A';
+        const veiculoFmt = item.modelo ? `${item.modelo} (${item.placa})` : 'Galão';
+        
+        tr.innerHTML = `
+            <td class="px-4 py-2">${new Date(item.data_movimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+            <td class="px-4 py-2">${item.nome_filial}</td>
+            <td class="px-4 py-2">${veiculoFmt}</td>
+            <td class="px-4 py-2 text-right">${quantidade.toFixed(2)}</td>
+            <td class="px-4 py-2 text-right">${odometroFmt}</td>
+            <td class="px-4 py-2 text-right">${custo.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td>
+        `;
+    });
+    
+    table.querySelector('#total-litros').textContent = `${totalLitros.toFixed(2)} L`;
+    table.querySelector('#total-custo').textContent = totalCusto.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+    container.appendChild(table);
 }
