@@ -1809,7 +1809,7 @@ router.get('/veiculos-para-checklist', authenticateToken, async (req, res) => {
     }
 });
 
-router.get('/logistica/checklists-por-periodo', authenticateToken, async (req, res) => {
+router.get('/checklists-por-periodo', authenticateToken, async (req, res) => {
     const { dataInicio, dataFim } = req.query;
     if (!dataInicio || !dataFim) {
         return res.status(400).json({ error: 'Data de início e fim são obrigatórias.' });
@@ -1853,7 +1853,7 @@ router.get('/logistica/checklists-por-periodo', authenticateToken, async (req, r
 });
 
 // Rota para desbloquear (excluir) um checklist
-router.delete('/logistica/checklist/:id/desbloquear', authenticateToken, async (req, res) => {
+router.delete('/checklist/:id/desbloquear', authenticateToken, async (req, res) => {
     const { id: checklistId } = req.params;
     const { userId, nome: nomeUsuario } = req.user;
 
