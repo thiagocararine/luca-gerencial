@@ -75,7 +75,7 @@ async function exportarRelatorioLogisticaPDF() {
 
     // NOVO: 1. Lógica para definir a orientação da página
     let orientation = 'p'; // Padrão é 'p' (portrait/retrato)
-    if (reportType === 'custoTotalFilial' || reportType === 'custoDireto' || reportType === 'listaVeiculos') {
+    if (reportType === 'custoTotalFilial' || reportType === 'custoDireto' || reportType === 'listaVeiculos' || reportType === 'abastecimento') {
         orientation = 'l'; // Define 'l' (landscape/paisagem) para os relatórios especificados
     }
 
@@ -107,22 +107,18 @@ async function exportarRelatorioLogisticaPDF() {
         if (!response.ok) throw new Error('Falha ao buscar dados para o relatório.');
         const data = await response.json();
 
-        if (data.length === 0) {
+        if (data.length === 0 && reportType !== 'despesaVeiculo') {
             alert('Nenhum dado encontrado com os filtros atuais para gerar o relatório.');
-            btn.textContent = 'Gerar PDF';
-            btn.disabled = false;
             return;
         }
 
         const { jsPDF } = window.jspdf;
-        // NOVO: A variável de orientação é usada aqui na criação do documento
         const doc = new jsPDF({ orientation: orientation, unit: 'mm', format: 'a4' });
         
         if (LOGO_BASE_64) {
             doc.addImage(LOGO_BASE_64, 'PNG', 14, 15, 25, 0);
         }
 
-        // NOVO: A variável de título limpo é usada aqui
         doc.setFontSize(18);
         doc.text(reportTitle, doc.internal.pageSize.getWidth() / 2, 22, { align: 'center' });
         doc.setFontSize(11);
@@ -132,6 +128,7 @@ async function exportarRelatorioLogisticaPDF() {
         let head = [];
         let body = [];
         let totalGeral = 0;
+        let totalGeralLitros = 0;
         
         switch (reportType) {
             case 'custoRateado':
@@ -180,22 +177,20 @@ async function exportarRelatorioLogisticaPDF() {
                         v.status,
                         (v.odometro_atual || 0).toLocaleString('pt-BR'),
                         ultimaPreventivaFmt,
-                        v.seguro ? 'Sim' : 'Não',      // <-- ALTERADO AQUI
-                        v.rastreador ? 'Sim' : 'Não'   // <-- ALTERADO AQUI
+                        v.seguro ? 'Sim' : 'Não',
+                        v.rastreador ? 'Sim' : 'Não'
                     ];
                 });
                 break;
             case 'despesaVeiculo':
-                // Os dados agora vêm como data.vehicle e data.expenses
                 const vehicleData = data.vehicle;
                 const expensesData = data.expenses;
 
                 if (expensesData.length === 0) {
                     alert('Nenhuma despesa encontrada para este veículo no período selecionado.');
-                    return; // Retorna para não gerar um PDF vazio
+                    return;
                 }
 
-                // Adiciona as novas informações no cabeçalho do PDF
                 doc.setFontSize(11);
                 doc.text(`Filial: ${vehicleData.nome_filial || 'N/A'}`, 14, 35);
                 doc.text(`Veículo: ${vehicleData.marca} / ${vehicleData.modelo}`, 14, 40);
@@ -205,8 +200,8 @@ async function exportarRelatorioLogisticaPDF() {
                 body = expensesData.map(item => {
                     totalGeral += parseFloat(item.custo);
                     return [
-                        new Date(item.data_manutencao).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
-                        item.tipo_manutencao,
+                        new Date(item.data_evento).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
+                        item.tipo,
                         item.descricao,
                         item.fornecedor_nome || 'N/A',
                         parseFloat(item.custo).toFixed(2)
@@ -218,7 +213,8 @@ async function exportarRelatorioLogisticaPDF() {
                 body = data.map(item => {
                     const quantidade = parseFloat(item.quantidade) || 0;
                     const custo = parseFloat(item.custo_estimado) || 0;
-                    totalGeral += custo; // O totalGeral aqui será o custo
+                    totalGeralLitros += quantidade;
+                    totalGeral += custo;
 
                     return [
                         new Date(item.data_movimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
@@ -240,8 +236,49 @@ async function exportarRelatorioLogisticaPDF() {
             headStyles: { fillColor: [41, 128, 185] },
         });
 
-        if (['custoTotalFilial', 'custoRateado', 'custoDireto', 'despesaVeiculo'].includes(reportType)) {
-            const finalY = doc.autoTable.previous.finalY;
+        let finalY = doc.autoTable.previous.finalY;
+
+        if (reportType === 'abastecimento') {
+            doc.setFontSize(14);
+            doc.text('Totais por Filial', 14, finalY + 15);
+
+            const totaisPorFilial = data.reduce((acc, item) => {
+                const filial = item.nome_filial || 'Sem Filial';
+                if (!acc[filial]) {
+                    acc[filial] = { litros: 0, custo: 0 };
+                }
+                acc[filial].litros += parseFloat(item.quantidade) || 0;
+                acc[filial].custo += parseFloat(item.custo_estimado) || 0;
+                return acc;
+            }, {});
+
+            const summaryBody = Object.entries(totaisPorFilial).map(([filial, totais]) => [
+                filial,
+                `${totais.litros.toFixed(2)} L`,
+                totais.custo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+            ]);
+
+            doc.autoTable({
+                head: [['Filial', 'Total de Litros', 'Custo Total']],
+                body: summaryBody,
+                startY: finalY + 20,
+                theme: 'striped',
+                headStyles: { fillColor: [108, 117, 125] }
+            });
+
+            finalY = doc.autoTable.previous.finalY;
+
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'bold');
+            doc.text('Total Geral do Período:', 14, finalY + 12);
+            doc.text(
+                `Litros: ${totalGeralLitros.toFixed(2)} L  |  Custo: ${totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, 
+                doc.internal.pageSize.getWidth() - 14, 
+                finalY + 12, 
+                { align: 'right' }
+            );
+
+        } else if (['custoTotalFilial', 'custoRateado', 'custoDireto', 'despesaVeiculo'].includes(reportType)) {
             doc.setFontSize(12);
             doc.setFont(undefined, 'bold');
             doc.text('Total Geral:', 14, finalY + 10);
