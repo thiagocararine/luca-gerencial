@@ -1954,4 +1954,67 @@ router.get('/relatorios/abastecimento', authenticateToken, async (req, res) => {
     }
 });
 
+// ROTA PARA BUSCAR OS DADOS DE UM CHECKLIST JÁ CONCLUÍDO
+router.get('/checklist/relatorio', authenticateToken, async (req, res) => {
+    const { veiculoId, data } = req.query;
+
+    if (!veiculoId || !data) {
+        return res.status(400).json({ error: 'ID do Veículo e Data são obrigatórios.' });
+    }
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+
+        // 1. Busca o checklist principal daquele dia para o veículo
+        const [checklistRows] = await connection.execute(
+            `SELECT * FROM veiculo_checklists 
+             WHERE id_veiculo = ? AND DATE(data_checklist) = ? 
+             ORDER BY id DESC LIMIT 1`,
+            [veiculoId, data]
+        );
+
+        if (checklistRows.length === 0) {
+            return res.status(404).json({ error: 'Nenhum checklist encontrado para este veículo na data especificada.' });
+        }
+        const checklist = checklistRows[0];
+
+        // 2. Busca os itens que foram marcados como "Avaria"
+        const [avariasRows] = await connection.execute(
+            `SELECT ci.item_verificado, ci.descricao_avaria, ci.caminho_foto, v.placa
+             FROM checklist_itens ci
+             JOIN veiculos v ON ci.id_veiculo = v.id
+             WHERE ci.id_checklist = ? AND ci.status = 'Avaria'`,
+            [checklist.id]
+        );
+        
+        // 3. Formata o caminho completo da foto da avaria
+        const avarias = avariasRows.map(avaria => {
+            let fotoUrl = null;
+            if (avaria.caminho_foto) {
+                const placaSanitizada = String(avaria.placa || '').replace(/[^a-zA-Z0-9-]/g, '_');
+                const dataFormatada = new Date(checklist.data_checklist).toISOString().slice(0, 10);
+                fotoUrl = `uploads/veiculos/${placaSanitizada}/checklist/${dataFormatada}/${avaria.caminho_foto}`;
+            }
+            return {
+                item_verificado: avaria.item_verificado,
+                descricao_avaria: avaria.descricao_avaria,
+                foto_url: fotoUrl
+            };
+        });
+
+        // 4. Retorna os dados no formato que o frontend espera
+        res.json({
+            checklist: checklist,
+            avarias: avarias
+        });
+
+    } catch (error) {
+        console.error("Erro ao buscar relatório de checklist:", error);
+        res.status(500).json({ error: 'Erro interno ao buscar o relatório do checklist.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
 module.exports = router;
