@@ -52,7 +52,6 @@ async function getLogisticsSummary(connection, req) {
     if (dataFim) { whereClauseCustos += " AND vm.data_manutencao <= ?"; paramsCustos.push(dataFim); }
     if (filial) { whereClauseCustos += " AND v.id_filial = ?"; paramsCustos.push(filial); }
     
-    // Cláusula WHERE para a nova query de combustível
     const paramsCombustivel = [];
     let whereClauseCombustivel = "WHERE em.status = 'Ativo' AND em.tipo_movimento = 'Saída'";
     if (dataInicio) { whereClauseCombustivel += " AND em.data_movimento >= ?"; paramsCombustivel.push(dataInicio); }
@@ -71,13 +70,18 @@ async function getLogisticsSummary(connection, req) {
 
     // --- Queries ---
 
-    // ALTERADO: Consulta de combustível foi dividida em duas para maior robustez
     const custoManutencaoDiretaQuery = `SELECT SUM(custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos} AND vm.tipo_manutencao != 'Abastecimento'`;
-    const somaCombustivelQuery = `SELECT SUM(em.quantidade) as total FROM estoque_movimentos em JOIN veiculos v ON em.id_veiculo = v.id ${whereClauseCombustivel}`;
-    const precoUnitarioQuery = `SELECT ultimo_preco_unitario as preco FROM itens_estoque WHERE id = 1`; // ID 1 = Diesel
+    
+    // CORREÇÃO APLICADA AQUI: A query agora calcula o custo da mesma forma que o relatório 6
+    const custoCombustivelQuery = `
+        SELECT SUM(em.quantidade * ie.ultimo_preco_unitario) as total 
+        FROM estoque_movimentos em
+        JOIN itens_estoque ie ON em.id_item = ie.id
+        LEFT JOIN veiculos v ON em.id_veiculo = v.id
+        ${whereClauseCombustivel}`;
+
     const custoFrotaQuery = `SELECT SUM(custo) as total FROM custos_frota cf ${whereClauseCustosFrota}`;
     
-    // MANTIDO: Queries para os KPIs de veículos e para os gráficos
     const veiculosStatusQuery = `SELECT status, COUNT(*) as total FROM veiculos ${whereClauseVeiculos} GROUP BY status`;
     const custoClassificacaoQuery = `SELECT classificacao_custo, SUM(custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos} GROUP BY classificacao_custo`;
     const top5VeiculosQuery = `SELECT CONCAT(v.modelo, ' - ', v.placa) as veiculo, SUM(vm.custo) as total FROM veiculo_manutencoes vm JOIN veiculos v ON vm.id_veiculo = v.id ${whereClauseCustos} GROUP BY vm.id_veiculo ORDER BY total DESC LIMIT 5`;
@@ -85,8 +89,7 @@ async function getLogisticsSummary(connection, req) {
 
     const [
         manutencaoDiretaResult,
-        somaCombustivelResult,  // Alterado
-        precoUnitarioResult,    // Novo
+        combustivelResult,
         custoFrotaResult,
         statusResult,
         custoClassificacaoResult,
@@ -94,8 +97,7 @@ async function getLogisticsSummary(connection, req) {
         veiculosFilialResult
     ] = await Promise.all([
         connection.execute(custoManutencaoDiretaQuery, paramsCustos),
-        connection.execute(somaCombustivelQuery, paramsCombustivel), // Alterado
-        connection.execute(precoUnitarioQuery),                     // Novo
+        connection.execute(custoCombustivelQuery, paramsCombustivel),
         connection.execute(custoFrotaQuery, paramsCustosFrota),
         connection.execute(veiculosStatusQuery, paramsVeiculos),
         connection.execute(custoClassificacaoQuery, paramsCustos),
@@ -103,11 +105,8 @@ async function getLogisticsSummary(connection, req) {
         connection.execute(chartVeiculosFilialQuery,[])
     ]);
 
-    // ALTERADO: Lógica de cálculo do combustível
     const totalManutencaoDireta = manutencaoDiretaResult[0][0]?.total || 0;
-    const totalLitrosConsumidos = somaCombustivelResult[0][0]?.total || 0;
-    const precoUnitarioDiesel = precoUnitarioResult[0][0]?.preco || 0;
-    const totalCombustivel = totalLitrosConsumidos * precoUnitarioDiesel;
+    const totalCombustivel = combustivelResult[0][0]?.total || 0;
     const totalCustoFrota = custoFrotaResult[0][0]?.total || 0;
 
     const veiculosAtivos = statusResult[0].find(r => r.status === 'Ativo')?.total || 0;
