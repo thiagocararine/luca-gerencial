@@ -409,11 +409,11 @@ function renderSummaryCostReport(data, container) {
     const table = document.createElement('table');
     table.className = 'min-w-full divide-y divide-gray-200 text-sm bg-white rounded-lg shadow';
     
-    // CABEÇALHO ATUALIZADO: Colunas idênticas às do PDF
     table.innerHTML = `
         <thead class="bg-gray-50">
             <tr>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">NF</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Filial</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Tipo de Custo</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo</th>
@@ -424,7 +424,7 @@ function renderSummaryCostReport(data, container) {
         <tbody class="bg-white divide-y divide-gray-200"></tbody>
         <tfoot class="bg-gray-100 font-bold">
             <tr>
-                <td colspan="5" class="px-4 py-2 text-right">TOTAL GERAL</td>
+                <td colspan="6" class="px-4 py-2 text-right">TOTAL GERAL</td>
                 <td id="total-geral" class="px-4 py-2 text-right"></td>
             </tr>
         </tfoot>`;
@@ -436,12 +436,11 @@ function renderSummaryCostReport(data, container) {
         const tr = tbody.insertRow();
         const valor = parseFloat(item.valor);
         totalGeral += valor;
-
-        // LÓGICA ATUALIZADA: Usando os mesmos campos e formatação do PDF
         const dataFormatada = item.data_despesa ? new Date(item.data_despesa.replace(/-/g, '\/')).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A';
         
         tr.innerHTML = `
             <td class="px-4 py-2">${dataFormatada}</td>
+            <td class="px-4 py-2">${item.numero_nf || 'N/A'}</td>
             <td class="px-4 py-2">${item.filial_nome}</td>
             <td class="px-4 py-2">${item.tipo_custo}</td>
             <td class="px-4 py-2">${item.veiculo_info || 'N/A (Rateio)'}</td>
@@ -462,11 +461,11 @@ function renderDirectCostReport(data, container) {
     container.innerHTML = '';
     const table = document.createElement('table');
     table.className = 'min-w-full divide-y divide-gray-200 text-sm bg-white rounded-lg shadow';
-    // Adicionamos a coluna "Serviço" ao cabeçalho
     table.innerHTML = `
         <thead class="bg-gray-50">
             <tr>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">NF</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Filial</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Serviço</th>
@@ -478,7 +477,7 @@ function renderDirectCostReport(data, container) {
         <tbody class="bg-white divide-y divide-gray-200"></tbody>
         <tfoot class="bg-gray-100 font-bold">
             <tr>
-                <td colspan="6" class="px-4 py-2 text-right">TOTAL GERAL</td>
+                <td colspan="7" class="px-4 py-2 text-right">TOTAL GERAL</td>
                 <td id="total-geral" class="px-4 py-2 text-right"></td>
             </tr>
         </tfoot>`;
@@ -488,10 +487,10 @@ function renderDirectCostReport(data, container) {
         const tr = tbody.insertRow();
         const valor = parseFloat(item.valor);
         totalGeral += valor;
-        // Correção da data e uso dos novos campos de descrição
         const dataFormatada = item.data_despesa ? new Date(item.data_despesa.replace(/-/g, '\/')).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A';
         tr.innerHTML = `
             <td class="px-4 py-2">${dataFormatada}</td>
+            <td class="px-4 py-2">${item.numero_nf || 'N/A'}</td>
             <td class="px-4 py-2">${item.filial_nome}</td>
             <td class="px-4 py-2">${item.veiculo_info}</td>
             <td class="px-4 py-2">${item.servico_info || 'N/A'}</td>
@@ -549,6 +548,7 @@ function renderVehicleExpenseReport(data, container) {
         <thead class="bg-gray-50">
             <tr>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">NF</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Tipo</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Descrição</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Fornecedor</th>
@@ -558,7 +558,7 @@ function renderVehicleExpenseReport(data, container) {
         <tbody class="bg-white divide-y divide-gray-200"></tbody>
         <tfoot class="bg-gray-100 font-bold">
             <tr>
-                <td colspan="4" class="px-4 py-2 text-right">TOTAL GERAL</td>
+                <td colspan="5" class="px-4 py-2 text-right">TOTAL GERAL</td>
                 <td id="total-geral" class="px-4 py-2 text-right"></td>
             </tr>
         </tfoot>`;
@@ -569,8 +569,9 @@ function renderVehicleExpenseReport(data, container) {
         const valor = parseFloat(item.custo);
         totalGeral += valor;
         tr.innerHTML = `
-            <td class="px-4 py-2">${new Date(item.data_manutencao).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
-            <td class="px-4 py-2">${item.tipo_manutencao}</td>
+            <td class="px-4 py-2">${new Date(item.data_evento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+            <td class="px-4 py-2">${item.numero_nf || 'N/A'}</td>
+            <td class="px-4 py-2">${item.tipo}</td>
             <td class="px-4 py-2">${item.descricao}</td>
             <td class="px-4 py-2">${item.fornecedor_nome || 'N/A'}</td>
             <td class="px-4 py-2 text-right">${valor.toFixed(2).replace('.', ',')}</td>

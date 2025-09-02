@@ -1224,6 +1224,7 @@ router.get('/relatorios/custoDireto', authenticateToken, async (req, res) => {
                 vm.tipo_manutencao as tipo_despesa,
                 f.razao_social as fornecedor_nome, 
                 vm.custo as valor
+                vm.numero_nf
             FROM veiculo_manutencoes vm
             JOIN veiculos v ON vm.id_veiculo = v.id
             LEFT JOIN fornecedores f ON vm.id_fornecedor = f.id
@@ -1264,6 +1265,7 @@ router.get('/relatorios/custoRateado', authenticateToken, async (req, res) => {
                 NULL as veiculo_info,
                 cf.descricao as servico_info,
                 cf.custo as valor,
+                cf.numero_nf,
                 DATE_FORMAT(cf.data_custo, '%Y-%m-%d') as data_despesa
             FROM custos_frota cf
             LEFT JOIN parametro p ON cf.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
@@ -1307,6 +1309,7 @@ router.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) =
                 CONCAT(v.modelo, ' (', v.placa, ')') as veiculo_info,
                 vm.descricao as servico_info,
                 vm.custo as valor,
+                vm.numero_nf,
                 DATE_FORMAT(vm.data_manutencao, '%Y-%m-%d') as data_despesa
             FROM veiculo_manutencoes vm
             JOIN veiculos v ON vm.id_veiculo = v.id
@@ -1321,6 +1324,7 @@ router.get('/relatorios/custoTotalFilial', authenticateToken, async (req, res) =
                 NULL as veiculo_info,
                 cf.descricao as servico_info,
                 cf.custo as valor,
+                cf.numero_nf,
                 DATE_FORMAT(cf.data_custo, '%Y-%m-%d') as data_despesa
             FROM custos_frota cf
             LEFT JOIN parametro p ON cf.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
@@ -1365,7 +1369,7 @@ router.get('/relatorios/despesaVeiculo', authenticateToken, async (req, res) => 
         const maintenanceSql = `
             SELECT 
                 data_manutencao as data_evento, tipo_manutencao as tipo, descricao,
-                f.razao_social as fornecedor_nome, custo
+                f.razao_social as fornecedor_nome, custo, numero_nf
             FROM veiculo_manutencoes vm
             LEFT JOIN fornecedores f ON vm.id_fornecedor = f.id
             WHERE vm.id_veiculo = ? AND vm.data_manutencao >= ? AND vm.data_manutencao <= ? 
@@ -1376,7 +1380,8 @@ router.get('/relatorios/despesaVeiculo', authenticateToken, async (req, res) => 
             SELECT 
                 em.data_movimento as data_evento, 'Abastecimento' as tipo, 
                 CONCAT(em.quantidade, 'L') as descricao, 'Posto Interno' as fornecedor_nome,
-                (em.quantidade * ie.ultimo_preco_unitario) as custo
+                (em.quantidade * ie.ultimo_preco_unitario) as custo,
+                NULL as numero_nf
             FROM estoque_movimentos em
             JOIN itens_estoque ie ON em.id_item = ie.id
             WHERE em.id_veiculo = ? AND em.data_movimento >= ? AND em.data_movimento <= ?
