@@ -64,18 +64,14 @@ function openExportModal() {
 }
 
 
-// NOVA FUNÇÃO para gerar o PDF
-// Substitua a função inteira por esta versão 100% COMPLETA E CORRIGIDA
 async function exportarRelatorioLogisticaPDF() {
     const btn = document.getElementById('generate-pdf-btn');
     btn.textContent = 'A gerar...';
     btn.disabled = true;
 
     const reportType = document.getElementById('report-type').value;
-    let orientation = 'p';
-    if (reportType === 'custoTotalFilial' || reportType === 'custoDireto' || reportType === 'listaVeiculos' || reportType === 'abastecimento') {
-        orientation = 'l';
-    }
+    const orientation = 'l'; // ALTERAÇÃO APLICADA AQUI: 'l' para landscape (paisagem) fixo para todos
+
     let reportTitle = document.getElementById('report-type').options[document.getElementById('report-type').selectedIndex].text;
     reportTitle = reportTitle.replace(/^\d+\s*-\s*/, '');
 

@@ -38,10 +38,37 @@
             box-shadow: 0 0 0 1px #4f46e5;
         }
         .modal.hidden { display: none; }
+
+        .page-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+        }
+        .abstract-background {
+            width: 100%;
+            height: 100%;
+            border-radius: 0;
+            aspect-ratio: auto;
+        }
     </style>
 </head>
 <body class="h-full">
-
+        <div class="page-background">
+            <div class="abstract-background">
+                <div class="tube tube-1"></div>
+                <div class="tube tube-2"></div>
+                <div class="tube tube-3"></div>
+                <div class="tube tube-4"></div>
+                <div class="tube tube-5"></div>
+                <div class="tube tube-6"></div>
+                <div class="tube tube-7"></div>
+                <div class="tube tube-8"></div>
+            </div>
+        </div>
 <div class="flex h-full">
     <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
     <nav id="sidebar" class="fixed inset-y-0 left-0 bg-white shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
