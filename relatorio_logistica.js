@@ -65,24 +65,19 @@ function openExportModal() {
 
 
 // NOVA FUNÇÃO para gerar o PDF
+// Substitua a função inteira por esta versão 100% COMPLETA E CORRIGIDA
 async function exportarRelatorioLogisticaPDF() {
     const btn = document.getElementById('generate-pdf-btn');
     btn.textContent = 'A gerar...';
     btn.disabled = true;
 
-    // --- INÍCIO DAS ALTERAÇÕES ---
     const reportType = document.getElementById('report-type').value;
-
-    // NOVO: 1. Lógica para definir a orientação da página
-    let orientation = 'p'; // Padrão é 'p' (portrait/retrato)
+    let orientation = 'p';
     if (reportType === 'custoTotalFilial' || reportType === 'custoDireto' || reportType === 'listaVeiculos' || reportType === 'abastecimento') {
-        orientation = 'l'; // Define 'l' (landscape/paisagem) para os relatórios especificados
+        orientation = 'l';
     }
-
-    // NOVO: 2. Lógica para obter e limpar o título do relatório
     let reportTitle = document.getElementById('report-type').options[document.getElementById('report-type').selectedIndex].text;
-    reportTitle = reportTitle.replace(/^\d+\s*-\s*/, ''); // Remove o "1 - ", "2 - ", etc. do início do título
-    // --- FIM DAS ALTERAÇÕES ---
+    reportTitle = reportTitle.replace(/^\d+\s*-\s*/, '');
 
     let apiUrl = `${apiUrlBase}/logistica/relatorios/${reportType}?export=true`;
     
@@ -129,16 +124,18 @@ async function exportarRelatorioLogisticaPDF() {
         let body = [];
         let totalGeral = 0;
         let totalGeralLitros = 0;
-        
+        let columnStyles = {};
+
         switch (reportType) {
             case 'custoRateado':
             case 'custoTotalFilial':
-                head = [['Data', 'Filial', 'Tipo de Custo', 'Veículo', 'Descrição do Serviço', 'Valor (R$)']];
+                head = [['Data', 'NF', 'Filial', 'Tipo de Custo', 'Veículo', 'Descrição', 'Valor (R$)']];
                 body = data.map(item => {
                     totalGeral += parseFloat(item.valor);
                     const dataFormatada = item.data_despesa ? new Date(item.data_despesa.replace(/-/g, '\/')).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A';
                     return [
                         dataFormatada,
+                        item.numero_nf || 'N/A',
                         item.filial_nome,
                         item.tipo_custo,
                         item.veiculo_info || 'N/A (Rateio)',
@@ -146,14 +143,20 @@ async function exportarRelatorioLogisticaPDF() {
                         parseFloat(item.valor).toFixed(2)
                     ];
                 });
+                columnStyles = {
+                    0: { cellWidth: 22 }, 1: { cellWidth: 20 }, 2: { cellWidth: 35 }, 3: { cellWidth: 35 },
+                    4: { cellWidth: 45 }, 5: { cellWidth: 'auto' }, 6: { cellWidth: 25, halign: 'right' }
+                };
                 break;
+
             case 'custoDireto':
-                 head = [['Data', 'Filial', 'Veículo', 'Serviço Realizado', 'Tipo', 'Fornecedor', 'Valor (R$)']];
+                head = [['Data', 'NF', 'Filial', 'Veículo', 'Serviço', 'Tipo', 'Fornecedor', 'Valor (R$)']];
                 body = data.map(item => {
                     totalGeral += parseFloat(item.valor);
                     const dataFormatada = item.data_despesa ? new Date(item.data_despesa.replace(/-/g, '\/')).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A';
                     return [
                         dataFormatada,
+                        item.numero_nf || 'N/A',
                         item.filial_nome,
                         item.veiculo_info,
                         item.servico_info || 'N/A',
@@ -162,7 +165,13 @@ async function exportarRelatorioLogisticaPDF() {
                         parseFloat(item.valor).toFixed(2)
                     ];
                 });
+                columnStyles = {
+                    0: { cellWidth: 22 }, 1: { cellWidth: 20 }, 2: { cellWidth: 35 }, 3: { cellWidth: 50 },
+                    4: { cellWidth: 'auto' }, 5: { cellWidth: 30 }, 6: { cellWidth: 40, overflow: 'ellipsize' },
+                    7: { cellWidth: 25, halign: 'right' }
+                };
                 break;
+
             case 'listaVeiculos':
                 head = [['Placa', 'Marca/Modelo', 'Filial', 'Status', 'Odômetro', 'Última Preventiva', 'Seguro', 'Rastreador']];
                 body = data.map(v => {
@@ -181,7 +190,11 @@ async function exportarRelatorioLogisticaPDF() {
                         v.rastreador ? 'Sim' : 'Não'
                     ];
                 });
+                columnStyles = {
+                    4: { halign: 'right' }, 6: { halign: 'center' }, 7: { halign: 'center' }
+                }
                 break;
+
             case 'despesaVeiculo':
                 const vehicleData = data.vehicle;
                 const expensesData = data.expenses;
@@ -190,24 +203,28 @@ async function exportarRelatorioLogisticaPDF() {
                     alert('Nenhuma despesa encontrada para este veículo no período selecionado.');
                     return;
                 }
+                
+                doc.text(`Veículo: ${vehicleData.marca} / ${vehicleData.modelo} - Placa: ${vehicleData.placa}`, 14, 45);
 
-                doc.setFontSize(11);
-                doc.text(`Filial: ${vehicleData.nome_filial || 'N/A'}`, 14, 35);
-                doc.text(`Veículo: ${vehicleData.marca} / ${vehicleData.modelo}`, 14, 40);
-                doc.text(`Placa: ${vehicleData.placa}`, 14, 45);
-
-                head = [['Data', 'Tipo', 'Descrição', 'Fornecedor', 'Valor (R$)']];
+                head = [['Data', 'NF', 'Tipo', 'Descrição', 'Fornecedor', 'Valor (R$)']];
                 body = expensesData.map(item => {
                     totalGeral += parseFloat(item.custo);
                     return [
                         new Date(item.data_evento).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
+                        item.numero_nf || 'N/A',
                         item.tipo,
                         item.descricao,
                         item.fornecedor_nome || 'N/A',
                         parseFloat(item.custo).toFixed(2)
                     ];
                 });
+                columnStyles = {
+                    0: { cellWidth: 25 }, 1: { cellWidth: 25 }, 2: { cellWidth: 40 }, 
+                    3: { cellWidth: 'auto' }, 4: { cellWidth: 50, overflow: 'ellipsize' }, 
+                    5: { cellWidth: 30, halign: 'right' }
+                };
                 break;
+
             case 'abastecimento':
                 head = [['Data', 'Filial', 'Veículo', 'Qtd (L)', 'Odômetro', 'Custo Estimado']];
                 body = data.map(item => {
@@ -225,15 +242,20 @@ async function exportarRelatorioLogisticaPDF() {
                         custo.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})
                     ];
                 });
+                columnStyles = {
+                    3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }
+                };
                 break;
         }
 
         doc.autoTable({
             head: head,
             body: body,
-            startY: 50,
+            startY: (reportType === 'despesaVeiculo' ? 50 : 45),
             theme: 'grid',
-            headStyles: { fillColor: [41, 128, 185] },
+            headStyles: { fillColor: [41, 128, 185], fontSize: 8 },
+            styles: { fontSize: 7, cellPadding: 1.5 },
+            columnStyles: columnStyles
         });
 
         let finalY = doc.autoTable.previous.finalY;
