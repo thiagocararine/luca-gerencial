@@ -865,7 +865,7 @@ router.get('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
 
 router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
     const { id: id_veiculo } = req.params;
-    const { data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_fornecedor, item_servico, odometro_manutencao } = req.body;
+    const { data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_fornecedor, numero_nf, item_servico, odometro_manutencao } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
 
     if (!data_manutencao || !custo || !tipo_manutencao || !classificacao_custo || !id_fornecedor) {
@@ -886,10 +886,10 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
 
         const sqlInsert = `
             INSERT INTO veiculo_manutencoes 
-            (id_veiculo, id_filial, data_manutencao, descricao, custo, tipo_manutencao, item_servico, odometro_manutencao, classificacao_custo, id_user_lanc, id_fornecedor, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
+            (id_veiculo, id_filial, data_manutencao, descricao, custo, tipo_manutencao, item_servico, odometro_manutencao, classificacao_custo, id_user_lanc, numero_nf, id_fornecedor, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
 
-        await connection.execute(sqlInsert, [id_veiculo, id_filial_veiculo, data_manutencao, descricao, custo, tipo_manutencao, item_servico || null, odometro_manutencao || null, classificacao_custo, userId, id_fornecedor]);
+        await connection.execute(sqlInsert, [id_veiculo, id_filial_veiculo, data_manutencao, descricao, custo, tipo_manutencao, item_servico || null, odometro_manutencao || null, classificacao_custo, userId, id_fornecedor, numero_nf]);
         
         if (classificacao_custo === 'Preventiva') {
             const proximaManutencao = new Date(data_manutencao);
@@ -908,6 +908,7 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
             tipo_entidade: 'Manutenção',
             id_entidade: id_veiculo,
             tipo_acao: 'Criação',
+            numero_nf: numero_nf,
             descricao: `Registou manutenção (${tipo_manutencao}) para o veículo ID ${id_veiculo} no valor de R$ ${custo}.`
         });
 
@@ -992,7 +993,7 @@ router.post('/fornecedores/cnpj', authenticateToken, async (req, res) => {
 // --- SEÇÃO DE CUSTOS DE FROTA ---
 
 router.post('/custos-frota', authenticateToken, async (req, res) => {
-    const { descricao, custo, data_custo, id_fornecedor, filiais_rateio } = req.body;
+    const { descricao, custo, data_custo, id_fornecedor, filiais_rateio, numero_nf } = req.body;
     const { userId, nome: nomeUsuario, perfil } = req.user;
 
     const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
@@ -1010,10 +1011,10 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
         await connection.beginTransaction();
         const sequencial = `CF-${Date.now()}`;
         const valorRateado = (parseFloat(custo) / filiais_rateio.length).toFixed(2);
-        const sqlInsert = `INSERT INTO custos_frota (descricao, custo, data_custo, id_fornecedor, id_filial, sequencial_rateio, id_user_lanc, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
+        const sqlInsert = `INSERT INTO custos_frota (descricao, custo, data_custo, id_fornecedor, id_filial, sequencial_rateio, id_user_lanc, numero_nf, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
         
         for (const id_filial of filiais_rateio) {
-            await connection.execute(sqlInsert, [descricao, valorRateado, data_custo, id_fornecedor, id_filial, sequencial, userId]);
+            await connection.execute(sqlInsert, [descricao, valorRateado, data_custo, id_fornecedor, id_filial, sequencial, userId, numero_nf]);
         }
         
         await registrarLog({
@@ -1022,6 +1023,7 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
             tipo_entidade: 'Custo de Frota',
             id_entidade: null, 
             tipo_acao: 'Criação',
+            numero_nf: numero_nf,
             descricao: `Criou custo de frota "${descricao}" (Seq: ${sequencial}) com valor total de R$ ${custo}.`
         });
 

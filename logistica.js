@@ -1322,6 +1322,7 @@ async function handleMaintenanceFormSubmit(event) {
         classificacao_custo: document.getElementById('maintenance-classification').value,
         descricao: document.getElementById('maintenance-description').value,
         id_fornecedor: document.getElementById('maintenance-fornecedor-id').value,
+        numero_nf: document.getElementById('maintenance-nf').value,
         item_servico: document.getElementById('maintenance-item-servico').value,
         odometro_manutencao: document.getElementById('maintenance-odometer').value
     };
@@ -1417,7 +1418,7 @@ async function handleVehicleCostFormSubmit(event) {
         classificacao_custo: document.getElementById('vehicle-cost-classification').value,
         descricao: document.getElementById('vehicle-cost-description').value,
         id_fornecedor: document.getElementById('vehicle-cost-fornecedor-id').value,
-        // ADICIONAR ESTES DOIS CAMPOS
+        numero_nf: document.getElementById('vehicle-cost-nf').value,
         item_servico: document.getElementById('vehicle-cost-item-servico').value,
         odometro_manutencao: document.getElementById('vehicle-cost-odometer').value
     };
@@ -1484,6 +1485,7 @@ async function handleFleetCostFormSubmit(event) {
         custo: document.getElementById('fleet-cost-value').value,
         data_custo: document.getElementById('fleet-cost-date').value,
         id_fornecedor: document.getElementById('fleet-cost-fornecedor-id').value,
+        numero_nf: document.getElementById('fleet-cost-nf').value,
         filiais_rateio: selectedFiliais
     };
     if (!costData.id_fornecedor) {
