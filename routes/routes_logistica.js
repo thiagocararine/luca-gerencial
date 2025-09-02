@@ -1050,6 +1050,7 @@ router.get('/custos-frota', authenticateToken, async (req, res) => {
         const dataQuery = `
             SELECT 
                 cf.id, cf.descricao, cf.custo, cf.data_custo, cf.sequencial_rateio,
+                cf.numero_nf,
                 p.NOME_PARAMETRO as nome_filial,
                 CASE WHEN cf.id_fornecedor = 0 THEN 'DESPESA INTERNA' ELSE f.razao_social END as nome_fornecedor,
                 u.nome_user as nome_utilizador
@@ -1091,6 +1092,7 @@ router.get('/manutencoes/recentes', authenticateToken, async (req, res) => {
         const dataQuery = `
             SELECT 
                 vm.id, vm.data_manutencao as data_custo, vm.descricao, vm.custo,
+                vm.numero_nf,
                 v.placa, v.modelo, f.razao_social as nome_fornecedor, u.nome_user as nome_utilizador
             FROM veiculo_manutencoes vm
             JOIN veiculos v ON vm.id_veiculo = v.id

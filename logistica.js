@@ -694,6 +694,7 @@ async function loadFleetCosts() {
                     tr.innerHTML = `
                         <td class="px-4 py-2 font-mono text-xs">${c.sequencial_rateio || 'N/A'}</td>
                         <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                        <td class="px-4 py-2">${c.numero_nf || 'N/A'}</td>
                         <td class="px-4 py-2">${c.descricao}</td>
                         <td class="px-4 py-2">${c.nome_filial || 'N/A'}</td>
                         <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
@@ -747,6 +748,7 @@ async function loadRecentIndividualCosts() {
                     const tr = tbody.insertRow();
                     tr.innerHTML = `
                         <td class="px-4 py-2">${new Date(c.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                        <td class="px-4 py-2">${c.numero_nf || 'N/A'}</td>
                         <td class="px-4 py-2">${c.modelo} (${c.placa})</td>
                         <td class="px-4 py-2">${c.nome_fornecedor || 'N/A'}</td>
                         <td class="px-4 py-2 text-right">R$ ${parseFloat(c.custo).toFixed(2)}</td>
@@ -1521,9 +1523,11 @@ function createCostTable(type) {
 
     let headers = [];
     if (type === 'gerais') {
-        headers = ['Sequencial', 'Data', 'Descrição', 'Filial', 'Fornecedor', 'Custo', 'Ações'];
+        // Adicionada a coluna 'NF'
+        headers = ['Sequencial', 'Data', 'NF', 'Descrição', 'Filial', 'Fornecedor', 'Custo', 'Ações'];
     } else { // 'individuais'
-        headers = ['Data', 'Veículo', 'Fornecedor', 'Custo', 'Ações'];
+        // Adicionada a coluna 'NF'
+        headers = ['Data', 'NF', 'Veículo', 'Fornecedor', 'Custo', 'Ações'];
     }
 
     const headerHtml = headers.map(h => {
