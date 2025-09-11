@@ -63,7 +63,10 @@ const checklistStorage = multer.diskStorage({
     }
 });
 
-const checklistUpload = multer({ storage: checklistStorage }).any();
+const checklistUpload = multer({ 
+    storage: checklistStorage,
+    limits: { fileSize: 5 * 1024 * 1024 } // Limite de 5 MB por foto
+}).any();
 
 /**
  * Função Auxiliar para registrar logs de logística.

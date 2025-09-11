@@ -84,51 +84,48 @@ function setupChecklistEventListeners() {
     const launchModal = document.getElementById('checklist-modal');
     const reportModal = document.getElementById('checklist-report-modal');
     const itemsContainer = document.getElementById('checklist-items-container');
+    const form = document.getElementById('checklist-form');
 
     // Listener principal na lista de veículos
     vehicleList.addEventListener('click', (event) => {
-        const button = event.target;
+        const button = event.target.closest('button');
+        if (!button) return;
         const card = button.closest('[data-vehicle-id]');
         if (!card) return;
 
         const vehicleId = card.dataset.vehicleId;
         const vehicleInfo = card.dataset.vehicleInfo;
 
-        // Decide qual modal abrir com base no botão clicado
         if (button.classList.contains('start-checklist-btn')) {
             const vehicleData = { id: vehicleId, modelo: vehicleInfo.split(' - ')[0], placa: vehicleInfo.split(' - ')[1] };
             openChecklistModal(vehicleData);
         } else if (button.classList.contains('view-checklist-btn')) {
-            openChecklistReportModal(vehicleId, vehicleInfo); // Chama a nova função de visualização
+            openChecklistReportModal(vehicleId, vehicleInfo);
         }
     });
     
-    // Listeners para fechar o modal de LANÇAMENTO
+    // Listeners para fechar os modais
     launchModal.querySelector('#close-checklist-modal-btn').addEventListener('click', () => launchModal.classList.add('hidden'));
     launchModal.querySelector('#cancel-checklist-btn').addEventListener('click', () => launchModal.classList.add('hidden'));
-
-    // Listener para fechar o NOVO modal de RELATÓRIO
     if (reportModal) {
         reportModal.querySelector('#close-report-modal-btn').addEventListener('click', () => reportModal.classList.add('hidden'));
     }
 
-    // Listener para o envio do formulário de checklist
-    document.getElementById('checklist-form').addEventListener('submit', handleChecklistSubmit);
+    // Listener para o envio do formulário
+    form.addEventListener('submit', handleChecklistSubmit);
 
-    // Listener para os botões de status (OK/Avaria) dentro do formulário
+    // Listener para os botões de status (OK/Avaria)
     itemsContainer.addEventListener('click', (event) => {
         const button = event.target.closest('.checklist-status-btn');
         if (!button) return;
         const itemDiv = button.closest('.checklist-item');
         const detailsDiv = itemDiv.querySelector('.avaria-details');
         
-        // Reseta os botões do item específico
         itemDiv.querySelectorAll('.checklist-status-btn').forEach(btn => {
             btn.classList.remove('bg-green-500', 'bg-red-500', 'text-white');
             btn.classList.add('bg-gray-200');
         });
 
-        // Aplica o estilo ao botão clicado e mostra/esconde os detalhes da avaria
         if (button.dataset.status === 'OK') {
             button.classList.add('bg-green-500', 'text-white');
             detailsDiv.classList.add('hidden');
@@ -138,7 +135,7 @@ function setupChecklistEventListeners() {
         }
     });
 
-    // Listener para o efeito de acordeão nas seções do formulário
+    // Listener para o efeito de acordeão
     launchModal.querySelectorAll('.accordion-header').forEach(header => {
         header.addEventListener('click', () => {
             const content = header.nextElementSibling;
@@ -147,6 +144,23 @@ function setupChecklistEventListeners() {
             if (icon) icon.classList.toggle('rotate-180');
         });
     });
+
+    // --- SEÇÃO ATUALIZADA ---
+    // Adiciona o processamento de imagem (compressão) para os campos de foto
+
+    // 1. Para as fotos de avaria (que são criadas dinamicamente)
+    itemsContainer.addEventListener('change', (event) => {
+        if (event.target.type === 'file') {
+            handlePhotoProcessing(event); // Chama a nova função
+        }
+    });
+
+    // 2. Para as fotos obrigatórias (que são fixas no HTML)
+    form.querySelector('input[name="foto_frente"]')?.addEventListener('change', handlePhotoProcessing);
+    form.querySelector('input[name="foto_traseira"]')?.addEventListener('change', handlePhotoProcessing);
+    form.querySelector('input[name="foto_lateral_direita"]')?.addEventListener('change', handlePhotoProcessing);
+    form.querySelector('input[name="foto_lateral_esquerda"]')?.addEventListener('change', handlePhotoProcessing);
+    // --- FIM DA SEÇÃO ATUALIZADA ---
 }
 
 async function openChecklistModal(vehicle) {
@@ -386,4 +400,76 @@ async function openChecklistReportModal(vehicleId, vehicleInfo) {
     } finally {
         loader.style.display = 'none';
     }
+}
+
+async function handlePhotoProcessing(event) {
+    const fileInput = event.target;
+    if (fileInput.files.length === 0) return;
+
+    let file = fileInput.files[0];
+    const maxSize = 5 * 1024 * 1024; // 5 MB
+
+    if (file.size > maxSize) {
+        alert(`A foto "${file.name}" é muito grande (${(file.size / 1024 / 1024).toFixed(2)} MB) e será otimizada automaticamente. Por favor, aguarde.`);
+        
+        try {
+            const compressedFile = await compressImage(file);
+            console.log(`Foto otimizada de ${(file.size / 1024 / 1024).toFixed(2)} MB para ${(compressedFile.size / 1024 / 1024).toFixed(2)} MB.`);
+
+            // Truque para substituir o arquivo no input
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(compressedFile);
+            fileInput.files = dataTransfer.files;
+            
+            alert(`Foto otimizada com sucesso! Pode continuar.`);
+
+        } catch (error) {
+            alert("Ocorreu um erro ao otimizar a foto. Por favor, tente selecionar uma imagem menor.");
+            fileInput.value = ''; // Limpa o campo em caso de erro
+        }
+    }
+}
+
+function compressImage(file, maxWidth = 1280, quality = 0.8) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth) {
+                    height *= maxWidth / width;
+                    width = maxWidth;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                canvas.toBlob(
+                    (blob) => {
+                        if (!blob) {
+                            reject(new Error('Falha na compressão da imagem.'));
+                            return;
+                        }
+                        const compressedFile = new File([blob], file.name, {
+                            type: 'image/jpeg',
+                            lastModified: Date.now(),
+                        });
+                        resolve(compressedFile);
+                    },
+                    'image/jpeg',
+                    quality
+                );
+            };
+            img.onerror = (error) => reject(error);
+        };
+        reader.onerror = (error) => reject(error);
+    });
 }
