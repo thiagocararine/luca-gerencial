@@ -81,9 +81,11 @@ function renderVehicleCardsForChecklist(vehicles) {
 
 function setupChecklistEventListeners() {
     const vehicleList = document.getElementById('checklist-vehicle-list');
-    const modal = document.getElementById('checklist-modal');
+    const launchModal = document.getElementById('checklist-modal');
+    const reportModal = document.getElementById('checklist-report-modal');
     const itemsContainer = document.getElementById('checklist-items-container');
 
+    // Listener principal na lista de veículos
     vehicleList.addEventListener('click', (event) => {
         const button = event.target;
         const card = button.closest('[data-vehicle-id]');
@@ -92,39 +94,41 @@ function setupChecklistEventListeners() {
         const vehicleId = card.dataset.vehicleId;
         const vehicleInfo = card.dataset.vehicleInfo;
 
-        // Lógica para decidir qual modal abrir
+        // Decide qual modal abrir com base no botão clicado
         if (button.classList.contains('start-checklist-btn')) {
-            // Buscamos os dados do veículo do atributo do card que já temos
             const vehicleData = { id: vehicleId, modelo: vehicleInfo.split(' - ')[0], placa: vehicleInfo.split(' - ')[1] };
             openChecklistModal(vehicleData);
         } else if (button.classList.contains('view-checklist-btn')) {
-            openReadOnlyChecklistModal(vehicleId, vehicleInfo);
+            openChecklistReportModal(vehicleId, vehicleInfo); // Chama a nova função de visualização
         }
     });
     
-    // Reset visual ao fechar o modal
-    const closeModalFn = () => {
-        modal.classList.add('hidden');
-        document.getElementById('save-checklist-btn').classList.remove('hidden');
-        document.getElementById('cancel-checklist-btn').textContent = 'Cancelar';
-        document.querySelectorAll('#checklist-form input, #checklist-form textarea').forEach(el => el.readOnly = false);
-        document.querySelectorAll('#checklist-form input[type="file"]').forEach(el => el.parentElement.style.display = 'block');
-        document.querySelectorAll('.accordion-header').forEach(header => header.style.pointerEvents = 'auto');
-    };
+    // Listeners para fechar o modal de LANÇAMENTO
+    launchModal.querySelector('#close-checklist-modal-btn').addEventListener('click', () => launchModal.classList.add('hidden'));
+    launchModal.querySelector('#cancel-checklist-btn').addEventListener('click', () => launchModal.classList.add('hidden'));
 
-    modal.querySelector('#close-checklist-modal-btn').addEventListener('click', closeModalFn);
-    modal.querySelector('#cancel-checklist-btn').addEventListener('click', closeModalFn);
+    // Listener para fechar o NOVO modal de RELATÓRIO
+    if (reportModal) {
+        reportModal.querySelector('#close-report-modal-btn').addEventListener('click', () => reportModal.classList.add('hidden'));
+    }
 
-    // O resto dos listeners permanece o mesmo
+    // Listener para o envio do formulário de checklist
+    document.getElementById('checklist-form').addEventListener('submit', handleChecklistSubmit);
+
+    // Listener para os botões de status (OK/Avaria) dentro do formulário
     itemsContainer.addEventListener('click', (event) => {
         const button = event.target.closest('.checklist-status-btn');
         if (!button) return;
         const itemDiv = button.closest('.checklist-item');
         const detailsDiv = itemDiv.querySelector('.avaria-details');
+        
+        // Reseta os botões do item específico
         itemDiv.querySelectorAll('.checklist-status-btn').forEach(btn => {
             btn.classList.remove('bg-green-500', 'bg-red-500', 'text-white');
             btn.classList.add('bg-gray-200');
         });
+
+        // Aplica o estilo ao botão clicado e mostra/esconde os detalhes da avaria
         if (button.dataset.status === 'OK') {
             button.classList.add('bg-green-500', 'text-white');
             detailsDiv.classList.add('hidden');
@@ -134,17 +138,15 @@ function setupChecklistEventListeners() {
         }
     });
 
-    modal.querySelectorAll('.accordion-header').forEach(header => {
+    // Listener para o efeito de acordeão nas seções do formulário
+    launchModal.querySelectorAll('.accordion-header').forEach(header => {
         header.addEventListener('click', () => {
             const content = header.nextElementSibling;
-            const icon = header.querySelector('.feather');
+            const icon = header.querySelector('[data-feather="chevron-down"]');
             if (content) content.classList.toggle('hidden');
             if (icon) icon.classList.toggle('rotate-180');
         });
     });
-
-    const form = document.getElementById('checklist-form');
-    form.addEventListener('submit', handleChecklistSubmit);
 }
 
 async function openChecklistModal(vehicle) {
@@ -259,6 +261,7 @@ async function handleChecklistSubmit(event) {
     // --- FIM DA LÓGICA ALTERADA ---
 
     formData.append('id_veiculo', document.getElementById('checklist-vehicle-id').value);
+    formData.append('nome_motorista', document.getElementById('checklist-driver-name').value);
     formData.append('odometro_saida', document.getElementById('checklist-odometer').value);
     formData.append('observacoes_gerais', document.getElementById('checklist-observacoes').value);
 
@@ -286,13 +289,14 @@ async function handleChecklistSubmit(event) {
     }
 }
 
-async function openReadOnlyChecklistModal(vehicleId, vehicleInfo) {
+async function openChecklistReportModal(vehicleId, vehicleInfo) {
     const loader = document.getElementById('global-loader');
     loader.style.display = 'flex';
+    const modal = document.getElementById('checklist-report-modal');
 
     try {
         const hoje = new Date().toISOString().slice(0, 10);
-        const response = await fetch(`/api/logistica/checklist/relatorio?veiculoId=${vehicleId}&data=${hoje}`, {
+        const response = await fetch(`${apiUrlBase}/logistica/checklist/relatorio?veiculoId=${vehicleId}&data=${hoje}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
 
@@ -304,53 +308,67 @@ async function openReadOnlyChecklistModal(vehicleId, vehicleInfo) {
         const data = await response.json();
         const { checklist, avarias } = data;
 
-        // Reutilizamos o modal existente, mas o transformaremos em "somente leitura"
-        const modal = document.getElementById('checklist-modal');
-        const form = document.getElementById('checklist-form');
-        form.reset();
+        // Preenche o cabeçalho
+        document.getElementById('report-vehicle-info').textContent = vehicleInfo;
+        
+        // Preenche as Informações Gerais
+        document.getElementById('report-datetime').textContent = new Date(checklist.data_checklist).toLocaleString('pt-BR');
+        document.getElementById('report-driver').textContent = checklist.nome_motorista || 'Não informado';
+        document.getElementById('report-odometer').textContent = checklist.odometro_saida.toLocaleString('pt-BR');
+        document.getElementById('report-user').textContent = checklist.nome_usuario || 'Não informado';
+        document.getElementById('report-obs').textContent = checklist.observacoes_gerais || 'Nenhuma.';
 
-        // Preenche as informações
-        document.getElementById('checklist-vehicle-info').textContent = vehicleInfo;
-        document.getElementById('checklist-odometer').value = checklist.odometro_saida;
-        document.getElementById('checklist-observacoes').value = checklist.observacoes_gerais || '';
-
-        // Monta a visualização dos itens (OK ou Avaria)
-        const itemsContainer = document.getElementById('checklist-items-container');
+        // Preenche os Itens Verificados
+        const itemsContainer = document.getElementById('report-items-container');
+        itemsContainer.innerHTML = '';
         const requiredItems = ["Lataria", "Pneus", "Nível de Óleo e Água", "Iluminação (Lanternas e Sinalização)"];
-        itemsContainer.innerHTML = ''; // Limpa antes de adicionar
 
         requiredItems.forEach(itemName => {
-            const avariaEncontrada = avarias.find(a => a.item_verificado === itemName);
-            const status = avariaEncontrada ? 'Avaria' : 'OK';
-            const statusColor = avariaEncontrada ? 'text-red-600' : 'text-green-600';
-            const descricao = avariaEncontrada ? avariaEncontrada.descricao_avaria : '';
-            const fotoUrl = avariaEncontrada ? avariaEncontrada.foto_url : null;
+            const avaria = avarias.find(a => a.item_verificado === itemName);
+            const status = avaria ? 'Avaria' : 'OK';
+            const statusClass = avaria ? 'text-red-600' : 'text-green-600';
 
-            const itemDiv = document.createElement('div');
-            itemDiv.className = 'p-3 bg-gray-50 rounded-md';
-            itemDiv.innerHTML = `
-                <div class="flex justify-between items-center">
-                    <label class="font-medium text-gray-800">${itemName}</label>
-                    <span class="font-bold ${statusColor}">${status}</span>
-                </div>
-                ${avariaEncontrada ? `
-                    <div class="mt-2 pl-2 border-l-2 border-gray-200">
-                        <p class="text-sm"><strong>Descrição:</strong> ${descricao || 'Nenhuma'}</p>
-                        ${fotoUrl ? `<a href="/${fotoUrl}" target="_blank" class="text-sm text-indigo-600 hover:underline">Ver Foto da Avaria</a>` : ''}
+            const itemHtml = `
+                <div class="p-3 bg-gray-50 rounded-md">
+                    <div class="flex justify-between items-center">
+                        <span class="font-medium">${itemName}</span>
+                        <span class="font-bold ${statusClass}">${status}</span>
                     </div>
-                ` : ''}
+                    ${avaria ? `
+                    <div class="mt-2 pl-2 border-l-2 border-gray-200 text-sm">
+                        <p><strong>Descrição:</strong> ${avaria.descricao_avaria || 'Nenhuma'}</p>
+                        ${avaria.foto_url ? `<a href="/${avaria.foto_url}" target="_blank" class="text-indigo-600 hover:underline">Ver Foto da Avaria</a>` : ''}
+                    </div>
+                    ` : ''}
+                </div>
             `;
-            itemsContainer.appendChild(itemDiv);
+            itemsContainer.innerHTML += itemHtml;
+        });
+
+        // Preenche a galeria de Fotos Obrigatórias
+        const photosContainer = document.getElementById('report-photos-container');
+        photosContainer.innerHTML = '';
+        const photos = [
+            { label: 'Frente', url: checklist.foto_frente_url },
+            { label: 'Traseira', url: checklist.foto_traseira_url },
+            { label: 'Lateral Direita', url: checklist.foto_lateral_direita_url },
+            { label: 'Lateral Esquerda', url: checklist.foto_lateral_esquerda_url }
+        ];
+
+        photos.forEach(photo => {
+            const photoHtml = `
+                <div>
+                    <p class="text-sm font-semibold mb-1">${photo.label}</p>
+                    <a href="${photo.url || '#'}" target="_blank" class="block">
+                        <img src="${photo.url || 'https://placehold.co/300x200/e2e8f0/4a5568?text=Sem+Foto'}" alt="${photo.label}" class="w-full h-32 object-cover rounded-md border bg-gray-100">
+                    </a>
+                </div>
+            `;
+            photosContainer.innerHTML += photoHtml;
         });
         
-        // Esconde botões de ação e deixa campos como somente leitura
-        document.getElementById('save-checklist-btn').classList.add('hidden');
-        document.getElementById('cancel-checklist-btn').textContent = 'Fechar';
-        document.querySelectorAll('#checklist-form input, #checklist-form textarea').forEach(el => el.readOnly = true);
-        document.querySelectorAll('#checklist-form input[type="file"]').forEach(el => el.parentElement.style.display = 'none');
-        document.querySelectorAll('.accordion-header').forEach(header => header.style.pointerEvents = 'none'); // Desabilita clique no acordeão
-        
         modal.classList.remove('hidden');
+        feather.replace();
 
     } catch (error) {
         alert(`Erro ao carregar o relatório: ${error.message}`);

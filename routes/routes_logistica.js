@@ -1663,10 +1663,10 @@ router.post('/checklist', authenticateToken, (req, res) => {
         }
 
         // Alterado: 'avarias' agora é 'checklist_items'
-        const { id_veiculo, odometro_saida, observacoes_gerais, checklist_items } = req.body;
+        const { id_veiculo, odometro_saida, observacoes_gerais, checklist_items, nome_motorista } = req.body;
         const { userId } = req.user;
 
-        if (!id_veiculo || !odometro_saida) {
+        if (!id_veiculo || !odometro_saida || !nome_motorista) {
             return res.status(400).json({ error: 'Veículo e Odômetro de Saída são obrigatórios.' });
         }
 
@@ -1701,8 +1701,8 @@ router.post('/checklist', authenticateToken, (req, res) => {
 
             // Salva o "cabeçalho" do checklist (sem alterações aqui)
             const checklistSql = `
-                INSERT INTO veiculo_checklists (id_veiculo, id_usuario, id_filial, data_checklist, odometro_saida, observacoes_gerais)
-                VALUES (?, ?, ?, NOW(), ?, ?)`;
+                INSERT INTO veiculo_checklists (id_veiculo, id_usuario, id_filial, data_checklist, odometro_saida, nome_motorista, observacoes_gerais)
+                VALUES (?, ?, ?, NOW(), ?, ?, ?)`;
             const [checklistResult] = await connection.execute(checklistSql, [id_veiculo, userId, id_filial_veiculo, odometro_saida, observacoes_gerais]);
             const newChecklistId = checklistResult.insertId;
 
@@ -1966,11 +1966,12 @@ router.get('/checklist/relatorio', authenticateToken, async (req, res) => {
     try {
         connection = await mysql.createConnection(dbConfig);
 
-        // 1. Busca o checklist principal daquele dia para o veículo
         const [checklistRows] = await connection.execute(
-            `SELECT * FROM veiculo_checklists 
-             WHERE id_veiculo = ? AND DATE(data_checklist) = ? 
-             ORDER BY id DESC LIMIT 1`,
+            `SELECT c.*, u.nome_user as nome_usuario 
+             FROM veiculo_checklists c
+             JOIN cad_user u ON c.id_usuario = u.ID
+             WHERE c.id_veiculo = ? AND DATE(c.data_checklist) = ? 
+             ORDER BY c.id DESC LIMIT 1`,
             [veiculoId, data]
         );
 
@@ -1978,32 +1979,28 @@ router.get('/checklist/relatorio', authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'Nenhum checklist encontrado para este veículo na data especificada.' });
         }
         const checklist = checklistRows[0];
+        const dataFormatada = new Date(checklist.data_checklist).toISOString().slice(0, 10);
 
-        // 2. Busca os itens que foram marcados como "Avaria"
+        const [placaRow] = await connection.execute('SELECT placa FROM veiculos WHERE id = ?', [checklist.id_veiculo]);
+        const placaSanitizada = String(placaRow[0].placa || '').replace(/[^a-zA-Z0-9-]/g, '_');
+        const basePath = `uploads/veiculos/${placaSanitizada}/checklist/${dataFormatada}/`;
+
+        // Formata os caminhos das fotos obrigatórias
+        checklist.foto_frente_url = checklist.foto_frente ? basePath + checklist.foto_frente : null;
+        checklist.foto_traseira_url = checklist.foto_traseira ? basePath + checklist.foto_traseira : null;
+        checklist.foto_lateral_direita_url = checklist.foto_lateral_direita ? basePath + checklist.foto_lateral_direita : null;
+        checklist.foto_lateral_esquerda_url = checklist.foto_lateral_esquerda ? basePath + checklist.foto_lateral_esquerda : null;
+
         const [avariasRows] = await connection.execute(
-            `SELECT ci.item_verificado, ci.descricao_avaria, ci.caminho_foto, v.placa
-             FROM checklist_itens ci
-             JOIN veiculos v ON ci.id_veiculo = v.id
-             WHERE ci.id_checklist = ? AND ci.status = 'Avaria'`,
+            `SELECT item_verificado, descricao_avaria, caminho_foto FROM checklist_itens WHERE id_checklist = ? AND status = 'Avaria'`,
             [checklist.id]
         );
         
-        // 3. Formata o caminho completo da foto da avaria
-        const avarias = avariasRows.map(avaria => {
-            let fotoUrl = null;
-            if (avaria.caminho_foto) {
-                const placaSanitizada = String(avaria.placa || '').replace(/[^a-zA-Z0-9-]/g, '_');
-                const dataFormatada = new Date(checklist.data_checklist).toISOString().slice(0, 10);
-                fotoUrl = `uploads/veiculos/${placaSanitizada}/checklist/${dataFormatada}/${avaria.caminho_foto}`;
-            }
-            return {
-                item_verificado: avaria.item_verificado,
-                descricao_avaria: avaria.descricao_avaria,
-                foto_url: fotoUrl
-            };
-        });
+        const avarias = avariasRows.map(avaria => ({
+            ...avaria,
+            foto_url: avaria.caminho_foto ? basePath + avaria.caminho_foto : null
+        }));
 
-        // 4. Retorna os dados no formato que o frontend espera
         res.json({
             checklist: checklist,
             avarias: avarias
