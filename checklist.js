@@ -203,6 +203,7 @@ async function openChecklistModal(vehicle) {
 async function handleChecklistSubmit(event) {
     event.preventDefault();
 
+    // Validação de itens (OK/Avaria) - Permanece a mesma
     const items = document.querySelectorAll('#checklist-items-container .checklist-item');
     let allItemsValid = true;
     for (const item of items) {
@@ -229,7 +230,6 @@ async function handleChecklistSubmit(event) {
 
     const formData = new FormData(form);
 
-    // --- LÓGICA ALTERADA PARA ENVIAR TODOS OS ITENS ---
     const checklistItems = [];
     document.querySelectorAll('#checklist-items-container .checklist-item').forEach((itemDiv) => {
         const itemName = itemDiv.dataset.itemName;
@@ -248,7 +248,6 @@ async function handleChecklistSubmit(event) {
             descricao = descricaoInput ? descricaoInput.value : '';
         }
 
-        // Adiciona o item à lista, independentemente do status
         checklistItems.push({
             item: itemName,
             status: status,
@@ -256,15 +255,15 @@ async function handleChecklistSubmit(event) {
         });
     });
 
-    // Adiciona a nova lista completa ao formulário
     formData.append('checklist_items', JSON.stringify(checklistItems));
-    // --- FIM DA LÓGICA ALTERADA ---
+    
+    // Os campos abaixo já são adicionados automaticamente pelo FormData
+    // formData.append('id_veiculo', document.getElementById('checklist-vehicle-id').value);
+    // formData.append('odometro_saida', document.getElementById('checklist-odometer').value);
+    // formData.append('observacoes_gerais', document.getElementById('checklist-observacoes').value);
+    // formData.append('nome_motorista', document.getElementById('checklist-driver-name').value);
 
-    formData.append('id_veiculo', document.getElementById('checklist-vehicle-id').value);
-    formData.append('nome_motorista', document.getElementById('checklist-driver-name').value);
-    formData.append('odometro_saida', document.getElementById('checklist-odometer').value);
-    formData.append('observacoes_gerais', document.getElementById('checklist-observacoes').value);
-
+    // --- LÓGICA DE TRATAMENTO DE ERRO MELHORADA ---
     try {
         const response = await fetch(`${apiUrlBase}/logistica/checklist`, {
             method: 'POST',
@@ -272,16 +271,25 @@ async function handleChecklistSubmit(event) {
             body: formData
         });
 
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Falha ao enviar o checklist.');
+        // Se a resposta NÃO for OK, vamos capturar os detalhes
+        if (!response.ok) {
+            const responseBody = await response.text(); // Pega a resposta do servidor como texto
+            const detailedError = `Status: ${response.status} (${response.statusText})\n\nResposta do Servidor:\n${responseBody}`;
+            // Lança um erro com a mensagem detalhada
+            throw new Error(detailedError);
+        }
 
+        // Se a resposta for OK, continua o fluxo normal
+        const result = await response.json();
+        
         alert('Checklist registado com sucesso!');
         document.getElementById('checklist-modal').classList.add('hidden');
         
         await loadVehiclesForChecklist();
 
     } catch (error) {
-        alert(`Erro: ${error.message}`);
+        // O alerta agora exibirá a mensagem de erro detalhada que criamos
+        alert(`Erro ao enviar o checklist:\n\n${error.message}`);
     } finally {
         loader.style.display = 'none';
         saveBtn.disabled = false;
