@@ -1687,7 +1687,7 @@ router.post('/checklist', authenticateToken, (req, res) => {
                 return res.status(400).json({ error: `Odômetro inválido. O valor informado (${odometro_saida} km) é inferior ao último registrado (${odometroAtual} km).` });
             }
 
-            const dataHoje = new Date("2025-08-29T17:43:31.919Z").toISOString().slice(0, 10);
+            const dataHoje = new Date().toISOString().slice(0, 10);
             const placaSanitizada = sanitizeForPath(placa);
             const finalDestPath = path.join(UPLOADS_BASE_PATH, 'veiculos', placaSanitizada, 'checklist', dataHoje);
             
