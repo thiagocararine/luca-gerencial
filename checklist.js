@@ -296,6 +296,7 @@ async function openChecklistReportModal(vehicleId, vehicleInfo) {
 
     try {
         const hoje = new Date().toISOString().slice(0, 10);
+        // A API já foi corrigida para buscar todos os dados necessários
         const response = await fetch(`${apiUrlBase}/logistica/checklist/relatorio?veiculoId=${vehicleId}&data=${hoje}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
@@ -312,7 +313,7 @@ async function openChecklistReportModal(vehicleId, vehicleInfo) {
         document.getElementById('report-vehicle-info').textContent = vehicleInfo;
         
         // Preenche as Informações Gerais
-        document.getElementById('report-datetime').textContent = new Date(checklist.data_checklist).toLocaleString('pt-BR');
+        document.getElementById('report-datetime').textContent = new Date(checklist.data_checklist).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
         document.getElementById('report-driver').textContent = checklist.nome_motorista || 'Não informado';
         document.getElementById('report-odometer').textContent = checklist.odometro_saida.toLocaleString('pt-BR');
         document.getElementById('report-user').textContent = checklist.nome_usuario || 'Não informado';
@@ -336,8 +337,8 @@ async function openChecklistReportModal(vehicleId, vehicleInfo) {
                     </div>
                     ${avaria ? `
                     <div class="mt-2 pl-2 border-l-2 border-gray-200 text-sm">
-                        <p><strong>Descrição:</strong> ${avaria.descricao_avaria || 'Nenhuma'}</p>
-                        ${avaria.foto_url ? `<a href="/${avaria.foto_url}" target="_blank" class="text-indigo-600 hover:underline">Ver Foto da Avaria</a>` : ''}
+                        <p class="mb-1"><strong>Descrição:</strong> ${avaria.descricao_avaria || 'Nenhuma'}</p>
+                        ${avaria.foto_url ? `<a href="/${avaria.foto_url}" target="_blank" class="text-indigo-600 hover:underline font-semibold">Ver Foto da Avaria</a>` : '<span class="text-gray-500">Sem foto</span>'}
                     </div>
                     ` : ''}
                 </div>
@@ -356,11 +357,13 @@ async function openChecklistReportModal(vehicleId, vehicleInfo) {
         ];
 
         photos.forEach(photo => {
+            // CORREÇÃO APLICADA AQUI: Adicionado a barra "/" no início do caminho da imagem
+            const imagePath = photo.url ? `/${photo.url}` : 'https://placehold.co/300x200/e2e8f0/4a5568?text=Sem+Foto';
             const photoHtml = `
                 <div>
                     <p class="text-sm font-semibold mb-1">${photo.label}</p>
-                    <a href="${photo.url || '#'}" target="_blank" class="block">
-                        <img src="${photo.url || 'https://placehold.co/300x200/e2e8f0/4a5568?text=Sem+Foto'}" alt="${photo.label}" class="w-full h-32 object-cover rounded-md border bg-gray-100">
+                    <a href="${imagePath}" target="_blank" class="block">
+                        <img src="${imagePath}" alt="${photo.label}" class="w-full h-32 object-cover rounded-md border bg-gray-100">
                     </a>
                 </div>
             `;
