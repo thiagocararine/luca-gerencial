@@ -12,7 +12,12 @@ function initChecklistPage() {
         window.location.href = 'login.html';
         return;
     }
+
+    // ADICIONE A LINHA ABAIXO
+    document.getElementById('logout-button')?.addEventListener('click', logout);
+
     gerenciarAcessoModulos();
+
     const userData = getUserData();
     if (userData && document.getElementById('user-name')) {
         document.getElementById('user-name').textContent = userData.nome || 'Utilizador';
