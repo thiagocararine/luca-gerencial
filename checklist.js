@@ -12,6 +12,7 @@ function initChecklistPage() {
         window.location.href = 'login.html';
         return;
     }
+    gerenciarAcessoModulos();
     const userData = getUserData();
     if (userData && document.getElementById('user-name')) {
         document.getElementById('user-name').textContent = userData.nome || 'Utilizador';
@@ -472,4 +473,36 @@ function compressImage(file, maxWidth = 1280, quality = 0.8) {
         };
         reader.onerror = (error) => reject(error);
     });
+}
+
+function gerenciarAcessoModulos() {
+    const userData = getUserData();
+    if (!userData || !userData.permissoes) {
+        console.error("Não foi possível obter as permissões do usuário.");
+        return;
+    }
+
+    const permissoesDoUsuario = userData.permissoes;
+
+    // Mapeamento dos nomes dos módulos para os links no HTML
+    const mapaModulos = {
+        'lancamentos': 'despesas.html',
+        'logistica': 'logistica.html',
+        'configuracoes': 'settings.html',
+        'checklist': 'checklist.html' // Garante que ele mesmo não seja escondido
+    };
+
+    // Itera sobre o mapa de módulos para verificar cada permissão
+    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
+        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
+        
+        // Se a permissão não existe ou não é permitida
+        if (!permissao || !permissao.permitido) {
+            // Encontra o link na barra lateral e esconde o item da lista (o <li> pai)
+            const link = document.querySelector(`#sidebar a[href="${href}"]`);
+            if (link && link.parentElement) {
+                link.parentElement.style.display = 'none';
+            }
+        }
+    }
 }
