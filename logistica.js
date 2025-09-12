@@ -2894,134 +2894,139 @@ async function exportChecklistReportPDF() {
         let yPos = 15;
         const margin = 15;
         const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
 
-        // --- CABEÇALHO SIMPLES ---
+        const pageFooter = () => {
+            doc.setFontSize(8);
+            doc.setTextColor(150);
+            const pageText = `Página ${doc.internal.getNumberOfPages()}`;
+            const dateText = `Gerado em: ${new Date().toLocaleString('pt-BR')}`;
+            doc.text(pageText, margin, pageHeight - 10);
+            doc.text(dateText, pageWidth - margin, pageHeight - 10, { align: 'right' });
+        };
+
+        // --- CABEÇALHO COM LOGO À DIREITA ---
+        const logoWidth = 25;
+        if (LOGO_BASE_64) {
+            // ALTERAÇÃO APLICADA AQUI: A imagem agora é posicionada à direita
+            doc.addImage(LOGO_BASE_64, 'PNG', pageWidth - margin - logoWidth, yPos, logoWidth, 0);
+        }
+        
         doc.setFontSize(16);
         doc.setFont(undefined, 'bold');
-        doc.text("Relatório do Checklist", margin, yPos);
-        yPos += 7;
-        doc.setFontSize(10);
+        doc.text("Relatório de Vistoria de Veículo", margin, yPos + 7); // Alinha o título à esquerda
+        
+        doc.setFontSize(11);
         doc.setFont(undefined, 'normal');
-        doc.text(vehicleInfo, margin, yPos);
-        yPos += 10;
-        doc.setLineWidth(0.5);
-        doc.line(margin, yPos, pageWidth - margin, yPos);
-        yPos += 10;
+        doc.text(vehicleInfo, margin, yPos + 14);
+        yPos += 30;
 
-        // --- SEÇÃO: INFORMAÇÕES GERAIS ---
-        doc.setFontSize(12);
-        doc.setFont(undefined, 'bold');
-        doc.text("Informações Gerais", margin, yPos);
-        yPos += 6;
+        // O resto da função continua exatamente como antes...
+        
         doc.autoTable({
             startY: yPos,
-            theme: 'plain',
+            theme: 'striped',
+            head: [['Informações Gerais']],
+            headStyles: { fillColor: [44, 62, 80] },
             body: [
-                ['Data e Hora:', new Date(checklist.data_checklist).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })],
+                ['Data e Hora da Vistoria:', new Date(checklist.data_checklist).toLocaleString('pt-BR')],
                 ['Motorista:', checklist.nome_motorista],
                 ['Odômetro de Saída:', `${checklist.odometro_saida.toLocaleString('pt-BR')} km`],
-                ['Usuário do Lançamento:', checklist.nome_usuario]
+                ['Realizado por:', checklist.nome_usuario],
+                ['Observações Gerais:', checklist.observacoes_gerais || 'Nenhuma.'],
             ],
-            styles: { fontSize: 9, cellPadding: 1 },
-            columnStyles: { 0: { fontStyle: 'bold', cellWidth: 45 } }
+            columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } }
         });
-        yPos = doc.autoTable.previous.finalY + 2;
-        doc.setFontSize(9);
-        doc.setFont(undefined, 'bold');
-        doc.text("Observações:", margin, yPos);
-        yPos += 4;
-        doc.setFont(undefined, 'normal');
-        doc.text(checklist.observacoes_gerais || 'Nenhuma.', margin, yPos, { maxWidth: pageWidth - (margin * 2) });
-        yPos += 15;
+        yPos = doc.autoTable.previous.finalY + 10;
 
-        // --- SEÇÃO: ITENS VERIFICADOS ---
         doc.setFontSize(12);
-        doc.setFont(undefined, 'bold');
-        doc.text("Itens Verificados", margin, yPos);
-        yPos += 6;
-        const requiredItems = ["Lataria", "Pneus", "Nível de Óleo e Água", "Iluminação (Lanternas e Sinalização)"];
-        requiredItems.forEach(itemName => {
-            const avaria = avarias.find(a => a.item_verificado === itemName);
-            const status = avaria ? 'AVARIA' : 'OK';
-            
-            doc.setFontSize(10);
-            doc.setFont(undefined, 'normal');
-            doc.text(itemName, margin, yPos);
-            
-            doc.setFont(undefined, 'bold');
-            if (status === 'AVARIA') doc.setTextColor(220, 53, 69); // Vermelho
-            else doc.setTextColor(22, 163, 74); // Verde
-            doc.text(status, pageWidth - margin, yPos, { align: 'right' });
-            
-            doc.setTextColor(0, 0, 0); // Reseta para preto
-            yPos += 5;
-
-            if (avaria) {
-                doc.setFontSize(8);
-                doc.setFont(undefined, 'normal');
-                doc.text(`Descrição: ${avaria.descricao_avaria || 'Nenhuma.'}`, margin + 2, yPos, { maxWidth: pageWidth - (margin * 2) - 2 });
-                yPos += 5;
-            }
-            doc.setLineWidth(0.1);
-            doc.line(margin, yPos, pageWidth - margin, yPos);
-            yPos += 5;
-        });
+        doc.text("Itens Verificados", 15, yPos);
         yPos += 5;
-
-        // --- SEÇÃO: FOTOS OBRIGATÓRIAS ---
-        doc.setFontSize(12);
-        doc.setFont(undefined, 'bold');
-        doc.text("Fotos Obrigatórias", margin, yPos);
-        yPos += 6;
         
+        const requiredItems = ["Lataria", "Pneus", "Nível de Óleo e Água", "Iluminação (Lanternas e Sinalização)"];
+
+        const itensBody = requiredItems.map(itemName => {
+            const avaria = avarias.find(a => a.item_verificado === itemName);
+            return [itemName, avaria ? 'AVARIA' : 'OK', avaria ? avaria.descricao_avaria || '-' : ''];
+        });
+        doc.autoTable({
+            head: [['Item', 'Status', 'Descrição da Avaria']],
+            body: itensBody,
+            startY: yPos,
+            theme: 'grid',
+            headStyles: { fillColor: [41, 128, 185] },
+            didParseCell: function(data) {
+                if (data.cell.section === 'body' && data.column.index === 1) {
+                    if (data.cell.text[0] === 'AVARIA') {
+                        data.cell.styles.textColor = [220, 53, 69];
+                        data.cell.styles.fontStyle = 'bold';
+                        data.cell.styles.halign = 'center';
+                    }
+                    if (data.cell.text[0] === 'OK') {
+                        data.cell.styles.textColor = [22, 163, 74];
+                        data.cell.styles.halign = 'center';
+                    }
+                }
+            }
+        });
+        yPos = doc.autoTable.previous.finalY + 10;
+        
+        pageFooter();
+
         const mandatoryPhotos = [
             { label: 'Frente', url: checklist.foto_frente_url }, { label: 'Traseira', url: checklist.foto_traseira_url },
             { label: 'Lateral Direita', url: checklist.foto_lateral_direita_url }, { label: 'Lateral Esquerda', url: checklist.foto_lateral_esquerda_url }
         ];
+        const avariasComFoto = avarias.filter(a => a.foto_url).map(a => ({ url: a.foto_url, title: `Avaria: ${a.item_verificado}` }));
+        const allPhotos = [
+            ...mandatoryPhotos.map(p => ({ ...p, title: `Foto Obrigatória: ${p.label}` })),
+            ...avariasComFoto
+        ];
         
-        const photoWidth = (pageWidth - (margin * 2) - (3 * 5)) / 4; // Largura para 4 fotos com 5mm de espaçamento
-        const photoHeight = photoWidth * 0.75; // Proporção 4:3
-        let xPos = margin;
-
-        for (const photo of mandatoryPhotos) {
-            const imgData = await imageToBase64(photo.url ? `/${photo.url}` : null);
-            doc.setFontSize(8);
-            doc.text(photo.label, xPos, yPos);
-            if (imgData) {
-                doc.addImage(imgData, 'JPEG', xPos, yPos + 2, photoWidth, photoHeight);
-            } else {
-                doc.rect(xPos, yPos + 2, photoWidth, photoHeight);
-                doc.text("Sem Foto", xPos + photoWidth / 2, yPos + 2 + photoHeight / 2, { align: 'center' });
-            }
-            xPos += photoWidth + 5; // Move para a próxima posição
-        }
-        yPos += photoHeight + 15;
-
-        // --- SEÇÃO: FOTOS DE AVARIAS ---
-        const avariasComFoto = avarias.filter(a => a.foto_url);
-        if (avariasComFoto.length > 0) {
-            doc.setFontSize(12);
+        if (allPhotos.length > 0) {
+            doc.addPage();
+            yPos = 15;
+            doc.setFontSize(16);
             doc.setFont(undefined, 'bold');
-            doc.text("Fotos das Avarias", margin, yPos);
-            yPos += 6;
-            xPos = margin;
+            doc.text("Evidências Fotográficas", pageWidth / 2, yPos, { align: 'center' });
+            yPos += 15;
 
-            for (const avaria of avariasComFoto) {
-                const imgData = await imageToBase64(`/${avaria.foto_url}`);
-                doc.setFontSize(8);
-                doc.text(avaria.item_verificado, xPos, yPos);
+            for (const photo of allPhotos) {
+                const imgData = await imageToBase64(photo.url ? `/${photo.url}` : null);
+                if (yPos + 80 > pageHeight - 20) {
+                    pageFooter();
+                    doc.addPage();
+                    yPos = 20;
+                }
+                doc.setFontSize(10);
+                doc.setFont(undefined, 'bold');
+                doc.text(photo.title, margin, yPos);
+                yPos += 5;
                 if (imgData) {
-                    doc.addImage(imgData, 'JPEG', xPos, yPos + 2, photoWidth, photoHeight);
+                    doc.addImage(imgData, 'JPEG', margin, yPos, 90, 65);
+                } else {
+                    doc.rect(margin, yPos, 90, 65);
+                    doc.text("Sem Foto", margin + 45, yPos + 35, { align: 'center' });
                 }
-                xPos += photoWidth + 5;
-                // Quebra a linha se não couber mais fotos
-                if (xPos + photoWidth > pageWidth - margin) {
-                    xPos = margin;
-                    yPos += photoHeight + 12;
-                }
+                yPos += 75;
             }
+            pageFooter();
         }
+
+        if (yPos + 40 > pageHeight - 20) {
+             pageFooter();
+             doc.addPage();
+             yPos = 20;
+        }
+
+        doc.setLineWidth(0.5);
+        doc.line(margin, yPos + 20, pageWidth - margin, yPos + 20);
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        doc.text("Assinatura do Motorista", pageWidth / 2, yPos + 25, { align: 'center' });
         
+        if(allPhotos.length === 0) pageFooter();
+
         doc.save(`Checklist_${vehicleInfo.replace(/\s/g, '_')}.pdf`);
 
     } catch (error) {

@@ -6,6 +6,7 @@ const path = require('path');
 const multer = require('multer');
 const { authenticateToken, authorizeAdmin } = require('../middlewares'); 
 const dbConfig = require('../dbConfig');
+const privilegedAccessProfiles = ["Administrador", "Financeiro", "Logistica"];
 
 // --- CONFIGURAÇÃO DO MULTER E HELPERS ---
 
