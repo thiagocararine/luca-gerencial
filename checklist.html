@@ -37,7 +37,7 @@
 <div class="flex h-full">
     <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
     
-    <nav id="sidebar" class="fixed inset-y-0 left-0 bg-white/80 backdrop-blur-sm shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
+    <nav id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-white/80 backdrop-blur-sm shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
         <div class="flex flex-col h-full">
             <div class="h-16 flex items-center justify-center border-b border-gray-200/50 px-4 gap-2">
                 <img id="company-logo" src="" alt="Logo da Empresa" style="display: none;" class="max-h-10 max-w-10">
@@ -53,7 +53,10 @@
                 </ul>
             </div>
             <div class="p-2 border-t border-gray-200/50">
-                <button id="sidebar-toggle" class="w-full hidden md:flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100"></button>
+                <button id="sidebar-toggle" class="w-full hidden md:flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none">
+                    <svg id="toggle-icon-collapse" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" /></svg>
+                    <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
+                </button>
             </div>
         </div>
     </nav>
@@ -210,7 +213,11 @@
             if (!desktopToggleButton) return;
             
             const setDesktopSidebarState = (collapsed) => {
-                sidebar.classList.toggle('collapsed', collapsed);
+                sidebar.classList.toggle('w-64', !collapsed);
+                sidebar.classList.toggle('w-20', collapsed);
+                document.querySelectorAll('.sidebar-text').forEach(el => el.classList.toggle('hidden', collapsed));
+                document.getElementById('toggle-icon-collapse').classList.toggle('hidden', collapsed);
+                document.getElementById('toggle-icon-expand').classList.toggle('hidden', !collapsed);
                 localStorage.setItem('sidebar_collapsed', collapsed);
             };
 
@@ -218,7 +225,7 @@
             setDesktopSidebarState(isDesktopCollapsed);
 
             desktopToggleButton.addEventListener('click', () => {
-                const currentlyCollapsed = sidebar.classList.contains('collapsed');
+                const currentlyCollapsed = sidebar.classList.contains('w-20');
                 setDesktopSidebarState(!currentlyCollapsed);
             });
         };
