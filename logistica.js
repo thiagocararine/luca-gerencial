@@ -2490,18 +2490,21 @@ function renderHistoryAsCards(data, container, type) {
 
     data.forEach(item => {
         const card = document.createElement('div');
-        card.className = 'bg-white rounded-lg shadow p-4 space-y-2 border-l-4';
+        card.className = 'bg-white rounded-lg shadow p-4 space-y-2 border-l-4 relative'; // Adicionado 'relative' para o botão
         
         let title = '';
         let detailsHtml = '';
         let buttonHtml = '';
-        let valor, unidade;
+        let valor = 0;
+        let unidade = 'R$';
 
         if (type === 'gerais') {
             card.style.borderColor = '#14b8a6'; // Teal
             title = item.descricao;
+            valor = item.custo;
             detailsHtml = `
                 <p class="text-xs text-gray-500">${new Date(item.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
+                <div><strong class="font-medium text-gray-700">NF:</strong> ${item.numero_nf || 'N/A'}</div>
                 <div><strong class="font-medium text-gray-700">Filial:</strong> ${item.nome_filial || 'N/A'}</div>
                 <div><strong class="font-medium text-gray-700">Fornecedor:</strong> ${item.nome_fornecedor || 'N/A'}</div>
             `;
@@ -2511,8 +2514,10 @@ function renderHistoryAsCards(data, container, type) {
         } else if (type === 'individuais') {
             card.style.borderColor = '#0ea5e9'; // Cyan
             title = `${item.modelo} (${item.placa})`;
+            valor = item.custo;
             detailsHtml = `
                 <p class="text-xs text-gray-500">${new Date(item.data_custo).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p>
+                <div><strong class="font-medium text-gray-700">NF:</strong> ${item.numero_nf || 'N/A'}</div>
                 <div><strong class="font-medium text-gray-700">Fornecedor:</strong> ${item.nome_fornecedor || 'N/A'}</div>
             `;
             if (isPrivileged) {

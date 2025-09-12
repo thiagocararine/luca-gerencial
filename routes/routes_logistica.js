@@ -1660,23 +1660,25 @@ router.get('/veiculos/manutencao/alertas', authenticateToken, async (req, res) =
 // ROTA PARA SALVAR UM NOVO CHECKLIST DE VEÍCULO (VERSÃO ATUALIZADA)
 router.post('/checklist', authenticateToken, (req, res) => {
     checklistUpload(req, res, async (err) => {
+        // ... (código do multer permanece o mesmo) ...
         if (err) {
-            console.error("Erro no Multer (checklist):", err);
+            console.error("ERRO NO MULTER:", err);
             return res.status(500).json({ error: "Ocorreu um erro durante o upload das imagens." });
         }
-
-        // Alterado: 'avarias' agora é 'checklist_items'
+        
+        console.log('--- INICIANDO PROCESSAMENTO DO CHECKLIST ---');
         const { id_veiculo, odometro_saida, observacoes_gerais, checklist_items, nome_motorista } = req.body;
         const { userId } = req.user;
 
         if (!id_veiculo || !odometro_saida || !nome_motorista) {
-            return res.status(400).json({ error: 'Veículo e Odômetro de Saída são obrigatórios.' });
+            return res.status(400).json({ error: 'Veículo, Odômetro de Saída e Nome do Motorista são obrigatórios.' });
         }
 
         let connection;
         try {
             connection = await mysql.createConnection(dbConfig);
             await connection.beginTransaction();
+            console.log('Passo 1: Transação com o banco de dados iniciada.');
 
             const [veiculoRows] = await connection.execute('SELECT odometro_atual, id_filial, placa FROM veiculos WHERE id = ?', [id_veiculo]);
             if (veiculoRows.length === 0) {
@@ -1690,28 +1692,31 @@ router.post('/checklist', authenticateToken, (req, res) => {
                 return res.status(400).json({ error: `Odômetro inválido. O valor informado (${odometro_saida} km) é inferior ao último registrado (${odometroAtual} km).` });
             }
 
+            console.log('Passo 2: Informações do veículo validadas.');
             const dataHoje = new Date().toISOString().slice(0, 10);
             const placaSanitizada = sanitizeForPath(placa);
             const finalDestPath = path.join(UPLOADS_BASE_PATH, 'veiculos', placaSanitizada, 'checklist', dataHoje);
             
             await fs.mkdir(finalDestPath, { recursive: true });
+            console.log('Passo 3: Pasta de destino criada/verificada:', finalDestPath);
 
             for (const file of req.files) {
                 const tempPath = file.path;
                 const finalPath = path.join(finalDestPath, file.filename);
                 await fs.rename(tempPath, finalPath);
             }
+            console.log(`Passo 4: ${req.files.length} arquivos movidos com sucesso.`);
 
-            // Salva o "cabeçalho" do checklist (sem alterações aqui)
             const checklistSql = `
                 INSERT INTO veiculo_checklists (id_veiculo, id_usuario, id_filial, data_checklist, odometro_saida, nome_motorista, observacoes_gerais)
                 VALUES (?, ?, ?, NOW(), ?, ?, ?)`;
-            const [checklistResult] = await connection.execute(checklistSql, [id_veiculo, userId, id_filial_veiculo, odometro_saida, observacoes_gerais]);
+            const [checklistResult] = await connection.execute(checklistSql, [id_veiculo, userId, id_filial_veiculo, odometro_saida, nome_motorista, observacoes_gerais]);
             const newChecklistId = checklistResult.insertId;
+            console.log('Passo 5: Registro principal do checklist inserido com ID:', newChecklistId);
 
             await connection.execute('UPDATE veiculos SET odometro_atual = ? WHERE id = ?', [odometro_saida, id_veiculo]);
-            
-            // ... (código para salvar fotos obrigatórias permanece o mesmo) ...
+            console.log('Passo 6: Odômetro do veículo atualizado.');
+
             const fotosObrigatorias = {};
             req.files.forEach(file => {
                 if (['foto_frente', 'foto_traseira', 'foto_lateral_direita', 'foto_lateral_esquerda'].includes(file.fieldname)) {
@@ -1722,16 +1727,17 @@ router.post('/checklist', authenticateToken, (req, res) => {
                 `UPDATE veiculo_checklists SET foto_frente = ?, foto_traseira = ?, foto_lateral_direita = ?, foto_lateral_esquerda = ? WHERE id = ?`,
                 [fotosObrigatorias.foto_frente, fotosObrigatorias.foto_traseira, fotosObrigatorias.foto_lateral_direita, fotosObrigatorias.foto_lateral_esquerda, newChecklistId]
             );
+            console.log('Passo 7: Nomes das fotos obrigatórias salvos no checklist.');
 
-            // --- LÓGICA ALTERADA PARA SALVAR NA NOVA TABELA 'checklist_itens' ---
             if (checklist_items) {
                 const itemsParsed = JSON.parse(checklist_items);
+                console.log('Passo 8: Iniciando inserção de', itemsParsed.length, 'itens do checklist...');
                 const itemSql = `
                     INSERT INTO checklist_itens 
                     (id_checklist, data_checklist, id_filial, id_veiculo, placa, id_usuario, item_verificado, status, descricao_avaria, caminho_foto) 
                     VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-                for (const item of itemsParsed) {
+                for (const [index, item] of itemsParsed.entries()) {
                     let fotoFilename = null;
                     if (item.status === 'Avaria') {
                         const itemSanitized = item.item.replace(/\s+/g, '_').replace(/[^\w-]/g, '');
@@ -1742,31 +1748,24 @@ router.post('/checklist', authenticateToken, (req, res) => {
                     }
                     
                     await connection.execute(itemSql, [
-                        newChecklistId,
-                        id_filial_veiculo,
-                        id_veiculo,
-                        placa,
-                        userId,
-                        item.item,
-                        item.status,
-                        item.descricao || null,
-                        fotoFilename
+                        newChecklistId, id_filial_veiculo, id_veiculo, placa, userId,
+                        item.item, item.status, item.descricao || null, fotoFilename
                     ]);
+                    console.log(` -> Item ${index + 1} ('${item.item}') inserido.`);
                 }
+                console.log('Passo 9: Todos os itens do checklist inseridos com sucesso.');
             }
-            // --- FIM DA LÓGICA ALTERADA ---
             
             await connection.commit();
+            console.log('Passo 10: Transação confirmada (commit).');
             res.status(201).json({ message: 'Checklist salvo com sucesso!', checklistId: newChecklistId });
 
         } catch (error) {
-            for (const file of req.files) {
-                if(file && file.path) {
-                    await fs.unlink(file.path).catch(e => console.error("Falha ao limpar arquivo temporário:", e.path));
-                }
-            }
             if (connection) await connection.rollback();
-            console.error("Erro ao salvar checklist:", error);
+            // ESTE É O LOG MAIS IMPORTANTE
+            console.error('--- ERRO DETALHADO AO SALVAR CHECKLIST ---');
+            console.error(error);
+            console.error('------------------------------------------');
             res.status(500).json({ error: 'Erro interno ao salvar o checklist.' });
         } finally {
             if (connection) await connection.end();
