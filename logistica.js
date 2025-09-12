@@ -2582,32 +2582,47 @@ let checklistControlState = {
 };
 
 async function initChecklistControlPanel() {
-    const controlModal = document.getElementById('checklist-control-modal');
-    const reportModal = document.getElementById('checklist-report-modal'); // Adicione esta linha
-
+    const modal = document.getElementById('checklist-control-modal');
+    
     // Conecta o novo botão da barra de ações para abrir o modal
     document.getElementById('open-checklist-panel-btn').addEventListener('click', () => {
-        controlModal.classList.remove('hidden');
+        modal.classList.remove('hidden');
+
+        // --- LÓGICA CORRIGIDA E MOVIDA PARA DENTRO DO EVENTO DE CLIQUE ---
+        // A inicialização do calendário agora acontece SÓ AQUI.
+        // Ele só será criado na primeira vez que o modal for aberto.
         if (!checklistControlState.datepicker) {
-             checklistControlState.datepicker = new Litepicker({ /* ... */ });
+            checklistControlState.datepicker = new Litepicker({
+                element: document.getElementById('cc-filter-date'), // Tenta encontrar o elemento SÓ AGORA
+                singleMode: false,
+                lang: 'pt-BR',
+                format: 'DD/MM/YYYY',
+                setup: (picker) => { 
+                    if (!picker.getStartDate() || !picker.getEndDate()) {
+                        picker.setDateRange(new Date(), new Date()); 
+                    }
+                },
+            });
         }
+        
+        // Dispara a busca pelos dados do dia automaticamente
         document.getElementById('cc-filter-btn').click(); 
     });
     
-    controlModal.querySelector('#close-checklist-control-modal').addEventListener('click', () => controlModal.classList.add('hidden'));
-    
-    // ADICIONE ESTA LINHA PARA FAZER O BOTÃO FECHAR FUNCIONAR
-    reportModal.querySelector('#close-report-modal-btn').addEventListener('click', () => reportModal.classList.add('hidden'));
+    modal.querySelector('#close-checklist-control-modal').addEventListener('click', () => modal.classList.add('hidden'));
 
+    // O código abaixo continua como estava, pois precisa preencher os filtros
     await populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Unidades`, 'cc-filter-filial', 'ID', 'NOME_PARAMETRO', 'Todas as Filiais');
 
     document.getElementById('cc-filter-btn').addEventListener('click', fetchAndRenderChecklists);
     document.getElementById('cc-completed-list').addEventListener('click', handleChecklistPanelActionClick);
-    document.getElementById('export-checklist-pdf-btn')?.addEventListener('click', exportChecklistReportPDF);
     
     const unlockModal = document.getElementById('confirm-unlock-modal');
     unlockModal.querySelector('#cancel-unlock-btn').addEventListener('click', () => unlockModal.classList.add('hidden'));
     unlockModal.querySelector('#confirm-unlock-btn').addEventListener('click', executeUnlockChecklist);
+    
+    // Adicionado o listener para o botão de exportar PDF que criamos
+    document.getElementById('export-checklist-pdf-btn')?.addEventListener('click', exportChecklistReportPDF);
 }
 
 // Função para buscar os dados na API com base nos filtros
