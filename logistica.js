@@ -2895,7 +2895,6 @@ async function exportChecklistReportPDF() {
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 15;
 
-        // --- FUNÇÃO DE RODAPÉ (será chamada em cada página) ---
         const pageFooter = () => {
             doc.setFontSize(8);
             doc.setTextColor(150);
@@ -2905,7 +2904,6 @@ async function exportChecklistReportPDF() {
             doc.text(dateText, pageWidth - margin, pageHeight - 10, { align: 'right' });
         };
 
-        // --- CABEÇALHO DA PRIMEIRA PÁGINA ---
         if (LOGO_BASE_64) doc.addImage(LOGO_BASE_64, 'PNG', margin, yPos, 25, 0);
         
         doc.setFontSize(16);
@@ -2917,7 +2915,6 @@ async function exportChecklistReportPDF() {
         doc.text(vehicleInfo, pageWidth / 2, yPos + 14, { align: 'center' });
         yPos += 30;
 
-        // --- SEÇÃO: INFORMAÇÕES GERAIS ---
         doc.autoTable({
             startY: yPos,
             theme: 'striped',
@@ -2934,14 +2931,21 @@ async function exportChecklistReportPDF() {
         });
         yPos = doc.autoTable.previous.finalY + 10;
 
-        // --- SEÇÃO: ITENS VERIFICADOS ---
+        doc.setFontSize(12);
+        doc.text("Itens Verificados", 15, yPos);
+        yPos += 5;
+        
+        // --- LINHA ADICIONADA PARA CORRIGIR O ERRO ---
+        const requiredItems = ["Lataria", "Pneus", "Nível de Óleo e Água", "Iluminação (Lanternas e Sinalização)"];
+
+        const itensBody = requiredItems.map(itemName => {
+            const avaria = avarias.find(a => a.item_verificado === itemName);
+            return [itemName, avaria ? 'AVARIA' : 'OK', avaria ? avaria.descricao_avaria || '-' : ''];
+        });
         doc.autoTable({
+            head: [['Item', 'Status', 'Descrição da Avaria']],
+            body: itensBody,
             startY: yPos,
-            head: [['Item Vistoriado', 'Status', 'Descrição da Avaria']],
-            body: requiredItems.map(itemName => {
-                const avaria = avarias.find(a => a.item_verificado === itemName);
-                return [itemName, avaria ? 'AVARIA' : 'OK', avaria ? avaria.descricao_avaria || '-' : ''];
-            }),
             theme: 'grid',
             headStyles: { fillColor: [41, 128, 185] },
             didParseCell: function(data) {
@@ -2960,13 +2964,18 @@ async function exportChecklistReportPDF() {
         });
         yPos = doc.autoTable.previous.finalY + 10;
         
-        // Adiciona rodapé na primeira página
         pageFooter();
 
-        // --- SEÇÃO: EVIDÊNCIAS FOTOGRÁFICAS ---
+        const mandatoryPhotos = [
+            { label: 'Frente', url: checklist.foto_frente_url }, { label: 'Traseira', url: checklist.foto_traseira_url },
+            { label: 'Lateral Direita', url: checklist.foto_lateral_direita_url }, { label: 'Lateral Esquerda', url: checklist.foto_lateral_esquerda_url }
+        ];
+
+        const avariasComFoto = avarias.filter(a => a.foto_url).map(a => ({ url: a.foto_url, title: `Avaria: ${a.item_verificado}` }));
+
         const allPhotos = [
             ...mandatoryPhotos.map(p => ({ ...p, title: `Foto Obrigatória: ${p.label}` })),
-            ...avarias.filter(a => a.foto_url).map(a => ({ url: a.foto_url, title: `Avaria: ${a.item_verificado}` }))
+            ...avariasComFoto
         ];
         
         if (allPhotos.length > 0) {
@@ -2980,7 +2989,6 @@ async function exportChecklistReportPDF() {
             for (const photo of allPhotos) {
                 const imgData = await imageToBase64(photo.url ? `/${photo.url}` : null);
                 
-                // Verifica se a imagem cabe na página atual, se não, cria uma nova
                 if (yPos + 80 > pageHeight - 20) {
                     pageFooter();
                     doc.addPage();
@@ -2998,14 +3006,11 @@ async function exportChecklistReportPDF() {
                     doc.rect(margin, yPos, 90, 65);
                     doc.text("Sem Foto", margin + 45, yPos + 35, { align: 'center' });
                 }
-                yPos += 75; // Espaço para a próxima foto
+                yPos += 75;
             }
-             // Adiciona rodapé na última página de fotos
             pageFooter();
         }
 
-        // --- SEÇÃO: ASSINATURAS ---
-        // Verifica se a assinatura cabe na página atual, se não, cria uma nova
         if (yPos + 40 > pageHeight - 20) {
              pageFooter();
              doc.addPage();
@@ -3018,7 +3023,6 @@ async function exportChecklistReportPDF() {
         doc.setFont(undefined, 'normal');
         doc.text("Assinatura do Motorista", pageWidth / 2, yPos + 25, { align: 'center' });
         
-        // Adiciona rodapé na última página
         if(allPhotos.length === 0) pageFooter();
 
 
