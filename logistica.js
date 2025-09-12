@@ -2572,22 +2572,23 @@ let checklistControlState = {
 async function initChecklistControlPanel() {
     const modal = document.getElementById('checklist-control-modal');
     
-    // Conecta o novo botão da barra de ações para abrir o modal
+    // Conecta o botão da barra de ações para abrir o modal
     document.getElementById('open-checklist-panel-btn').addEventListener('click', () => {
         modal.classList.remove('hidden');
         // Ao abrir, dispara a busca pelos dados do dia automaticamente
+        if (!checklistControlState.datepicker) {
+             checklistControlState.datepicker = new Litepicker({
+                element: document.getElementById('cc-filter-date'),
+                singleMode: false,
+                lang: 'pt-BR',
+                format: 'DD/MM/YYYY',
+                setup: (picker) => { picker.setDateRange(new Date(), new Date()); },
+            });
+        }
         document.getElementById('cc-filter-btn').click(); 
     });
     
     modal.querySelector('#close-checklist-control-modal').addEventListener('click', () => modal.classList.add('hidden'));
-
-    checklistControlState.datepicker = new Litepicker({
-        element: document.getElementById('cc-filter-date'),
-        singleMode: false,
-        lang: 'pt-BR',
-        format: 'DD/MM/YYYY',
-        setup: (picker) => { picker.setDateRange(new Date(), new Date()); },
-    });
 
     await populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Unidades`, 'cc-filter-filial', 'ID', 'NOME_PARAMETRO', 'Todas as Filiais');
 
@@ -2599,6 +2600,7 @@ async function initChecklistControlPanel() {
     unlockModal.querySelector('#confirm-unlock-btn').addEventListener('click', executeUnlockChecklist);
 }
 
+// Função para buscar os dados na API com base nos filtros
 async function fetchAndRenderChecklists() {
     showLoader();
     try {
@@ -2619,7 +2621,7 @@ async function fetchAndRenderChecklists() {
         checklistControlState.allCompleted = completed;
         checklistControlState.allPending = pending;
         
-        applyChecklistControlFilters();
+        applyChecklistControlFilters(); // Chama a função para renderizar com os filtros aplicados
 
     } catch (error) {
         alert(error.message);
@@ -2628,12 +2630,13 @@ async function fetchAndRenderChecklists() {
     }
 }
 
+// Função para aplicar os filtros de pesquisa e filial aos dados já buscados
 function applyChecklistControlFilters() {
     const searchTerm = document.getElementById('cc-filter-search').value.toLowerCase();
     const filialId = document.getElementById('cc-filter-filial').value;
 
     const filterFn = (item) => {
-        const searchMatch = !searchTerm || item.placa.toLowerCase().includes(searchTerm) || item.modelo.toLowerCase().includes(searchTerm);
+        const searchMatch = !searchTerm || (item.placa && item.placa.toLowerCase().includes(searchTerm)) || (item.modelo && item.modelo.toLowerCase().includes(searchTerm));
         const filialMatch = !filialId || item.id_filial == filialId;
         return searchMatch && filialMatch;
     };
@@ -2644,56 +2647,82 @@ function applyChecklistControlFilters() {
     renderChecklistControlPanel(filteredCompleted, filteredPending);
 }
 
+// Função para desenhar as listas de concluídos e pendentes no modal
 function renderChecklistControlPanel(completed, pending) {
     const completedContainer = document.getElementById('cc-completed-list');
     const pendingContainer = document.getElementById('cc-pending-list');
     
-    completedContainer.innerHTML = completed.length > 0 ? completed.map(c => `
-        <div class="text-sm p-2 border rounded-md flex justify-between items-center ${c.total_avarias > 0 ? 'bg-red-50' : 'bg-green-50'}">
+    // --- LÓGICA DE RENDERIZAÇÃO DOS CHECKLISTS CONCLUÍDOS (COM MELHORIA) ---
+    completedContainer.innerHTML = completed.length > 0 ? completed.map(c => {
+        // Variável para guardar o HTML do indicador de avaria
+        let avariaIndicatorHtml = `
+            <span class="px-2 text-xs font-semibold rounded-full bg-green-200 text-green-800">OK</span>
+        `;
+
+        // Se houver avarias, cria o novo indicador vermelho
+        if (c.total_avarias > 0) {
+            avariaIndicatorHtml = `
+                <span class="relative flex h-6 w-6">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-6 w-6 bg-red-500 text-white text-xs font-bold items-center justify-center" title="${c.total_avarias} avaria(s) encontrada(s)">
+                        ${c.total_avarias}
+                    </span>
+                </span>
+            `;
+        }
+
+        return `
+        <div class="text-sm p-2 border rounded-md flex justify-between items-center ${c.total_avarias > 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}">
             <div>
                 <p class="font-bold">${c.modelo} (${c.placa})</p>
-                <p class="text-xs">${c.nome_filial} - por ${c.nome_usuario} às ${new Date(c.data_checklist).toLocaleTimeString('pt-BR')}</p>
+                <p class="text-xs text-gray-600">${c.nome_filial} - por ${c.nome_usuario} às ${new Date(c.data_checklist).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</p>
             </div>
-            <div class="flex items-center gap-2">
-                <span class="px-2 text-xs font-semibold rounded-full ${c.total_avarias > 0 ? 'bg-red-200 text-red-800' : 'bg-green-200 text-green-800'}">
-                    ${c.total_avarias > 0 ? `${c.total_avarias} Avaria(s)` : 'OK'}
-                </span>
-                <button data-action="view" data-checklist-id="${c.id}" class="text-indigo-600 hover:underline" title="Visualizar"><i data-feather="eye" class="w-4 h-4"></i></button>
+            <div class="flex items-center gap-4">
+                ${avariaIndicatorHtml}
+                <button data-action="view" data-vehicle-id="${c.id_veiculo}" data-vehicle-info="${c.modelo} - ${c.placa}" class="text-indigo-600 hover:underline" title="Visualizar"><i data-feather="eye" class="w-4 h-4"></i></button>
                 <button data-action="unlock" data-checklist-id="${c.id}" data-info="${c.modelo} - ${c.placa}" class="text-blue-600 hover:underline" title="Desbloquear"><i data-feather="unlock" class="w-4 h-4"></i></button>
             </div>
         </div>
-    `).join('') : '<p class="text-xs text-center text-gray-500 p-4">Nenhum checklist concluído para os filtros selecionados.</p>';
+        `;
+    }).join('') : '<p class="text-xs text-center text-gray-500 p-4">Nenhum checklist concluído para os filtros selecionados.</p>';
 
+    // --- LÓGICA DE RENDERIZAÇÃO DOS PENDENTES (SEM ALTERAÇÃO) ---
     pendingContainer.innerHTML = pending.length > 0 ? pending.map(p => `
         <div class="text-sm p-2 border rounded-md flex justify-between items-center bg-gray-50">
             <div>
                 <p class="font-bold">${p.modelo} (${p.placa})</p>
-                <p class="text-xs">${p.nome_filial}</p>
+                <p class="text-xs text-gray-600">${p.nome_filial}</p>
             </div>
+            <span class="px-2 text-xs font-semibold rounded-full bg-yellow-200 text-yellow-800">Pendente</span>
         </div>
     `).join('') : '<p class="text-xs text-center text-gray-500 p-4">Nenhum veículo pendente para os filtros selecionados.</p>';
     
     feather.replace();
 }
 
+// Função para lidar com os cliques nos botões de ação (ver, desbloquear)
 function handleChecklistPanelActionClick(event) {
     const button = event.target.closest('button');
     if (!button || !button.dataset.action) return;
 
     const action = button.dataset.action;
-    const checklistId = button.dataset.checklistId;
-    const info = button.dataset.info;
     
     if (action === 'unlock') {
+        const checklistId = button.dataset.checklistId;
+        const info = button.dataset.info;
         checklistControlState.checklistToUnlock = checklistId;
         document.getElementById('unlock-checklist-info').textContent = info;
         document.getElementById('confirm-unlock-modal').classList.remove('hidden');
         feather.replace();
     } else if (action === 'view') {
-        alert(`A visualização do checklist ID ${checklistId} será implementada aqui.`);
+        const vehicleId = button.dataset.vehicleId;
+        const vehicleInfo = button.dataset.vehicleInfo;
+        // Reutiliza a função que já criamos para ver o relatório de checklist
+        openChecklistReportModal(vehicleId, vehicleInfo);
     }
 }
 
+// Função para executar o desbloqueio
 async function executeUnlockChecklist() {
     const id = checklistControlState.checklistToUnlock;
     if (!id) return;
@@ -2715,7 +2744,6 @@ async function executeUnlockChecklist() {
         modal.classList.add('hidden');
         
         await fetchAndRenderChecklists(); // Atualiza a lista no modal
-        await updateChecklistAlertIcon(); // Atualiza o ícone
     } catch (error) {
         alert(`Erro: ${error.message}`);
     } finally {
