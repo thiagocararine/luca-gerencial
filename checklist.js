@@ -4,7 +4,28 @@ const apiUrlBase = '/api';
 
 // Funções utilitárias de autenticação
 function getToken() { return localStorage.getItem('lucaUserToken'); }
-function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
+function getUserData() { 
+    const token = getToken(); 
+    if (!token) return null; 
+    try { 
+        return JSON.parse(atob(token.split('.')[1])); 
+    } catch (e) { 
+        return null; 
+    } 
+}
+
+function getUserName() { 
+    return getUserData()?.nome || 'Utilizador'; 
+}
+
+function getUserProfile() { 
+    return getUserData()?.perfil || null; 
+}
+
+function logout() { 
+    localStorage.removeItem('lucaUserToken'); 
+    window.location.href = 'login.html'; 
+}
 
 function initChecklistPage() {
     const token = getToken();
@@ -13,7 +34,9 @@ function initChecklistPage() {
         return;
     }
     document.getElementById('logout-button')?.addEventListener('click', logout);
+
     gerenciarAcessoModulos();
+
     const userData = getUserData();
     if (userData && document.getElementById('user-name')) {
         document.getElementById('user-name').textContent = userData.nome || 'Utilizador';
