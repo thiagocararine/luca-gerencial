@@ -1859,11 +1859,19 @@ router.get('/checklists-por-periodo', authenticateToken, async (req, res) => {
 
 // Rota para desbloquear (excluir) um checklist
 router.delete('/checklist/:id/desbloquear', authenticateToken, async (req, res) => {
+    // --- INÍCIO DO BLOCO DE DEPURAÇÃO ---
+    console.log('--- ROTA DE DESBLOQUEIO DE CHECKLIST ACESSADA ---');
+    console.log('ID do Checklist para desbloquear:', req.params.id);
+    console.log('Dados do Usuário no Token:', req.user);
+    // --- FIM DO BLOCO DE DEPURAÇÃO ---
+
     const { id: checklistId } = req.params;
     const { userId, nome: nomeUsuario } = req.user;
 
     // Apenas perfis privilegiados podem desbloquear
     if (!privilegedAccessProfiles.includes(req.user.perfil)) {
+        // Log adicional para falha de permissão
+        console.log(`FALHA DE PERMISSÃO: Usuário ${nomeUsuario} com perfil '${req.user.perfil}' tentou desbloquear.`);
         return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
     }
 
@@ -1872,14 +1880,12 @@ router.delete('/checklist/:id/desbloquear', authenticateToken, async (req, res) 
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
 
-        // Pega o id_veiculo para o log antes de deletar
         const [checklist] = await connection.execute('SELECT id_veiculo FROM veiculo_checklists WHERE id = ?', [checklistId]);
         if (checklist.length === 0) {
             await connection.rollback();
             return res.status(404).json({ error: 'Checklist não encontrado.' });
         }
 
-        // Deleta primeiro os itens (se houver), depois o checklist principal
         await connection.execute('DELETE FROM checklist_itens WHERE id_checklist = ?', [checklistId]);
         await connection.execute('DELETE FROM veiculo_checklists WHERE id = ?', [checklistId]);
 
@@ -1893,11 +1899,13 @@ router.delete('/checklist/:id/desbloquear', authenticateToken, async (req, res) 
         });
 
         await connection.commit();
+        console.log(`SUCESSO: Checklist ID ${checklistId} desbloqueado por ${nomeUsuario}.`);
         res.json({ message: 'Checklist desbloqueado com sucesso!' });
 
     } catch (error) {
         if (connection) await connection.rollback();
-        console.error("Erro ao desbloquear checklist:", error);
+        // Log do erro completo
+        console.error("ERRO CRÍTICO AO DESBLOQUEAR CHECKLIST:", error);
         res.status(500).json({ error: 'Erro interno ao desbloquear o checklist.' });
     } finally {
         if (connection) await connection.end();
