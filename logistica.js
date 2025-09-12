@@ -2652,14 +2652,9 @@ function renderChecklistControlPanel(completed, pending) {
     const completedContainer = document.getElementById('cc-completed-list');
     const pendingContainer = document.getElementById('cc-pending-list');
     
-    // --- LÓGICA DE RENDERIZAÇÃO DOS CHECKLISTS CONCLUÍDOS (COM MELHORIA) ---
     completedContainer.innerHTML = completed.length > 0 ? completed.map(c => {
-        // Variável para guardar o HTML do indicador de avaria
-        let avariaIndicatorHtml = `
-            <span class="px-2 text-xs font-semibold rounded-full bg-green-200 text-green-800">OK</span>
-        `;
+        let avariaIndicatorHtml = `<span class="px-2 text-xs font-semibold rounded-full bg-green-200 text-green-800">OK</span>`;
 
-        // Se houver avarias, cria o novo indicador vermelho
         if (c.total_avarias > 0) {
             avariaIndicatorHtml = `
                 <span class="relative flex h-6 w-6">
@@ -2671,11 +2666,17 @@ function renderChecklistControlPanel(completed, pending) {
             `;
         }
 
+        // --- ALTERAÇÃO APLICADA AQUI ---
+        // Formata a data e a hora para exibição
+        const dataHoraChecklist = new Date(c.data_checklist).toLocaleString('pt-BR', {
+            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+
         return `
         <div class="text-sm p-2 border rounded-md flex justify-between items-center ${c.total_avarias > 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}">
             <div>
                 <p class="font-bold">${c.modelo} (${c.placa})</p>
-                <p class="text-xs text-gray-600">${c.nome_filial} - por ${c.nome_usuario} às ${new Date(c.data_checklist).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</p>
+                <p class="text-xs text-gray-600">${c.nome_filial} - por ${c.nome_usuario} em ${dataHoraChecklist}</p>
             </div>
             <div class="flex items-center gap-4">
                 ${avariaIndicatorHtml}
@@ -2686,7 +2687,6 @@ function renderChecklistControlPanel(completed, pending) {
         `;
     }).join('') : '<p class="text-xs text-center text-gray-500 p-4">Nenhum checklist concluído para os filtros selecionados.</p>';
 
-    // --- LÓGICA DE RENDERIZAÇÃO DOS PENDENTES (SEM ALTERAÇÃO) ---
     pendingContainer.innerHTML = pending.length > 0 ? pending.map(p => `
         <div class="text-sm p-2 border rounded-md flex justify-between items-center bg-gray-50">
             <div>
@@ -2753,4 +2753,91 @@ async function executeUnlockChecklist() {
     }
 }
 
-// --- FIM DA LÓGICA DO PAINEL DE CONTROLE DE CHECKLISTS ---
+async function openChecklistReportModal(vehicleId, vehicleInfo) {
+    const loader = document.getElementById('global-loader');
+    loader.style.display = 'flex';
+    const modal = document.getElementById('checklist-report-modal'); // Certifique-se que o HTML deste modal esteja em logistica.html também
+
+    try {
+        const hoje = new Date().toISOString().slice(0, 10);
+        const response = await fetch(`${apiUrlBase}/logistica/checklist/relatorio?veiculoId=${vehicleId}&data=${hoje}`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+
+        if (!response.ok) {
+            if (response.status === 404) throw new Error('O relatório do checklist de hoje não foi encontrado.');
+            throw new Error('Falha ao buscar os dados do checklist.');
+        }
+
+        const data = await response.json();
+        const { checklist, avarias } = data;
+
+        // Preenche o cabeçalho
+        document.getElementById('report-vehicle-info').textContent = vehicleInfo;
+        
+        // Preenche as Informações Gerais
+        document.getElementById('report-datetime').textContent = new Date(checklist.data_checklist).toLocaleString('pt-BR');
+        document.getElementById('report-driver').textContent = checklist.nome_motorista || 'Não informado';
+        document.getElementById('report-odometer').textContent = checklist.odometro_saida.toLocaleString('pt-BR');
+        document.getElementById('report-user').textContent = checklist.nome_usuario || 'Não informado';
+        document.getElementById('report-obs').textContent = checklist.observacoes_gerais || 'Nenhuma.';
+
+        // Preenche os Itens Verificados
+        const itemsContainer = document.getElementById('report-items-container');
+        itemsContainer.innerHTML = '';
+        const requiredItems = ["Lataria", "Pneus", "Nível de Óleo e Água", "Iluminação (Lanternas e Sinalização)"];
+
+        requiredItems.forEach(itemName => {
+            const avaria = avarias.find(a => a.item_verificado === itemName);
+            const status = avaria ? 'Avaria' : 'OK';
+            const statusClass = avaria ? 'text-red-600' : 'text-green-600';
+
+            const itemHtml = `
+                <div class="p-3 bg-gray-50 rounded-md">
+                    <div class="flex justify-between items-center">
+                        <span class="font-medium">${itemName}</span>
+                        <span class="font-bold ${statusClass}">${status}</span>
+                    </div>
+                    ${avaria ? `
+                    <div class="mt-2 pl-2 border-l-2 border-gray-200 text-sm">
+                        <p><strong>Descrição:</strong> ${avaria.descricao_avaria || 'Nenhuma'}</p>
+                        ${avaria.foto_url ? `<a href="/${avaria.foto_url}" target="_blank" class="text-indigo-600 hover:underline">Ver Foto da Avaria</a>` : ''}
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+            itemsContainer.innerHTML += itemHtml;
+        });
+
+        // Preenche a galeria de Fotos Obrigatórias
+        const photosContainer = document.getElementById('report-photos-container');
+        photosContainer.innerHTML = '';
+        const photos = [
+            { label: 'Frente', url: checklist.foto_frente_url },
+            { label: 'Traseira', url: checklist.foto_traseira_url },
+            { label: 'Lateral Direita', url: checklist.foto_lateral_direita_url },
+            { label: 'Lateral Esquerda', url: checklist.foto_lateral_esquerda_url }
+        ];
+
+        photos.forEach(photo => {
+            const imagePath = photo.url ? `/${photo.url}` : 'https://placehold.co/300x200/e2e8f0/4a5568?text=Sem+Foto';
+            const photoHtml = `
+                <div>
+                    <p class="text-sm font-semibold mb-1">${photo.label}</p>
+                    <a href="${imagePath}" target="_blank" class="block">
+                        <img src="${imagePath}" alt="${photo.label}" class="w-full h-32 object-cover rounded-md border bg-gray-100">
+                    </a>
+                </div>
+            `;
+            photosContainer.innerHTML += photoHtml;
+        });
+        
+        modal.classList.remove('hidden');
+        feather.replace();
+
+    } catch (error) {
+        alert(`Erro ao carregar o relatório: ${error.message}`);
+    } finally {
+        loader.style.display = 'none';
+    }
+}

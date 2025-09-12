@@ -1080,5 +1080,39 @@
         </div>
     </div>
 </div>
+<div id="checklist-report-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[70] flex items-center justify-center p-4">
+    <div class="relative mx-auto border w-full max-w-4xl shadow-lg rounded-md bg-white flex flex-col h-[90vh]">
+        <div class="flex items-start justify-between p-4 border-b flex-shrink-0">
+            <div>
+                <h3 class="text-xl font-semibold">Relatório do Checklist</h3>
+                <p id="report-vehicle-info" class="text-sm text-gray-500"></p>
+            </div>
+            <button id="close-report-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center"><span data-feather="x"></span></button>
+        </div>
+        
+        <div class="flex-grow overflow-y-auto p-6 space-y-6">
+            <section>
+                <h4 class="text-lg font-semibold text-gray-800 border-b pb-2 mb-3">Informações Gerais</h4>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div><strong class="block text-gray-500">Data e Hora</strong><span id="report-datetime"></span></div>
+                    <div><strong class="block text-gray-500">Motorista</strong><span id="report-driver"></span></div>
+                    <div><strong class="block text-gray-500">Odômetro de Saída</strong><span id="report-odometer"></span> km</div>
+                    <div><strong class="block text-gray-500">Usuário do Lançamento</strong><span id="report-user"></span></div>
+                    <div class="md:col-span-3"><strong class="block text-gray-500">Observações</strong><p id="report-obs" class="mt-1 p-2 bg-gray-50 rounded"></p></div>
+                </div>
+            </section>
+
+            <section>
+                <h4 class="text-lg font-semibold text-gray-800 border-b pb-2 mb-3">Itens Verificados</h4>
+                <div id="report-items-container" class="space-y-3"></div>
+            </section>
+
+            <section>
+                <h4 class="text-lg font-semibold text-gray-800 border-b pb-2 mb-3">Fotos Obrigatórias</h4>
+                <div id="report-photos-container" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></div>
+            </section>
+        </div>
+    </div>
+</div>
 </body>
 </html>
