@@ -29,6 +29,7 @@ let photoCaptureState = {
     targetInputId: null,
     targetPreviewId: null
 };
+let currentChecklistReportData = null;
 
 // --- Funções do Indicador de Carregamento ---
 function showLoader() {
@@ -114,6 +115,17 @@ function setupEventListeners() {
         carregarEExibirAlertasDeManutencao();
         document.getElementById('maintenance-alert-modal').classList.remove('hidden');
     });
+
+    const searchInput = document.getElementById('filter-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            // Filtra em tempo real se o campo estiver vazio ou tiver 3 ou mais caracteres
+            if (searchTerm.length === 0 || searchTerm.length >= 3) {
+                applyFilters();
+            }
+        });
+    }
 
     const vehicleModal = document.getElementById('vehicle-modal');
     if (vehicleModal) {
@@ -2570,30 +2582,28 @@ let checklistControlState = {
 };
 
 async function initChecklistControlPanel() {
-    const modal = document.getElementById('checklist-control-modal');
-    
-    // Conecta o botão da barra de ações para abrir o modal
+    const controlModal = document.getElementById('checklist-control-modal');
+    const reportModal = document.getElementById('checklist-report-modal'); // Adicione esta linha
+
+    // Conecta o novo botão da barra de ações para abrir o modal
     document.getElementById('open-checklist-panel-btn').addEventListener('click', () => {
-        modal.classList.remove('hidden');
-        // Ao abrir, dispara a busca pelos dados do dia automaticamente
+        controlModal.classList.remove('hidden');
         if (!checklistControlState.datepicker) {
-             checklistControlState.datepicker = new Litepicker({
-                element: document.getElementById('cc-filter-date'),
-                singleMode: false,
-                lang: 'pt-BR',
-                format: 'DD/MM/YYYY',
-                setup: (picker) => { picker.setDateRange(new Date(), new Date()); },
-            });
+             checklistControlState.datepicker = new Litepicker({ /* ... */ });
         }
         document.getElementById('cc-filter-btn').click(); 
     });
     
-    modal.querySelector('#close-checklist-control-modal').addEventListener('click', () => modal.classList.add('hidden'));
+    controlModal.querySelector('#close-checklist-control-modal').addEventListener('click', () => controlModal.classList.add('hidden'));
+    
+    // ADICIONE ESTA LINHA PARA FAZER O BOTÃO FECHAR FUNCIONAR
+    reportModal.querySelector('#close-report-modal-btn').addEventListener('click', () => reportModal.classList.add('hidden'));
 
     await populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Unidades`, 'cc-filter-filial', 'ID', 'NOME_PARAMETRO', 'Todas as Filiais');
 
     document.getElementById('cc-filter-btn').addEventListener('click', fetchAndRenderChecklists);
     document.getElementById('cc-completed-list').addEventListener('click', handleChecklistPanelActionClick);
+    document.getElementById('export-checklist-pdf-btn')?.addEventListener('click', exportChecklistReportPDF);
     
     const unlockModal = document.getElementById('confirm-unlock-modal');
     unlockModal.querySelector('#cancel-unlock-btn').addEventListener('click', () => unlockModal.classList.add('hidden'));
@@ -2768,9 +2778,11 @@ async function openChecklistReportModal(vehicleId, vehicleInfo) {
             if (response.status === 404) throw new Error('O relatório do checklist de hoje não foi encontrado.');
             throw new Error('Falha ao buscar os dados do checklist.');
         }
-
+        
         const data = await response.json();
         const { checklist, avarias } = data;
+
+        currentChecklistReportData = { checklist, avarias, vehicleInfo };
 
         // Preenche o cabeçalho
         document.getElementById('report-vehicle-info').textContent = vehicleInfo;
@@ -2839,5 +2851,102 @@ async function openChecklistReportModal(vehicleId, vehicleInfo) {
         alert(`Erro ao carregar o relatório: ${error.message}`);
     } finally {
         loader.style.display = 'none';
+    }
+}
+
+async function imageToBase64(url) {
+    if (!url) return null;
+    try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    } catch (error) {
+        console.error("Erro ao converter imagem para Base64:", error);
+        return null;
+    }
+}
+
+async function exportChecklistReportPDF() {
+    if (!currentChecklistReportData) {
+        alert("Não há dados de checklist para exportar.");
+        return;
+    }
+    showLoader();
+    const btn = document.getElementById('export-checklist-pdf-btn');
+    btn.disabled = true;
+
+    try {
+        const { checklist, avarias, vehicleInfo } = currentChecklistReportData;
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+        let yPos = 15; // Posição vertical inicial
+
+        // Cabeçalho
+        if (LOGO_BASE_64) doc.addImage(LOGO_BASE_64, 'PNG', 15, yPos, 25, 0);
+        doc.setFontSize(18);
+        doc.text("Relatório de Checklist de Veículo", 105, yPos + 7, { align: 'center' });
+        yPos += 25;
+
+        // Informações Gerais
+        doc.setFontSize(10);
+        doc.text(`Veículo: ${vehicleInfo}`, 15, yPos);
+        doc.text(`Data: ${new Date(checklist.data_checklist).toLocaleString('pt-BR')}`, 15, yPos + 5);
+        doc.text(`Motorista: ${checklist.nome_motorista}`, 15, yPos + 10);
+        doc.text(`Odômetro: ${checklist.odometro_saida.toLocaleString('pt-BR')} km`, 15, yPos + 15);
+        yPos += 25;
+
+        // Tabela de Itens
+        const requiredItems = ["Lataria", "Pneus", "Nível de Óleo e Água", "Iluminação (Lanternas e Sinalização)"];
+        const body = requiredItems.map(itemName => {
+            const avaria = avarias.find(a => a.item_verificado === itemName);
+            return [itemName, avaria ? 'Avaria' : 'OK', avaria ? avaria.descricao_avaria || 'Nenhuma' : ''];
+        });
+
+        doc.autoTable({
+            head: [['Item Verificado', 'Status', 'Descrição da Avaria']],
+            body: body,
+            startY: yPos,
+            theme: 'grid',
+        });
+        yPos = doc.autoTable.previous.finalY + 10;
+
+        // Seção de Fotos de Avarias
+        const avariasComFoto = avarias.filter(a => a.foto_url);
+        if (avariasComFoto.length > 0) {
+            doc.addPage();
+            yPos = 15;
+            doc.setFontSize(14);
+            doc.text("Fotos das Avarias", 15, yPos);
+            yPos += 10;
+
+            for (const avaria of avariasComFoto) {
+                doc.setFontSize(10);
+                doc.text(`Item: ${avaria.item_verificado}`, 15, yPos);
+                yPos += 5;
+
+                const imgData = await imageToBase64(`/${avaria.foto_url}`);
+                if (imgData) {
+                    if (yPos + 60 > 280) { // Verifica se a imagem cabe na página
+                        doc.addPage();
+                        yPos = 15;
+                    }
+                    doc.addImage(imgData, 'JPEG', 15, yPos, 80, 60);
+                    yPos += 70; // Espaço para a próxima imagem
+                }
+            }
+        }
+        
+        doc.save(`Checklist_${vehicleInfo.replace(/\s/g, '_')}.pdf`);
+
+    } catch (error) {
+        alert("Erro ao gerar o PDF: " + error.message);
+    } finally {
+        hideLoader();
+        btn.disabled = false;
     }
 }
