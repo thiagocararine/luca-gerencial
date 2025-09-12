@@ -19,7 +19,8 @@ const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 const ALL_MODULES = {
     'lancamentos': 'Lançamentos',
     'logistica': 'Logística',
-    'configuracoes': 'Configurações'
+    'configuracoes': 'Configurações',
+    'checklist': 'Checklist Veículos'
 };
 
 /**
