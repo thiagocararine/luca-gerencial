@@ -171,13 +171,20 @@ async function openChecklistModal(vehicle) {
     const form = document.getElementById('checklist-form');
     form.reset();
     
-    // Reseta o estado do acordeão
+    // Reseta e define o estado do acordeão
     modal.querySelectorAll('.accordion-content').forEach((content, index) => {
-        // Agora o segundo acordeão (itens) abre por padrão
-        if (index === 1) content.classList.remove('hidden');
-        else content.classList.add('hidden');
+        const header = content.previousElementSibling;
+        const icon = header ? header.querySelector('[data-feather="chevron-down"]') : null;
+
+        // ALTERAÇÃO APLICADA AQUI: Abre a primeira seção (index 0) por padrão
+        if (index === 0) {
+            content.classList.remove('hidden');
+            if (icon) icon.classList.add('rotate-180');
+        } else {
+            content.classList.add('hidden');
+            if (icon) icon.classList.remove('rotate-180');
+        }
     });
-    modal.querySelectorAll('.accordion-header .feather').forEach(icon => icon.classList.remove('rotate-180'));
 
     const itemsContainer = document.getElementById('checklist-items-container');
     itemsContainer.innerHTML = '';
