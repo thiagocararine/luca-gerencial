@@ -130,6 +130,12 @@ async function getLogisticsSummary(connection, req) {
     };
 }
 
+async function getChecklistSummary(connection, req) {
+    // No futuro, você pode adicionar lógicas aqui para buscar KPIs de checklist.
+    // Por enquanto, retornamos um objeto vazio para que a página carregue sem erros.
+    return {}; 
+}
+
 
 router.get('/dashboard-summary', authenticateToken, async (req, res) => {
     let connection;
