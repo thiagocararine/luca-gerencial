@@ -890,7 +890,7 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
 
         const sqlInsert = `
             INSERT INTO veiculo_manutencoes 
-            (id_veiculo, id_filial, data_manutencao, descricao, custo, tipo_manutencao, item_servico, odometro_manutencao, classificacao_custo, id_user_lanc, numero_nf, id_fornecedor, status)
+            (id_veiculo, id_filial, data_manutencao, descricao, custo, tipo_manutencao, item_servico, odometro_manutencao, classificacao_custo, id_user_lanc, id_fornecedor, numero_nf, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
 
         await connection.execute(sqlInsert, [id_veiculo, id_filial_veiculo, data_manutencao, descricao, custo, tipo_manutencao, item_servico || null, odometro_manutencao || null, classificacao_custo, userId, id_fornecedor, numero_nf]);
