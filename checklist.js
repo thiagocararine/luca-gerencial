@@ -74,15 +74,16 @@ function renderVehicleCardsForChecklist(vehicles) {
     }
     container.innerHTML = '';
     vehicles.forEach(vehicle => {
+        // --- LOG DE VERIFICAÇÃO 1 ---
+        console.log('Renderizando card para o veículo:', vehicle); // Verifica se o objeto 'vehicle' tem o 'id'
+
         const card = document.createElement('div');
-        // Adicionamos data-vehicle-id para facilitar o acesso
         card.dataset.vehicleId = vehicle.id;
         card.dataset.vehicleInfo = `${vehicle.modelo} - ${vehicle.placa}`;
 
         const checklistFeito = vehicle.checklist_hoje > 0;
         const cardClasses = checklistFeito ? 'bg-green-50 border-green-400' : 'bg-white/80 backdrop-blur-sm border-gray-200';
         const buttonText = checklistFeito ? 'Ver Checklist Concluído' : 'Iniciar Checklist';
-        // Adicionamos uma classe de ação diferente para o botão
         const buttonActionClass = checklistFeito ? 'view-checklist-btn' : 'start-checklist-btn';
 
         card.className = `rounded-lg shadow p-4 flex flex-col justify-between border ${cardClasses}`;
@@ -109,12 +110,9 @@ function setupChecklistEventListeners() {
     const launchModal = document.getElementById('checklist-modal');
     const reportModal = document.getElementById('checklist-report-modal');
     const itemsContainer = document.getElementById('checklist-items-container');
-    const form = document.getElementById('checklist-form');
 
-    // Listener principal na lista de veículos
     vehicleList.addEventListener('click', (event) => {
-        const button = event.target.closest('button');
-        if (!button) return;
+        const button = event.target;
         const card = button.closest('[data-vehicle-id]');
         if (!card) return;
 
@@ -125,6 +123,10 @@ function setupChecklistEventListeners() {
             const vehicleData = { id: vehicleId, modelo: vehicleInfo.split(' - ')[0], placa: vehicleInfo.split(' - ')[1] };
             openChecklistModal(vehicleData);
         } else if (button.classList.contains('view-checklist-btn')) {
+            // --- LOG DE VERIFICAÇÃO 2 ---
+            console.log('Botão "Ver Checklist Concluído" foi clicado.');
+            console.log('ID do Veículo capturado do card:', vehicleId); // Verifica se o ID foi pego do data attribute
+            
             openChecklistReportModal(vehicleId, vehicleInfo);
         }
     });
@@ -362,13 +364,18 @@ async function openChecklistReportModal(vehicleId, vehicleInfo) {
     try {
         const hoje = new Date().toISOString().slice(0, 10);
         
-        // CORREÇÃO: Usa a rota original que busca por VEÍCULO e DATA
-        const response = await fetch(`${apiUrlBase}/logistica/checklist/relatorio?veiculoId=${vehicleId}&data=${hoje}`, {
+        // --- LOG DE VERIFICAÇÃO 3 ---
+        console.log('--- Dentro da função openChecklistReportModal ---');
+        console.log('ID do Veículo recebido pela função:', vehicleId); // Verifica o parâmetro
+        console.log('Data usada na busca:', hoje);
+        const apiUrl = `${apiUrlBase}/logistica/checklist/relatorio?veiculoId=${vehicleId}&data=${hoje}`;
+        console.log('URL final da API que será chamada:', apiUrl); // Mostra a URL exata
+        
+        const response = await fetch(apiUrl, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
 
         if (!response.ok) {
-            // A mensagem de erro "não encontrado" agora faz sentido aqui
             if (response.status === 404) throw new Error('O relatório do checklist de hoje não foi encontrado.');
             throw new Error('Falha ao buscar os dados do checklist.');
         }

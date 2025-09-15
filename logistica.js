@@ -2663,53 +2663,36 @@ function applyChecklistControlFilters() {
     renderChecklistControlPanel(filteredCompleted, filteredPending);
 }
 
-// Função para desenhar as listas de concluídos e pendentes no modal
 function renderChecklistControlPanel(completed, pending) {
     const completedContainer = document.getElementById('cc-completed-list');
     const pendingContainer = document.getElementById('cc-pending-list');
     
     completedContainer.innerHTML = completed.length > 0 ? completed.map(c => {
-        let avariaIndicatorHtml = `<span class="px-2 text-xs font-semibold rounded-full bg-green-200 text-green-800">OK</span>`;
-
-        if (c.total_avarias > 0) {
-            avariaIndicatorHtml = `
-                <span class="relative flex h-6 w-6">
-                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                    <span class="relative inline-flex rounded-full h-6 w-6 bg-red-500 text-white text-xs font-bold items-center justify-center" title="${c.total_avarias} avaria(s) encontrada(s)">
-                        ${c.total_avarias}
-                    </span>
-                </span>
-            `;
-        }
-
-        // --- ALTERAÇÃO APLICADA AQUI ---
-        // Formata a data e a hora para exibição
-        const dataHoraChecklist = new Date(c.data_checklist).toLocaleString('pt-BR', {
-            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-        });
+        // --- LOG DE VERIFICAÇÃO 1 ---
+        console.log('Renderizando item para o painel:', c); // O objeto 'c' deve ter uma propriedade 'id'
 
         return `
-        <div class="text-sm p-2 border rounded-md flex justify-between items-center ${c.total_avarias > 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}">
+        <div class="text-sm p-2 border rounded-md flex justify-between items-center ${c.total_avarias > 0 ? 'bg-red-50' : 'bg-green-50'}">
             <div>
                 <p class="font-bold">${c.modelo} (${c.placa})</p>
-                <p class="text-xs text-gray-600">${c.nome_filial} - por ${c.nome_usuario} em ${dataHoraChecklist}</p>
+                <p class="text-xs">${c.nome_filial} - por ${c.nome_usuario} às ${new Date(c.data_checklist).toLocaleTimeString('pt-BR')}</p>
             </div>
-            <div class="flex items-center gap-4">
-                ${avariaIndicatorHtml}
-                <button data-action="view" data-vehicle-id="${c.id_veiculo}" data-vehicle-info="${c.modelo} - ${c.placa}" class="text-indigo-600 hover:underline" title="Visualizar"><i data-feather="eye" class="w-4 h-4"></i></button>
+            <div class="flex items-center gap-2">
+                <span class="px-2 text-xs font-semibold rounded-full ${c.total_avarias > 0 ? 'bg-red-200 text-red-800' : 'bg-green-200 text-green-800'}">
+                    ${c.total_avarias > 0 ? `${c.total_avarias} Avaria(s)` : 'OK'}
+                </span>
+                <button data-action="view" data-checklist-id="${c.id}" data-info="${c.modelo} - ${c.placa}" class="text-indigo-600 hover:underline" title="Visualizar"><i data-feather="eye" class="w-4 h-4"></i></button>
                 <button data-action="unlock" data-checklist-id="${c.id}" data-info="${c.modelo} - ${c.placa}" class="text-blue-600 hover:underline" title="Desbloquear"><i data-feather="unlock" class="w-4 h-4"></i></button>
             </div>
         </div>
-        `;
-    }).join('') : '<p class="text-xs text-center text-gray-500 p-4">Nenhum checklist concluído para os filtros selecionados.</p>';
+    `}).join('') : '<p class="text-xs text-center text-gray-500 p-4">Nenhum checklist concluído para os filtros selecionados.</p>';
 
     pendingContainer.innerHTML = pending.length > 0 ? pending.map(p => `
         <div class="text-sm p-2 border rounded-md flex justify-between items-center bg-gray-50">
             <div>
                 <p class="font-bold">${p.modelo} (${p.placa})</p>
-                <p class="text-xs text-gray-600">${p.nome_filial}</p>
+                <p class="text-xs">${p.nome_filial}</p>
             </div>
-            <span class="px-2 text-xs font-semibold rounded-full bg-yellow-200 text-yellow-800">Pendente</span>
         </div>
     `).join('') : '<p class="text-xs text-center text-gray-500 p-4">Nenhum veículo pendente para os filtros selecionados.</p>';
     
@@ -2722,8 +2705,12 @@ function handleChecklistPanelActionClick(event) {
     if (!button || !button.dataset.action) return;
 
     const action = button.dataset.action;
-    const checklistId = button.dataset.checklistId; // Pega o ID único
+    const checklistId = button.dataset.checklistId;
     const info = button.dataset.info;
+
+    // --- LOG DE VERIFICAÇÃO 2 ---
+    console.log('Botão do PAINEL foi clicado!');
+    console.log('Checklist ID capturado do atributo do botão:', checklistId); // <<< Ponto crítico! Verifique se aqui aparece o ID ou 'undefined'
     
     if (action === 'unlock') {
         checklistControlState.checklistToUnlock = checklistId;
@@ -2731,7 +2718,6 @@ function handleChecklistPanelActionClick(event) {
         document.getElementById('confirm-unlock-modal').classList.remove('hidden');
         feather.replace();
     } else if (action === 'view') {
-        // Chama a função que usa o ID único, o que está correto aqui
         showChecklistReport(checklistId, info);
     }
 }
@@ -3039,12 +3025,16 @@ async function showChecklistReport(checklistId, vehicleInfo) {
     const loader = document.getElementById('global-loader');
     loader.style.display = 'flex';
     const modal = document.getElementById('checklist-report-modal');
-    // ATENÇÃO: O container de conteúdo do modal precisa ser selecionado aqui
     const modalContent = modal.querySelector('.flex-grow'); 
 
     try {
-        // Usa a nova rota que busca por ID
-        const response = await fetch(`${apiUrlBase}/logistica/checklist/relatorio/${checklistId}`, {
+        // --- LOG DE VERIFICAÇÃO 3 ---
+        console.log('--- Dentro da função showChecklistReport ---');
+        console.log('Checklist ID recebido pela função:', checklistId); // Verifica o parâmetro
+        const apiUrl = `${apiUrlBase}/logistica/checklist/relatorio/${checklistId}`;
+        console.log('URL final da API que será chamada:', apiUrl); // Mostra a URL exata
+
+        const response = await fetch(apiUrl, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
 
