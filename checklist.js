@@ -360,7 +360,6 @@ async function openChecklistReportModal(vehicleId, vehicleInfo) {
     const modal = document.getElementById('checklist-report-modal');
 
     try {
-        // CORREÇÃO: Usa a data de HOJE para buscar o relatório nesta página
         const hoje = new Date().toISOString().slice(0, 10);
         
         // CORREÇÃO: Usa a rota original que busca por VEÍCULO e DATA
@@ -369,7 +368,7 @@ async function openChecklistReportModal(vehicleId, vehicleInfo) {
         });
 
         if (!response.ok) {
-            // A mensagem de erro original agora faz sentido neste contexto
+            // A mensagem de erro "não encontrado" agora faz sentido aqui
             if (response.status === 404) throw new Error('O relatório do checklist de hoje não foi encontrado.');
             throw new Error('Falha ao buscar os dados do checklist.');
         }
@@ -377,7 +376,7 @@ async function openChecklistReportModal(vehicleId, vehicleInfo) {
         const data = await response.json();
         const { checklist, avarias } = data;
 
-        // O restante da função para preencher o modal continua igual
+        // O código restante para preencher o modal está correto e permanece o mesmo
         document.getElementById('report-vehicle-info').textContent = vehicleInfo;
         document.getElementById('report-datetime').textContent = new Date(checklist.data_checklist).toLocaleString('pt-BR');
         document.getElementById('report-driver').textContent = checklist.nome_motorista || 'Não informado';

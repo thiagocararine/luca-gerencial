@@ -2722,7 +2722,7 @@ function handleChecklistPanelActionClick(event) {
     if (!button || !button.dataset.action) return;
 
     const action = button.dataset.action;
-    const checklistId = button.dataset.checklistId;
+    const checklistId = button.dataset.checklistId; // Pega o ID único
     const info = button.dataset.info;
     
     if (action === 'unlock') {
@@ -2731,6 +2731,7 @@ function handleChecklistPanelActionClick(event) {
         document.getElementById('confirm-unlock-modal').classList.remove('hidden');
         feather.replace();
     } else if (action === 'view') {
+        // Chama a função que usa o ID único, o que está correto aqui
         showChecklistReport(checklistId, info);
     }
 }
