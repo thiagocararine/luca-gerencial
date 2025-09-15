@@ -360,13 +360,16 @@ async function openChecklistReportModal(vehicleId, vehicleInfo) {
     const modal = document.getElementById('checklist-report-modal');
 
     try {
+        // CORREÇÃO: Usa a data de HOJE para buscar o relatório nesta página
         const hoje = new Date().toISOString().slice(0, 10);
-        // A API já foi corrigida para buscar todos os dados necessários
+        
+        // CORREÇÃO: Usa a rota original que busca por VEÍCULO e DATA
         const response = await fetch(`${apiUrlBase}/logistica/checklist/relatorio?veiculoId=${vehicleId}&data=${hoje}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
 
         if (!response.ok) {
+            // A mensagem de erro original agora faz sentido neste contexto
             if (response.status === 404) throw new Error('O relatório do checklist de hoje não foi encontrado.');
             throw new Error('Falha ao buscar os dados do checklist.');
         }
@@ -374,17 +377,14 @@ async function openChecklistReportModal(vehicleId, vehicleInfo) {
         const data = await response.json();
         const { checklist, avarias } = data;
 
-        // Preenche o cabeçalho
+        // O restante da função para preencher o modal continua igual
         document.getElementById('report-vehicle-info').textContent = vehicleInfo;
-        
-        // Preenche as Informações Gerais
-        document.getElementById('report-datetime').textContent = new Date(checklist.data_checklist).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+        document.getElementById('report-datetime').textContent = new Date(checklist.data_checklist).toLocaleString('pt-BR');
         document.getElementById('report-driver').textContent = checklist.nome_motorista || 'Não informado';
         document.getElementById('report-odometer').textContent = checklist.odometro_saida.toLocaleString('pt-BR');
         document.getElementById('report-user').textContent = checklist.nome_usuario || 'Não informado';
         document.getElementById('report-obs').textContent = checklist.observacoes_gerais || 'Nenhuma.';
 
-        // Preenche os Itens Verificados
         const itemsContainer = document.getElementById('report-items-container');
         itemsContainer.innerHTML = '';
         const requiredItems = ["Lataria", "Pneus", "Nível de Óleo e Água", "Iluminação (Lanternas e Sinalização)"];
@@ -402,8 +402,8 @@ async function openChecklistReportModal(vehicleId, vehicleInfo) {
                     </div>
                     ${avaria ? `
                     <div class="mt-2 pl-2 border-l-2 border-gray-200 text-sm">
-                        <p class="mb-1"><strong>Descrição:</strong> ${avaria.descricao_avaria || 'Nenhuma'}</p>
-                        ${avaria.foto_url ? `<a href="/${avaria.foto_url}" target="_blank" class="text-indigo-600 hover:underline font-semibold">Ver Foto da Avaria</a>` : '<span class="text-gray-500">Sem foto</span>'}
+                        <p><strong>Descrição:</strong> ${avaria.descricao_avaria || 'Nenhuma'}</p>
+                        ${avaria.foto_url ? `<a href="/${avaria.foto_url}" target="_blank" class="text-indigo-600 hover:underline">Ver Foto da Avaria</a>` : ''}
                     </div>
                     ` : ''}
                 </div>
@@ -411,7 +411,6 @@ async function openChecklistReportModal(vehicleId, vehicleInfo) {
             itemsContainer.innerHTML += itemHtml;
         });
 
-        // Preenche a galeria de Fotos Obrigatórias
         const photosContainer = document.getElementById('report-photos-container');
         photosContainer.innerHTML = '';
         const photos = [
@@ -422,7 +421,6 @@ async function openChecklistReportModal(vehicleId, vehicleInfo) {
         ];
 
         photos.forEach(photo => {
-            // CORREÇÃO APLICADA AQUI: Adicionado a barra "/" no início do caminho da imagem
             const imagePath = photo.url ? `/${photo.url}` : 'https://placehold.co/300x200/e2e8f0/4a5568?text=Sem+Foto';
             const photoHtml = `
                 <div>

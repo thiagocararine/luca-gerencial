@@ -2731,7 +2731,6 @@ function handleChecklistPanelActionClick(event) {
         document.getElementById('confirm-unlock-modal').classList.remove('hidden');
         feather.replace();
     } else if (action === 'view') {
-        // ALTERAÇÃO APLICADA AQUI
         showChecklistReport(checklistId, info);
     }
 }
