@@ -2722,19 +2722,17 @@ function handleChecklistPanelActionClick(event) {
     if (!button || !button.dataset.action) return;
 
     const action = button.dataset.action;
+    const checklistId = button.dataset.checklistId;
+    const info = button.dataset.info;
     
     if (action === 'unlock') {
-        const checklistId = button.dataset.checklistId;
-        const info = button.dataset.info;
         checklistControlState.checklistToUnlock = checklistId;
         document.getElementById('unlock-checklist-info').textContent = info;
         document.getElementById('confirm-unlock-modal').classList.remove('hidden');
         feather.replace();
     } else if (action === 'view') {
-        const vehicleId = button.dataset.vehicleId;
-        const vehicleInfo = button.dataset.vehicleInfo;
-        // Reutiliza a função que já criamos para ver o relatório de checklist
-        openChecklistReportModal(vehicleId, vehicleInfo);
+        // ALTERAÇÃO APLICADA AQUI
+        showChecklistReport(checklistId, info);
     }
 }
 
@@ -3034,5 +3032,99 @@ async function exportChecklistReportPDF() {
     } finally {
         hideLoader();
         btn.disabled = false;
+    }
+}
+
+async function showChecklistReport(checklistId, vehicleInfo) {
+    const loader = document.getElementById('global-loader');
+    loader.style.display = 'flex';
+    const modal = document.getElementById('checklist-report-modal');
+    // ATENÇÃO: O container de conteúdo do modal precisa ser selecionado aqui
+    const modalContent = modal.querySelector('.flex-grow'); 
+
+    try {
+        // Usa a nova rota que busca por ID
+        const response = await fetch(`${apiUrlBase}/logistica/checklist/relatorio/${checklistId}`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || 'Falha ao buscar os dados do checklist.');
+        }
+
+        const data = await response.json();
+        const { checklist, avarias } = data;
+
+        // Preenche o cabeçalho do modal
+        document.getElementById('report-vehicle-info').textContent = vehicleInfo;
+        
+        const requiredItems = ["Lataria", "Pneus", "Nível de Óleo e Água", "Iluminação (Lanternas e Sinalização)"];
+        let itemsHtml = '';
+        requiredItems.forEach(itemName => {
+            const avaria = avarias.find(a => a.item_verificado === itemName);
+            const status = avaria ? 'Avaria' : 'OK';
+            const statusClass = avaria ? 'text-red-600' : 'text-green-600';
+            itemsHtml += `
+                <div class="p-3 bg-gray-50 rounded-md">
+                    <div class="flex justify-between items-center">
+                        <span class="font-medium">${itemName}</span>
+                        <span class="font-bold ${statusClass}">${status}</span>
+                    </div>
+                    ${avaria ? `
+                    <div class="mt-2 pl-2 border-l-2 border-gray-200 text-sm">
+                        <p class="mb-1"><strong>Descrição:</strong> ${avaria.descricao_avaria || 'Nenhuma'}</p>
+                        ${avaria.foto_url ? `<a href="/${avaria.foto_url}" target="_blank" class="text-indigo-600 hover:underline font-semibold">Ver Foto da Avaria</a>` : '<span class="text-gray-500">Sem foto</span>'}
+                    </div>` : ''}
+                </div>`;
+        });
+
+        let photosHtml = '';
+        const photos = [
+            { label: 'Frente', url: checklist.foto_frente_url },
+            { label: 'Traseira', url: checklist.foto_traseira_url },
+            { label: 'Lateral Direita', url: checklist.foto_lateral_direita_url },
+            { label: 'Lateral Esquerda', url: checklist.foto_lateral_esquerda_url }
+        ];
+        photos.forEach(photo => {
+            const imagePath = photo.url ? `/${photo.url}` : 'https://placehold.co/300x200/e2e8f0/4a5568?text=Sem+Foto';
+            photosHtml += `
+                <div>
+                    <p class="text-sm font-semibold mb-1">${photo.label}</p>
+                    <a href="${imagePath}" target="_blank" class="block">
+                        <img src="${imagePath}" alt="${photo.label}" class="w-full h-32 object-cover rounded-md border bg-gray-100">
+                    </a>
+                </div>`;
+        });
+
+        // Monta o conteúdo completo do modal
+        modalContent.innerHTML = `
+            <section>
+                <h4 class="text-lg font-semibold text-gray-800 border-b pb-2 mb-3">Informações Gerais</h4>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div><strong class="block text-gray-500">Data e Hora</strong><span>${new Date(checklist.data_checklist).toLocaleString('pt-BR')}</span></div>
+                    <div><strong class="block text-gray-500">Motorista</strong><span>${checklist.nome_motorista || 'Não informado'}</span></div>
+                    <div><strong class="block text-gray-500">Odômetro de Saída</strong><span>${checklist.odometro_saida.toLocaleString('pt-BR')} km</span></div>
+                    <div><strong class="block text-gray-500">Usuário do Lançamento</strong><span>${checklist.nome_usuario || 'Não informado'}</span></div>
+                    <div class="md:col-span-3"><strong class="block text-gray-500">Observações</strong><p class="mt-1 p-2 bg-gray-50 rounded">${checklist.observacoes_gerais || 'Nenhuma.'}</p></div>
+                </div>
+            </section>
+            <section>
+                <h4 class="text-lg font-semibold text-gray-800 border-b pb-2 mb-3">Itens Verificados</h4>
+                <div class="space-y-3">${itemsHtml}</div>
+            </section>
+            <section>
+                <h4 class="text-lg font-semibold text-gray-800 border-b pb-2 mb-3">Fotos Obrigatórias</h4>
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">${photosHtml}</div>
+            </section>
+        `;
+        
+        modal.classList.remove('hidden');
+        feather.replace();
+
+    } catch (error) {
+        alert(`Erro ao carregar o relatório: ${error.message}`);
+    } finally {
+        loader.style.display = 'none';
     }
 }

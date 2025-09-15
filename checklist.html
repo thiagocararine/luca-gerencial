@@ -138,20 +138,22 @@
                     <div class="accordion-content hidden p-4">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-sm font-medium">Frente do Veículo</label>
-                                <input type="file" name="foto_frente" class="mt-1 text-sm" accept="image/*" capture="environment">
+                                <label class="block text-sm font-medium">Frente do Veículo <span class="text-red-500">*</span></label>
+                                <input type="file" name="foto_frente" class="mt-1 text-sm" accept="image/*" capture="environment" required>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium">Traseira do Veículo <span class="text-red-500">*</span></label>
+                                <input type="file" name="foto_traseira" class="mt-1 text-sm" accept="image/*" capture="environment" required>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium">Lateral Direita <span class="text-red-500">*</span></label>
+                                <input type="file" name="foto_lateral_direita" class="mt-1 text-sm" accept="image/*" capture="environment" required>
                             </div>
                             <div>
-                                <label class="block text-sm font-medium">Traseira do Veículo</label>
-                                <input type="file" name="foto_traseira" class="mt-1 text-sm" accept="image/*" capture="environment">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium">Lateral Direita</label>
-                                <input type="file" name="foto_lateral_direita" class="mt-1 text-sm" accept="image/*" capture="environment">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium">Lateral Esquerda</label>
-                                <input type="file" name="foto_lateral_esquerda" class="mt-1 text-sm" accept="image/*" capture="environment">
+                                <label class="block text-sm font-medium">Lateral Esquerda <span class="text-red-500">*</span></label>
+                                <input type="file" name="foto_lateral_esquerda" class="mt-1 text-sm" accept="image/*" capture="environment" required>
                             </div>
                         </div>
                     </div>

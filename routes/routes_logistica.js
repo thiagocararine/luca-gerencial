@@ -1671,6 +1671,23 @@ router.post('/checklist', authenticateToken, (req, res) => {
         const { id_veiculo, odometro_saida, observacoes_gerais, checklist_items, nome_motorista } = req.body;
         const { userId } = req.user;
 
+        const uploadedFiles = req.files;
+        const requiredFieldnames = ['foto_frente', 'foto_traseira', 'foto_lateral_direita', 'foto_lateral_esquerda'];
+
+        const missingPhotos = requiredFieldnames.filter(fieldname => 
+            !uploadedFiles.some(file => file.fieldname === fieldname)
+        );
+
+        if (missingPhotos.length > 0) {
+            // Apaga os arquivos que já foram enviados para não deixar lixo no servidor
+            for (const file of uploadedFiles) {
+                if(file && file.path) {
+                    await fs.unlink(file.path).catch(e => console.error("Falha ao limpar arquivo temporário:", e.path));
+                }
+            }
+            return res.status(400).json({ error: `As seguintes fotos obrigatórias não foram enviadas: ${missingPhotos.join(', ')}` });
+        }
+
         if (!id_veiculo || !odometro_saida || !nome_motorista) {
             return res.status(400).json({ error: 'Veículo, Odômetro de Saída e Nome do Motorista são obrigatórios.' });
         }
@@ -2019,6 +2036,58 @@ router.get('/checklist/relatorio', authenticateToken, async (req, res) => {
 
     } catch (error) {
         console.error("Erro ao buscar relatório de checklist:", error);
+        res.status(500).json({ error: 'Erro interno ao buscar o relatório do checklist.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// ROTA PARA BUSCAR UM RELATÓRIO DE CHECKLIST PELO SEU ID ÚNICO
+router.get('/checklist/relatorio/:id', authenticateToken, async (req, res) => {
+    const { id: checklistId } = req.params;
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+
+        const [checklistRows] = await connection.execute(
+            `SELECT c.*, u.nome_user as nome_usuario 
+             FROM veiculo_checklists c
+             JOIN cad_user u ON c.id_usuario = u.ID
+             WHERE c.id = ?`,
+            [checklistId]
+        );
+
+        if (checklistRows.length === 0) {
+            return res.status(404).json({ error: 'Relatório de checklist não encontrado.' });
+        }
+        const checklist = checklistRows[0];
+        const dataFormatada = new Date(checklist.data_checklist).toISOString().slice(0, 10);
+
+        const [placaRow] = await connection.execute('SELECT placa FROM veiculos WHERE id = ?', [checklist.id_veiculo]);
+        const placaSanitizada = String(placaRow[0].placa || '').replace(/[^a-zA-Z0-9-]/g, '_');
+        const basePath = `uploads/veiculos/${placaSanitizada}/checklist/${dataFormatada}/`;
+
+        // Formata os caminhos das fotos
+        checklist.foto_frente_url = checklist.foto_frente ? basePath + checklist.foto_frente : null;
+        checklist.foto_traseira_url = checklist.foto_traseira ? basePath + checklist.foto_traseira : null;
+        checklist.foto_lateral_direita_url = checklist.foto_lateral_direita ? basePath + checklist.foto_lateral_direita : null;
+        checklist.foto_lateral_esquerda_url = checklist.foto_lateral_esquerda ? basePath + checklist.foto_lateral_esquerda : null;
+
+        const [avariasRows] = await connection.execute(
+            `SELECT item_verificado, descricao_avaria, caminho_foto FROM checklist_itens WHERE id_checklist = ? AND status = 'Avaria'`,
+            [checklist.id]
+        );
+        
+        const avarias = avariasRows.map(avaria => ({
+            ...avaria,
+            foto_url: avaria.caminho_foto ? basePath + avaria.caminho_foto : null
+        }));
+
+        res.json({ checklist, avarias });
+
+    } catch (error) {
+        console.error("Erro ao buscar relatório de checklist por ID:", error);
         res.status(500).json({ error: 'Erro interno ao buscar o relatório do checklist.' });
     } finally {
         if (connection) await connection.end();
