@@ -477,7 +477,7 @@ async function handlePhotoProcessing(event) {
     }
 }
 
-function compressImage(file, maxWidth = 1280, quality = 0.8) {
+function compressImage(file, maxWidth = 1024, quality = 0.7) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
