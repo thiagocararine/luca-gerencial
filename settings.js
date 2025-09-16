@@ -19,8 +19,9 @@ const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 const ALL_MODULES = {
     'lancamentos': 'Lançamentos',
     'logistica': 'Logística',
-    'configuracoes': 'Configurações',
-    'checklist': 'Checklist Veículos'
+    'checklist': 'Checklist',
+    'produtos': 'Produtos',
+    'configuracoes': 'Configurações'
 };
 
 /**
@@ -822,6 +823,7 @@ function gerenciarAcessoModulos() {
     const mapaModulos = {
         'lancamentos': 'despesas.html',
         'logistica': 'logistica.html',
+        'checklist': 'checklist.html',
         'produtos': 'produtos.html', // <-- LINHA ADICIONADA
         'configuracoes': 'settings.html'
     };

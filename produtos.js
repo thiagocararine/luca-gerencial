@@ -14,14 +14,45 @@ async function initProductsPage() {
         return;
     }
     
-    // Opcional: Adicionar nome do usuário e gerenciar acesso ao módulo se necessário
-    // document.getElementById('user-name').textContent = getUserData()?.nome || 'Utilizador';
-    // gerenciarAcessoModulos();
+    gerenciarAcessoModulos(); // <-- Chame a função aqui
 
     await populateFilialFilter();
     setupEventListeners();
     initializeProductsTable();
     setupBarcodeScannerListeners();
+}
+
+function gerenciarAcessoModulos() {
+    const userData = getUserData();
+    if (!userData || !userData.permissoes) {
+        console.error("Não foi possível obter as permissões do usuário.");
+        return;
+    }
+
+    const permissoesDoUsuario = userData.permissoes;
+
+    // Mapa completo com todos os módulos
+    const mapaModulos = {
+        'lancamentos': 'despesas.html',
+        'logistica': 'logistica.html',
+        'checklist': 'checklist.html',
+        'produtos': 'produtos.html',
+        'configuracoes': 'settings.html'
+    };
+
+    // Itera sobre o mapa de módulos para verificar cada permissão
+    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
+        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
+        
+        // Se a permissão não existe ou não é permitida (permitido=false)
+        if (!permissao || !permissao.permitido) {
+            // Encontra o link na barra lateral e esconde o item da lista (o <li> pai)
+            const link = document.querySelector(`#sidebar a[href="${href}"]`);
+            if (link && link.parentElement) {
+                link.parentElement.style.display = 'none';
+            }
+        }
+    }
 }
 
 function setupEventListeners() {
