@@ -103,7 +103,6 @@ function setupEventListeners() {
 async function populateFilialFilter() {
     const selectElement = document.getElementById('filter-filial');
     try {
-        // CORREÇÃO: Chama a nova rota específica para produtos
         const response = await fetch(`${apiUrlBase}/produtos/filiais-com-estoque`, { 
             headers: { 'Authorization': `Bearer ${getToken()}` } 
         });
@@ -111,7 +110,7 @@ async function populateFilialFilter() {
         if (!response.ok) throw new Error('Falha ao carregar filiais com estoque.');
         const items = await response.json();
         
-        selectElement.innerHTML = ''; // Limpa as opções antigas
+        selectElement.innerHTML = '';
         if (items.length === 0) {
             selectElement.innerHTML = `<option value="">Nenhuma filial com estoque</option>`;
             return;
@@ -119,20 +118,21 @@ async function populateFilialFilter() {
 
         items.forEach(item => {
             const option = document.createElement('option');
-            option.value = item.KEY_PARAMETRO; 
-            option.textContent = item.NOME_PARAMETRO;
+            // O VALOR do filtro será o código (ex: 'TNASC')
+            option.value = item.codigo; 
+            // O TEXTO exibido será o nome amigável (ex: 'Parada Angélica')
+            option.textContent = item.nome;
             selectElement.appendChild(option);
         });
         
-        const userFilial = getUserData()?.unidade;
-        if (userFilial) {
-            const defaultOption = Array.from(selectElement.options).find(opt => opt.text === userFilial);
+        const userFilialData = getUserData();
+        if (userFilialData && userFilialData.unidade) {
+            const defaultOption = Array.from(selectElement.options).find(opt => opt.text === userFilialData.unidade);
             if (defaultOption) {
                 selectElement.value = defaultOption.value;
             }
         }
         
-        // Dispara um evento 'change' para garantir que a tabela carregue os dados da primeira filial da lista
         selectElement.dispatchEvent(new Event('change'));
 
     } catch (error) {

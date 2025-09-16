@@ -13,28 +13,13 @@ const dbConfig = require('../dbConfig');
 router.get('/', authenticateToken, async (req, res) => {
     const { filialId, search, page = 1, limit = 20 } = req.query;
 
-    // A filial agora é opcional na busca, mas recomendada para ver o estoque
-    let filialQueryId = filialId;
-    if (!filialId) {
-        // Se nenhuma filial for selecionada, usa uma filial padrão ou um valor que não encontrará correspondência
-        const { unidade } = req.user; // Pega a unidade do token do usuário
-        const conn = await mysql.createConnection(dbConfig);
-        const [filialRows] = await conn.execute("SELECT KEY_PARAMETRO FROM parametro WHERE NOME_PARAMETRO = ? AND COD_PARAMETRO = 'Unidades'", [unidade]);
-        await conn.end();
-        if (filialRows.length > 0) {
-            filialQueryId = filialRows[0].KEY_PARAMETRO;
-        } else {
-            return res.status(400).json({ error: 'Filial do usuário não encontrada ou inválida.' });
-        }
-    }
-
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
         
         const offset = (parseInt(page) - 1) * parseInt(limit);
         const params = [];
-        let whereClauses = ["p.pd_codi IS NOT NULL AND p.pd_codi != ''"]; // Garante que produtos sem código não apareçam
+        let whereClauses = ["p.pd_codi IS NOT NULL AND p.pd_codi != ''"];
 
         if (search) {
             whereClauses.push(`(p.pd_nome LIKE ? OR p.pd_codi LIKE ? OR p.pd_barr LIKE ?)`);
@@ -44,28 +29,23 @@ router.get('/', authenticateToken, async (req, res) => {
         
         const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
         
+        // CORREÇÃO APLICADA AQUI: A query de contagem não precisa de parâmetros extras
         const countQuery = `SELECT COUNT(*) as total FROM produtos p ${whereSql}`;
         const [totalResult] = await connection.execute(countQuery, params);
         const totalItems = totalResult[0].total;
 
         const dataQuery = `
             SELECT 
-                p.pd_regi,
-                p.pd_codi,
-                p.pd_nome,
-                p.pd_barr,
+                p.pd_regi, p.pd_codi, p.pd_nome, p.pd_barr,
                 COALESCE(e.ef_fisico, 0) as estoque_fisico_filial
-            FROM 
-                produtos p
-            LEFT JOIN 
-                estoque e ON p.pd_codi = e.ef_codigo AND e.ef_idfili = ?
+            FROM produtos p
+            LEFT JOIN estoque e ON p.pd_codi = e.ef_codigo AND e.ef_idfili = ?
             ${whereSql}
-            ORDER BY 
-                p.pd_nome ASC
+            ORDER BY p.pd_nome ASC
             LIMIT ? OFFSET ?
         `;
         
-        const finalParams = [filialQueryId, ...params, parseInt(limit), offset];
+        const finalParams = [filialId || null, ...params, parseInt(limit), offset];
         const [products] = await connection.execute(dataQuery, finalParams);
 
         res.json({
@@ -230,20 +210,31 @@ router.post('/ajuste-estoque', authenticateToken, async (req, res) => {
 router.get('/filiais-com-estoque', authenticateToken, async (req, res) => {
     let connection;
     try {
+        // 1. Criamos o mapa de tradução de código para nome, como você informou
+        const mapaFiliais = {
+            'TNASC': 'Parada Angélica',
+            'LCMAT': 'Nova Campinas',
+            'LUCAM': 'Santa Cruz',
+            'VMNAF': 'Piabetá'
+            // Adicione outras filiais aqui se necessário
+        };
+
         connection = await mysql.createConnection(dbConfig);
         
-        // Usa DISTINCT para pegar apenas as filiais únicas da tabela de estoque
-        // e busca seus nomes na tabela de parâmetros para exibição.
+        // 2. Buscamos todos os códigos de filial distintos que existem na tabela de estoque
         const [rows] = await connection.execute(`
-            SELECT DISTINCT
-                e.ef_idfili AS KEY_PARAMETRO,
-                p.NOME_PARAMETRO
-            FROM estoque e
-            JOIN parametro p ON e.ef_idfili = p.KEY_PARAMETRO
-            WHERE p.COD_PARAMETRO = 'Unidades'
-            ORDER BY p.NOME_PARAMETRO ASC
+            SELECT DISTINCT ef_idfili FROM estoque WHERE ef_idfili IS NOT NULL AND ef_idfili != ''
         `);
-        res.json(rows);
+
+        // 3. Montamos a resposta para o frontend, combinando o código com o nome do mapa
+        const filiaisComEstoque = rows
+            .map(row => ({
+                codigo: row.ef_idfili,
+                nome: mapaFiliais[row.ef_idfili] || row.ef_idfili // Se não encontrar no mapa, usa o próprio código
+            }))
+            .sort((a, b) => a.nome.localeCompare(b.nome)); // Ordena por nome
+        
+        res.json(filiaisComEstoque);
 
     } catch (error) {
         console.error("Erro ao buscar filiais com estoque:", error);
