@@ -227,5 +227,30 @@ router.post('/ajuste-estoque', authenticateToken, async (req, res) => {
     }
 });
 
+router.get('/filiais-com-estoque', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        
+        // Usa DISTINCT para pegar apenas as filiais únicas da tabela de estoque
+        // e busca seus nomes na tabela de parâmetros para exibição.
+        const [rows] = await connection.execute(`
+            SELECT DISTINCT
+                e.ef_idfili AS KEY_PARAMETRO,
+                p.NOME_PARAMETRO
+            FROM estoque e
+            JOIN parametro p ON e.ef_idfili = p.KEY_PARAMETRO
+            WHERE p.COD_PARAMETRO = 'Unidades'
+            ORDER BY p.NOME_PARAMETRO ASC
+        `);
+        res.json(rows);
+
+    } catch (error) {
+        console.error("Erro ao buscar filiais com estoque:", error);
+        res.status(500).json({ error: 'Erro ao buscar filiais.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
 
 module.exports = router;

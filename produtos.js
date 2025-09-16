@@ -103,14 +103,22 @@ function setupEventListeners() {
 async function populateFilialFilter() {
     const selectElement = document.getElementById('filter-filial');
     try {
-        const response = await fetch(`${apiUrlBase}/settings/parametros?cod=Unidades`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!response.ok) throw new Error('Falha ao carregar filiais.');
+        // CORREÇÃO: Chama a nova rota específica para produtos
+        const response = await fetch(`${apiUrlBase}/produtos/filiais-com-estoque`, { 
+            headers: { 'Authorization': `Bearer ${getToken()}` } 
+        });
+
+        if (!response.ok) throw new Error('Falha ao carregar filiais com estoque.');
         const items = await response.json();
         
-        selectElement.innerHTML = '';
+        selectElement.innerHTML = ''; // Limpa as opções antigas
+        if (items.length === 0) {
+            selectElement.innerHTML = `<option value="">Nenhuma filial com estoque</option>`;
+            return;
+        }
+
         items.forEach(item => {
             const option = document.createElement('option');
-            // ATENÇÃO: Usando KEY_PARAMETRO, que deve ser o ID da filial na tabela de estoque
             option.value = item.KEY_PARAMETRO; 
             option.textContent = item.NOME_PARAMETRO;
             selectElement.appendChild(option);
@@ -123,6 +131,9 @@ async function populateFilialFilter() {
                 selectElement.value = defaultOption.value;
             }
         }
+        
+        // Dispara um evento 'change' para garantir que a tabela carregue os dados da primeira filial da lista
+        selectElement.dispatchEvent(new Event('change'));
 
     } catch (error) {
         selectElement.innerHTML = `<option value="">Erro ao carregar</option>`;

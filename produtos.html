@@ -227,7 +227,6 @@
             });
         }
 
-        // Carrega a logo da empresa no menu
         const loadCompanyLogo = () => {
             const companyLogo = document.getElementById('company-logo');
             if (!companyLogo) return;
@@ -238,6 +237,13 @@
             }
         };
         loadCompanyLogo();
+
+        // Adiciona o nome do usuário e o listener de logout
+        const userData = getUserData();
+        if (userData && document.getElementById('user-name')) {
+            document.getElementById('user-name').textContent = userData.nome || 'Utilizador';
+        }
+        document.getElementById('logout-button')?.addEventListener('click', logout);
     });
 </script>
 </body>
