@@ -2,38 +2,12 @@ document.addEventListener('DOMContentLoaded', initProductsPage);
 
 const apiUrlBase = '/api';
 let productsTable = null;
-let currentProduct = null; // Para guardar os dados do produto que está sendo editado
+let currentProduct = null;
 
-// Funções de Autenticação (pode copiar de outros arquivos .js)
+// Funções de Autenticação e Utilitários
 function getToken() { return localStorage.getItem('lucaUserToken'); }
 function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
-
-async function initProductsPage() {
-    if (!getToken()) {
-        window.location.href = 'login.html';
-        return;
-    }
-    
-    gerenciarAcessoModulos(); // <-- Chame a função aqui
-
-    await populateFilialFilter();
-    setupEventListeners();
-    initializeProductsTable();
-    setupBarcodeScannerListeners();
-}
-
-function getUserName() { 
-    return getUserData()?.nome || 'Utilizador'; 
-}
-
-function getUserProfile() { 
-    return getUserData()?.perfil || null; 
-}
-
-function logout() { 
-    localStorage.removeItem('lucaUserToken'); 
-    window.location.href = 'login.html'; 
-}
+function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html';}
 
 function gerenciarAcessoModulos() {
     const userData = getUserData();
@@ -41,10 +15,7 @@ function gerenciarAcessoModulos() {
         console.error("Não foi possível obter as permissões do usuário.");
         return;
     }
-
     const permissoesDoUsuario = userData.permissoes;
-
-    // Mapa completo com todos os módulos
     const mapaModulos = {
         'lancamentos': 'despesas.html',
         'logistica': 'logistica.html',
@@ -52,14 +23,9 @@ function gerenciarAcessoModulos() {
         'produtos': 'produtos.html',
         'configuracoes': 'settings.html'
     };
-
-    // Itera sobre o mapa de módulos para verificar cada permissão
     for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
         const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
-        
-        // Se a permissão não existe ou não é permitida (permitido=false)
         if (!permissao || !permissao.permitido) {
-            // Encontra o link na barra lateral e esconde o item da lista (o <li> pai)
             const link = document.querySelector(`#sidebar a[href="${href}"]`);
             if (link && link.parentElement) {
                 link.parentElement.style.display = 'none';
@@ -68,9 +34,22 @@ function gerenciarAcessoModulos() {
     }
 }
 
-function setupEventListeners() {
-    // Adicione aqui os listeners do seu sidebar/header/logout, se ainda não tiverem sido adicionados
+
+async function initProductsPage() {
+    if (!getToken()) {
+        window.location.href = 'login.html';
+        return;
+    }
     
+    gerenciarAcessoModulos();
+    
+    await populateFilialFilter();
+    setupEventListeners();
+    initializeProductsTable();
+    setupBarcodeScannerListeners();
+}
+
+function setupEventListeners() {
     document.getElementById('filter-search').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             productsTable.setData(); 
@@ -81,21 +60,17 @@ function setupEventListeners() {
         productsTable.setData();
     });
 
-    // --- Listeners do Modal de Edição ---
     const modal = document.getElementById('product-edit-modal');
     modal.querySelector('#close-product-modal-btn').addEventListener('click', () => modal.classList.add('hidden'));
     
     modal.querySelector('#product-modal-tabs').addEventListener('click', (e) => {
         if (e.target.tagName !== 'BUTTON') return;
-        
         modal.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
         e.target.classList.add('active');
-        
         modal.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
         document.getElementById(`${e.target.dataset.tab}-tab-content`).classList.remove('hidden');
     });
 
-    // Listeners para os botões de SALVAR
     document.getElementById('save-details-btn').addEventListener('click', saveProductDetails);
     document.getElementById('save-stock-btn').addEventListener('click', saveStockAdjustment);
 }
@@ -106,7 +81,6 @@ async function populateFilialFilter() {
         const response = await fetch(`${apiUrlBase}/produtos/filiais-com-estoque`, { 
             headers: { 'Authorization': `Bearer ${getToken()}` } 
         });
-
         if (!response.ok) throw new Error('Falha ao carregar filiais com estoque.');
         const items = await response.json();
         
@@ -118,9 +92,7 @@ async function populateFilialFilter() {
 
         items.forEach(item => {
             const option = document.createElement('option');
-            // O VALOR do filtro será o código (ex: 'TNASC')
             option.value = item.codigo; 
-            // O TEXTO exibido será o nome amigável (ex: 'Parada Angélica')
             option.textContent = item.nome;
             selectElement.appendChild(option);
         });
@@ -132,9 +104,7 @@ async function populateFilialFilter() {
                 selectElement.value = defaultOption.value;
             }
         }
-        
         selectElement.dispatchEvent(new Event('change'));
-
     } catch (error) {
         selectElement.innerHTML = `<option value="">Erro ao carregar</option>`;
         console.error(error);
@@ -146,8 +116,8 @@ function initializeProductsTable() {
         height: "65vh",
         layout: "fitColumns",
         placeholder: "Nenhum produto encontrado.",
-        pagination: "remote", // Habilita paginação remota
-        paginationSize: 20,    // Quantos itens por página
+        pagination: "remote",
+        paginationSize: 20,
         ajaxURL: `${apiUrlBase}/produtos`,
         ajaxConfig: {
             method: "GET",
@@ -157,17 +127,12 @@ function initializeProductsTable() {
             get filialId() { return document.getElementById('filter-filial').value; },
             get search() { return document.getElementById('filter-search').value; }
         },
-        // --- ADICIONE O BLOCO ABAIXO ---
         ajaxResponse: function(url, params, response){
-            // response é o objeto { totalItems, totalPages, data }
-            // Precisamos retornar um objeto com a propriedade 'data' (a lista)
-            // e 'last_page' para a paginação funcionar.
             return {
                 last_page: response.totalPages,
                 data: response.data
             };
         },
-        // --- FIM DO BLOCO ---
         columns: [
             { title: "Cód. Interno", field: "pd_codi", width: 120 },
             { title: "Nome do Produto", field: "pd_nome", minWidth: 250, tooltip: true },
@@ -184,8 +149,6 @@ function initializeProductsTable() {
     });
 }
 
-// --- FUNÇÕES DE EDIÇÃO E SALVAMENTO ---
-
 async function openEditModal(rowData) {
     const modal = document.getElementById('product-edit-modal');
     document.getElementById('product-modal-info').textContent = `${rowData.pd_codi} - ${rowData.pd_nome}`;
@@ -197,9 +160,8 @@ async function openEditModal(rowData) {
         if (!response.ok) throw new Error('Falha ao buscar detalhes do produto.');
         
         const data = await response.json();
-        currentProduct = data; // Salva os dados completos na variável global
+        currentProduct = data;
 
-        // Preenche a Aba 1: Dados Cadastrais
         document.getElementById('pd-codi-input').value = data.details.pd_codi;
         document.getElementById('pd-nome-input').value = data.details.pd_nome;
         document.getElementById('pd-barr-input').value = data.details.pd_barr || '';
@@ -207,21 +169,18 @@ async function openEditModal(rowData) {
         document.getElementById('pd-unid-input').value = data.details.pd_unid || '';
         document.getElementById('pd-cara-input').value = data.details.pd_cara || '';
 
-        // Preenche a Aba 2: Gestão de Estoque
         const filialSelect = document.getElementById('ef-filial-select');
         const filialFilter = document.getElementById('filter-filial');
         
-        // Clona as opções do filtro de filial para o modal
         filialSelect.innerHTML = filialFilter.innerHTML;
-        filialSelect.value = filialFilter.value; // Já seleciona a filial atual
+        filialSelect.value = filialFilter.value;
 
         const stockInfo = data.stockByBranch.find(s => s.ef_idfili === filialFilter.value);
         document.getElementById('ef-fisico-input').value = stockInfo ? stockInfo.ef_fisico : 0;
         document.getElementById('ef-endere-input').value = stockInfo ? stockInfo.ef_endere : '';
-        document.getElementById('ajuste-motivo-input').value = ''; // Limpa o motivo a cada abertura
+        document.getElementById('ajuste-motivo-input').value = '';
         
         modal.classList.remove('hidden');
-
     } catch(error) {
         alert(error.message);
     }
@@ -239,7 +198,6 @@ async function saveProductDetails() {
         pd_fabr: document.getElementById('pd-fabr-input').value,
         pd_unid: document.getElementById('pd-unid-input').value,
         pd_cara: document.getElementById('pd-cara-input').value,
-        // Adicione aqui outros campos de "Dados Cadastrais" ou "Preços" que desejar salvar
         pd_pcom: currentProduct.details.pd_pcom,
         pd_pcus: currentProduct.details.pd_pcus,
         pd_vdp1: currentProduct.details.pd_vdp1,
@@ -255,7 +213,7 @@ async function saveProductDetails() {
         if (!response.ok) throw new Error(result.error);
 
         alert('Dados do produto salvos com sucesso!');
-        productsTable.setData(); // Atualiza a tabela
+        productsTable.setData();
     } catch (error) {
         alert('Erro ao salvar dados do produto: ' + error.message);
     } finally {
@@ -297,7 +255,7 @@ async function saveStockAdjustment() {
 
         alert('Estoque ajustado com sucesso!');
         document.getElementById('product-edit-modal').classList.add('hidden');
-        productsTable.setData(); // Atualiza a tabela para refletir o novo estoque
+        productsTable.setData();
     } catch (error) {
         alert('Erro ao ajustar o estoque: ' + error.message);
     } finally {
@@ -306,9 +264,6 @@ async function saveStockAdjustment() {
     }
 }
 
-
-// --- LÓGICA DO LEITOR DE CÓDIGO DE BARRAS ---
-// (Código já fornecido anteriormente, incluído aqui para ser completo)
 let selectedDeviceId;
 
 function setupBarcodeScannerListeners() {
@@ -345,6 +300,7 @@ function setupBarcodeScannerListeners() {
 }
 
 function stopBarcodeScanner() {
+    const codeReader = new ZXing.BrowserMultiFormatReader();
     codeReader.reset();
     document.getElementById('barcode-scanner-modal').classList.add('hidden');
 }
