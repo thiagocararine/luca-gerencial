@@ -127,12 +127,15 @@ function initializeProductsTable() {
             get filialId() { return document.getElementById('filter-filial').value; },
             get search() { return document.getElementById('filter-search').value; }
         },
+        // --- ESTE BLOCO É A CORREÇÃO ---
         ajaxResponse: function(url, params, response){
+            // Diz ao Tabulator para encontrar a lista dentro de response.data
             return {
                 last_page: response.totalPages,
                 data: response.data
             };
         },
+        // ---------------------------------
         columns: [
             { title: "Cód. Interno", field: "pd_codi", width: 120 },
             { title: "Nome do Produto", field: "pd_nome", minWidth: 250, tooltip: true },
