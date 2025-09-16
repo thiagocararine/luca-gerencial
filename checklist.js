@@ -137,13 +137,17 @@ function renderVehicleCardsForChecklist(vehicles) {
 }
 
 function setupChecklistEventListeners() {
+    // Declarações de variáveis no topo da função
     const vehicleList = document.getElementById('checklist-vehicle-list');
     const launchModal = document.getElementById('checklist-modal');
     const reportModal = document.getElementById('checklist-report-modal');
     const itemsContainer = document.getElementById('checklist-items-container');
+    const form = document.getElementById('checklist-form'); // <<< A VARIÁVEL 'form' AGORA ESTÁ NO TOPO
 
+    // Listener principal na lista de veículos
     vehicleList.addEventListener('click', (event) => {
-        const button = event.target;
+        const button = event.target.closest('button');
+        if (!button) return;
         const card = button.closest('[data-vehicle-id]');
         if (!card) return;
 
@@ -154,10 +158,6 @@ function setupChecklistEventListeners() {
             const vehicleData = { id: vehicleId, modelo: vehicleInfo.split(' - ')[0], placa: vehicleInfo.split(' - ')[1] };
             openChecklistModal(vehicleData);
         } else if (button.classList.contains('view-checklist-btn')) {
-            // --- LOG DE VERIFICAÇÃO 2 ---
-            console.log('Botão "Ver Checklist Concluído" foi clicado.');
-            console.log('ID do Veículo capturado do card:', vehicleId); // Verifica se o ID foi pego do data attribute
-            
             openChecklistReportModal(vehicleId, vehicleInfo);
         }
     });
@@ -169,7 +169,7 @@ function setupChecklistEventListeners() {
         reportModal.querySelector('#close-report-modal-btn').addEventListener('click', () => reportModal.classList.add('hidden'));
     }
 
-    // Listener para o envio do formulário
+    // Listener para o envio do formulário (usa a variável 'form')
     form.addEventListener('submit', handleChecklistSubmit);
 
     // Listener para os botões de status (OK/Avaria)
@@ -203,22 +203,16 @@ function setupChecklistEventListeners() {
         });
     });
 
-    // --- SEÇÃO ATUALIZADA ---
-    // Adiciona o processamento de imagem (compressão) para os campos de foto
-
-    // 1. Para as fotos de avaria (que são criadas dinamicamente)
+    // Adiciona o processamento de imagem (compressão) para os campos de foto (usa a variável 'form')
     itemsContainer.addEventListener('change', (event) => {
         if (event.target.type === 'file') {
-            handlePhotoProcessing(event); // Chama a nova função
+            handlePhotoProcessing(event);
         }
     });
-
-    // 2. Para as fotos obrigatórias (que são fixas no HTML)
     form.querySelector('input[name="foto_frente"]')?.addEventListener('change', handlePhotoProcessing);
     form.querySelector('input[name="foto_traseira"]')?.addEventListener('change', handlePhotoProcessing);
     form.querySelector('input[name="foto_lateral_direita"]')?.addEventListener('change', handlePhotoProcessing);
     form.querySelector('input[name="foto_lateral_esquerda"]')?.addEventListener('change', handlePhotoProcessing);
-    // --- FIM DA SEÇÃO ATUALIZADA ---
 }
 
 async function openChecklistModal(vehicle) {
