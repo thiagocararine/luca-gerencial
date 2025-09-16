@@ -29,7 +29,6 @@ router.get('/', authenticateToken, async (req, res) => {
         
         const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
         
-        // CORREÇÃO APLICADA AQUI: A query de contagem não precisa de parâmetros extras
         const countQuery = `SELECT COUNT(*) as total FROM produtos p ${whereSql}`;
         const [totalResult] = await connection.execute(countQuery, params);
         const totalItems = totalResult[0].total;
@@ -210,29 +209,25 @@ router.post('/ajuste-estoque', authenticateToken, async (req, res) => {
 router.get('/filiais-com-estoque', authenticateToken, async (req, res) => {
     let connection;
     try {
-        // 1. Criamos o mapa de tradução de código para nome, como você informou
         const mapaFiliais = {
             'TNASC': 'Parada Angélica',
             'LCMAT': 'Nova Campinas',
             'LUCAM': 'Santa Cruz',
             'VMNAF': 'Piabetá'
-            // Adicione outras filiais aqui se necessário
         };
 
         connection = await mysql.createConnection(dbConfig);
         
-        // 2. Buscamos todos os códigos de filial distintos que existem na tabela de estoque
         const [rows] = await connection.execute(`
             SELECT DISTINCT ef_idfili FROM estoque WHERE ef_idfili IS NOT NULL AND ef_idfili != ''
         `);
 
-        // 3. Montamos a resposta para o frontend, combinando o código com o nome do mapa
         const filiaisComEstoque = rows
             .map(row => ({
                 codigo: row.ef_idfili,
-                nome: mapaFiliais[row.ef_idfili] || row.ef_idfili // Se não encontrar no mapa, usa o próprio código
+                nome: mapaFiliais[row.ef_idfili] || row.ef_idfili
             }))
-            .sort((a, b) => a.nome.localeCompare(b.nome)); // Ordena por nome
+            .sort((a, b) => a.nome.localeCompare(b.nome));
         
         res.json(filiaisComEstoque);
 

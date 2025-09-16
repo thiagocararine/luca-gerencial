@@ -298,11 +298,11 @@ async function saveStockAdjustment() {
 
 // --- LÓGICA DO LEITOR DE CÓDIGO DE BARRAS ---
 // (Código já fornecido anteriormente, incluído aqui para ser completo)
-const codeReader = new ZXing.BrowserMultiFormatReader();
 let selectedDeviceId;
 
 function setupBarcodeScannerListeners() {
     const scannerModal = document.getElementById('barcode-scanner-modal');
+    const codeReader = new ZXing.BrowserMultiFormatReader();
     
     document.getElementById('barcode-scanner-btn').addEventListener('click', async () => {
         scannerModal.classList.remove('hidden');
