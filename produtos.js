@@ -22,6 +22,19 @@ async function initProductsPage() {
     setupBarcodeScannerListeners();
 }
 
+function getUserName() { 
+    return getUserData()?.nome || 'Utilizador'; 
+}
+
+function getUserProfile() { 
+    return getUserData()?.perfil || null; 
+}
+
+function logout() { 
+    localStorage.removeItem('lucaUserToken'); 
+    window.location.href = 'login.html'; 
+}
+
 function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) {
