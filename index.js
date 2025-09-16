@@ -23,9 +23,10 @@ console.log(`[INFO] Diretório de uploads configurado para: ${UPLOADS_BASE_PATH}
 // 3. Middlewares e Configurações Globais do Express
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '10mb' }));
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
 // Serve a pasta de uploads como estática para que o frontend possa aceder aos ficheiros
 app.use('/uploads', express.static(UPLOADS_BASE_PATH));
-app.use('/assets', express.static(path.join(__dirname, 'assets')));
+
 
 // 4. Importação das Rotas
 const authRoutes = require('./routes/routes_auth');
