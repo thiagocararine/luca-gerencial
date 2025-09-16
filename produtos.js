@@ -146,8 +146,8 @@ function initializeProductsTable() {
         height: "65vh",
         layout: "fitColumns",
         placeholder: "Nenhum produto encontrado.",
-        pagination: "remote",
-        paginationSize: 20,
+        pagination: "remote", // Habilita paginação remota
+        paginationSize: 20,    // Quantos itens por página
         ajaxURL: `${apiUrlBase}/produtos`,
         ajaxConfig: {
             method: "GET",
@@ -157,6 +157,17 @@ function initializeProductsTable() {
             get filialId() { return document.getElementById('filter-filial').value; },
             get search() { return document.getElementById('filter-search').value; }
         },
+        // --- ADICIONE O BLOCO ABAIXO ---
+        ajaxResponse: function(url, params, response){
+            // response é o objeto { totalItems, totalPages, data }
+            // Precisamos retornar um objeto com a propriedade 'data' (a lista)
+            // e 'last_page' para a paginação funcionar.
+            return {
+                last_page: response.totalPages,
+                data: response.data
+            };
+        },
+        // --- FIM DO BLOCO ---
         columns: [
             { title: "Cód. Interno", field: "pd_codi", width: 120 },
             { title: "Nome do Produto", field: "pd_nome", minWidth: 250, tooltip: true },
