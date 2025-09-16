@@ -4,7 +4,19 @@ const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2/promise');
 const { authenticateToken } = require('../middlewares');
-const dbConfig = require('../dbConfig');
+
+// Configuração para o banco de dados 'sei' a partir das variáveis de ambiente
+const dbConfigSei = {
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_DATABASE_SEI, // Usa a nova variável do .env
+    charset: 'utf8mb4'
+};
+
+// Nome do banco de dados principal para queries cross-database
+const mainDbName = process.env.DB_DATABASE || 'gerencial_lucamat';
+
 
 /**
  * ROTA PARA LISTAR PRODUTOS (com busca, filtro de filial e paginação)
@@ -15,7 +27,7 @@ router.get('/', authenticateToken, async (req, res) => {
 
     let connection;
     try {
-        connection = await mysql.createConnection(dbConfig);
+        connection = await mysql.createConnection(dbConfigSei);
         
         const offset = (parseInt(page) - 1) * parseInt(limit);
         const params = [];
@@ -70,7 +82,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     let connection;
     try {
-        connection = await mysql.createConnection(dbConfig);
+        connection = await mysql.createConnection(dbConfigSei);
 
         const [productRows] = await connection.execute('SELECT * FROM produtos WHERE pd_regi = ?', [id]);
         if (productRows.length === 0) {
@@ -78,13 +90,13 @@ router.get('/:id', authenticateToken, async (req, res) => {
         }
         const product = productRows[0];
 
-        const [stockRows] = await connection.execute(
-            `SELECT e.ef_idfili, e.ef_fisico, e.ef_endere, p.NOME_PARAMETRO as nome_filial
+        const stockQuery = `
+             SELECT e.ef_idfili, e.ef_fisico, e.ef_endere, p.NOME_PARAMETRO as nome_filial
              FROM estoque e
-             LEFT JOIN parametro p ON e.ef_idfili = p.KEY_PARAMETRO AND p.COD_PARAMETRO = 'Unidades'
-             WHERE e.ef_codigo = ?`,
-            [product.pd_codi]
-        );
+             LEFT JOIN ${mainDbName}.parametro p ON e.ef_idfili = p.KEY_PARAMETRO AND p.COD_PARAMETRO = 'Unidades'
+             WHERE e.ef_codigo = ?`;
+        
+        const [stockRows] = await connection.execute(stockQuery, [product.pd_codi]);
 
         res.json({
             details: product,
@@ -99,8 +111,38 @@ router.get('/:id', authenticateToken, async (req, res) => {
     }
 });
 
-
-// --- NOVAS ROTAS DE EDIÇÃO E AJUSTE ---
+/**
+ * ROTA PARA BUSCAR APENAS FILIAIS QUE TÊM ESTOQUE
+ * GET /api/produtos/filiais-com-estoque
+ */
+router.get('/filiais-com-estoque', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfigSei);
+        
+        const query = `
+            SELECT DISTINCT
+                e.ef_idfili,
+                p.NOME_PARAMETRO
+            FROM estoque e
+            LEFT JOIN ${mainDbName}.parametro p ON e.ef_idfili = p.KEY_PARAMETRO
+            WHERE p.COD_PARAMETRO = 'Unidades'
+            ORDER BY p.NOME_PARAMETRO ASC
+        `;
+        
+        const [rows] = await connection.execute(query);
+        const filiais = rows.map(row => ({
+            codigo: row.ef_idfili,
+            nome: row.NOME_PARAMETRO
+        }));
+        res.json(filiais);
+    } catch (error) {
+        console.error("Erro ao buscar filiais com estoque:", error);
+        res.status(500).json({ error: 'Erro ao buscar filiais.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
 
 /**
  * ROTA PARA ATUALIZAR OS DADOS CADASTRAIS DE UM PRODUTO
@@ -108,7 +150,6 @@ router.get('/:id', authenticateToken, async (req, res) => {
  */
 router.put('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
-    // Selecionamos apenas os campos que planejamos editar no modal
     const { pd_nome, pd_barr, pd_cara, pd_refe, pd_unid, pd_fabr, pd_pcom, pd_pcus, pd_vdp1 } = req.body;
 
     if (!pd_nome || !pd_unid) {
@@ -117,7 +158,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     let connection;
     try {
-        connection = await mysql.createConnection(dbConfig);
+        connection = await mysql.createConnection(dbConfigSei);
         const sql = `
             UPDATE produtos SET
                 pd_nome = ?, pd_barr = ?, pd_cara = ?, pd_refe = ?, pd_unid = ?,
@@ -139,7 +180,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
 /**
  * ROTA PARA AJUSTAR O ESTOQUE DE UM PRODUTO EM UMA FILIAL
- * POST /api/estoque/ajuste
+ * POST /api/produtos/ajuste-estoque
  */
 router.post('/ajuste-estoque', authenticateToken, async (req, res) => {
     const { id_produto_regi, codigo_produto, filial_id, nova_quantidade, endereco, motivo } = req.body;
@@ -151,89 +192,50 @@ router.post('/ajuste-estoque', authenticateToken, async (req, res) => {
 
     let connection;
     try {
-        connection = await mysql.createConnection(dbConfig);
-        await connection.beginTransaction();
+        connection = await mysql.createConnection(dbConfigSei);
+        // ATENÇÃO: Transações não funcionam entre diferentes conexões/bancos de dados.
+        // A lógica de log será executada sequencialmente.
 
         // 1. Pega o estoque atual para o log
         const [currentStock] = await connection.execute(
-            'SELECT ef_fisico FROM estoque WHERE ef_codigo = ? AND ef_idfili = ? FOR UPDATE',
+            'SELECT ef_fisico FROM estoque WHERE ef_codigo = ? AND ef_idfili = ?',
             [codigo_produto, filial_id]
         );
         const quantidade_anterior = (currentStock.length > 0) ? currentStock[0].ef_fisico : 0;
 
-        // 2. Atualiza ou Insere o registro de estoque (UPSERT)
-        const upsertSql = `
-            INSERT INTO estoque (ef_codigo, ef_idfili, ef_fisico, ef_endere)
-            VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE ef_fisico = ?, ef_endere = ?
-        `;
-        // O MySQL não tem um ON DUPLICATE KEY para chaves não primárias de forma simples.
-        // Faremos uma lógica de IF/ELSE no código.
-        
+        // 2. Atualiza ou Insere o registro de estoque
         if (currentStock.length > 0) {
-            // UPDATE
             await connection.execute(
                 'UPDATE estoque SET ef_fisico = ?, ef_endere = ? WHERE ef_codigo = ? AND ef_idfili = ?',
                 [nova_quantidade, endereco, codigo_produto, filial_id]
             );
         } else {
-            // INSERT
             await connection.execute(
                 'INSERT INTO estoque (ef_codigo, ef_idfili, ef_fisico, ef_endere) VALUES (?, ?, ?, ?)',
                 [codigo_produto, filial_id, nova_quantidade, endereco]
             );
         }
         
-        // 3. Insere o registro na tabela de log de auditoria
+        // 3. Conecta ao banco principal para inserir o log
+        const mainDbConnection = await mysql.createConnection({
+            host: process.env.DB_HOST,
+            user: process.env.DB_USER,
+            password: process.env.DB_PASSWORD,
+            database: mainDbName
+        });
         const logSql = `
             INSERT INTO estoque_ajustes_log 
             (id_produto_regi, codigo_produto, id_filial, quantidade_anterior, quantidade_nova, motivo, id_usuario, nome_usuario)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `;
-        await connection.execute(logSql, [id_produto_regi, codigo_produto, filial_id, quantidade_anterior, nova_quantidade, motivo, userId, nomeUsuario]);
-
-        // 4. Confirma a transação
-        await connection.commit();
+        await mainDbConnection.execute(logSql, [id_produto_regi, codigo_produto, filial_id, quantidade_anterior, nova_quantidade, motivo, userId, nomeUsuario]);
+        await mainDbConnection.end();
         
         res.status(200).json({ message: 'Estoque ajustado com sucesso!' });
 
     } catch (error) {
-        if (connection) await connection.rollback();
         console.error('Erro ao ajustar estoque:', error);
         res.status(500).json({ error: 'Erro interno ao ajustar o estoque.' });
-    } finally {
-        if (connection) await connection.end();
-    }
-});
-
-router.get('/filiais-com-estoque', authenticateToken, async (req, res) => {
-    let connection;
-    try {
-        const mapaFiliais = {
-            'TNASC': 'Parada Angélica',
-            'LCMAT': 'Nova Campinas',
-            'LUCAM': 'Santa Cruz',
-            'VMNAF': 'Piabetá'
-        };
-
-        connection = await mysql.createConnection(dbConfig);
-        
-        const [rows] = await connection.execute(`
-            SELECT DISTINCT ef_idfili FROM estoque WHERE ef_idfili IS NOT NULL AND ef_idfili != ''
-        `);
-
-        const filiaisComEstoque = rows
-            .map(row => ({
-                codigo: row.ef_idfili,
-                nome: mapaFiliais[row.ef_idfili] || row.ef_idfili
-            }))
-            .sort((a, b) => a.nome.localeCompare(b.nome));
-        
-        res.json(filiaisComEstoque);
-
-    } catch (error) {
-        console.error("Erro ao buscar filiais com estoque:", error);
-        res.status(500).json({ error: 'Erro ao buscar filiais.' });
     } finally {
         if (connection) await connection.end();
     }
