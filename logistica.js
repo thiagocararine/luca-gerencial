@@ -2355,9 +2355,10 @@ function gerenciarAcessoModulos() {
 
     const permissoesDoUsuario = userData.permissoes;
 
-    const mapaModulos = {
+     const mapaModulos = {
         'lancamentos': 'despesas.html',
         'logistica': 'logistica.html',
+        'produtos': 'produtos.html', // <-- LINHA ADICIONADA
         'configuracoes': 'settings.html'
     };
 

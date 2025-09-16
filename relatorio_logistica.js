@@ -650,6 +650,7 @@ function gerenciarAcessoModulos() {
     const mapaModulos = {
         'lancamentos': 'despesas.html',
         'logistica': 'logistica.html',
+        'produtos': 'produtos.html', // <-- LINHA ADICIONADA
         'configuracoes': 'settings.html'
     };
     for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
