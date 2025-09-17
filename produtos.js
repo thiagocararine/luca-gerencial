@@ -206,6 +206,7 @@ async function openEditModal(rowData) {
         const data = await response.json();
         currentProduct = data;
 
+        // Preenche a Aba 1: Dados Cadastrais
         document.getElementById('pd-codi-input').value = data.details.pd_codi;
         document.getElementById('pd-nome-input').value = data.details.pd_nome;
         document.getElementById('pd-barr-input').value = data.details.pd_barr || '';
@@ -213,18 +214,16 @@ async function openEditModal(rowData) {
         document.getElementById('pd-unid-input').value = data.details.pd_unid || '';
         document.getElementById('pd-cara-input').value = data.details.pd_cara || '';
 
-        const filialSelect = document.getElementById('ef-filial-select');
+        // Preenche a Aba 2: Gestão de Estoque
         const filialFilter = document.getElementById('filter-filial');
-        
-        filialSelect.innerHTML = filialFilter.innerHTML;
-        filialSelect.value = filialFilter.value;
-
         const stockInfo = data.stockByBranch.find(s => s.ef_idfili === filialFilter.value);
+        
         document.getElementById('ef-fisico-input').value = stockInfo ? stockInfo.ef_fisico : 0;
         document.getElementById('ef-endere-input').value = stockInfo ? stockInfo.ef_endere : '';
         document.getElementById('ajuste-motivo-input').value = '';
         
         modal.classList.remove('hidden');
+
     } catch(error) {
         alert(error.message);
     }
@@ -282,7 +281,8 @@ async function saveStockAdjustment() {
     const payload = {
         id_produto_regi: currentProduct.details.pd_regi,
         codigo_produto: currentProduct.details.pd_codi,
-        filial_id: document.getElementById('ef-filial-select').value,
+        // CORREÇÃO: Pega o ID da filial do filtro principal da página
+        filial_id: document.getElementById('filter-filial').value,
         nova_quantidade: document.getElementById('ef-fisico-input').value,
         endereco: document.getElementById('ef-endere-input').value,
         motivo: motivo,
@@ -299,7 +299,9 @@ async function saveStockAdjustment() {
 
         alert('Estoque ajustado com sucesso!');
         document.getElementById('product-edit-modal').classList.add('hidden');
-        productsTable.setData();
+        // Força a renderização da tabela para atualizar o estoque visualmente
+        document.getElementById('filter-filial').dispatchEvent(new Event('change'));
+
     } catch (error) {
         alert('Erro ao ajustar o estoque: ' + error.message);
     } finally {
