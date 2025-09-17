@@ -103,13 +103,11 @@ async function populateFilialFilter() {
 }
 
 function initializeProductsTable() {
-    // 1. Inicializamos a tabela VAZIA, sem configurar o AJAX interno dela.
     productsTable = new Tabulator("#products-table", {
         height: "65vh",
         layout: "fitColumns",
         placeholder: "A carregar dados...",
-        pagination: true, // Usaremos a paginação simples
-        paginationMode: "local", // A paginação será controlada localmente por página
+        pagination: "remote", // Voltamos para a paginação remota
         paginationSize: 20,
         columns: [
             { title: "Cód. Interno", field: "pd_codi", width: 120 },
@@ -126,47 +124,56 @@ function initializeProductsTable() {
         ],
     });
 
-    // 2. Criamos uma função separada para carregar os dados manualmente
-    async function loadTableData() {
+    // Função para carregar dados manualmente, agora com a URL corrigida
+    async function loadTableData(page = 1, size = 20) {
+        productsTable.blockRedraw(); // Bloqueia a renderização para evitar piscar
+        productsTable.setData([]); // Limpa a tabela
+        productsTable.placeholder = "A carregar dados...";
+
         const filialId = document.getElementById('filter-filial').value;
         const search = document.getElementById('filter-search').value;
 
-        // Montamos a URL exatamente como o Tabulator faria
-        const url = new URL(`${apiUrlBase}/produtos`);
+        const url = new URL(`${apiUrlBase}/produtos`, window.location.origin);
         url.searchParams.append('filialId', filialId);
         url.searchParams.append('search', search);
-        // NOTA: A paginação será local, então não precisamos enviar 'page' e 'limit' aqui.
-        // Se a performance ficar lenta com muitos produtos, podemos reintroduzir a paginação remota.
+        url.searchParams.append('page', page);
+        url.searchParams.append('limit', size);
 
         try {
             const response = await fetch(url, {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
-
-            if (!response.ok) {
-                throw new Error('Falha na resposta da rede ao buscar produtos.');
-            }
-
+            if (!response.ok) throw new Error('Falha na resposta da rede.');
+            
             const result = await response.json();
             
-            // 3. Alimentamos a tabela manualmente com a lista de produtos que está dentro de 'result.data'
+            productsTable.setMaxPage(result.totalPages);
             productsTable.setData(result.data);
-
+            
         } catch (error) {
             console.error("Erro ao carregar dados para a tabela:", error);
             productsTable.alert("Erro ao carregar dados.", "error");
+        } finally {
+            productsTable.restoreRedraw();
         }
     }
 
-    // 4. Dizemos aos filtros para chamar nossa função manual em vez de recarregar a tabela
+    // Evento do Tabulator para lidar com a paginação
+    productsTable.on("pageLoaded", function(pageno){
+        loadTableData(pageno);
+    });
+
+    // Dizemos aos filtros para recarregar a primeira página
     document.getElementById('filter-search').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
-            loadTableData();
+            productsTable.setPage(1);
         }
     });
-    document.getElementById('filter-filial').addEventListener('change', loadTableData);
+    document.getElementById('filter-filial').addEventListener('change', () => {
+        productsTable.setPage(1);
+    });
 
-    // 5. Carregamos os dados pela primeira vez
+    // Carrega os dados pela primeira vez
     loadTableData();
 }
 
