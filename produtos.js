@@ -106,63 +106,39 @@ function initializeProductsTable() {
     productsTable = new Tabulator("#products-table", {
         height: "65vh",
         layout: "fitColumns",
-        placeholder: "A carregar dados...",
-        pagination: "remote", // Mantemos a paginação remota
+        placeholder: "Nenhum produto encontrado.",
+        pagination: "remote",
         paginationSize: 20,
-        
-        // --- AJUSTE APLICADO AQUI ---
-        // Adicionamos o evento de clique na linha inteira
+        ajaxURL: `${apiUrlBase}/produtos`,
+        ajaxConfig: {
+            method: "GET",
+            headers: { 'Authorization': `Bearer ${getToken()}` },
+        },
+        ajaxParams: {
+            get filialId() { return document.getElementById('filter-filial').value; },
+            get search() { return document.getElementById('filter-search').value; }
+        },
+        ajaxResponse: function(url, params, response){
+            return {
+                last_page: response.totalPages,
+                data: response.data
+            };
+        },
+        // Adicionando um log para confirmar que a configuração foi lida
+        initFinished:function(){
+            console.log("Tabulator: Tabela inicializada e pronta.");
+        },
         rowClick: function(e, row){
+            // Adicionando um log para confirmar que o clique foi detectado
+            console.log("Tabulator: Linha clicada. Dados do produto:", row.getData());
             openEditModal(row.getData());
         },
-        // -----------------------------
-
         columns: [
             { title: "Cód. Interno", field: "pd_codi", width: 120 },
             { title: "Nome do Produto", field: "pd_nome", minWidth: 250, tooltip: true },
             { title: "Cód. Barras", field: "pd_barr", width: 150 },
             { title: "Estoque na Filial", field: "estoque_fisico_filial", hozAlign: "center", width: 150 },
-            // A coluna "Ações" foi removida daqui
         ],
-    });
-
-    // A sua função de carregar dados manualmente continua a mesma
-    async function loadTableData(page = 1, size = 20) {
-        productsTable.blockRedraw(); 
-        productsTable.setData([]); 
-        productsTable.placeholder = "A carregar dados...";
-
-        const filialId = document.getElementById('filter-filial').value;
-        const search = document.getElementById('filter-search').value;
-
-        const url = new URL(`${apiUrlBase}/produtos`, window.location.origin);
-        url.searchParams.append('filialId', filialId);
-        url.searchParams.append('search', search);
-        url.searchParams.append('page', page);
-        url.searchParams.append('limit', size);
-
-        try {
-            const response = await fetch(url, {
-                headers: { 'Authorization': `Bearer ${getToken()}` }
-            });
-            if (!response.ok) throw new Error('Falha na resposta da rede.');
-            
-            const result = await response.json();
-            
-            productsTable.setMaxPage(result.totalPages);
-            productsTable.setData(result.data);
-            
-        } catch (error) {
-            console.error("Erro ao carregar dados para a tabela:", error);
-            productsTable.alert("Erro ao carregar dados.", "error");
-        } finally {
-            productsTable.restoreRedraw();
-        }
-    }
-
-    // A lógica de paginação e filtros continua a mesma
-    productsTable.on("pageLoaded", function(pageno){
-        loadTableData(pageno);
     });
 
     document.getElementById('filter-search').addEventListener('keypress', (e) => {
@@ -173,9 +149,6 @@ function initializeProductsTable() {
     document.getElementById('filter-filial').addEventListener('change', () => {
         productsTable.setPage(1);
     });
-
-    // Carrega os dados pela primeira vez
-    loadTableData();
 }
 
 async function openEditModal(rowData) {
@@ -297,39 +270,35 @@ let selectedDeviceId;
 
 function setupBarcodeScannerListeners() {
     const scannerModal = document.getElementById('barcode-scanner-modal');
-    
-    // --- ALTERAÇÃO APLICADA AQUI ---
-    // 1. Criamos um "mapa de dicas" para a biblioteca
-    const hints = new Map();
-    // 2. Definimos os formatos de código de barras que queremos procurar (os mais comuns em produtos)
-    const formats = [
-        ZXing.BarcodeFormat.EAN_13,
-        ZXing.BarcodeFormat.CODE_128,
-        ZXing.BarcodeFormat.UPC_A,
-        ZXing.BarcodeFormat.UPC_E
-    ];
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+    const videoElement = document.getElementById('barcode-scanner-video');
+    const statusElement = document.getElementById('scanner-status');
+    let codeReader; // Mova a declaração para cá
 
-    // 3. Inicializamos o leitor já com as dicas
-    const codeReader = new ZXing.BrowserMultiFormatReader(hints);
-    // ------------------------------------
-    
     document.getElementById('barcode-scanner-btn').addEventListener('click', async () => {
+        const hints = new Map();
+        const formats = [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E];
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+        codeReader = new ZXing.BrowserMultiFormatReader(hints);
+        
         scannerModal.classList.remove('hidden');
+        statusElement.textContent = "Iniciando câmera...";
         try {
             const videoInputDevices = await codeReader.listVideoInputDevices();
             if (videoInputDevices.length > 0) {
                 const rearCamera = videoInputDevices.find(device => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('trás'));
                 selectedDeviceId = rearCamera ? rearCamera.deviceId : videoInputDevices[0].deviceId;
                 
+                statusElement.textContent = "Procurando código...";
                 codeReader.decodeFromVideoDevice(selectedDeviceId, 'barcode-scanner-video', (result, err) => {
                     if (result) {
+                        statusElement.textContent = `Código encontrado: ${result.text}`;
                         document.getElementById('filter-search').value = result.text;
-                        stopBarcodeScanner();
-                        productsTable.setPage(1); // Inicia a busca automaticamente
+                        stopBarcodeScanner(codeReader);
+                        productsTable.setPage(1);
                     }
                     if (err && !(err instanceof ZXing.NotFoundException)) {
                         console.error(err);
+                        statusElement.textContent = "Erro ao ler o código.";
                     }
                 });
             } else {
@@ -340,8 +309,29 @@ function setupBarcodeScannerListeners() {
         }
     });
 
+    document.getElementById('capture-frame-btn').addEventListener('click', () => {
+        if (!codeReader || !videoElement) return;
+        statusElement.textContent = "Processando imagem capturada...";
+        const canvas = document.createElement('canvas');
+        canvas.width = videoElement.videoWidth;
+        canvas.height = videoElement.videoHeight;
+        canvas.getContext('2d').drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        const imageUrl = canvas.toDataURL('image/jpeg');
+
+        codeReader.decodeFromImageUrl(imageUrl).then(result => {
+            if (result) {
+                statusElement.textContent = `Código encontrado: ${result.text}`;
+                document.getElementById('filter-search').value = result.text;
+                stopBarcodeScanner(codeReader);
+                productsTable.setPage(1);
+            }
+        }).catch(err => {
+            statusElement.textContent = "Nenhum código encontrado na imagem. Tente novamente.";
+            console.error(err);
+        });
+    });
+
     document.getElementById('close-scanner-btn').addEventListener('click', () => {
-        // Passamos a instância do codeReader para a função de parar
         stopBarcodeScanner(codeReader);
     });
 }
