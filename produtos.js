@@ -106,9 +106,26 @@ function initializeProductsTable() {
     productsTable = new Tabulator("#products-table", {
         height: "65vh",
         layout: "fitColumns",
-        placeholder: "A carregar dados...",
-        pagination: "remote", // Voltamos para a paginação remota
+        placeholder: "Nenhum produto encontrado.",
+        pagination: "remote", // Paginação controlada pelo backend
         paginationSize: 20,
+        ajaxURL: `${apiUrlBase}/produtos`, // URL base da API
+        ajaxConfig: {
+            method: "GET",
+            headers: { 'Authorization': `Bearer ${getToken()}` },
+        },
+        // Parâmetros que serão enviados a cada requisição (busca, filial)
+        ajaxParams: {
+            get filialId() { return document.getElementById('filter-filial').value; },
+            get search() { return document.getElementById('filter-search').value; }
+        },
+        // Função que "traduz" a resposta da nossa API para o formato que o Tabulator entende
+        ajaxResponse: function(url, params, response){
+            return {
+                last_page: response.totalPages, // Informa o número total de páginas
+                data: response.data             // Informa qual é a lista de produtos
+            };
+        },
         columns: [
             { title: "Cód. Interno", field: "pd_codi", width: 120 },
             { title: "Nome do Produto", field: "pd_nome", minWidth: 250, tooltip: true },
@@ -124,57 +141,16 @@ function initializeProductsTable() {
         ],
     });
 
-    // Função para carregar dados manualmente, agora com a URL corrigida
-    async function loadTableData(page = 1, size = 20) {
-        productsTable.blockRedraw(); // Bloqueia a renderização para evitar piscar
-        productsTable.setData([]); // Limpa a tabela
-        productsTable.placeholder = "A carregar dados...";
-
-        const filialId = document.getElementById('filter-filial').value;
-        const search = document.getElementById('filter-search').value;
-
-        const url = new URL(`${apiUrlBase}/produtos`, window.location.origin);
-        url.searchParams.append('filialId', filialId);
-        url.searchParams.append('search', search);
-        url.searchParams.append('page', page);
-        url.searchParams.append('limit', size);
-
-        try {
-            const response = await fetch(url, {
-                headers: { 'Authorization': `Bearer ${getToken()}` }
-            });
-            if (!response.ok) throw new Error('Falha na resposta da rede.');
-            
-            const result = await response.json();
-            
-            productsTable.setMaxPage(result.totalPages);
-            productsTable.setData(result.data);
-            
-        } catch (error) {
-            console.error("Erro ao carregar dados para a tabela:", error);
-            productsTable.alert("Erro ao carregar dados.", "error");
-        } finally {
-            productsTable.restoreRedraw();
-        }
-    }
-
-    // Evento do Tabulator para lidar com a paginação
-    productsTable.on("pageLoaded", function(pageno){
-        loadTableData(pageno);
-    });
-
-    // Dizemos aos filtros para recarregar a primeira página
+    // Lógica de filtro simplificada: apenas diz ao Tabulator para recarregar a primeira página
     document.getElementById('filter-search').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             productsTable.setPage(1);
         }
     });
+
     document.getElementById('filter-filial').addEventListener('change', () => {
         productsTable.setPage(1);
     });
-
-    // Carrega os dados pela primeira vez
-    loadTableData();
 }
 
 async function openEditModal(rowData) {
