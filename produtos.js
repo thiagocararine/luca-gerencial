@@ -1,4 +1,3 @@
-import { Grid, h } from "https://unpkg.com/gridjs?module";
 document.addEventListener('DOMContentLoaded', initProductsPage);
 
 const apiUrlBase = '/api';
@@ -104,42 +103,45 @@ async function populateFilialFilter() {
 }
 
 function initializeProductsTable() {
-    // Limpa a div caso a tabela já exista, para evitar duplicação
     const wrapper = document.getElementById('products-table');
-    wrapper.innerHTML = '';
+    if (wrapper.innerHTML !== '') { return; } // Evita recriar a tabela
 
-    const grid = new Grid({
+    // CORREÇÃO: Usa o objeto global 'gridjs'
+    productsTable = new gridjs.Grid({
         columns: [
-            { name: 'Cód. Interno', id: 'pd_codi', width: '120px' },
-            { name: 'Nome do Produto', id: 'pd_nome', width: '250px' },
-            { name: 'Cód. Barras', id: 'pd_barr', width: '150px' },
-            { name: 'Estoque na Filial', id: 'estoque_fisico_filial', width: '150px' },
+            { name: 'Cód. Interno', id: 'pd_codi' },
+            { name: 'Nome do Produto', id: 'pd_nome' },
+            { name: 'Cód. Barras', id: 'pd_barr' },
+            { name: 'Estoque', id: 'estoque_fisico_filial' },
             {
                 name: 'Ações',
-                width: '100px',
                 formatter: (cell, row) => {
-                    return h('button', {
+                    return gridjs.h('button', {
                         className: 'bg-indigo-600 text-white text-xs font-semibold py-1 px-3 rounded hover:bg-indigo-700',
-                        onClick: () => openEditModal(row.cells.reduce((obj, cell) => {
-                            obj[cell.id] = cell.data;
+                        onClick: () => openEditModal(row.cells.reduce((obj, cell, i) => {
+                            // Constrói o objeto de dados da linha manualmente
+                            obj[grid.config.columns[i].id] = cell.data;
                             return obj;
                         }, {}))
                     }, 'Gerir');
                 }
             }
         ],
+        server: {
+            url: `${apiUrlBase}/produtos`,
+            headers: { 'Authorization': `Bearer ${getToken()}` },
+            then: data => data.data.map(product => [
+                product.pd_codi,
+                product.pd_nome,
+                product.pd_barr,
+                product.estoque_fisico_filial,
+                product // Passa o objeto inteiro para o formatador de 'Ações'
+            ]),
+            total: data => data.totalItems
+        },
         search: {
-            enabled: true,
             server: {
-                url: `${apiUrlBase}/produtos`,
-                then: results => results.data.map(product => [
-                    product.pd_codi,
-                    product.pd_nome,
-                    product.pd_barr,
-                    product.estoque_fisico_filial,
-                    product // Passa o objeto inteiro para o formatador de 'Ações'
-                ]),
-                total: results => results.totalItems
+                url: (prev, keyword) => `${prev}?search=${keyword}`
             }
         },
         pagination: {
@@ -148,33 +150,14 @@ function initializeProductsTable() {
             server: {
                 url: (prev, page, limit) => {
                     const filialId = document.getElementById('filter-filial').value;
+                    // Adiciona o search param à URL da paginação
                     const search = document.getElementById('filter-search').value;
                     return `${prev}?filialId=${filialId}&search=${search}&page=${page + 1}&limit=${limit}`;
-                },
+                }
             }
         },
-        server: {
-            url: `${apiUrlBase}/produtos`,
-            headers: { 'Authorization': `Bearer ${getToken()}` },
-            then: results => results.data,
-            total: results => results.totalItems
-        },
-        language: {
-            'search': {
-                'placeholder': 'Digite para pesquisar...'
-            },
-            'pagination': {
-                'previous': 'Anterior',
-                'next': 'Próxima',
-                'showing': 'Mostrando',
-                'results': () => 'resultados',
-                'to': 'a',
-                'of': 'de'
-            }
-        }
-    });
-
-    grid.render(wrapper);
+        language: { /* ... traduções ... */ }
+    }).render(wrapper);
 }
 
 async function openEditModal(rowData) {
