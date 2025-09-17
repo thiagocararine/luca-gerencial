@@ -107,27 +107,29 @@ function initializeProductsTable() {
         height: "65vh",
         layout: "fitColumns",
         placeholder: "A carregar dados...",
-        pagination: "remote", // Voltamos para a paginação remota
+        pagination: "remote", // Mantemos a paginação remota
         paginationSize: 20,
+        
+        // --- AJUSTE APLICADO AQUI ---
+        // Adicionamos o evento de clique na linha inteira
+        rowClick: function(e, row){
+            openEditModal(row.getData());
+        },
+        // -----------------------------
+
         columns: [
             { title: "Cód. Interno", field: "pd_codi", width: 120 },
             { title: "Nome do Produto", field: "pd_nome", minWidth: 250, tooltip: true },
             { title: "Cód. Barras", field: "pd_barr", width: 150 },
             { title: "Estoque na Filial", field: "estoque_fisico_filial", hozAlign: "center", width: 150 },
-            {
-                title: "Ações", hozAlign: "center", width: 100,
-                formatter: (cell) => `<button class="bg-indigo-600 text-white text-xs font-semibold py-1 px-3 rounded hover:bg-indigo-700">Gerir</button>`,
-                cellClick: (e, cell) => {
-                    openEditModal(cell.getRow().getData());
-                }
-            },
+            // A coluna "Ações" foi removida daqui
         ],
     });
 
-    // Função para carregar dados manualmente, agora com a URL corrigida
+    // A sua função de carregar dados manualmente continua a mesma
     async function loadTableData(page = 1, size = 20) {
-        productsTable.blockRedraw(); // Bloqueia a renderização para evitar piscar
-        productsTable.setData([]); // Limpa a tabela
+        productsTable.blockRedraw(); 
+        productsTable.setData([]); 
         productsTable.placeholder = "A carregar dados...";
 
         const filialId = document.getElementById('filter-filial').value;
@@ -158,12 +160,11 @@ function initializeProductsTable() {
         }
     }
 
-    // Evento do Tabulator para lidar com a paginação
+    // A lógica de paginação e filtros continua a mesma
     productsTable.on("pageLoaded", function(pageno){
         loadTableData(pageno);
     });
 
-    // Dizemos aos filtros para recarregar a primeira página
     document.getElementById('filter-search').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             productsTable.setPage(1);
@@ -296,7 +297,22 @@ let selectedDeviceId;
 
 function setupBarcodeScannerListeners() {
     const scannerModal = document.getElementById('barcode-scanner-modal');
-    const codeReader = new ZXing.BrowserMultiFormatReader();
+    
+    // --- ALTERAÇÃO APLICADA AQUI ---
+    // 1. Criamos um "mapa de dicas" para a biblioteca
+    const hints = new Map();
+    // 2. Definimos os formatos de código de barras que queremos procurar (os mais comuns em produtos)
+    const formats = [
+        ZXing.BarcodeFormat.EAN_13,
+        ZXing.BarcodeFormat.CODE_128,
+        ZXing.BarcodeFormat.UPC_A,
+        ZXing.BarcodeFormat.UPC_E
+    ];
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+
+    // 3. Inicializamos o leitor já com as dicas
+    const codeReader = new ZXing.BrowserMultiFormatReader(hints);
+    // ------------------------------------
     
     document.getElementById('barcode-scanner-btn').addEventListener('click', async () => {
         scannerModal.classList.remove('hidden');
@@ -310,7 +326,7 @@ function setupBarcodeScannerListeners() {
                     if (result) {
                         document.getElementById('filter-search').value = result.text;
                         stopBarcodeScanner();
-                        productsTable.setData();
+                        productsTable.setPage(1); // Inicia a busca automaticamente
                     }
                     if (err && !(err instanceof ZXing.NotFoundException)) {
                         console.error(err);
@@ -324,7 +340,18 @@ function setupBarcodeScannerListeners() {
         }
     });
 
-    document.getElementById('close-scanner-btn').addEventListener('click', stopBarcodeScanner);
+    document.getElementById('close-scanner-btn').addEventListener('click', () => {
+        // Passamos a instância do codeReader para a função de parar
+        stopBarcodeScanner(codeReader);
+    });
+}
+
+// A função stopBarcodeScanner também precisa de um pequeno ajuste
+function stopBarcodeScanner(reader) {
+    if (reader) {
+        reader.reset();
+    }
+    document.getElementById('barcode-scanner-modal').classList.add('hidden');
 }
 
 function stopBarcodeScanner() {
