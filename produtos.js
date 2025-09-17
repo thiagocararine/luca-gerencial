@@ -149,8 +149,8 @@ function initializeProductsTable() {
             thead: 'bg-gray-50',
             th: 'px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider',
             tbody: 'bg-white divide-y divide-gray-200',
-            tr: 'hover:bg-gray-50 cursor-pointer', // <-- Efeito de hover na linha
-            td: 'px-4 py-3 whitespace-nowrap',
+            tr: 'hover:bg-gray-200 cursor-pointer', // <-- Efeito de hover na linha
+            td: 'px-4 py-2 whitespace-nowrap',
         },
         language: {
             'search': {
