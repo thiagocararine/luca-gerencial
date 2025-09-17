@@ -50,16 +50,7 @@ async function initProductsPage() {
 }
 
 function setupEventListeners() {
-    document.getElementById('filter-search').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            productsTable.setData(); 
-        }
-    });
-
-    document.getElementById('filter-filial').addEventListener('change', () => {
-        productsTable.setData();
-    });
-
+    // Listeners do Modal de Edição
     const modal = document.getElementById('product-edit-modal');
     modal.querySelector('#close-product-modal-btn').addEventListener('click', () => modal.classList.add('hidden'));
     
@@ -112,30 +103,14 @@ async function populateFilialFilter() {
 }
 
 function initializeProductsTable() {
+    // 1. Inicializamos a tabela VAZIA, sem configurar o AJAX interno dela.
     productsTable = new Tabulator("#products-table", {
         height: "65vh",
         layout: "fitColumns",
-        placeholder: "Nenhum produto encontrado.",
-        pagination: "remote",
+        placeholder: "A carregar dados...",
+        pagination: true, // Usaremos a paginação simples
+        paginationMode: "local", // A paginação será controlada localmente por página
         paginationSize: 20,
-        ajaxURL: `${apiUrlBase}/produtos`,
-        ajaxConfig: {
-            method: "GET",
-            headers: { 'Authorization': `Bearer ${getToken()}` },
-        },
-        ajaxParams: {
-            get filialId() { return document.getElementById('filter-filial').value; },
-            get search() { return document.getElementById('filter-search').value; }
-        },
-        // --- ESTE BLOCO É A CORREÇÃO ---
-        ajaxResponse: function(url, params, response){
-            // Diz ao Tabulator para encontrar a lista dentro de response.data
-            return {
-                last_page: response.totalPages,
-                data: response.data
-            };
-        },
-        // ---------------------------------
         columns: [
             { title: "Cód. Interno", field: "pd_codi", width: 120 },
             { title: "Nome do Produto", field: "pd_nome", minWidth: 250, tooltip: true },
@@ -150,6 +125,49 @@ function initializeProductsTable() {
             },
         ],
     });
+
+    // 2. Criamos uma função separada para carregar os dados manualmente
+    async function loadTableData() {
+        const filialId = document.getElementById('filter-filial').value;
+        const search = document.getElementById('filter-search').value;
+
+        // Montamos a URL exatamente como o Tabulator faria
+        const url = new URL(`${apiUrlBase}/produtos`);
+        url.searchParams.append('filialId', filialId);
+        url.searchParams.append('search', search);
+        // NOTA: A paginação será local, então não precisamos enviar 'page' e 'limit' aqui.
+        // Se a performance ficar lenta com muitos produtos, podemos reintroduzir a paginação remota.
+
+        try {
+            const response = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${getToken()}` }
+            });
+
+            if (!response.ok) {
+                throw new Error('Falha na resposta da rede ao buscar produtos.');
+            }
+
+            const result = await response.json();
+            
+            // 3. Alimentamos a tabela manualmente com a lista de produtos que está dentro de 'result.data'
+            productsTable.setData(result.data);
+
+        } catch (error) {
+            console.error("Erro ao carregar dados para a tabela:", error);
+            productsTable.alert("Erro ao carregar dados.", "error");
+        }
+    }
+
+    // 4. Dizemos aos filtros para chamar nossa função manual em vez de recarregar a tabela
+    document.getElementById('filter-search').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            loadTableData();
+        }
+    });
+    document.getElementById('filter-filial').addEventListener('change', loadTableData);
+
+    // 5. Carregamos os dados pela primeira vez
+    loadTableData();
 }
 
 async function openEditModal(rowData) {
