@@ -104,32 +104,34 @@ async function populateFilialFilter() {
 
 function initializeProductsTable() {
     const wrapper = document.getElementById('products-table');
-    // Limpa a tabela anterior, se houver, antes de recriar
+    // Limpa a tabela anterior para evitar duplicação
     if (wrapper.grid) {
         wrapper.grid.destroy();
     }
     wrapper.innerHTML = '';
 
     const grid = new gridjs.Grid({
-        // 1. REMOÇÃO DO FILTRO SUPERIOR: a opção 'search' foi removida daqui.
         columns: [
             { id: 'pd_codi', name: 'Cód. Interno' },
             { id: 'pd_nome', name: 'Nome do Produto' },
             { id: 'pd_barr', name: 'Cód. Barras' },
-            { id: 'estoque_fisico_filial', name: 'Estoque' }
-            // 2. REMOÇÃO DA COLUNA 'AÇÕES': A coluna de ações foi removida.
+            { id: 'estoque_fisico_filial', name: 'Estoque' },
+            { 
+                id: 'pd_regi', 
+                hidden: true // <-- Coluna oculta para o ID primário
+            }
         ],
         server: {
             url: `${apiUrlBase}/produtos`,
             headers: { 'Authorization': `Bearer ${getToken()}` },
-            then: data => data.data.map(product => [
+            then: results => results.data.map(product => [
                 product.pd_codi,
                 product.pd_nome,
                 product.pd_barr,
                 product.estoque_fisico_filial,
-                product.pd_regi // Enviamos o ID primário oculto para usar no clique
+                product.pd_regi // <-- Passa o ID para a coluna oculta
             ]),
-            total: data => data.totalItems
+            total: results => results.totalItems
         },
         pagination: {
             enabled: true,
@@ -142,26 +144,34 @@ function initializeProductsTable() {
                 }
             }
         },
-        // 3. ESTILIZAÇÃO COM TAILWIND: Adicionando as classes do Tailwind
         className: {
             table: 'min-w-full divide-y divide-gray-200 text-sm',
             thead: 'bg-gray-50',
             th: 'px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider',
             tbody: 'bg-white divide-y divide-gray-200',
-            tr: 'hover:bg-gray-50 cursor-pointer', // Adicionado cursor-pointer para indicar que a linha é clicável
+            tr: 'hover:bg-gray-50 cursor-pointer', // <-- Efeito de hover na linha
             td: 'px-4 py-3 whitespace-nowrap',
-            paginationButton: 'mx-1 px-3 py-1.5 text-sm font-semibold rounded-md',
-            paginationButtonCurrent: 'bg-indigo-50 text-indigo-600',
-            paginationButtonPrev: 'bg-white text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50',
-            paginationButtonNext: 'bg-white text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50'
         },
-        language: { /* ... traduções ... */ }
+        language: {
+            'search': {
+                'placeholder': 'Digite para pesquisar...'
+            },
+            'pagination': {
+                'previous': 'Anterior',
+                'next': 'Próxima',
+                'showing': 'Mostrando',
+                'results': () => 'resultados',
+                'to': 'a',
+                'of': 'de'
+            }
+        }
     }).render(wrapper);
     
-    // 4. AÇÃO AO CLICAR NA LINHA: Adicionando o evento de clique
+    // Evento de clique na linha
     grid.on('rowClick', (event, row) => {
-        const pd_regi = row.cells[4].data; // Pega o ID que enviamos como a 5ª coluna oculta
-        // Busca o objeto completo para passar ao modal, ou monta um objeto simples
+        // Acessa a célula 4 (quinta coluna, a oculta) para pegar o ID
+        const pd_regi = row.cells[4].data; 
+        
         const rowData = {
             pd_regi: pd_regi,
             pd_codi: row.cells[0].data,
@@ -170,10 +180,9 @@ function initializeProductsTable() {
         openEditModal(rowData);
     });
 
-    // Anexa a instância do grid ao wrapper para referência futura
     wrapper.grid = grid;
 
-    // Lógica para o seu filtro de busca personalizado
+    // Lógica dos filtros
     document.getElementById('filter-search').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             grid.forceRender();
