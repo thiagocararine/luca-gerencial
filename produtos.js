@@ -1,3 +1,4 @@
+import { Grid, h } from "https://unpkg.com/gridjs?module";
 document.addEventListener('DOMContentLoaded', initProductsPage);
 
 const apiUrlBase = '/api';
@@ -103,52 +104,77 @@ async function populateFilialFilter() {
 }
 
 function initializeProductsTable() {
-    productsTable = new Tabulator("#products-table", {
-        height: "65vh",
-        layout: "fitColumns",
-        placeholder: "Nenhum produto encontrado.",
-        pagination: "remote",
-        paginationSize: 20,
-        ajaxURL: `${apiUrlBase}/produtos`,
-        ajaxConfig: {
-            method: "GET",
-            headers: { 'Authorization': `Bearer ${getToken()}` },
-        },
-        ajaxParams: {
-            get filialId() { return document.getElementById('filter-filial').value; },
-            get search() { return document.getElementById('filter-search').value; }
-        },
-        ajaxResponse: function(url, params, response){
-            return {
-                last_page: response.totalPages,
-                data: response.data
-            };
-        },
-        // Adicionando um log para confirmar que a configuração foi lida
-        initFinished:function(){
-            console.log("Tabulator: Tabela inicializada e pronta.");
-        },
-        rowClick: function(e, row){
-            // Adicionando um log para confirmar que o clique foi detectado
-            console.log("Tabulator: Linha clicada. Dados do produto:", row.getData());
-            openEditModal(row.getData());
-        },
-        columns: [
-            { title: "Cód. Interno", field: "pd_codi", width: 120 },
-            { title: "Nome do Produto", field: "pd_nome", minWidth: 250, tooltip: true },
-            { title: "Cód. Barras", field: "pd_barr", width: 150 },
-            { title: "Estoque na Filial", field: "estoque_fisico_filial", hozAlign: "center", width: 150 },
-        ],
-    });
+    // Limpa a div caso a tabela já exista, para evitar duplicação
+    const wrapper = document.getElementById('products-table');
+    wrapper.innerHTML = '';
 
-    document.getElementById('filter-search').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            productsTable.setPage(1);
+    const grid = new Grid({
+        columns: [
+            { name: 'Cód. Interno', id: 'pd_codi', width: '120px' },
+            { name: 'Nome do Produto', id: 'pd_nome', width: '250px' },
+            { name: 'Cód. Barras', id: 'pd_barr', width: '150px' },
+            { name: 'Estoque na Filial', id: 'estoque_fisico_filial', width: '150px' },
+            {
+                name: 'Ações',
+                width: '100px',
+                formatter: (cell, row) => {
+                    return h('button', {
+                        className: 'bg-indigo-600 text-white text-xs font-semibold py-1 px-3 rounded hover:bg-indigo-700',
+                        onClick: () => openEditModal(row.cells.reduce((obj, cell) => {
+                            obj[cell.id] = cell.data;
+                            return obj;
+                        }, {}))
+                    }, 'Gerir');
+                }
+            }
+        ],
+        search: {
+            enabled: true,
+            server: {
+                url: `${apiUrlBase}/produtos`,
+                then: results => results.data.map(product => [
+                    product.pd_codi,
+                    product.pd_nome,
+                    product.pd_barr,
+                    product.estoque_fisico_filial,
+                    product // Passa o objeto inteiro para o formatador de 'Ações'
+                ]),
+                total: results => results.totalItems
+            }
+        },
+        pagination: {
+            enabled: true,
+            limit: 20,
+            server: {
+                url: (prev, page, limit) => {
+                    const filialId = document.getElementById('filter-filial').value;
+                    const search = document.getElementById('filter-search').value;
+                    return `${prev}?filialId=${filialId}&search=${search}&page=${page + 1}&limit=${limit}`;
+                },
+            }
+        },
+        server: {
+            url: `${apiUrlBase}/produtos`,
+            headers: { 'Authorization': `Bearer ${getToken()}` },
+            then: results => results.data,
+            total: results => results.totalItems
+        },
+        language: {
+            'search': {
+                'placeholder': 'Digite para pesquisar...'
+            },
+            'pagination': {
+                'previous': 'Anterior',
+                'next': 'Próxima',
+                'showing': 'Mostrando',
+                'results': () => 'resultados',
+                'to': 'a',
+                'of': 'de'
+            }
         }
     });
-    document.getElementById('filter-filial').addEventListener('change', () => {
-        productsTable.setPage(1);
-    });
+
+    grid.render(wrapper);
 }
 
 async function openEditModal(rowData) {
