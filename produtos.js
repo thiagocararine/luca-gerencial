@@ -275,6 +275,21 @@ function initializeProductsTable() {
             },
             total: results => results.totalItems
         },
+        // --- ESTILIZAÇÃO COM TAILWIND ---
+        className: {
+            table: 'w-full text-sm text-left text-gray-500',
+            thead: 'text-xs text-gray-700 uppercase bg-gray-50',
+            tbody: 'bg-white divide-y',
+            tr: 'hover:bg-gray-50',
+            th: 'px-6 py-3',
+            td: 'px-6 py-4 whitespace-nowrap',
+            pagination: 'mt-4 flex justify-between items-center',
+            paginationButton: 'inline-flex items-center px-3 py-1 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50',
+            paginationButtonCurrent: 'bg-indigo-50 border-indigo-500 text-indigo-600',
+            paginationButtonPrev: 'mr-2',
+            paginationButtonNext: 'ml-2',
+            footer: 'text-sm text-gray-700'
+        },
         pagination: {
             enabled: true,
             limit: 15,
@@ -282,15 +297,11 @@ function initializeProductsTable() {
         },
         search: false,
         sort: false,
-        style: {
-            table: { 'width': '100%' },
-            th: { 'background-color': '#f9fafb' }
-        },
         language: {
             'search': { 'placeholder': '🔍 Buscar...' },
             'pagination': {
-                'previous': '⬅️',
-                'next': '➡️',
+                'previous': 'Anterior',
+                'next': 'Próximo',
                 'showing': 'Mostrando',
                 'to': 'a',
                 'of': 'de',
