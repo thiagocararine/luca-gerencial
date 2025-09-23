@@ -106,7 +106,6 @@ function setupEventListeners() {
     document.getElementById('save-details-btn').addEventListener('click', saveProductDetails);
     document.getElementById('save-stock-btn').addEventListener('click', saveStockAdjustment);
     
-    // Apenas a configuração dos listeners do scanner é chamada aqui
     setupBarcodeScannerListeners();
 }
 
@@ -276,7 +275,6 @@ async function saveProductDetails() {
     const btn = document.getElementById('save-details-btn');
     btn.disabled = true;
     btn.textContent = 'A Salvar...';
-
     const payload = {
         pd_nome: document.getElementById('pd-nome-input').value,
         pd_barr: document.getElementById('pd-barr-input').value,
@@ -287,7 +285,6 @@ async function saveProductDetails() {
         pd_pcus: currentProduct.details.pd_pcus,
         pd_vdp1: currentProduct.details.pd_vdp1,
     };
-
     try {
         const response = await fetch(`${apiUrlBase}/produtos/${currentProduct.details.pd_regi}`, {
             method: 'PUT',
@@ -296,7 +293,6 @@ async function saveProductDetails() {
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error);
-
         alert('Dados do produto salvos com sucesso!');
         renderContent();
     } catch (error) {
@@ -311,15 +307,12 @@ async function saveStockAdjustment() {
     if (!currentProduct) return;
     const btn = document.getElementById('save-stock-btn');
     const motivo = document.getElementById('ajuste-motivo-input').value;
-
     if (!motivo.trim()) {
         alert('O "Motivo do Ajuste" é obrigatório para registrar a alteração no estoque.');
         return;
     }
-
     btn.disabled = true;
     btn.textContent = 'A Ajustar...';
-
     const payload = {
         id_produto_regi: currentProduct.details.pd_regi,
         codigo_produto: currentProduct.details.pd_codi,
@@ -328,7 +321,6 @@ async function saveStockAdjustment() {
         endereco: document.getElementById('ef-endere-input').value,
         motivo: motivo,
     };
-
     try {
         const response = await fetch(`${apiUrlBase}/produtos/ajuste-estoque`, {
             method: 'POST',
@@ -337,7 +329,6 @@ async function saveStockAdjustment() {
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error);
-
         alert('Estoque ajustado com sucesso!');
         document.getElementById('product-edit-modal').classList.add('hidden');
         renderContent();
@@ -353,14 +344,6 @@ async function saveStockAdjustment() {
 let activeCodeReader = null;
 let videoInputDevices = [];
 let currentDeviceIndex = 0;
-
-function stopBarcodeScanner() {
-    if (activeCodeReader) {
-        activeCodeReader.reset();
-        activeCodeReader = null;
-    }
-    document.getElementById('barcode-scanner-modal').classList.add('hidden');
-}
 
 function startScannerForDevice(deviceId) {
     if (activeCodeReader) {
@@ -385,8 +368,17 @@ function startScannerForDevice(deviceId) {
     });
 }
 
+function stopBarcodeScanner() {
+    if (activeCodeReader) {
+        activeCodeReader.reset();
+        activeCodeReader = null;
+    }
+    document.getElementById('barcode-scanner-modal').classList.add('hidden');
+}
+
 function setupBarcodeScannerListeners() {
     const scannerModal = document.getElementById('barcode-scanner-modal');
+    
     document.getElementById('barcode-scanner-btn').addEventListener('click', async () => {
         scannerModal.classList.remove('hidden');
         try {
