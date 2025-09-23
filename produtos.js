@@ -281,8 +281,8 @@ function initializeProductsTable() {
             thead: 'text-xs text-gray-700 uppercase bg-gray-50',
             tbody: 'bg-white divide-y',
             tr: 'hover:bg-gray-50',
-            th: 'px-6 py-3',
-            td: 'px-6 py-4 whitespace-nowrap',
+            th: 'px-6 py-2', // <-- Padding vertical REDUZIDO do cabeçalho
+            td: 'px-6 py-2 whitespace-nowrap', // <-- Padding vertical REDUZIDO das células
             pagination: 'mt-4 flex justify-between items-center',
             paginationButton: 'inline-flex items-center px-3 py-1 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50',
             paginationButtonCurrent: 'bg-indigo-50 border-indigo-500 text-indigo-600',
