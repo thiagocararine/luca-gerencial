@@ -262,7 +262,19 @@ function initializeProductsTable() {
             'Estoque'
         ],
         server: {
-            url: `${apiUrlBase}/produtos?filialId=${document.getElementById('filter-filial').value}&search=${document.getElementById('filter-search').value}`,
+            url: (prev) => {
+                // Constrói a URL base com os filtros
+                const baseUrl = new URL(`${apiUrlBase}/produtos`, window.location.origin);
+                baseUrl.searchParams.append('search', document.getElementById('filter-search').value);
+                baseUrl.searchParams.append('filialId', document.getElementById('filter-filial').value);
+
+                // Adiciona os parâmetros de paginação que o Grid.js já calculou
+                const prevParams = new URLSearchParams(prev.split('?')[1]);
+                if (prevParams.has('limit')) baseUrl.searchParams.append('limit', prevParams.get('limit'));
+                if (prevParams.has('page')) baseUrl.searchParams.append('page', prevParams.get('page'));
+
+                return baseUrl.toString();
+            },
             headers: { 'Authorization': `Bearer ${getToken()}` },
             then: results => {
                 gridInstance.config.data = results.data;
@@ -275,14 +287,13 @@ function initializeProductsTable() {
             },
             total: results => results.totalItems
         },
-        // --- ESTILIZAÇÃO COM TAILWIND ---
         className: {
             table: 'w-full text-sm text-left text-gray-500',
             thead: 'text-xs text-gray-700 uppercase bg-gray-50',
             tbody: 'bg-white divide-y',
             tr: 'hover:bg-gray-50',
-            th: 'px-6 py-2', // <-- Padding vertical REDUZIDO do cabeçalho
-            td: 'px-6 py-2 whitespace-nowrap', // <-- Padding vertical REDUZIDO das células
+            th: 'px-6 py-2',
+            td: 'px-6 py-2 whitespace-nowrap',
             pagination: 'mt-4 flex justify-between items-center',
             paginationButton: 'inline-flex items-center px-3 py-1 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50',
             paginationButtonCurrent: 'bg-indigo-50 border-indigo-500 text-indigo-600',
@@ -292,8 +303,18 @@ function initializeProductsTable() {
         },
         pagination: {
             enabled: true,
-            limit: 15,
-            summary: true
+            limit: 20, // Ajustado para 20, o padrão do seu backend
+            summary: true,
+            // --- ESTA É A CORREÇÃO PRINCIPAL ---
+            // Dizemos ao Grid.js para usar 'page' em vez do 'offset' padrão
+            server: {
+                url: (prev, page, limit) => {
+                    // page aqui é o índice (começa em 0), então somamos 1
+                    // para corresponder ao que sua API espera (page=1, page=2, etc.)
+                    const pageNumber = page + 1;
+                    return `${prev}&limit=${limit}&page=${pageNumber}`;
+                }
+            }
         },
         search: false,
         sort: false,
