@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', initProductsPage);
 
 const apiUrlBase = '/api';
-let gridInstance = null;
+//let gridInstance = null;
 let currentProduct = null;
 let resizeTimer;
 
