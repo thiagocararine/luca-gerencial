@@ -6,32 +6,24 @@
     <title>Estoque e Produtos - Luca Gerencial</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="/assets/tabulator.min.css" rel="stylesheet"> 
+    <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="/assets/style.css">
     <link rel="icon" href="/assets/favicon.ico" type="image/x-icon">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <script type="text/javascript" src="/assets/libs/zxing.min.js"></script>
-    <script type="text/javascript" src="/assets/libs/tabulator.min.js"></script>
-
-    <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
-    
-    <script src="produtos.js?v=3.5" defer></script>
 
     <style>
         body { font-family: 'Inter', sans-serif; }
         [data-feather] { width: 1.25rem; height: 1.25rem; }
         .modal.hidden { display: none; }
-        .tabulator { border-radius: 0.5rem; }
-        .tab-button.active { border-color: #4f46e5; color: #4f46e5; }
+        .gridjs-table { width: 100%; }
+        .gridjs-tr:hover .gridjs-td { background-color: #f3f4f6; cursor: pointer; }
         .page-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
         .abstract-background { width: 100%; height: 100%; border-radius: 0; aspect-ratio: auto; }
         #barcode-scanner-video { width: 100%; max-height: 70vh; border-radius: 0.5rem; }
+        #scanner-laser { animation: scan 2s infinite ease-in-out; }
+        @keyframes scan { 0% { transform: translateY(-60px); } 50% { transform: translateY(60px); } 100% { transform: translateY(-60px); } }
     </style>
 </head>
-
 <body class="h-full">
 
     <div class="page-background">
@@ -44,151 +36,26 @@
         <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
         
         <nav id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-white/80 backdrop-blur-sm shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
-            <div class="flex flex-col h-full">
-                <div class="h-16 flex items-center justify-center border-b border-gray-200/50 px-4 gap-2">
-                    <img id="company-logo" src="" alt="Logo da Empresa" style="display: none; max-height: 40px;" class="max-h-10 max-w-10">
-                    <h1 class="text-xl font-bold text-indigo-600 overflow-hidden"><span class="sidebar-text">Luca Gerencial</span></h1>
-                </div>
-                <div class="flex-grow p-4">
-                    <ul class="space-y-2">
-                        <li><a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="home"></span><span class="sidebar-text">Início / Dashboard</span></a></li>
-                        <li><a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="dollar-sign"></span><span class="sidebar-text">Lançamentos</span></a></li>
-                        <li><a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="truck"></span><span class="sidebar-text">Logística</span></a></li>
-                        <li><a href="checklist.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="check-square"></span><span class="sidebar-text">Checklist Veículos</span></a></li>
-                        <li><a href="produtos.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium bg-indigo-50 text-indigo-700" aria-current="page"><span data-feather="archive"></span><span class="sidebar-text">Estoque / Produtos</span></a></li>
-                        <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
-                    </ul>
-                </div>
-                <div class="p-2 border-t border-gray-200/50">
-                    <button id="sidebar-toggle" class="w-full hidden md:flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100"></button>
-                </div>
-            </div>
-        </nav>
+            </nav>
 
         <div class="flex-1 flex flex-col min-w-0">
             <header class="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
-                <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900"><span data-feather="menu"></span></button>
-                <div class="hidden md:block"></div>
-                <div class="flex items-center gap-4 ml-auto">
-                    <span class="text-sm text-gray-700">Olá, <strong id="user-name" class="font-medium">Utilizador</strong>!</span>
-                    <button id="logout-button" class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500">Sair</button>
-                </div>
-            </header>
+                </header>
 
             <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
                 <h2 class="text-2xl font-bold text-gray-900 mb-6">Gestão de Estoque e Produtos</h2>
                 <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow mb-6">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                        <div>
-                            <label for="filter-filial" class="block text-sm font-medium text-gray-700">Filial</label>
-                            <select id="filter-filial" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></select>
-                        </div>
-                        <div class="md:col-span-2">
-                            <label for="filter-search" class="block text-sm font-medium text-gray-700">Pesquisar (Nome, Cód. Interno ou Barras)</label>
-                            <div class="mt-1 flex rounded-md shadow-sm">
-                                <input type="text" id="filter-search" class="block w-full rounded-none rounded-l-md border-gray-300" placeholder="Digite para buscar...">
-                                <button id="barcode-scanner-btn" type="button" class="relative -ml-px inline-flex items-center space-x-2 rounded-r-md border border-gray-300 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">
-                                    <span data-feather="camera"></span>
-                                </button>
-                            </div>
-                        </div>
                     </div>
-                </div>
                 <div id="products-table" class="bg-white/80 backdrop-blur-sm rounded-lg shadow"></div>
             </main>
         </div>
     </div>
 
-    <div id="product-edit-modal" class="modal hidden fixed inset-0 bg-gray-800 bg-opacity-60 z-[60] flex items-center justify-center p-4">
-        <div class="relative mx-auto border w-full max-w-2xl shadow-lg rounded-md bg-white flex flex-col h-auto max-h-[90vh]">
-            <div class="flex items-start justify-between p-4 border-b flex-shrink-0">
-                <div>
-                    <h3 class="text-xl font-semibold">Gerir Produto</h3>
-                    <p id="product-modal-info" class="text-sm text-gray-500"></p>
-                </div>
-                <button id="close-product-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto"><span data-feather="x"></span></button>
-            </div>
-            
-            <div class="border-b border-gray-200 px-4">
-                <nav id="product-modal-tabs" class="-mb-px flex space-x-8" aria-label="Tabs">
-                    <button class="tab-button active" data-tab="cadastro">Dados Cadastrais</button>
-                    <button class="tab-button" data-tab="estoque">Gestão de Estoque</button>
-                </nav>
-            </div>
-
-            <div class="flex-grow overflow-y-auto">
-                <div id="cadastro-tab-content" class="tab-content active p-6">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
-                        <div class="sm:col-span-2">
-                            <label class="block font-medium">Nome do Produto</label>
-                            <input type="text" id="pd-nome-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                        </div>
-                        <div>
-                            <label class="block font-medium">Cód. Interno</label>
-                            <input type="text" id="pd-codi-input" class="mt-1 block w-full bg-gray-200 rounded-md shadow-sm" readonly>
-                        </div>
-                        <div>
-                            <label class="block font-medium">Cód. Barras</label>
-                            <input type="text" id="pd-barr-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                        </div>
-                        <div>
-                            <label class="block font-medium">Fabricante</label>
-                            <input type="text" id="pd-fabr-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                        </div>
-                        <div>
-                            <label class="block font-medium">Unidade</label>
-                            <input type="text" id="pd-unid-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                        </div>
-                        <div class="sm:col-span-2">
-                            <label class="block font-medium">Características</label>
-                            <input type="text" id="pd-cara-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                        </div>
-                    </div>
-                    <div class="flex justify-end pt-4 mt-4 border-t">
-                        <button id="save-details-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-indigo-700">Salvar Dados Cadastrais</button>
-                    </div>
-                </div>
-
-                <div id="estoque-tab-content" class="tab-content hidden p-6">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
-                        <div>
-                            <label class="block font-medium">Nova Qtd. em Estoque Físico</label>
-                            <input type="number" id="ef-fisico-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                        </div>
-                        <div>
-                            <label class="block font-medium">Endereço no Estoque</label>
-                            <input type="text" id="ef-endere-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                        </div>
-                        <div class="sm:col-span-2">
-                            <label class="block font-medium">Motivo do Ajuste (Obrigatório)</label>
-                            <textarea id="ajuste-motivo-input" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" placeholder="Ex: Contagem de inventário, Entrada NF-1234..."></textarea>
-                        </div>
-                    </div>
-                    <div class="flex justify-end pt-4 mt-4 border-t">
-                        <button id="save-stock-btn" class="bg-green-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-green-700">Confirmar Ajuste de Estoque</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div id="barcode-scanner-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-90 z-[80] flex flex-col items-center justify-center p-4">
-        <video id="barcode-scanner-video" class="absolute top-0 left-0 w-full h-full object-cover" playsinline></video>
-
-        <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <p class="text-white text-lg font-semibold mb-4 drop-shadow-md">Posicione o código de barras na área</p>
-            <div class="w-11/12 max-w-sm h-32 bg-transparent border-4 border-white rounded-xl shadow-lg"></div>
-            <div id="scanner-laser" class="w-11/12 max-w-sm h-1 bg-red-500 rounded-full absolute opacity-50"></div>
-        </div>
-
-        <div class="absolute bottom-10 flex gap-4">
-            <button id="switch-camera-btn" class="bg-white/20 backdrop-blur-md text-white font-semibold py-2 px-6 rounded-full hover:bg-white/30">Trocar Câmera</button>
-            <button id="close-scanner-btn" class="bg-white/20 backdrop-blur-md text-white font-semibold py-2 px-6 rounded-full hover:bg-white/30">Cancelar</button>
-        </div>
-    </div>
-</div>
-
     <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-    <script src="produtos.js?v=1.4" defer></script> 
+    <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@zxing/library@latest/umd/zxing.min.js"></script>
+    
+    <script src="produtos.js?v=4.0" defer></script> 
     
     <script>
         document.addEventListener('DOMContentLoaded', () => {
