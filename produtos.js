@@ -1,8 +1,9 @@
 document.addEventListener('DOMContentLoaded', initProductsPage);
 
 const apiUrlBase = '/api';
-let productsTable = null;
+let gridInstance = null;
 let currentProduct = null;
+let resizeTimer;
 
 // Funções de Autenticação e Utilitários
 function getToken() { return localStorage.getItem('lucaUserToken'); }
@@ -34,7 +35,6 @@ function gerenciarAcessoModulos() {
     }
 }
 
-
 async function initProductsPage() {
     if (!getToken()) {
         window.location.href = 'login.html';
@@ -42,18 +42,65 @@ async function initProductsPage() {
     }
     
     gerenciarAcessoModulos();
-    
     await populateFilialFilter();
     setupEventListeners();
-    initializeProductsTable();
-    setupBarcodeScannerListeners();
+    
+    renderContent(); 
+    
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(renderContent, 250);
+    });
+}
+
+function renderContent() {
+    const isMobile = window.innerWidth < 768;
+    const wrapper = document.getElementById('products-table');
+
+    if (isMobile) {
+        // Se a instância da tabela Grid.js existir, destrua-a
+        if (gridInstance) {
+            gridInstance.destroy();
+            gridInstance = null;
+            wrapper.innerHTML = ''; // Limpa a div
+        }
+        renderProductCards();
+    } else {
+        // Se a instância da tabela ainda não existir, inicialize-a
+        if (!gridInstance) {
+            wrapper.innerHTML = ''; // Garante que os cards sejam limpos
+            initializeProductsTable();
+        }
+    }
 }
 
 function setupEventListeners() {
-    // Listeners do Modal de Edição
+    const wrapper = document.getElementById('products-table');
     const modal = document.getElementById('product-edit-modal');
-    modal.querySelector('#close-product-modal-btn').addEventListener('click', () => modal.classList.add('hidden'));
     
+    // Listener de clique para os CARDS (delegação de evento)
+    wrapper.addEventListener('click', (e) => {
+        const targetCard = e.target.closest('.product-card');
+        if (targetCard) {
+            const productData = {
+                pd_regi: targetCard.dataset.pdRegi,
+                pd_codi: targetCard.dataset.pdCodi,
+                pd_nome: targetCard.dataset.pdNome
+            };
+            openEditModal(productData);
+        }
+    });
+
+    // Listeners dos filtros
+    document.getElementById('filter-search').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            renderContent();
+        }
+    });
+    document.getElementById('filter-filial').addEventListener('change', renderContent);
+
+    // Listeners do modal e do scanner
+    modal.querySelector('#close-product-modal-btn').addEventListener('click', () => modal.classList.add('hidden'));
     modal.querySelector('#product-modal-tabs').addEventListener('click', (e) => {
         if (e.target.tagName !== 'BUTTON') return;
         modal.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
@@ -61,9 +108,9 @@ function setupEventListeners() {
         modal.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
         document.getElementById(`${e.target.dataset.tab}-tab-content`).classList.remove('hidden');
     });
-
     document.getElementById('save-details-btn').addEventListener('click', saveProductDetails);
     document.getElementById('save-stock-btn').addEventListener('click', saveStockAdjustment);
+    setupBarcodeScannerListeners();
 }
 
 async function populateFilialFilter() {
@@ -95,42 +142,73 @@ async function populateFilialFilter() {
                 selectElement.value = defaultOption.value;
             }
         }
-        selectElement.dispatchEvent(new Event('change'));
     } catch (error) {
         selectElement.innerHTML = `<option value="">Erro ao carregar</option>`;
         console.error(error);
     }
 }
 
+async function renderProductCards() {
+    const wrapper = document.getElementById('products-table');
+    wrapper.innerHTML = `<p class="text-center p-8">A carregar produtos...</p>`;
+
+    const filialId = document.getElementById('filter-filial').value;
+    const search = document.getElementById('filter-search').value;
+    const url = new URL(`${apiUrlBase}/produtos`, window.location.origin);
+    url.searchParams.append('filialId', filialId);
+    url.searchParams.append('search', search);
+    url.searchParams.append('limit', 1000);
+
+    try {
+        const response = await fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error('Falha ao buscar produtos.');
+        
+        const result = await response.json();
+        if (result.data.length === 0) {
+            wrapper.innerHTML = `<p class="text-center p-8 text-gray-500">Nenhum produto encontrado.</p>`;
+            return;
+        }
+
+        wrapper.innerHTML = '<div class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>';
+        const gridContainer = wrapper.querySelector('.grid');
+
+        result.data.forEach(product => {
+            const card = document.createElement('div');
+            card.className = 'product-card bg-white p-4 rounded-lg shadow-md space-y-2 cursor-pointer hover:bg-gray-100 transition-colors';
+            card.dataset.pdRegi = product.pd_regi;
+            card.dataset.pdCodi = product.pd_codi;
+            card.dataset.pdNome = product.pd_nome;
+            
+            card.innerHTML = `
+                <div class="font-bold text-gray-800 truncate">${product.pd_nome}</div>
+                <div class="text-sm text-gray-500">Cód: ${product.pd_codi}</div>
+                <div class="text-sm text-gray-500">Barras: ${product.pd_barr || 'N/A'}</div>
+                <div class="text-right font-semibold text-lg">Estoque: ${product.estoque_fisico_filial}</div>
+            `;
+            gridContainer.appendChild(card);
+        });
+
+    } catch(error) {
+        wrapper.innerHTML = `<p class="text-center p-8 text-red-500">Erro ao carregar produtos.</p>`;
+    }
+}
+
 function initializeProductsTable() {
     const wrapper = document.getElementById('products-table');
-    // Limpa a tabela anterior para evitar duplicação
-    if (wrapper.grid) {
-        wrapper.grid.destroy();
-    }
     wrapper.innerHTML = '';
 
-    const grid = new gridjs.Grid({
+    gridInstance = new gridjs.Grid({
         columns: [
             { id: 'pd_codi', name: 'Cód. Interno' },
             { id: 'pd_nome', name: 'Nome do Produto' },
             { id: 'pd_barr', name: 'Cód. Barras' },
             { id: 'estoque_fisico_filial', name: 'Estoque' },
-            { 
-                id: 'pd_regi', 
-                hidden: true // <-- Coluna oculta para o ID primário
-            }
+            { id: 'pd_regi', hidden: true }
         ],
         server: {
             url: `${apiUrlBase}/produtos`,
             headers: { 'Authorization': `Bearer ${getToken()}` },
-            then: results => results.data.map(product => [
-                product.pd_codi,
-                product.pd_nome,
-                product.pd_barr,
-                product.estoque_fisico_filial,
-                product.pd_regi // <-- Passa o ID para a coluna oculta
-            ]),
+            then: results => results.data,
             total: results => results.totalItems
         },
         pagination: {
@@ -149,47 +227,26 @@ function initializeProductsTable() {
             thead: 'bg-gray-50',
             th: 'px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider',
             tbody: 'bg-white divide-y divide-gray-200',
-            tr: 'hover:bg-gray-200 cursor-pointer', // <-- Efeito de hover na linha
+            tr: 'hover:bg-gray-200 cursor-pointer',
             td: 'px-4 py-2 whitespace-nowrap',
         },
         language: {
-            'search': {
-                'placeholder': 'Digite para pesquisar...'
-            },
+            'search': { 'placeholder': 'Digite para pesquisar...' },
             'pagination': {
-                'previous': 'Anterior',
-                'next': 'Próxima',
-                'showing': 'Mostrando',
-                'results': () => 'resultados',
-                'to': 'a',
-                'of': 'de'
+                'previous': 'Anterior', 'next': 'Próxima', 'showing': 'Mostrando',
+                'results': () => 'resultados', 'to': 'a', 'of': 'de'
             }
         }
     }).render(wrapper);
-    
-    // Evento de clique na linha
-    grid.on('rowClick', (event, row) => {
-        // Acessa a célula 4 (quinta coluna, a oculta) para pegar o ID
-        const pd_regi = row.cells[4].data; 
-        
+
+    gridInstance.on('rowClick', (event, row) => {
+        const pd_regi = row.cells[4].data;
         const rowData = {
             pd_regi: pd_regi,
             pd_codi: row.cells[0].data,
             pd_nome: row.cells[1].data
         };
         openEditModal(rowData);
-    });
-
-    wrapper.grid = grid;
-
-    // Lógica dos filtros
-    document.getElementById('filter-search').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            grid.forceRender();
-        }
-    });
-    document.getElementById('filter-filial').addEventListener('change', () => {
-        grid.forceRender();
     });
 }
 
@@ -206,7 +263,6 @@ async function openEditModal(rowData) {
         const data = await response.json();
         currentProduct = data;
 
-        // Preenche a Aba 1: Dados Cadastrais
         document.getElementById('pd-codi-input').value = data.details.pd_codi;
         document.getElementById('pd-nome-input').value = data.details.pd_nome;
         document.getElementById('pd-barr-input').value = data.details.pd_barr || '';
@@ -214,7 +270,6 @@ async function openEditModal(rowData) {
         document.getElementById('pd-unid-input').value = data.details.pd_unid || '';
         document.getElementById('pd-cara-input').value = data.details.pd_cara || '';
 
-        // Preenche a Aba 2: Gestão de Estoque
         const filialFilter = document.getElementById('filter-filial');
         const stockInfo = data.stockByBranch.find(s => s.ef_idfili === filialFilter.value);
         
@@ -256,7 +311,7 @@ async function saveProductDetails() {
         if (!response.ok) throw new Error(result.error);
 
         alert('Dados do produto salvos com sucesso!');
-        productsTable.setData();
+        renderContent();
     } catch (error) {
         alert('Erro ao salvar dados do produto: ' + error.message);
     } finally {
@@ -281,7 +336,6 @@ async function saveStockAdjustment() {
     const payload = {
         id_produto_regi: currentProduct.details.pd_regi,
         codigo_produto: currentProduct.details.pd_codi,
-        // CORREÇÃO: Pega o ID da filial do filtro principal da página
         filial_id: document.getElementById('filter-filial').value,
         nova_quantidade: document.getElementById('ef-fisico-input').value,
         endereco: document.getElementById('ef-endere-input').value,
@@ -299,9 +353,7 @@ async function saveStockAdjustment() {
 
         alert('Estoque ajustado com sucesso!');
         document.getElementById('product-edit-modal').classList.add('hidden');
-        // Força a renderização da tabela para atualizar o estoque visualmente
-        document.getElementById('filter-filial').dispatchEvent(new Event('change'));
-
+        renderContent();
     } catch (error) {
         alert('Erro ao ajustar o estoque: ' + error.message);
     } finally {
@@ -311,12 +363,11 @@ async function saveStockAdjustment() {
 }
 
 let selectedDeviceId;
-
 function setupBarcodeScannerListeners() {
     const scannerModal = document.getElementById('barcode-scanner-modal');
     const videoElement = document.getElementById('barcode-scanner-video');
     const statusElement = document.getElementById('scanner-status');
-    let codeReader; // Mova a declaração para cá
+    let codeReader;
 
     document.getElementById('barcode-scanner-btn').addEventListener('click', async () => {
         const hints = new Map();
@@ -325,37 +376,33 @@ function setupBarcodeScannerListeners() {
         codeReader = new ZXing.BrowserMultiFormatReader(hints);
         
         scannerModal.classList.remove('hidden');
-        statusElement.textContent = "Iniciando câmera...";
+        if (statusElement) statusElement.textContent = "Iniciando câmera...";
         try {
             const videoInputDevices = await codeReader.listVideoInputDevices();
             if (videoInputDevices.length > 0) {
                 const rearCamera = videoInputDevices.find(device => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('trás'));
                 selectedDeviceId = rearCamera ? rearCamera.deviceId : videoInputDevices[0].deviceId;
                 
-                statusElement.textContent = "Procurando código...";
+                if (statusElement) statusElement.textContent = "Procurando código...";
                 codeReader.decodeFromVideoDevice(selectedDeviceId, 'barcode-scanner-video', (result, err) => {
                     if (result) {
-                        statusElement.textContent = `Código encontrado: ${result.text}`;
+                        if (statusElement) statusElement.textContent = `Código encontrado: ${result.text}`;
                         document.getElementById('filter-search').value = result.text;
                         stopBarcodeScanner(codeReader);
-                        productsTable.setPage(1);
+                        renderContent();
                     }
                     if (err && !(err instanceof ZXing.NotFoundException)) {
                         console.error(err);
-                        statusElement.textContent = "Erro ao ler o código.";
+                        if (statusElement) statusElement.textContent = "Erro ao ler o código.";
                     }
                 });
-            } else {
-                alert('Nenhum dispositivo de câmera encontrado.');
-            }
-        } catch (error) {
-            alert('Erro ao acessar a câmera: ' + error);
-        }
+            } else { alert('Nenhum dispositivo de câmera encontrado.'); }
+        } catch (error) { alert('Erro ao acessar a câmera: ' + error); }
     });
 
-    document.getElementById('capture-frame-btn').addEventListener('click', () => {
+    document.getElementById('capture-frame-btn')?.addEventListener('click', () => {
         if (!codeReader || !videoElement) return;
-        statusElement.textContent = "Processando imagem capturada...";
+        if (statusElement) statusElement.textContent = "Processando imagem capturada...";
         const canvas = document.createElement('canvas');
         canvas.width = videoElement.videoWidth;
         canvas.height = videoElement.videoHeight;
@@ -364,13 +411,13 @@ function setupBarcodeScannerListeners() {
 
         codeReader.decodeFromImageUrl(imageUrl).then(result => {
             if (result) {
-                statusElement.textContent = `Código encontrado: ${result.text}`;
+                if (statusElement) statusElement.textContent = `Código encontrado: ${result.text}`;
                 document.getElementById('filter-search').value = result.text;
                 stopBarcodeScanner(codeReader);
-                productsTable.setPage(1);
+                renderContent();
             }
         }).catch(err => {
-            statusElement.textContent = "Nenhum código encontrado na imagem. Tente novamente.";
+            if (statusElement) statusElement.textContent = "Nenhum código encontrado na imagem. Tente novamente.";
             console.error(err);
         });
     });
@@ -380,16 +427,9 @@ function setupBarcodeScannerListeners() {
     });
 }
 
-// A função stopBarcodeScanner também precisa de um pequeno ajuste
 function stopBarcodeScanner(reader) {
     if (reader) {
         reader.reset();
     }
-    document.getElementById('barcode-scanner-modal').classList.add('hidden');
-}
-
-function stopBarcodeScanner() {
-    const codeReader = new ZXing.BrowserMultiFormatReader();
-    codeReader.reset();
     document.getElementById('barcode-scanner-modal').classList.add('hidden');
 }
