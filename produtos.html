@@ -69,6 +69,86 @@
             </main>
         </div>
     </div>
+    <div id="product-edit-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-40">
+        <div class="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+            <div class="flex justify-between items-center pb-3 border-b">
+                <div>
+                    <h3 class="text-lg font-medium leading-6 text-gray-900">Editar Produto</h3>
+                    <p id="product-modal-info" class="mt-1 text-sm text-gray-500">Carregando...</p>
+                </div>
+                <button id="close-product-modal-btn" class="p-1 rounded-full hover:bg-gray-200">
+                    <svg data-feather="x" class="h-6 w-6 text-gray-500"></svg>
+                </button>
+            </div>
+
+            <div id="product-modal-tabs" class="mt-4 border-b border-gray-200">
+                <nav class="-mb-px flex space-x-4" aria-label="Tabs">
+                    <button data-tab="details" class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm text-indigo-600 border-indigo-500 active">
+                        Dados Cadastrais
+                    </button>
+                    <button data-tab="stock" class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 border-transparent hover:border-gray-300">
+                        Ajuste de Estoque
+                    </button>
+                </nav>
+            </div>
+
+            <div id="details-tab-content" class="tab-content mt-6 space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="pd-codi-input" class="block text-sm font-medium text-gray-700">Cód. Interno</label>
+                        <input type="text" id="pd-codi-input" readonly class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 cursor-not-allowed">
+                    </div>
+                    <div>
+                        <label for="pd-nome-input" class="block text-sm font-medium text-gray-700">Nome do Produto</label>
+                        <input type="text" id="pd-nome-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <div>
+                        <label for="pd-barr-input" class="block text-sm font-medium text-gray-700">Cód. Barras</label>
+                        <input type="text" id="pd-barr-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <div>
+                        <label for="pd-fabr-input" class="block text-sm font-medium text-gray-700">Fabricante</label>
+                        <input type="text" id="pd-fabr-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <div>
+                        <label for="pd-unid-input" class="block text-sm font-medium text-gray-700">Unidade</label>
+                        <input type="text" id="pd-unid-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                </div>
+                <div>
+                    <label for="pd-cara-input" class="block text-sm font-medium text-gray-700">Características</label>
+                    <textarea id="pd-cara-input" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></textarea>
+                </div>
+                <div class="pt-4 text-right">
+                    <button id="save-details-btn" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                        Salvar Dados Cadastrais
+                    </button>
+                </div>
+            </div>
+
+            <div id="stock-tab-content" class="tab-content hidden mt-6 space-y-4">
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="ef-fisico-input" class="block text-sm font-medium text-gray-700">Nova Quantidade em Estoque</label>
+                        <input type="number" id="ef-fisico-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                     <div>
+                        <label for="ef-endere-input" class="block text-sm font-medium text-gray-700">Endereço no Estoque</label>
+                        <input type="text" id="ef-endere-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                </div>
+                <div>
+                    <label for="ajuste-motivo-input" class="block text-sm font-medium text-gray-700">Motivo do Ajuste (Obrigatório)</label>
+                    <input type="text" id="ajuste-motivo-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                </div>
+                <div class="pt-4 text-right">
+                    <button id="save-stock-btn" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
+                        Confirmar Ajuste de Estoque
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
     <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
