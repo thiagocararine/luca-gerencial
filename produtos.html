@@ -149,6 +149,30 @@
             </div>
         </div>
     </div>
+    <div id="barcode-scanner-modal" class="modal hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md m-4">
+            <div class="flex justify-between items-center p-4 border-b">
+                <h3 class="text-lg font-medium text-gray-800">Aponte para o Código de Barras</h3>
+                <button id="close-scanner-btn" class="p-1 rounded-full text-gray-500 hover:bg-gray-200">
+                    <svg data-feather="x" class="h-6 w-6"></svg>
+                </button>
+            </div>
+            
+            <div class="p-4 bg-gray-900 relative overflow-hidden">
+                <video id="barcode-scanner-video"></video>
+                <div class="absolute inset-0 flex items-center justify-center">
+                    <div id="scanner-laser" class="w-full h-0.5 bg-red-500 shadow-[0_0_10px_theme(colors.red.500)]"></div>
+                </div>
+            </div>
+
+            <div class="p-4 bg-gray-50 text-center">
+                <button id="switch-camera-btn" class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                    <svg data-feather="refresh-cw" class="h-5 w-5 mr-2"></svg>
+                    Trocar Câmera
+                </button>
+            </div>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
     <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
