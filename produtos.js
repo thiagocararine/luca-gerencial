@@ -362,59 +362,88 @@ async function saveStockAdjustment() {
     }
 }
 
-let selectedDeviceId;
+let activeCodeReader = null;
+
 function setupBarcodeScannerListeners() {
     const scannerModal = document.getElementById('barcode-scanner-modal');
     const videoElement = document.getElementById('barcode-scanner-video');
     const statusElement = document.getElementById('scanner-status');
-    let codeReader;
 
-    document.getElementById('barcode-scanner-btn').addEventListener('click', async () => {
+    // Função interna para INICIAR o scanner
+    async function startScanner() {
+        // Garante que qualquer instância anterior seja limpa
+        if (activeCodeReader) {
+            activeCodeReader.reset();
+        }
+
         const hints = new Map();
         const formats = [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E];
         hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-        codeReader = new ZXing.BrowserMultiFormatReader(hints);
+        
+        // Cria uma NOVA instância do leitor a cada vez que é aberto
+        activeCodeReader = new ZXing.BrowserMultiFormatReader(hints);
         
         scannerModal.classList.remove('hidden');
         if (statusElement) statusElement.textContent = "Iniciando câmera...";
+        
         try {
-            const videoInputDevices = await codeReader.listVideoInputDevices();
+            const videoInputDevices = await activeCodeReader.listVideoInputDevices();
             if (videoInputDevices.length > 0) {
+                // Lógica para sempre procurar a câmera traseira
                 const rearCamera = videoInputDevices.find(device => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('trás'));
-                selectedDeviceId = rearCamera ? rearCamera.deviceId : videoInputDevices[0].deviceId;
+                const selectedDeviceId = rearCamera ? rearCamera.deviceId : videoInputDevices[0].deviceId;
                 
                 if (statusElement) statusElement.textContent = "Procurando código...";
-                codeReader.decodeFromVideoDevice(selectedDeviceId, 'barcode-scanner-video', (result, err) => {
+                
+                activeCodeReader.decodeFromVideoDevice(selectedDeviceId, 'barcode-scanner-video', (result, err) => {
                     if (result) {
                         if (statusElement) statusElement.textContent = `Código encontrado: ${result.text}`;
                         document.getElementById('filter-search').value = result.text;
-                        stopBarcodeScanner(codeReader);
-                        renderContent();
+                        stopBarcodeScanner(); // Chama a função de parar
+                        if (gridInstance) {
+                            gridInstance.forceRender();
+                        } else {
+                            renderProductCards();
+                        }
                     }
                     if (err && !(err instanceof ZXing.NotFoundException)) {
                         console.error(err);
                         if (statusElement) statusElement.textContent = "Erro ao ler o código.";
                     }
                 });
-            } else { alert('Nenhum dispositivo de câmera encontrado.'); }
-        } catch (error) { alert('Erro ao acessar a câmera: ' + error); }
-    });
+            } else {
+                alert('Nenhum dispositivo de câmera encontrado.');
+            }
+        } catch (error) {
+            alert('Erro ao acessar a câmera: ' + error);
+            stopBarcodeScanner();
+        }
+    }
 
+    // Listener do botão principal para iniciar o scanner
+    document.getElementById('barcode-scanner-btn').addEventListener('click', startScanner);
+
+    // Listener do botão de captura de frame
     document.getElementById('capture-frame-btn')?.addEventListener('click', () => {
-        if (!codeReader || !videoElement) return;
+        if (!activeCodeReader || !videoElement) return;
         if (statusElement) statusElement.textContent = "Processando imagem capturada...";
+        
         const canvas = document.createElement('canvas');
         canvas.width = videoElement.videoWidth;
         canvas.height = videoElement.videoHeight;
         canvas.getContext('2d').drawImage(videoElement, 0, 0, canvas.width, canvas.height);
         const imageUrl = canvas.toDataURL('image/jpeg');
 
-        codeReader.decodeFromImageUrl(imageUrl).then(result => {
+        activeCodeReader.decodeFromImageUrl(imageUrl).then(result => {
             if (result) {
                 if (statusElement) statusElement.textContent = `Código encontrado: ${result.text}`;
                 document.getElementById('filter-search').value = result.text;
-                stopBarcodeScanner(codeReader);
-                renderContent();
+                stopBarcodeScanner();
+                if (gridInstance) {
+                    gridInstance.forceRender();
+                } else {
+                    renderProductCards();
+                }
             }
         }).catch(err => {
             if (statusElement) statusElement.textContent = "Nenhum código encontrado na imagem. Tente novamente.";
@@ -422,9 +451,16 @@ function setupBarcodeScannerListeners() {
         });
     });
 
-    document.getElementById('close-scanner-btn').addEventListener('click', () => {
-        stopBarcodeScanner(codeReader);
-    });
+    // Listener do botão de fechar
+    document.getElementById('close-scanner-btn').addEventListener('click', stopBarcodeScanner);
+}
+
+function stopBarcodeScanner() {
+    if (activeCodeReader) {
+        activeCodeReader.reset();
+        activeCodeReader = null; // Limpa a instância para a próxima vez
+    }
+    document.getElementById('barcode-scanner-modal').classList.add('hidden');
 }
 
 function stopBarcodeScanner(reader) {
