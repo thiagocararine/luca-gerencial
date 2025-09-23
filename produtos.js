@@ -253,7 +253,7 @@ function initializeProductsTable() {
 
     const wrapper = document.getElementById('products-table');
     wrapper.innerHTML = '';
-    
+
     gridInstance = new gridjs.Grid({
         columns: [
             'Cód. Interno',
@@ -262,21 +262,12 @@ function initializeProductsTable() {
             'Estoque'
         ],
         server: {
-            url: (prev) => {
-                // Constrói a URL base com os filtros
-                const baseUrl = new URL(`${apiUrlBase}/produtos`, window.location.origin);
-                baseUrl.searchParams.append('search', document.getElementById('filter-search').value);
-                baseUrl.searchParams.append('filialId', document.getElementById('filter-filial').value);
-
-                // Adiciona os parâmetros de paginação que o Grid.js já calculou
-                const prevParams = new URLSearchParams(prev.split('?')[1]);
-                if (prevParams.has('limit')) baseUrl.searchParams.append('limit', prevParams.get('limit'));
-                if (prevParams.has('page')) baseUrl.searchParams.append('page', prevParams.get('page'));
-
-                return baseUrl.toString();
-            },
+            // --- CORREÇÃO APLICADA AQUI ---
+            // Vamos construir a URL dinamicamente sem usar 'prev' para evitar o 'undefined'
+            url: `${apiUrlBase}/produtos?filialId=${document.getElementById('filter-filial').value}&search=${document.getElementById('filter-search').value}`,
             headers: { 'Authorization': `Bearer ${getToken()}` },
             then: results => {
+                // O backend já envia o total, então usamos results.data para os dados
                 gridInstance.config.data = results.data;
                 return results.data.map(p => [
                     p.pd_codi,
@@ -285,8 +276,22 @@ function initializeProductsTable() {
                     p.estoque_fisico_filial
                 ]);
             },
+            // O backend já envia o total, então usamos results.totalItems
             total: results => results.totalItems
         },
+        pagination: {
+            enabled: true,
+            limit: 20,
+            summary: true,
+            // Esta configuração garante que os parâmetros corretos (`page`) sejam enviados
+            server: {
+                url: (prev, page, limit) => {
+                    const pageNumber = page + 1;
+                    return `${prev}&limit=${limit}&page=${pageNumber}`;
+                }
+            }
+        },
+        // O resto da configuração permanece igual...
         className: {
             table: 'w-full text-sm text-left text-gray-500',
             thead: 'text-xs text-gray-700 uppercase bg-gray-50',
@@ -301,33 +306,11 @@ function initializeProductsTable() {
             paginationButtonNext: 'ml-2',
             footer: 'text-sm text-gray-700'
         },
-        pagination: {
-            enabled: true,
-            limit: 20, // Ajustado para 20, o padrão do seu backend
-            summary: true,
-            // --- ESTA É A CORREÇÃO PRINCIPAL ---
-            // Dizemos ao Grid.js para usar 'page' em vez do 'offset' padrão
-            server: {
-                url: (prev, page, limit) => {
-                    // page aqui é o índice (começa em 0), então somamos 1
-                    // para corresponder ao que sua API espera (page=1, page=2, etc.)
-                    const pageNumber = page + 1;
-                    return `${prev}&limit=${limit}&page=${pageNumber}`;
-                }
-            }
-        },
         search: false,
         sort: false,
         language: {
             'search': { 'placeholder': '🔍 Buscar...' },
-            'pagination': {
-                'previous': 'Anterior',
-                'next': 'Próximo',
-                'showing': 'Mostrando',
-                'to': 'a',
-                'of': 'de',
-                'results': 'resultados',
-            },
+            'pagination': { 'previous': 'Anterior', 'next': 'Próximo', 'showing': 'Mostrando', 'to': 'a', 'of': 'de', 'results': 'resultados' },
             'loading': 'Carregando...',
             'noRecordsFound': 'Nenhum produto encontrado',
             'error': 'Ocorreu um erro ao buscar os dados'
