@@ -10,6 +10,58 @@ function getToken() { return localStorage.getItem('lucaUserToken'); }
 function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
 function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html';}
 
+// --- LÓGICA DA SIDEBAR ---
+function setupSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+
+    // Lógica para Desktop (colapsar/expandir)
+    const desktopToggleButton = document.getElementById('sidebar-toggle');
+    if (desktopToggleButton) {
+        const setDesktopSidebarState = (collapsed) => {
+            sidebar.classList.toggle('w-64', !collapsed);
+            sidebar.classList.toggle('w-20', collapsed);
+            document.querySelectorAll('.sidebar-text').forEach(el => el.classList.toggle('hidden', collapsed));
+            document.getElementById('toggle-icon-collapse').classList.toggle('hidden', collapsed);
+            document.getElementById('toggle-icon-expand').classList.toggle('hidden', !collapsed);
+            localStorage.setItem('sidebar_collapsed', collapsed);
+        };
+
+        const isDesktopCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+        setDesktopSidebarState(isDesktopCollapsed);
+
+        desktopToggleButton.addEventListener('click', () => {
+            const currentlyCollapsed = sidebar.classList.contains('w-20');
+            setDesktopSidebarState(!currentlyCollapsed);
+        });
+    }
+
+    // Lógica para Mobile (abrir/fechar com overlay)
+    const mobileMenuButton = document.getElementById('mobile-menu-button');
+    const overlay = document.getElementById('mobile-menu-overlay');
+    if (mobileMenuButton && overlay) {
+        mobileMenuButton.addEventListener('click', () => {
+            sidebar.classList.remove('-translate-x-full');
+            overlay.classList.remove('hidden');
+        });
+        overlay.addEventListener('click', () => {
+            sidebar.classList.add('-translate-x-full');
+            overlay.classList.add('hidden');
+        });
+    }
+}
+
+function loadCompanyLogo() {
+    const companyLogo = document.getElementById('company-logo');
+    if (!companyLogo) return;
+    const logoBase64 = localStorage.getItem('company_logo');
+    if (logoBase64) {
+        companyLogo.src = logoBase64;
+        companyLogo.style.display = 'block';
+    }
+}
+// --- FIM DA LÓGICA DA SIDEBAR ---
+
 function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) {
@@ -40,6 +92,17 @@ async function initProductsPage() {
         window.location.href = 'login.html';
         return;
     }
+
+    // Inicialização dos componentes da página
+    feather.replace();
+    setupSidebar();
+    loadCompanyLogo();
+    
+    const userData = getUserData();
+    if (userData && document.getElementById('user-name')) {
+        document.getElementById('user-name').textContent = userData.nome || 'Utilizador';
+    }
+    document.getElementById('logout-button')?.addEventListener('click', logout);
     
     gerenciarAcessoModulos();
     await populateFilialFilter();
@@ -61,14 +124,12 @@ function renderContent() {
         if (gridInstance) {
             gridInstance.destroy();
             gridInstance = null;
-            wrapper.innerHTML = '';
         }
+        wrapper.innerHTML = '';
         renderProductCards();
     } else {
-        if (!gridInstance) {
-            wrapper.innerHTML = '';
-            initializeProductsTable();
-        }
+        wrapper.innerHTML = ''; // Limpa os cards se houver
+        initializeProductsTable();
     }
 }
 
@@ -185,6 +246,11 @@ async function renderProductCards() {
 }
 
 function initializeProductsTable() {
+    if (gridInstance) {
+        gridInstance.destroy();
+        gridInstance = null;
+    }
+
     const wrapper = document.getElementById('products-table');
     wrapper.innerHTML = '';
     
@@ -196,12 +262,10 @@ function initializeProductsTable() {
             'Estoque'
         ],
         server: {
-            url: `${apiUrlBase}/produtos`,
+            url: `${apiUrlBase}/produtos?filialId=${document.getElementById('filter-filial').value}&search=${document.getElementById('filter-search').value}`,
             headers: { 'Authorization': `Bearer ${getToken()}` },
             then: results => {
-                // Guarda a lista completa de objetos para usar no clique
-                gridInstance.config.data = results.data; 
-                // Mapeia apenas os dados visíveis para a tabela
+                gridInstance.config.data = results.data;
                 return results.data.map(p => [
                     p.pd_codi,
                     p.pd_nome,
@@ -211,19 +275,36 @@ function initializeProductsTable() {
             },
             total: results => results.totalItems
         },
-        pagination: { /* ... configuração da paginação ... */ },
-        className: { /* ... classes de estilo ... */ },
-        language: { /* ... traduções ... */ }
+        pagination: {
+            enabled: true,
+            limit: 15,
+            summary: true
+        },
+        search: false,
+        sort: false,
+        style: {
+            table: { 'width': '100%' },
+            th: { 'background-color': '#f9fafb' }
+        },
+        language: {
+            'search': { 'placeholder': '🔍 Buscar...' },
+            'pagination': {
+                'previous': '⬅️',
+                'next': '➡️',
+                'showing': 'Mostrando',
+                'to': 'a',
+                'of': 'de',
+                'results': 'resultados',
+            },
+            'loading': 'Carregando...',
+            'noRecordsFound': 'Nenhum produto encontrado',
+            'error': 'Ocorreu um erro ao buscar os dados'
+        }
     }).render(wrapper);
 
-    // --- LÓGICA DE CLIQUE ROBUSTA ---
     gridInstance.on('rowClick', (event, row) => {
-        // Pega o índice da linha que foi clicada
         const rowIndex = row.cells[0].row.index;
-        // Usa o índice para pegar o objeto completo do produto na lista que guardamos
         const rowData = gridInstance.config.data[rowIndex];
-        
-        // Agora podemos chamar o modal com todos os dados, incluindo o 'pd_regi'
         openEditModal(rowData);
     });
 }
@@ -244,12 +325,17 @@ async function openEditModal(rowData) {
         document.getElementById('pd-fabr-input').value = data.details.pd_fabr || '';
         document.getElementById('pd-unid-input').value = data.details.pd_unid || '';
         document.getElementById('pd-cara-input').value = data.details.pd_cara || '';
+        
         const filialFilter = document.getElementById('filter-filial');
-        const stockInfo = data.stockByBranch.find(s => s.ef_idfili === filialFilter.value);
+        const stockInfo = data.stockByBranch.find(s => s.ef_idfili.toString() === filialFilter.value);
+        
         document.getElementById('ef-fisico-input').value = stockInfo ? stockInfo.ef_fisico : 0;
         document.getElementById('ef-endere-input').value = stockInfo ? stockInfo.ef_endere : '';
         document.getElementById('ajuste-motivo-input').value = '';
+
+        document.querySelector('[data-tab="details"]').click();
         modal.classList.remove('hidden');
+
     } catch(error) {
         alert(error.message);
     }
@@ -266,9 +352,6 @@ async function saveProductDetails() {
         pd_fabr: document.getElementById('pd-fabr-input').value,
         pd_unid: document.getElementById('pd-unid-input').value,
         pd_cara: document.getElementById('pd-cara-input').value,
-        pd_pcom: currentProduct.details.pd_pcom,
-        pd_pcus: currentProduct.details.pd_pcus,
-        pd_vdp1: currentProduct.details.pd_vdp1,
     };
     try {
         const response = await fetch(`${apiUrlBase}/produtos/${currentProduct.details.pd_regi}`, {
