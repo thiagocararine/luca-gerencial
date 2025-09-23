@@ -367,7 +367,7 @@ function setupBarcodeScannerListeners() {
     document.getElementById('barcode-scanner-btn').addEventListener('click', async () => {
         scannerModal.classList.remove('hidden');
         try {
-            videoInputDevices = await ZXing.BrowserMultiFormatReader.listVideoInputDevices();
+            videoInputDevices = await new ZXing.BrowserCodeReader().listVideoInputDevices();
             if (videoInputDevices.length > 0) {
                 let rearCameraIndex = videoInputDevices.findIndex(device => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('trás'));
                 currentDeviceIndex = (rearCameraIndex !== -1) ? rearCameraIndex : 0;
