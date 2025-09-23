@@ -45,7 +45,26 @@
             <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
                 <h2 class="text-2xl font-bold text-gray-900 mb-6">Gestão de Estoque e Produtos</h2>
                 <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow mb-6">
+                    <div class="flex flex-wrap items-center gap-4">
+                        <div class="flex-grow">
+                            <label for="filter-search" class="sr-only">Buscar Produto</label>
+                            <input type="text" id="filter-search" placeholder="Buscar por nome ou código..." class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        </div>
+
+                        <div class="flex-shrink-0">
+                            <label for="filter-filial" class="sr-only">Filial</label>
+                            <select id="filter-filial" class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option>A carregar filiais...</option>
+                            </select>
+                        </div>
+
+                        <div class="flex-shrink-0">
+                            <button id="barcode-scanner-btn" title="Ler Código de Barras" class="inline-flex items-center justify-center p-2 border border-transparent rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                <svg data-feather="camera" class="h-5 w-5"></svg>
+                            </button>
+                        </div>
                     </div>
+                </div>
                 <div id="products-table" class="bg-white/80 backdrop-blur-sm rounded-lg shadow"></div>
             </main>
         </div>
@@ -53,7 +72,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
     <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@zxing/library@latest/umd/zxing.min.js"></script>
+    <script type="text/javascript" src="/assets/libs/zxing.min.js"></script>
     
     <script src="produtos.js?v=4.2" defer></script> 
     
