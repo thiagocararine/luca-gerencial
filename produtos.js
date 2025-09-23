@@ -58,17 +58,15 @@ function renderContent() {
     const wrapper = document.getElementById('products-table');
 
     if (isMobile) {
-        // Se a instância da tabela Grid.js existir, destrua-a
         if (gridInstance) {
             gridInstance.destroy();
             gridInstance = null;
-            wrapper.innerHTML = ''; // Limpa a div
+            wrapper.innerHTML = '';
         }
         renderProductCards();
     } else {
-        // Se a instância da tabela ainda não existir, inicialize-a
         if (!gridInstance) {
-            wrapper.innerHTML = ''; // Garante que os cards sejam limpos
+            wrapper.innerHTML = '';
             initializeProductsTable();
         }
     }
@@ -78,7 +76,6 @@ function setupEventListeners() {
     const wrapper = document.getElementById('products-table');
     const modal = document.getElementById('product-edit-modal');
     
-    // Listener de clique para os CARDS (delegação de evento)
     wrapper.addEventListener('click', (e) => {
         const targetCard = e.target.closest('.product-card');
         if (targetCard) {
@@ -91,7 +88,6 @@ function setupEventListeners() {
         }
     });
 
-    // Listeners dos filtros
     document.getElementById('filter-search').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             renderContent();
@@ -99,7 +95,6 @@ function setupEventListeners() {
     });
     document.getElementById('filter-filial').addEventListener('change', renderContent);
 
-    // Listeners do modal e do scanner
     modal.querySelector('#close-product-modal-btn').addEventListener('click', () => modal.classList.add('hidden'));
     modal.querySelector('#product-modal-tabs').addEventListener('click', (e) => {
         if (e.target.tagName !== 'BUTTON') return;
@@ -110,6 +105,8 @@ function setupEventListeners() {
     });
     document.getElementById('save-details-btn').addEventListener('click', saveProductDetails);
     document.getElementById('save-stock-btn').addEventListener('click', saveStockAdjustment);
+    
+    // Apenas a configuração dos listeners do scanner é chamada aqui
     setupBarcodeScannerListeners();
 }
 
@@ -127,7 +124,6 @@ async function populateFilialFilter() {
             selectElement.innerHTML = `<option value="">Nenhuma filial com estoque</option>`;
             return;
         }
-
         items.forEach(item => {
             const option = document.createElement('option');
             option.value = item.codigo; 
@@ -151,7 +147,6 @@ async function populateFilialFilter() {
 async function renderProductCards() {
     const wrapper = document.getElementById('products-table');
     wrapper.innerHTML = `<p class="text-center p-8">A carregar produtos...</p>`;
-
     const filialId = document.getElementById('filter-filial').value;
     const search = document.getElementById('filter-search').value;
     const url = new URL(`${apiUrlBase}/produtos`, window.location.origin);
@@ -171,14 +166,12 @@ async function renderProductCards() {
 
         wrapper.innerHTML = '<div class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>';
         const gridContainer = wrapper.querySelector('.grid');
-
         result.data.forEach(product => {
             const card = document.createElement('div');
             card.className = 'product-card bg-white p-4 rounded-lg shadow-md space-y-2 cursor-pointer hover:bg-gray-100 transition-colors';
             card.dataset.pdRegi = product.pd_regi;
             card.dataset.pdCodi = product.pd_codi;
             card.dataset.pdNome = product.pd_nome;
-            
             card.innerHTML = `
                 <div class="font-bold text-gray-800 truncate">${product.pd_nome}</div>
                 <div class="text-sm text-gray-500">Cód: ${product.pd_codi}</div>
@@ -187,7 +180,6 @@ async function renderProductCards() {
             `;
             gridContainer.appendChild(card);
         });
-
     } catch(error) {
         wrapper.innerHTML = `<p class="text-center p-8 text-red-500">Erro ao carregar produtos.</p>`;
     }
@@ -196,7 +188,6 @@ async function renderProductCards() {
 function initializeProductsTable() {
     const wrapper = document.getElementById('products-table');
     wrapper.innerHTML = '';
-
     gridInstance = new gridjs.Grid({
         columns: [
             { id: 'pd_codi', name: 'Cód. Interno' },
@@ -208,7 +199,10 @@ function initializeProductsTable() {
         server: {
             url: `${apiUrlBase}/produtos`,
             headers: { 'Authorization': `Bearer ${getToken()}` },
-            then: results => results.data,
+            then: results => {
+                gridInstance.config.data = results.data;
+                return results.data.map(p => [p.pd_codi, p.pd_nome, p.pd_barr, p.estoque_fisico_filial, p.pd_regi]);
+            },
             total: results => results.totalItems
         },
         pagination: {
@@ -253,32 +247,25 @@ function initializeProductsTable() {
 async function openEditModal(rowData) {
     const modal = document.getElementById('product-edit-modal');
     document.getElementById('product-modal-info').textContent = `${rowData.pd_codi} - ${rowData.pd_nome}`;
-    
     try {
         const response = await fetch(`${apiUrlBase}/produtos/${rowData.pd_regi}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         if (!response.ok) throw new Error('Falha ao buscar detalhes do produto.');
-        
         const data = await response.json();
         currentProduct = data;
-
         document.getElementById('pd-codi-input').value = data.details.pd_codi;
         document.getElementById('pd-nome-input').value = data.details.pd_nome;
         document.getElementById('pd-barr-input').value = data.details.pd_barr || '';
         document.getElementById('pd-fabr-input').value = data.details.pd_fabr || '';
         document.getElementById('pd-unid-input').value = data.details.pd_unid || '';
         document.getElementById('pd-cara-input').value = data.details.pd_cara || '';
-
         const filialFilter = document.getElementById('filter-filial');
         const stockInfo = data.stockByBranch.find(s => s.ef_idfili === filialFilter.value);
-        
         document.getElementById('ef-fisico-input').value = stockInfo ? stockInfo.ef_fisico : 0;
         document.getElementById('ef-endere-input').value = stockInfo ? stockInfo.ef_endere : '';
         document.getElementById('ajuste-motivo-input').value = '';
-        
         modal.classList.remove('hidden');
-
     } catch(error) {
         alert(error.message);
     }
@@ -362,70 +349,10 @@ async function saveStockAdjustment() {
     }
 }
 
+// --- LÓGICA DO LEITOR DE CÓDIGO DE BARRAS ---
 let activeCodeReader = null;
 let videoInputDevices = [];
 let currentDeviceIndex = 0;
-
-function setupBarcodeScannerListeners() {
-    const scannerModal = document.getElementById('barcode-scanner-modal');
-    const statusElement = document.getElementById('scanner-status');
-
-    // Função interna para iniciar o scanner com um dispositivo específico
-    function startDecoder(deviceId) {
-        // Garante que a instância anterior seja limpa antes de iniciar uma nova
-        if (activeCodeReader) {
-            activeCodeReader.reset();
-        }
-        
-        const hints = new Map();
-        const formats = [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E];
-        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-        
-        activeCodeReader = new ZXing.BrowserMultiFormatReader(hints);
-        
-        activeCodeReader.decodeFromVideoDevice(deviceId, 'barcode-scanner-video', (result, err) => {
-            if (result) {
-                document.getElementById('filter-search').value = result.text;
-                stopBarcodeScanner();
-                renderContent(); // Atualiza a tabela ou os cards
-            }
-            if (err && !(err instanceof ZXing.NotFoundException)) {
-                console.error("Erro de decodificação:", err);
-            }
-        });
-    }
-
-    // Listener do botão principal que abre o scanner
-    document.getElementById('barcode-scanner-btn').addEventListener('click', async () => {
-        scannerModal.classList.remove('hidden');
-        try {
-            videoInputDevices = await ZXing.BrowserMultiFormatReader.listVideoInputDevices();
-            if (videoInputDevices.length > 0) {
-                // Tenta encontrar a câmera traseira para ser a primeira opção
-                let rearCameraIndex = videoInputDevices.findIndex(device => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('trás'));
-                currentDeviceIndex = (rearCameraIndex !== -1) ? rearCameraIndex : 0;
-                
-                startDecoder(videoInputDevices[currentDeviceIndex].deviceId);
-            } else {
-                alert('Nenhum dispositivo de câmera encontrado.');
-            }
-        } catch (error) {
-            alert('Erro ao acessar a câmera: ' + error);
-        }
-    });
-
-    // Listener para o novo botão "Trocar Câmera"
-    document.getElementById('switch-camera-btn').addEventListener('click', () => {
-        if (videoInputDevices.length > 1) {
-            // Alterna para a próxima câmera na lista
-            currentDeviceIndex = (currentDeviceIndex + 1) % videoInputDevices.length;
-            startDecoder(videoInputDevices[currentDeviceIndex].deviceId);
-        }
-    });
-
-    // CORREÇÃO: Listener do botão "Cancelar"
-    document.getElementById('close-scanner-btn').addEventListener('click', stopBarcodeScanner);
-}
 
 function stopBarcodeScanner() {
     if (activeCodeReader) {
@@ -435,9 +362,55 @@ function stopBarcodeScanner() {
     document.getElementById('barcode-scanner-modal').classList.add('hidden');
 }
 
-function stopBarcodeScanner(reader) {
-    if (reader) {
-        reader.reset();
+function startScannerForDevice(deviceId) {
+    if (activeCodeReader) {
+        activeCodeReader.reset();
     }
-    document.getElementById('barcode-scanner-modal').classList.add('hidden');
+    const hints = new Map();
+    const formats = [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E];
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+    activeCodeReader = new ZXing.BrowserMultiFormatReader(hints);
+    activeCodeReader.decodeFromVideoDevice(deviceId, 'barcode-scanner-video', (result, err) => {
+        if (result) {
+            document.getElementById('filter-search').value = result.text;
+            stopBarcodeScanner();
+            renderContent();
+        }
+        if (err && !(err instanceof ZXing.NotFoundException)) {
+            console.error("Erro de decodificação:", err);
+        }
+    }).catch(err => {
+        console.error("Erro ao iniciar o decodificador:", err);
+        alert("Não foi possível iniciar a câmera selecionada.");
+    });
+}
+
+function setupBarcodeScannerListeners() {
+    const scannerModal = document.getElementById('barcode-scanner-modal');
+    document.getElementById('barcode-scanner-btn').addEventListener('click', async () => {
+        scannerModal.classList.remove('hidden');
+        try {
+            videoInputDevices = await ZXing.BrowserMultiFormatReader.listVideoInputDevices();
+            if (videoInputDevices.length > 0) {
+                let rearCameraIndex = videoInputDevices.findIndex(device => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('trás'));
+                currentDeviceIndex = (rearCameraIndex !== -1) ? rearCameraIndex : 0;
+                startScannerForDevice(videoInputDevices[currentDeviceIndex].deviceId);
+            } else {
+                alert('Nenhum dispositivo de câmera encontrado.');
+            }
+        } catch (error) {
+            console.error("Erro ao listar câmeras:", error);
+            alert('Erro ao acessar a câmera. Verifique as permissões do navegador.');
+            stopBarcodeScanner();
+        }
+    });
+
+    document.getElementById('switch-camera-btn').addEventListener('click', () => {
+        if (videoInputDevices.length > 1) {
+            currentDeviceIndex = (currentDeviceIndex + 1) % videoInputDevices.length;
+            startScannerForDevice(videoInputDevices[currentDeviceIndex].deviceId);
+        }
+    });
+
+    document.getElementById('close-scanner-btn').addEventListener('click', stopBarcodeScanner);
 }
