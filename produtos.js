@@ -4,6 +4,10 @@ const apiUrlBase = '/api';
 let gridInstance = null;
 let currentProduct = null;
 let resizeTimer;
+let tomSelectInstances = {
+    grupo: null,
+    fabricante: null
+};
 
 // Funções de Autenticação e Utilitários
 function getToken() { return localStorage.getItem('lucaUserToken'); }
@@ -90,7 +94,6 @@ async function initProductsPage() {
         window.location.href = 'login.html';
         return;
     }
-
     feather.replace();
     setupSidebar();
     loadCompanyLogo();
@@ -103,14 +106,66 @@ async function initProductsPage() {
     
     gerenciarAcessoModulos();
     await populateFilialFilter();
-    await populateAdvancedFilters();
+    await initializeFilterSelects(); // Substitui a antiga 'populateAdvancedFilters'
     setupEventListeners();
-    
     renderContent(); 
     
     window.addEventListener('resize', () => {
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(renderContent, 250);
+    });
+}
+
+async function initializeFilterSelects() {
+    const fetchOptions = async (endpoint = '') => {
+        try {
+            const response = await fetch(`${apiUrlBase}/produtos/${endpoint}`, {
+                headers: { 'Authorization': `Bearer ${getToken()}` }
+            });
+            if (!response.ok) return [];
+            const data = await response.json();
+            return data.map(item => ({ value: item, text: item }));
+        } catch (error) {
+            console.error(`Erro ao buscar ${endpoint}:`, error);
+            return [];
+        }
+    };
+
+    const initialGrupos = await fetchOptions('grupos');
+    const initialFabricantes = await fetchOptions('fabricantes');
+
+    // Configura o select de GRUPOS
+    tomSelectInstances.grupo = new TomSelect('#filter-grupo', {
+        options: initialGrupos,
+        placeholder: 'Todos os Grupos',
+        onChange: async (value) => {
+            const fabricantesSelect = tomSelectInstances.fabricante;
+            fabricantesSelect.clear();
+            fabricantesSelect.clearOptions();
+            fabricantesSelect.load(async (callback) => {
+                const endpoint = value ? `fabricantes?grupo=${encodeURIComponent(value)}` : 'fabricantes';
+                const newOptions = await fetchOptions(endpoint);
+                callback(newOptions);
+            });
+            renderContent();
+        }
+    });
+
+    // Configura o select de FABRICANTES
+    tomSelectInstances.fabricante = new TomSelect('#filter-fabricante', {
+        options: initialFabricantes,
+        placeholder: 'Todos os Fabricantes',
+        onChange: async (value) => {
+            const grupoSelect = tomSelectInstances.grupo;
+            grupoSelect.clear();
+            grupoSelect.clearOptions();
+            grupoSelect.load(async (callback) => {
+                const endpoint = value ? `grupos?fabricante=${encodeURIComponent(value)}` : 'grupos';
+                const newOptions = await fetchOptions(endpoint);
+                callback(newOptions);
+            });
+            renderContent();
+        }
     });
 }
 
@@ -175,8 +230,6 @@ function setupEventListeners() {
     document.getElementById('filter-search').addEventListener('keypress', (e) => { if (e.key === 'Enter') renderContent(); });
     document.getElementById('filter-filial').addEventListener('change', renderContent);
     document.getElementById('filter-status').addEventListener('change', renderContent);
-    document.getElementById('filter-grupo').addEventListener('change', renderContent);
-    document.getElementById('filter-fabricante').addEventListener('change', renderContent);
 
     // Event listeners do Modal
     modal.querySelector('#close-product-modal-btn').addEventListener('click', () => modal.classList.add('hidden'));
@@ -238,8 +291,8 @@ async function renderProductCards() {
         filialId: document.getElementById('filter-filial').value,
         search: document.getElementById('filter-search').value,
         status: document.getElementById('filter-status').value,
-        grupo: document.getElementById('filter-grupo').value,
-        fabricante: document.getElementById('filter-fabricante').value,
+        grupo: tomSelectInstances.grupo.getValue(),
+        fabricante: tomSelectInstances.fabricante.getValue(),
         limit: 1000
     });
     const url = `${apiUrlBase}/produtos?${params.toString()}`;
@@ -289,8 +342,8 @@ function initializeProductsTable() {
             url: `${apiUrlBase}/produtos?filialId=${document.getElementById('filter-filial').value}` +
                  `&search=${document.getElementById('filter-search').value}` +
                  `&status=${document.getElementById('filter-status').value}` +
-                 `&grupo=${document.getElementById('filter-grupo').value}` +
-                 `&fabricante=${document.getElementById('filter-fabricante').value}`,
+                 `&grupo=${tomSelectInstances.grupo.getValue()}` +
+                 `&fabricante=${tomSelectInstances.fabricante.getValue()}`,
             headers: { 'Authorization': `Bearer ${getToken()}` },
             then: results => {
                 gridInstance.config.data = results.data;

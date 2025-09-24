@@ -82,12 +82,21 @@ router.get('/', authenticateToken, async (req, res) => {
 
 // NOVA ROTA PARA BUSCAR A LISTA DE GRUPOS
 router.get('/grupos', authenticateToken, async (req, res) => {
+    const { fabricante } = req.query;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfigSei);
-        const [rows] = await connection.execute(
-            "SELECT DISTINCT pd_nmgr FROM produtos WHERE pd_nmgr IS NOT NULL AND pd_nmgr != '' ORDER BY pd_nmgr ASC"
-        );
+        
+        let query = "SELECT DISTINCT pd_nmgr FROM produtos WHERE pd_nmgr IS NOT NULL AND pd_nmgr != ''";
+        const params = [];
+
+        if (fabricante) {
+            query += " AND pd_fabr = ?";
+            params.push(fabricante);
+        }
+        query += " ORDER BY pd_nmgr ASC";
+
+        const [rows] = await connection.execute(query, params);
         res.json(rows.map(row => row.pd_nmgr));
     } catch (error) {
         console.error("Erro ao buscar grupos:", error);
@@ -99,12 +108,21 @@ router.get('/grupos', authenticateToken, async (req, res) => {
 
 // NOVA ROTA PARA BUSCAR A LISTA DE FABRICANTES
 router.get('/fabricantes', authenticateToken, async (req, res) => {
+    const { grupo } = req.query;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfigSei);
-        const [rows] = await connection.execute(
-            "SELECT DISTINCT pd_fabr FROM produtos WHERE pd_fabr IS NOT NULL AND pd_fabr != '' ORDER BY pd_fabr ASC"
-        );
+
+        let query = "SELECT DISTINCT pd_fabr FROM produtos WHERE pd_fabr IS NOT NULL AND pd_fabr != ''";
+        const params = [];
+
+        if (grupo) {
+            query += " AND pd_nmgr = ?";
+            params.push(grupo);
+        }
+        query += " ORDER BY pd_fabr ASC";
+        
+        const [rows] = await connection.execute(query, params);
         res.json(rows.map(row => row.pd_fabr));
     } catch (error) {
         console.error("Erro ao buscar fabricantes:", error);
