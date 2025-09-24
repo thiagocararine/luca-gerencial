@@ -15,7 +15,7 @@ const dbConfigSei = {
 
 const mainDbName = process.env.DB_DATABASE || 'gerencial_lucamat';
 
-// ROTA PRINCIPAL DE BUSCA - ATUALIZADA COM NOVOS FILTROS
+// ROTA PRINCIPAL DE BUSCA - ATUALIZADA E COMPLETA
 router.get('/', authenticateToken, async (req, res) => {
     const { filialId, search, status = 'ativos', grupo, fabricante, page = 1, limit = 20 } = req.query;
     
@@ -87,23 +87,14 @@ router.get('/', authenticateToken, async (req, res) => {
     }
 });
 
-// NOVA ROTA PARA BUSCAR A LISTA DE GRUPOS
+// ROTA DE GRUPOS - SIMPLIFICADA (sempre retorna todos)
 router.get('/grupos', authenticateToken, async (req, res) => {
-    const { fabricante } = req.query;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfigSei);
-        
-        let query = "SELECT DISTINCT pd_nmgr FROM produtos WHERE pd_nmgr IS NOT NULL AND pd_nmgr != ''";
-        const params = [];
-
-        if (fabricante) {
-            query += " AND pd_fabr = ?";
-            params.push(fabricante);
-        }
-        query += " ORDER BY pd_nmgr ASC";
-
-        const [rows] = await connection.execute(query, params);
+        const [rows] = await connection.execute(
+            "SELECT DISTINCT pd_nmgr FROM produtos WHERE pd_nmgr IS NOT NULL AND pd_nmgr != '' ORDER BY pd_nmgr ASC"
+        );
         res.json(rows.map(row => row.pd_nmgr));
     } catch (error) {
         console.error("Erro ao buscar grupos:", error);
@@ -113,23 +104,14 @@ router.get('/grupos', authenticateToken, async (req, res) => {
     }
 });
 
-// NOVA ROTA PARA BUSCAR A LISTA DE FABRICANTES
+// ROTA DE FABRICANTES - SIMPLIFICADA (sempre retorna todos)
 router.get('/fabricantes', authenticateToken, async (req, res) => {
-    const { grupo } = req.query;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfigSei);
-
-        let query = "SELECT DISTINCT pd_fabr FROM produtos WHERE pd_fabr IS NOT NULL AND pd_fabr != ''";
-        const params = [];
-
-        if (grupo) {
-            query += " AND pd_nmgr = ?";
-            params.push(grupo);
-        }
-        query += " ORDER BY pd_fabr ASC";
-        
-        const [rows] = await connection.execute(query, params);
+        const [rows] = await connection.execute(
+            "SELECT DISTINCT pd_fabr FROM produtos WHERE pd_fabr IS NOT NULL AND pd_fabr != '' ORDER BY pd_fabr ASC"
+        );
         res.json(rows.map(row => row.pd_fabr));
     } catch (error) {
         console.error("Erro ao buscar fabricantes:", error);
@@ -194,7 +176,6 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
 router.put('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
-    // Nota: Adicionei os novos campos que podem ser editados no modal
     const { pd_nome, pd_barr, pd_cara, pd_refe, pd_unid, pd_fabr, pd_nmgr } = req.body;
     if (!pd_nome || !pd_unid) {
         return res.status(400).json({ error: 'Nome e Unidade do produto são obrigatórios.' });

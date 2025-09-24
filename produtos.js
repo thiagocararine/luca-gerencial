@@ -4,6 +4,7 @@ const apiUrlBase = '/api';
 let gridInstance = null;
 let currentProduct = null;
 let resizeTimer;
+// Objeto para guardar as instâncias dos selects com busca
 let tomSelectInstances = {
     grupo: null,
     fabricante: null
@@ -106,7 +107,7 @@ async function initProductsPage() {
     
     gerenciarAcessoModulos();
     await populateFilialFilter();
-    await initializeFilterSelects(); // Substitui a antiga 'populateAdvancedFilters'
+    await initializeFilterSelects();
     setupEventListeners();
     renderContent(); 
     
@@ -116,96 +117,33 @@ async function initProductsPage() {
     });
 }
 
+// Inicializa os selects de Grupo e Fabricante com busca (sem dependência)
 async function initializeFilterSelects() {
-    // Objeto para armazenar as instâncias do TomSelect
-    tomSelectInstances = {};
-
-    const fetchOptions = async (endpoint = '') => {
-        try {
-            const response = await fetch(`${apiUrlBase}/produtos/${endpoint}`, {
-                headers: { 'Authorization': `Bearer ${getToken()}` }
-            });
-            if (!response.ok) return [];
-            const data = await response.json();
-            return data.map(item => ({ value: item, text: item }));
-        } catch (error) {
-            console.error(`Erro ao buscar ${endpoint}:`, error);
-            return [];
-        }
-    };
-
-    const initialGrupos = await fetchOptions('grupos');
-    const initialFabricantes = await fetchOptions('fabricantes');
-
-    // 1. CRIA as instâncias dos selects
-    tomSelectInstances.grupo = new TomSelect('#filter-grupo', {
-        options: initialGrupos,
-        placeholder: 'Todos os Grupos',
-    });
-
-    tomSelectInstances.fabricante = new TomSelect('#filter-fabricante', {
-        options: initialFabricantes,
-        placeholder: 'Todos os Fabricantes',
-    });
-
-    // 2. CONFIGURA os eventos DEPOIS que ambos existem
-    tomSelectInstances.grupo.on('change', async (value) => {
-        const fabricantesSelect = tomSelectInstances.fabricante;
-        fabricantesSelect.clear();
-        fabricantesSelect.clearOptions();
-        fabricantesSelect.load(async (callback) => {
-            const endpoint = value ? `fabricantes?grupo=${encodeURIComponent(value)}` : 'fabricantes';
-            const newOptions = await fetchOptions(endpoint);
-            callback(newOptions);
-            // Seleciona o primeiro item se houver apenas um, opcional
-            if (newOptions.length === 1) {
-                fabricantesSelect.setValue(newOptions[0].value, true); // O 'true' evita disparar o onChange do outro select
-            }
-        });
-        renderContent();
-    });
-
-    tomSelectInstances.fabricante.on('change', async (value) => {
-        const grupoSelect = tomSelectInstances.grupo;
-        grupoSelect.clear();
-        grupoSelect.clearOptions();
-        grupoSelect.load(async (callback) => {
-            const endpoint = value ? `grupos?fabricante=${encodeURIComponent(value)}` : 'grupos';
-            const newOptions = await fetchOptions(endpoint);
-            callback(newOptions);
-             if (newOptions.length === 1) {
-                grupoSelect.setValue(newOptions[0].value, true);
-            }
-        });
-        renderContent();
-    });
-}
-
-async function populateAdvancedFilters() {
-    const populate = async (endpoint, elementId) => {
-        const select = document.getElementById(elementId);
+    const fetchAndCreateSelect = async (endpoint, elementId, placeholder) => {
+        const selectElement = document.getElementById(elementId);
         try {
             const response = await fetch(`${apiUrlBase}/produtos/${endpoint}`, {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
             if (!response.ok) throw new Error(`Falha ao carregar ${endpoint}`);
             const items = await response.json();
-            
-            select.innerHTML = `<option value="">Todos os ${endpoint}</option>`;
-            items.forEach(item => {
-                const option = document.createElement('option');
-                option.value = item;
-                option.textContent = item;
-                select.appendChild(option);
+            const options = items.map(item => ({ value: item, text: item }));
+
+            tomSelectInstances[elementId.split('-')[1]] = new TomSelect(selectElement, {
+                options: options,
+                placeholder: placeholder,
+                onChange: () => renderContent() // Apenas recarrega a tabela ao mudar
             });
+
         } catch (error) {
-            select.innerHTML = `<option value="">Erro ao carregar</option>`;
-            console.error(error);
+            console.error(`Erro ao buscar ${endpoint}:`, error);
+            new TomSelect(selectElement, { placeholder: `Erro ao carregar ${placeholder}` });
         }
     };
+
     await Promise.all([
-        populate('grupos', 'filter-grupo'),
-        populate('fabricantes', 'filter-fabricante')
+        fetchAndCreateSelect('grupos', 'filter-grupo', 'Todos os Grupos'),
+        fetchAndCreateSelect('fabricantes', 'filter-fabricante', 'Todos os Fabricantes')
     ]);
 }
 
@@ -238,7 +176,7 @@ function setupEventListeners() {
         }
     });
 
-    // Event listeners para os filtros
+    // Listeners para filtros que NÃO são Tom Select
     document.getElementById('filter-search').addEventListener('keypress', (e) => { if (e.key === 'Enter') renderContent(); });
     document.getElementById('filter-filial').addEventListener('change', renderContent);
     document.getElementById('filter-status').addEventListener('change', renderContent);
@@ -360,7 +298,6 @@ function initializeProductsTable() {
             then: results => {
                 gridInstance.config.data = results.data;
                 return results.data.map(p => {
-                    // Se não houver filial selecionada, p.estoque_detalhado existirá
                     const estoqueCell = p.estoque_detalhado
                         ? gridjs.html(`<span class="cursor-pointer underline decoration-dotted" data-tippy-content="${p.estoque_detalhado.replace(/\n/g, '<br>')}">${p.estoque_fisico_filial}</span>`)
                         : p.estoque_fisico_filial;
@@ -409,9 +346,8 @@ function initializeProductsTable() {
             'error': 'Ocorreu um erro ao buscar os dados'
         }
     }).render(wrapper);
-
+    
     gridInstance.on('ready', () => {
-        // Inicializa todos os tooltips na tabela quando ela estiver pronta
         tippy('[data-tippy-content]', {
             allowHTML: true,
             theme: 'light-border',
@@ -429,6 +365,9 @@ function initializeProductsTable() {
                 setTimeout(() => tr.classList.remove('bg-indigo-100'), 300);
             }
             openEditModal(rowData);
+        } else {
+            console.error('Não foi possível encontrar os dados para o produto de código:', productCode);
+            alert('Ocorreu um erro ao tentar abrir os detalhes do produto.');
         }
     });
 }
