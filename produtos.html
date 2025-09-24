@@ -10,7 +10,6 @@
     <link rel="stylesheet" href="/assets/style.css">
     <link rel="icon" href="/assets/favicon.ico" type="image/x-icon">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.css" rel="stylesheet">
 
     <style>
         body { font-family: 'Inter', sans-serif; }
@@ -27,6 +26,44 @@
         #barcode-scanner-video { width: 100%; max-height: 70vh; border-radius: 0.5rem; }
         #scanner-laser { animation: scan 2s infinite ease-in-out; }
         @keyframes scan { 0% { transform: translateY(-60px); } 50% { transform: translateY(60px); } 100% { transform: translateY(-60px); } }
+        .ts-control {
+            border: 1px solid #d1d5db; /* Cor da borda: gray-300 */
+            border-radius: 0.375rem;   /* Borda: rounded-md */
+            padding: 0.5rem 0.75rem;
+            box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); /* shadow-sm */
+        }
+        .ts-control:focus-within {
+            border-color: #4f46e5; /* Cor da borda em foco: indigo-500 */
+            box-shadow: 0 0 0 1px #4f46e5; /* Anel de foco: ring-indigo-500 */
+        }
+
+        /* Estilo para a lista de opções (dropdown) */
+        .ts-dropdown {
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            margin-top: 0.25rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); /* shadow-md */
+        }
+
+        /* Estilo para cada opção na lista */
+        .ts-dropdown .option {
+            padding: 0.5rem 0.75rem;
+        }
+
+        /* Estilo para a opção selecionada ou com mouse em cima */
+        .ts-dropdown .option.active, .ts-dropdown .option:hover {
+            background-color: #eef2ff; /* Cor de fundo: indigo-50 */
+            color: #4338ca; /* Cor do texto: indigo-700 */
+        }
+
+        /* Estilo dos itens selecionados (no caso de multi-select) */
+        .ts-control .item {
+            background-color: #e0e7ff; /* Cor de fundo: indigo-100 */
+            color: #3730a3; /* Cor do texto: indigo-800 */
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            margin-right: 0.25rem;
+        }
     </style>
 </head>
 <body class="h-full">
