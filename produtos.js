@@ -117,6 +117,9 @@ async function initProductsPage() {
 }
 
 async function initializeFilterSelects() {
+    // Objeto para armazenar as instâncias do TomSelect
+    tomSelectInstances = {};
+
     const fetchOptions = async (endpoint = '') => {
         try {
             const response = await fetch(`${apiUrlBase}/produtos/${endpoint}`, {
@@ -134,38 +137,47 @@ async function initializeFilterSelects() {
     const initialGrupos = await fetchOptions('grupos');
     const initialFabricantes = await fetchOptions('fabricantes');
 
-    // Configura o select de GRUPOS
+    // 1. CRIA as instâncias dos selects
     tomSelectInstances.grupo = new TomSelect('#filter-grupo', {
         options: initialGrupos,
         placeholder: 'Todos os Grupos',
-        onChange: async (value) => {
-            const fabricantesSelect = tomSelectInstances.fabricante;
-            fabricantesSelect.clear();
-            fabricantesSelect.clearOptions();
-            fabricantesSelect.load(async (callback) => {
-                const endpoint = value ? `fabricantes?grupo=${encodeURIComponent(value)}` : 'fabricantes';
-                const newOptions = await fetchOptions(endpoint);
-                callback(newOptions);
-            });
-            renderContent();
-        }
     });
 
-    // Configura o select de FABRICANTES
     tomSelectInstances.fabricante = new TomSelect('#filter-fabricante', {
         options: initialFabricantes,
         placeholder: 'Todos os Fabricantes',
-        onChange: async (value) => {
-            const grupoSelect = tomSelectInstances.grupo;
-            grupoSelect.clear();
-            grupoSelect.clearOptions();
-            grupoSelect.load(async (callback) => {
-                const endpoint = value ? `grupos?fabricante=${encodeURIComponent(value)}` : 'grupos';
-                const newOptions = await fetchOptions(endpoint);
-                callback(newOptions);
-            });
-            renderContent();
-        }
+    });
+
+    // 2. CONFIGURA os eventos DEPOIS que ambos existem
+    tomSelectInstances.grupo.on('change', async (value) => {
+        const fabricantesSelect = tomSelectInstances.fabricante;
+        fabricantesSelect.clear();
+        fabricantesSelect.clearOptions();
+        fabricantesSelect.load(async (callback) => {
+            const endpoint = value ? `fabricantes?grupo=${encodeURIComponent(value)}` : 'fabricantes';
+            const newOptions = await fetchOptions(endpoint);
+            callback(newOptions);
+            // Seleciona o primeiro item se houver apenas um, opcional
+            if (newOptions.length === 1) {
+                fabricantesSelect.setValue(newOptions[0].value, true); // O 'true' evita disparar o onChange do outro select
+            }
+        });
+        renderContent();
+    });
+
+    tomSelectInstances.fabricante.on('change', async (value) => {
+        const grupoSelect = tomSelectInstances.grupo;
+        grupoSelect.clear();
+        grupoSelect.clearOptions();
+        grupoSelect.load(async (callback) => {
+            const endpoint = value ? `grupos?fabricante=${encodeURIComponent(value)}` : 'grupos';
+            const newOptions = await fetchOptions(endpoint);
+            callback(newOptions);
+             if (newOptions.length === 1) {
+                grupoSelect.setValue(newOptions[0].value, true);
+            }
+        });
+        renderContent();
     });
 }
 
@@ -435,7 +447,6 @@ async function openEditModal(rowData) {
         const data = await response.json();
         currentProduct = data;
 
-        // ATUALIZADO: Preenche o subtítulo do modal com as informações corretas
         document.getElementById('product-modal-info').textContent = 
             `Filial Origem: ${data.details.pd_fili || 'N/A'} | Cód: ${data.details.pd_codi} | Barras: ${data.details.pd_barr || 'N/A'}`;
 
@@ -450,8 +461,8 @@ async function openEditModal(rowData) {
         document.getElementById('pd-estm-input').value = data.details.pd_estm || 0;
         document.getElementById('pd-estx-input').value = data.details.pd_estx || 0;
 
-        const filialFilter = document.getElementById('filter-filial');
-        const stockInfo = data.stockByBranch.find(s => s.ef_idfili.toString() === filialFilter.value);
+        const filialFilterValue = document.getElementById('filter-filial').value;
+        const stockInfo = data.stockByBranch.find(s => s.ef_idfili.toString() === filialFilterValue);
         document.getElementById('ef-fisico-input').value = stockInfo ? stockInfo.ef_fisico : 0;
         document.getElementById('ef-endere-input').value = stockInfo ? stockInfo.ef_endere : '';
         document.getElementById('ajuste-motivo-input').value = '';
