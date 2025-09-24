@@ -1005,8 +1005,6 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
     }
 
-    // --- CORREÇÃO APLICADA AQUI ---
-    // A validação agora só exige a NF se o fornecedor não for 'Interno' (ID 0)
     const isInternalExpense = id_fornecedor == '0';
     if (!descricao || !custo || !data_custo || id_fornecedor == null || !filiais_rateio || !Array.isArray(filiais_rateio) || filiais_rateio.length === 0 || (!isInternalExpense && !numero_nf) ) {
         return res.status(400).json({ error: 'Dados inválidos. Descrição, custo, data, fornecedor e filiais são obrigatórios. A NF é obrigatória para fornecedores externos.' });
@@ -1016,17 +1014,16 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
     try {
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
+        
         const sequencial = `CF-${Date.now()}`;
         const valorRateado = (parseFloat(custo) / filiais_rateio.length).toFixed(2);
 
-        // A query já está correta, mas o valor de numero_nf pode ser vazio agora
         const sqlInsert = `
             INSERT INTO custos_frota 
             (descricao, custo, data_custo, id_fornecedor, id_filial, sequencial_rateio, id_user_lanc, numero_nf, status) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
         
         for (const id_filial of filiais_rateio) {
-            // Se for despesa interna e a NF estiver vazia, salvamos NULL. Caso contrário, salvamos o valor.
             await connection.execute(sqlInsert, [descricao, valorRateado, data_custo, id_fornecedor, id_filial, sequencial, userId, numero_nf || null, 'Ativo']);
         }
         
@@ -1040,15 +1037,21 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
         });
 
         await connection.commit();
+        
+        // CORREÇÃO: Fechamos a conexão aqui em caso de sucesso
+        if (connection) await connection.end(); 
+        
         res.status(201).json({ message: 'Custo de frota registado e rateado com sucesso!' });
 
     } catch (error) {
-        if (connection) await connection.rollback();
+        if (connection) {
+            await connection.rollback(); // O rollback agora acontece com a conexão aberta
+            await connection.end();     // E só depois fechamos
+        }
         console.error("Erro ao adicionar custo de frota:", error);
         res.status(500).json({ error: 'Erro interno ao adicionar custo de frota.' });
-    } finally {
-        if (connection) await connection.end();
-    }
+    } 
+    // O bloco 'finally' foi removido, pois o fechamento agora é tratado no try/catch
 });
 
 router.get('/custos-frota', authenticateToken, async (req, res) => {
