@@ -347,13 +347,14 @@ function initializeProductsTable() {
             headers: { 'Authorization': `Bearer ${getToken()}` },
             then: results => {
                 gridInstance.config.data = results.data;
-                return results.data.map(p => [
-                    p.pd_codi, 
-                    p.pd_nome, 
-                    p.pd_nmgr,      // <-- Novo
-                    p.pd_fabr,      // <-- Novo
-                    p.estoque_fisico_filial
-                ]);
+                return results.data.map(p => {
+                    // Se não houver filial selecionada, p.estoque_detalhado existirá
+                    const estoqueCell = p.estoque_detalhado
+                        ? gridjs.html(`<span class="cursor-pointer underline decoration-dotted" data-tippy-content="${p.estoque_detalhado.replace(/\n/g, '<br>')}">${p.estoque_fisico_filial}</span>`)
+                        : p.estoque_fisico_filial;
+
+                    return [p.pd_codi, p.pd_nome, p.pd_nmgr, p.pd_fabr, estoqueCell];
+                });
             },
             total: results => results.totalItems
         },
@@ -397,6 +398,15 @@ function initializeProductsTable() {
         }
     }).render(wrapper);
 
+    gridInstance.on('ready', () => {
+        // Inicializa todos os tooltips na tabela quando ela estiver pronta
+        tippy('[data-tippy-content]', {
+            allowHTML: true,
+            theme: 'light-border',
+            placement: 'top',
+        });
+    });
+
     gridInstance.on('rowClick', (event, row) => {
         const productCode = row.cells[0].data;
         const rowData = gridInstance.config.data.find(p => p.pd_codi === productCode);
@@ -407,9 +417,6 @@ function initializeProductsTable() {
                 setTimeout(() => tr.classList.remove('bg-indigo-100'), 300);
             }
             openEditModal(rowData);
-        } else {
-            console.error('Não foi possível encontrar os dados para o produto de código:', productCode);
-            alert('Ocorreu um erro ao tentar abrir os detalhes do produto.');
         }
     });
 }
@@ -417,17 +424,22 @@ function initializeProductsTable() {
 async function openEditModal(rowData) {
     const modal = document.getElementById('product-edit-modal');
     document.getElementById('product-modal-title').textContent = rowData.pd_nome;
-    document.getElementById('product-modal-info').textContent = `Cód: ${rowData.pd_codi} | Barras: ${rowData.pd_barr || 'N/A'}`;
+    document.getElementById('product-modal-info').textContent = `Carregando dados...`;
     
     try {
-        const response = await fetch(`${apiUrlBase}/produtos/${rowData.pd_regi}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!response.ok) throw new Error('Falha ao buscar detalhes do produto.');
+        const response = await fetch(`${apiUrlBase}/produtos/${rowData.pd_regi}`, { 
+            headers: { 'Authorization': `Bearer ${getToken()}` } 
+        });
+        if (!response.ok) throw new Error('Falha ao buscar detalhes completos do produto.');
+        
         const data = await response.json();
         currentProduct = data;
 
-        // Aba "Dados & Estoque"
-        const filialSelect = document.getElementById('filter-filial');
-        document.getElementById('pd-filial-info').value = filialSelect.options[filialSelect.selectedIndex].text || 'Todas';
+        // ATUALIZADO: Preenche o subtítulo do modal com as informações corretas
+        document.getElementById('product-modal-info').textContent = 
+            `Filial Origem: ${data.details.pd_fili || 'N/A'} | Cód: ${data.details.pd_codi} | Barras: ${data.details.pd_barr || 'N/A'}`;
+
+        // ---- Aba "Dados & Estoque" ----
         document.getElementById('pd-nome-input').value = data.details.pd_nome;
         document.getElementById('pd-barr-input').value = data.details.pd_barr || '';
         document.getElementById('pd-codi-input').value = data.details.pd_codi;
@@ -435,28 +447,42 @@ async function openEditModal(rowData) {
         document.getElementById('pd-fabr-input').value = data.details.pd_fabr || '';
         document.getElementById('pd-nmgr-input').value = data.details.pd_nmgr || '';
         document.getElementById('pd-unid-input').value = data.details.pd_unid || '';
+        document.getElementById('pd-estm-input').value = data.details.pd_estm || 0;
+        document.getElementById('pd-estx-input').value = data.details.pd_estx || 0;
 
-        const stockInfo = data.stockByBranch.find(s => s.ef_idfili.toString() === filialSelect.value);
+        const filialFilter = document.getElementById('filter-filial');
+        const stockInfo = data.stockByBranch.find(s => s.ef_idfili.toString() === filialFilter.value);
         document.getElementById('ef-fisico-input').value = stockInfo ? stockInfo.ef_fisico : 0;
         document.getElementById('ef-endere-input').value = stockInfo ? stockInfo.ef_endere : '';
         document.getElementById('ajuste-motivo-input').value = '';
 
-        // Aba "Financeiro & Preços"
+        // ---- Aba "Financeiro & Preços" ----
         const formatCurrency = (value) => `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
-        document.getElementById('pd-pcom-input').value = formatCurrency(data.details.pd_pcom);
+        const formatPercent = (value) => `${Number(value || 0).toFixed(2).replace('.', ',')} %`;
+        
         document.getElementById('pd-pcus-input').value = formatCurrency(data.details.pd_pcus);
-        document.getElementById('pd-tpr1-input').value = formatCurrency(data.details.pd_tpr1);
+        document.getElementById('pd-marg-input').value = formatPercent(data.details.pd_marg);
         
         const pricesContainer = document.getElementById('prices-table-container');
         let pricesHtml = '<ul class="divide-y divide-gray-200">';
         for (let i = 1; i <= 6; i++) {
-            pricesHtml += `<li class="py-2 flex justify-between text-sm"><span class="font-medium text-gray-600">Preço ${i}:</span><span class="text-gray-900">${formatCurrency(data.details[`pd_tpr${i}`])} (Margem: ${Number(data.details[`pd_vdp${i}`] || 0).toFixed(2).replace('.', ',')}%)</span></li>`;
+            pricesHtml += `<li class="py-2 flex justify-between text-sm">
+                <span class="font-medium text-gray-600">Preço ${i}:</span>
+                <span class="text-gray-900">${formatCurrency(data.details[`pd_tpr${i}`])} (Margem Real: ${formatPercent(data.details[`pd_vdp${i}`])})</span>
+            </li>`;
         }
         pricesHtml += '</ul>';
         pricesContainer.innerHTML = pricesHtml;
         pricesContainer.classList.add('hidden');
 
-        // Aba "Histórico"
+        // ---- Aba "Fiscal & Outros" ----
+        document.getElementById('pd-canc-status').value = (data.details.pd_canc === '4') ? 'Cancelado' : 'Ativo';
+        document.getElementById('pd-cfis-input').value = data.details.pd_cfis || 'N/A';
+        document.getElementById('pd-cest-input').value = data.details.pd_cest || 'N/A';
+        document.getElementById('pd-pesb-input').value = `${Number(data.details.pd_pesb || 0).toFixed(3).replace('.', ',')} kg`;
+        document.getElementById('pd-pesl-input').value = `${Number(data.details.pd_pesl || 0).toFixed(3).replace('.', ',')} kg`;
+
+        // ---- Aba "Histórico" ----
         document.getElementById('pd-ula1-input').value = data.details.pd_ula1 || 'N/A';
         document.getElementById('pd-ula2-input').value = data.details.pd_ula2 || 'N/A';
 
@@ -466,7 +492,6 @@ async function openEditModal(rowData) {
             const comprasArray = ultimasComprasRaw.split('|').filter(item => item.trim() !== '');
             let comprasHtml = '<ul class="divide-y divide-gray-200">';
             comprasArray.forEach(compra => {
-                // Cada 'compra' é uma string, você pode formatá-la como precisar
                 comprasHtml += `<li class="py-1">${compra.trim()}</li>`;
             });
             comprasHtml += '</ul>';
@@ -475,23 +500,23 @@ async function openEditModal(rowData) {
             ultimasComprasLista.innerHTML = '<p class="text-gray-500">Nenhum registro de compra encontrado.</p>';
         }
 
-        // Aba "Fiscal & Outros"
-        document.getElementById('pd-canc-status').value = (data.details.pd_canc === 'S') ? 'Cancelado' : 'Ativo';
-        document.getElementById('pd-cfis-input').value = data.details.pd_cfis || 'N/A';
-        document.getElementById('pd-cest-input').value = data.details.pd_cest || 'N/A';
-        document.getElementById('pd-pesb-input').value = `${Number(data.details.pd_pesb || 0).toFixed(3).replace('.', ',')} kg`;
-        document.getElementById('pd-pesl-input').value = `${Number(data.details.pd_pesl || 0).toFixed(3).replace('.', ',')} kg`;
-
-        // Reset das abas
+        // ---- Resetar e Mostrar o Modal ----
         const allTabs = modal.querySelectorAll('.tab-button');
         const firstTab = modal.querySelector('[data-tab="dados-estoque"]');
-        allTabs.forEach(tab => { tab.classList.remove('text-indigo-600', 'border-indigo-500'); tab.classList.add('text-gray-500', 'border-transparent'); });
+        
+        allTabs.forEach(tab => { 
+            tab.classList.remove('text-indigo-600', 'border-indigo-500'); 
+            tab.classList.add('text-gray-500', 'border-transparent'); 
+        });
+        
         firstTab.classList.remove('text-gray-500', 'border-transparent');
         firstTab.classList.add('text-indigo-600', 'border-indigo-500');
+        
         modal.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
         document.getElementById('dados-estoque-tab-content').classList.remove('hidden');
 
         modal.classList.remove('hidden');
+
     } catch(error) {
         alert(error.message);
     }

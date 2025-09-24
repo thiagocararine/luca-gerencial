@@ -17,41 +17,28 @@ const mainDbName = process.env.DB_DATABASE || 'gerencial_lucamat';
 
 // ROTA PRINCIPAL DE BUSCA - ATUALIZADA COM NOVOS FILTROS
 router.get('/', authenticateToken, async (req, res) => {
-    // Adicionados novos filtros: status, grupo, fabricante
     const { filialId, search, status = 'ativos', grupo, fabricante, page = 1, limit = 20 } = req.query;
     
     let connection;
     try {
         connection = await mysql.createConnection(dbConfigSei);
         const offset = (parseInt(page) - 1) * parseInt(limit);
-        const params = [];
+        let params = [];
         let whereClauses = ["p.pd_codi IS NOT NULL AND p.pd_codi != ''"];
 
-        // Lógica do filtro de Status (Cancelados/Ativos)
         if (status === 'ativos') {
             whereClauses.push(`(p.pd_canc IS NULL OR p.pd_canc != '4')`);
         } else if (status === 'cancelados') {
             whereClauses.push(`p.pd_canc = '4'`);
         }
-        // Se status for 'todos', não adiciona cláusula de cancelamento
 
         if (search) {
             whereClauses.push(`(p.pd_nome LIKE ? OR p.pd_codi LIKE ? OR p.pd_barr LIKE ?)`);
             const searchTerm = `%${search}%`;
             params.push(searchTerm, searchTerm, searchTerm);
         }
-
-        // Lógica do filtro de Grupo
-        if (grupo) {
-            whereClauses.push('p.pd_nmgr = ?');
-            params.push(grupo);
-        }
-
-        // Lógica do filtro de Fabricante
-        if (fabricante) {
-            whereClauses.push('p.pd_fabr = ?');
-            params.push(fabricante);
-        }
+        if (grupo) { whereClauses.push('p.pd_nmgr = ?'); params.push(grupo); }
+        if (fabricante) { whereClauses.push('p.pd_fabr = ?'); params.push(fabricante); }
         
         const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
         
@@ -59,16 +46,36 @@ router.get('/', authenticateToken, async (req, res) => {
         const [totalResult] = await connection.execute(countQuery, params);
         const totalItems = totalResult[0].total;
 
-        const dataQuery = `
-            SELECT p.pd_regi, p.pd_codi, p.pd_nome, p.pd_barr, p.pd_nmgr, p.pd_fabr, COALESCE(e.ef_fisico, 0) as estoque_fisico_filial
-            FROM produtos p
-            LEFT JOIN estoque e ON p.pd_codi = e.ef_codigo AND e.ef_idfili = ?
-            ${whereSql} 
-            GROUP BY p.pd_regi
-            ORDER BY p.pd_nome ASC 
-            LIMIT ? OFFSET ?`;
-        
-        const finalParams = [filialId || null, ...params, parseInt(limit), offset];
+        let dataQuery;
+        let finalParams;
+
+        if (filialId) {
+            // Caso 1: Uma filial específica foi selecionada
+            dataQuery = `
+                SELECT p.pd_regi, p.pd_codi, p.pd_nome, p.pd_barr, p.pd_nmgr, p.pd_fabr, 
+                       COALESCE(e.ef_fisico, 0) as estoque_fisico_filial
+                FROM produtos p
+                LEFT JOIN estoque e ON p.pd_codi = e.ef_codigo AND e.ef_idfili = ?
+                ${whereSql} 
+                GROUP BY p.pd_regi
+                ORDER BY p.pd_nome ASC 
+                LIMIT ? OFFSET ?`;
+            finalParams = [filialId, ...params, parseInt(limit), offset];
+        } else {
+            // Caso 2: Nenhuma filial selecionada (soma o estoque e detalha)
+            dataQuery = `
+                SELECT p.pd_regi, p.pd_codi, p.pd_nome, p.pd_barr, p.pd_nmgr, p.pd_fabr, 
+                       SUM(COALESCE(e.ef_fisico, 0)) as estoque_fisico_filial,
+                       GROUP_CONCAT(CONCAT(e.ef_idfili, ': ', COALESCE(e.ef_fisico, 0)) SEPARATOR '\\n') as estoque_detalhado
+                FROM produtos p
+                LEFT JOIN estoque e ON p.pd_codi = e.ef_codigo
+                ${whereSql} 
+                GROUP BY p.pd_regi
+                ORDER BY p.pd_nome ASC 
+                LIMIT ? OFFSET ?`;
+            finalParams = [...params, parseInt(limit), offset];
+        }
+
         const [products] = await connection.execute(dataQuery, finalParams);
 
         res.json({ totalItems, data: products });
