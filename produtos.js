@@ -337,7 +337,7 @@ function initializeProductsTable() {
     wrapper.innerHTML = '';
     
     gridInstance = new gridjs.Grid({
-        columns: ['Cód. Interno', 'Nome do Produto', 'Cód. Barras', 'Estoque'],
+        columns: ['Cód. Interno', 'Nome do Produto', 'Grupo', 'Fabricante', 'Estoque'],
         server: {
             url: `${apiUrlBase}/produtos?filialId=${document.getElementById('filter-filial').value}` +
                  `&search=${document.getElementById('filter-search').value}` +
@@ -347,7 +347,13 @@ function initializeProductsTable() {
             headers: { 'Authorization': `Bearer ${getToken()}` },
             then: results => {
                 gridInstance.config.data = results.data;
-                return results.data.map(p => [p.pd_codi, p.pd_nome, p.pd_barr, p.estoque_fisico_filial]);
+                return results.data.map(p => [
+                    p.pd_codi, 
+                    p.pd_nome, 
+                    p.pd_nmgr,      // <-- Novo
+                    p.pd_fabr,      // <-- Novo
+                    p.estoque_fisico_filial
+                ]);
             },
             total: results => results.totalItems
         },
@@ -449,6 +455,25 @@ async function openEditModal(rowData) {
         pricesHtml += '</ul>';
         pricesContainer.innerHTML = pricesHtml;
         pricesContainer.classList.add('hidden');
+
+        // Aba "Histórico"
+        document.getElementById('pd-ula1-input').value = data.details.pd_ula1 || 'N/A';
+        document.getElementById('pd-ula2-input').value = data.details.pd_ula2 || 'N/A';
+
+        const ultimasComprasLista = document.getElementById('ultimas-compras-lista');
+        const ultimasComprasRaw = data.details.pd_ulcm || '';
+        if (ultimasComprasRaw) {
+            const comprasArray = ultimasComprasRaw.split('|').filter(item => item.trim() !== '');
+            let comprasHtml = '<ul class="divide-y divide-gray-200">';
+            comprasArray.forEach(compra => {
+                // Cada 'compra' é uma string, você pode formatá-la como precisar
+                comprasHtml += `<li class="py-1">${compra.trim()}</li>`;
+            });
+            comprasHtml += '</ul>';
+            ultimasComprasLista.innerHTML = comprasHtml;
+        } else {
+            ultimasComprasLista.innerHTML = '<p class="text-gray-500">Nenhum registro de compra encontrado.</p>';
+        }
 
         // Aba "Fiscal & Outros"
         document.getElementById('pd-canc-status').value = (data.details.pd_canc === 'S') ? 'Cancelado' : 'Ativo';

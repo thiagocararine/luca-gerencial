@@ -29,9 +29,9 @@ router.get('/', authenticateToken, async (req, res) => {
 
         // Lógica do filtro de Status (Cancelados/Ativos)
         if (status === 'ativos') {
-            whereClauses.push(`(p.pd_canc IS NULL OR p.pd_canc = 'N' OR p.pd_canc = '')`);
+            whereClauses.push(`(p.pd_canc IS NULL OR p.pd_canc != '4')`);
         } else if (status === 'cancelados') {
-            whereClauses.push(`p.pd_canc = 'S'`);
+            whereClauses.push(`p.pd_canc = '4'`);
         }
         // Se status for 'todos', não adiciona cláusula de cancelamento
 
@@ -60,7 +60,7 @@ router.get('/', authenticateToken, async (req, res) => {
         const totalItems = totalResult[0].total;
 
         const dataQuery = `
-            SELECT p.pd_regi, p.pd_codi, p.pd_nome, p.pd_barr, COALESCE(e.ef_fisico, 0) as estoque_fisico_filial
+            SELECT p.pd_regi, p.pd_codi, p.pd_nome, p.pd_barr, p.pd_nmgr, p.pd_fabr, COALESCE(e.ef_fisico, 0) as estoque_fisico_filial
             FROM produtos p
             LEFT JOIN estoque e ON p.pd_codi = e.ef_codigo AND e.ef_idfili = ?
             ${whereSql} 
