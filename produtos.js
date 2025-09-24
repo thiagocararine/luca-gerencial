@@ -296,7 +296,7 @@ function initializeProductsTable() {
             table: 'w-full text-sm text-left text-gray-500',
             thead: 'text-xs text-gray-700 uppercase bg-gray-50',
             tbody: 'bg-white divide-y',
-            tr: 'hover:bg-gray-50',
+            tr: 'hover:bg-indigo-50 transition-colors duration-150',
             th: 'px-6 py-2',
             td: 'px-6 py-2 whitespace-nowrap',
             pagination: 'mt-4 flex justify-between items-center',
@@ -318,22 +318,45 @@ function initializeProductsTable() {
     }).render(wrapper);
 
     gridInstance.on('rowClick', (event, row) => {
-        const rowIndex = row.cells[0].row.index;
-        const rowData = gridInstance.config.data[rowIndex];
-        openEditModal(rowData);
+        // Nova forma: Pegamos o código do produto da primeira célula
+        const productCode = row.cells[0].data;
+
+        // Usamos o código para encontrar o objeto completo do produto na nossa lista de dados
+        const rowData = gridInstance.config.data.find(p => p.pd_codi === productCode);
+
+        if (rowData) {
+            // Efeito visual de clique na linha
+            const tr = event.target.closest('tr');
+            if (tr) {
+                tr.classList.add('bg-indigo-100');
+                setTimeout(() => {
+                    tr.classList.remove('bg-indigo-100');
+                }, 300); // Remove o destaque após 300ms
+            }
+            
+            // Abre o modal com os dados corretos
+            openEditModal(rowData);
+        } else {
+            console.error('Não foi possível encontrar os dados para o produto de código:', productCode);
+            alert('Ocorreu um erro ao tentar abrir os detalhes do produto.');
+        }
     });
 }
 
 async function openEditModal(rowData) {
     const modal = document.getElementById('product-edit-modal');
     document.getElementById('product-modal-info').textContent = `${rowData.pd_codi} - ${rowData.pd_nome}`;
+    
     try {
         const response = await fetch(`${apiUrlBase}/produtos/${rowData.pd_regi}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         if (!response.ok) throw new Error('Falha ao buscar detalhes do produto.');
+        
         const data = await response.json();
         currentProduct = data;
+        
+        // Preenche os campos do formulário
         document.getElementById('pd-codi-input').value = data.details.pd_codi;
         document.getElementById('pd-nome-input').value = data.details.pd_nome;
         document.getElementById('pd-barr-input').value = data.details.pd_barr || '';
@@ -348,7 +371,14 @@ async function openEditModal(rowData) {
         document.getElementById('ef-endere-input').value = stockInfo ? stockInfo.ef_endere : '';
         document.getElementById('ajuste-motivo-input').value = '';
 
-        document.querySelector('[data-tab="details"]').click();
+        // --- CORREÇÃO DAS ABAS AQUI ---
+        // Em vez de simular um clique, definimos o estado das abas manualmente
+        // Garante que a primeira aba (Detalhes) esteja sempre ativa ao abrir
+        modal.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+        modal.querySelector('[data-tab="details"]').classList.add('active');
+        modal.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+        document.getElementById('details-tab-content').classList.remove('hidden');
+
         modal.classList.remove('hidden');
 
     } catch(error) {
