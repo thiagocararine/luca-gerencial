@@ -389,7 +389,7 @@ async function openEditModal(rowData) {
         document.getElementById('product-modal-info').textContent = 
             `Filial Origem: ${data.details.pd_fili || 'N/A'} | Cód: ${data.details.pd_codi} | Barras: ${data.details.pd_barr || 'N/A'}`;
 
-        // ---- Aba "Dados & Estoque" ----
+        // ---- Aba "Dados Cadastrais" ----
         document.getElementById('pd-nome-input').value = data.details.pd_nome;
         document.getElementById('pd-barr-input').value = data.details.pd_barr || '';
         document.getElementById('pd-codi-input').value = data.details.pd_codi;
@@ -397,6 +397,8 @@ async function openEditModal(rowData) {
         document.getElementById('pd-fabr-input').value = data.details.pd_fabr || '';
         document.getElementById('pd-nmgr-input').value = data.details.pd_nmgr || '';
         document.getElementById('pd-unid-input').value = data.details.pd_unid || '';
+
+        // ---- Aba "Estoque" ----
         document.getElementById('pd-estm-input').value = data.details.pd_estm || 0;
         document.getElementById('pd-estx-input').value = data.details.pd_estx || 0;
 
@@ -412,6 +414,7 @@ async function openEditModal(rowData) {
         
         document.getElementById('pd-pcus-input').value = formatCurrency(data.details.pd_pcus);
         document.getElementById('pd-marg-input').value = formatPercent(data.details.pd_marg);
+        document.getElementById('pd-tpr1-input').value = formatCurrency(data.details.pd_tpr1); // CORRIGIDO
         
         const pricesContainer = document.getElementById('prices-table-container');
         let pricesHtml = '<ul class="divide-y divide-gray-200">';
@@ -485,6 +488,9 @@ async function saveProductDetails() {
         pd_fabr: document.getElementById('pd-fabr-input').value,
         pd_nmgr: document.getElementById('pd-nmgr-input').value,
         pd_unid: document.getElementById('pd-unid-input').value,
+        // Enviando os novos campos editáveis de estoque
+        pd_estm: document.getElementById('pd-estm-input').value,
+        pd_estx: document.getElementById('pd-estx-input').value,
         pd_cara: currentProduct.details.pd_cara || '' 
     };
 
@@ -497,12 +503,12 @@ async function saveProductDetails() {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error);
         alert('Dados do produto salvos com sucesso!');
-        renderContent();
+        renderContent(); // Atualiza a tabela com os novos dados
     } catch (error) {
         alert('Erro ao salvar dados do produto: ' + error.message);
     } finally {
         btn.disabled = false;
-        btn.textContent = 'Salvar Dados';
+        btn.textContent = 'Salvar Dados Cadastrais';
     }
 }
 

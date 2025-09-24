@@ -176,7 +176,9 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
 router.put('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
-    const { pd_nome, pd_barr, pd_cara, pd_refe, pd_unid, pd_fabr, pd_nmgr } = req.body;
+    // Adicionados pd_estm e pd_estx para serem salvos
+    const { pd_nome, pd_barr, pd_cara, pd_refe, pd_unid, pd_fabr, pd_nmgr, pd_estm, pd_estx } = req.body;
+    
     if (!pd_nome || !pd_unid) {
         return res.status(400).json({ error: 'Nome e Unidade do produto são obrigatórios.' });
     }
@@ -186,9 +188,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
         const sql = `
             UPDATE produtos SET
                 pd_nome = ?, pd_barr = ?, pd_cara = ?, pd_refe = ?, pd_unid = ?,
-                pd_fabr = ?, pd_nmgr = ?
+                pd_fabr = ?, pd_nmgr = ?, pd_estm = ?, pd_estx = ?
             WHERE pd_regi = ?`;
-        const params = [pd_nome, pd_barr, pd_cara, pd_refe, pd_unid, pd_fabr, pd_nmgr, id];
+        const params = [pd_nome, pd_barr, pd_cara, pd_refe, pd_unid, pd_fabr, pd_nmgr, pd_estm, pd_estx, id];
         await connection.execute(sql, params);
         res.json({ message: 'Dados do produto atualizados com sucesso!' });
     } catch (error) {
