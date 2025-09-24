@@ -1000,11 +1000,11 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
     const { descricao, custo, data_custo, id_fornecedor, filiais_rateio, numero_nf } = req.body;
     const { userId, nome: nomeUsuario, perfil } = req.user;
 
+    // ... (validações de permissão e dados permanecem as mesmas) ...
     const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
     if (!allowedProfiles.includes(perfil)) {
         return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
     }
-
     const isInternalExpense = id_fornecedor == '0';
     if (!descricao || !custo || !data_custo || id_fornecedor == null || !filiais_rateio || !Array.isArray(filiais_rateio) || filiais_rateio.length === 0 || (!isInternalExpense && !numero_nf) ) {
         return res.status(400).json({ error: 'Dados inválidos. Descrição, custo, data, fornecedor e filiais são obrigatórios. A NF é obrigatória para fornecedores externos.' });
@@ -1024,8 +1024,17 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
         
         for (const id_filial of filiais_rateio) {
-            // CORREÇÃO: O último valor 'Ativo' estava sobrando na lista de parâmetros.
-            await connection.execute(sqlInsert, [descricao, valorRateado, data_custo, id_fornecedor, id_filial, sequencial, userId, numero_nf || null]);
+            // CORREÇÃO APLICADA AQUI: O 9º parâmetro 'Ativo' foi removido do array.
+            await connection.execute(sqlInsert, [
+                descricao, 
+                valorRateado, 
+                data_custo, 
+                id_fornecedor, 
+                id_filial, 
+                sequencial, 
+                userId, 
+                numero_nf || null
+            ]);
         }
         
         await registrarLog({
@@ -1038,20 +1047,17 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
         });
 
         await connection.commit();
-        
         res.status(201).json({ message: 'Custo de frota registado e rateado com sucesso!' });
 
     } catch (error) {
         if (connection) {
-            await connection.rollback(); // 1. Primeiro executa o rollback.
+            await connection.rollback();
         }
         console.error("Erro ao adicionar custo de frota:", error);
         res.status(500).json({ error: 'Erro interno ao adicionar custo de frota.' });
     } finally {
-        // CORREÇÃO: O finally agora só fecha a conexão.
-        // Ele vai rodar depois do try (com sucesso) ou depois do catch (com erro).
         if (connection) {
-            await connection.end(); // 2. Depois fecha a conexão.
+            await connection.end();
         }
     }
 });
