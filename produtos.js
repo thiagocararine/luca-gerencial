@@ -344,6 +344,9 @@ function initializeProductsTable() {
             allowHTML: true,
             theme: 'light-border',
             placement: 'top',
+            // --- ESTA É A CORREÇÃO PRINCIPAL ---
+            // Força o tooltip a ter a camada mais alta possível
+            zIndex: 99999, 
         });
     });
 
