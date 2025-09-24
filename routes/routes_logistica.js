@@ -1024,7 +1024,8 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
         
         for (const id_filial of filiais_rateio) {
-            await connection.execute(sqlInsert, [descricao, valorRateado, data_custo, id_fornecedor, id_filial, sequencial, userId, numero_nf || null, 'Ativo']);
+            // CORREÇÃO: O último valor 'Ativo' estava sobrando na lista de parâmetros.
+            await connection.execute(sqlInsert, [descricao, valorRateado, data_custo, id_fornecedor, id_filial, sequencial, userId, numero_nf || null]);
         }
         
         await registrarLog({
@@ -1038,20 +1039,21 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
 
         await connection.commit();
         
-        // CORREÇÃO: Fechamos a conexão aqui em caso de sucesso
-        if (connection) await connection.end(); 
-        
         res.status(201).json({ message: 'Custo de frota registado e rateado com sucesso!' });
 
     } catch (error) {
         if (connection) {
-            await connection.rollback(); // O rollback agora acontece com a conexão aberta
-            await connection.end();     // E só depois fechamos
+            await connection.rollback(); // 1. Primeiro executa o rollback.
         }
         console.error("Erro ao adicionar custo de frota:", error);
         res.status(500).json({ error: 'Erro interno ao adicionar custo de frota.' });
-    } 
-    // O bloco 'finally' foi removido, pois o fechamento agora é tratado no try/catch
+    } finally {
+        // CORREÇÃO: O finally agora só fecha a conexão.
+        // Ele vai rodar depois do try (com sucesso) ou depois do catch (com erro).
+        if (connection) {
+            await connection.end(); // 2. Depois fecha a conexão.
+        }
+    }
 });
 
 router.get('/custos-frota', authenticateToken, async (req, res) => {
