@@ -997,7 +997,6 @@ router.post('/fornecedores/cnpj', authenticateToken, async (req, res) => {
 // --- SEÇÃO DE CUSTOS DE FROTA ---
 
 router.post('/custos-frota', authenticateToken, async (req, res) => {
-    // 1. ADICIONADO: Captura o 'numero_nf' do corpo da requisição
     const { descricao, custo, data_custo, id_fornecedor, filiais_rateio, numero_nf } = req.body;
     const { userId, nome: nomeUsuario, perfil } = req.user;
 
@@ -1006,9 +1005,11 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
     }
 
-    // 2. ADICIONADO: Validação para o 'numero_nf'
-    if (!descricao || !custo || !data_custo || id_fornecedor == null || !filiais_rateio || !Array.isArray(filiais_rateio) || filiais_rateio.length === 0 || !numero_nf) {
-        return res.status(400).json({ error: 'Dados inválidos. Descrição, custo, data, fornecedor, filiais e Nº da NF são obrigatórios.' });
+    // --- CORREÇÃO APLICADA AQUI ---
+    // A validação agora só exige a NF se o fornecedor não for 'Interno' (ID 0)
+    const isInternalExpense = id_fornecedor == '0';
+    if (!descricao || !custo || !data_custo || id_fornecedor == null || !filiais_rateio || !Array.isArray(filiais_rateio) || filiais_rateio.length === 0 || (!isInternalExpense && !numero_nf) ) {
+        return res.status(400).json({ error: 'Dados inválidos. Descrição, custo, data, fornecedor e filiais são obrigatórios. A NF é obrigatória para fornecedores externos.' });
     }
 
     let connection;
@@ -1018,15 +1019,15 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
         const sequencial = `CF-${Date.now()}`;
         const valorRateado = (parseFloat(custo) / filiais_rateio.length).toFixed(2);
 
-        // 3. ADICIONADO: Coluna 'numero_nf' na query SQL
+        // A query já está correta, mas o valor de numero_nf pode ser vazio agora
         const sqlInsert = `
             INSERT INTO custos_frota 
             (descricao, custo, data_custo, id_fornecedor, id_filial, sequencial_rateio, id_user_lanc, numero_nf, status) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
         
         for (const id_filial of filiais_rateio) {
-            // 4. ADICIONADO: Parâmetro 'numero_nf' na execução
-            await connection.execute(sqlInsert, [descricao, valorRateado, data_custo, id_fornecedor, id_filial, sequencial, userId, numero_nf]);
+            // Se for despesa interna e a NF estiver vazia, salvamos NULL. Caso contrário, salvamos o valor.
+            await connection.execute(sqlInsert, [descricao, valorRateado, data_custo, id_fornecedor, id_filial, sequencial, userId, numero_nf || null, 'Ativo']);
         }
         
         await registrarLog({
