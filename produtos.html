@@ -26,17 +26,33 @@
         #barcode-scanner-video { width: 100%; max-height: 70vh; border-radius: 0.5rem; }
         #scanner-laser { animation: scan 2s infinite ease-in-out; }
         @keyframes scan { 0% { transform: translateY(-60px); } 50% { transform: translateY(60px); } 100% { transform: translateY(-60px); } }
+
+        /* --- INÍCIO DO CSS CORRIGIDO PARA O TOM SELECT --- */
+
+        /* IMPORTANTE: Esta é a regra que estava faltando para esconder o select original */
+        .tom-select-hidden {
+            display: none !important;
+        }
+
+        /* Estilo para o campo principal (parecido com um input do Tailwind) */
         .ts-control {
             border: 1px solid #d1d5db; /* Cor da borda: gray-300 */
             border-radius: 0.375rem;   /* Borda: rounded-md */
             padding: 0.5rem 0.75rem;
             box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); /* shadow-sm */
+            display: flex; /* Garante alinhamento correto */
         }
-        .ts-control:focus-within {
+        .ts-control:focus-within, .ts-control.focus {
             border-color: #4f46e5; /* Cor da borda em foco: indigo-500 */
             box-shadow: 0 0 0 1px #4f46e5; /* Anel de foco: ring-indigo-500 */
         }
-
+        .ts-control > input {
+            padding: 0 !important; /* Remove padding interno do input */
+        }
+        .ts-control > input::placeholder {
+            color: #6b7280; /* Cor do placeholder: gray-500 */
+        }
+        
         /* Estilo para a lista de opções (dropdown) */
         .ts-dropdown {
             border: 1px solid #d1d5db;
@@ -55,15 +71,8 @@
             background-color: #eef2ff; /* Cor de fundo: indigo-50 */
             color: #4338ca; /* Cor do texto: indigo-700 */
         }
-
-        /* Estilo dos itens selecionados (no caso de multi-select) */
-        .ts-control .item {
-            background-color: #e0e7ff; /* Cor de fundo: indigo-100 */
-            color: #3730a3; /* Cor do texto: indigo-800 */
-            padding: 0.25rem 0.5rem;
-            border-radius: 0.25rem;
-            margin-right: 0.25rem;
-        }
+        
+        /* --- FIM DO CSS CORRIGIDO --- */
     </style>
 </head>
 <body class="h-full">
