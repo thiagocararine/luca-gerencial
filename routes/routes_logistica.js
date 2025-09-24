@@ -997,18 +997,20 @@ router.post('/fornecedores/cnpj', authenticateToken, async (req, res) => {
 // --- SEÇÃO DE CUSTOS DE FROTA ---
 
 router.post('/custos-frota', authenticateToken, async (req, res) => {
+    // Seus dados recebidos
     const { descricao, custo, data_custo, id_fornecedor, filiais_rateio, numero_nf } = req.body;
     const { userId, nome: nomeUsuario, perfil } = req.user;
 
-    // ... (validações de permissão e dados permanecem as mesmas) ...
+    // ... (suas validações de permissão e de dados obrigatórios) ...
     const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
     if (!allowedProfiles.includes(perfil)) {
         return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
     }
     const isInternalExpense = id_fornecedor == '0';
     if (!descricao || !custo || !data_custo || id_fornecedor == null || !filiais_rateio || !Array.isArray(filiais_rateio) || filiais_rateio.length === 0 || (!isInternalExpense && !numero_nf) ) {
-        return res.status(400).json({ error: 'Dados inválidos. Descrição, custo, data, fornecedor e filiais são obrigatórios. A NF é obrigatória para fornecedores externos.' });
+        return res.status(400).json({ error: 'Dados inválidos.' });
     }
+
 
     let connection;
     try {
@@ -1024,15 +1026,20 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
         
         for (const id_filial of filiais_rateio) {
-            // CORREÇÃO APLICADA AQUI: O 9º parâmetro 'Ativo' foi removido do array.
+            
+            // MUDANÇA 1: Garantindo que os IDs sejam números
+            const idFornecedorInt = parseInt(id_fornecedor, 10);
+            const idFilialInt = parseInt(id_filial, 10);
+            const idUserInt = parseInt(userId, 10);
+
             await connection.execute(sqlInsert, [
                 descricao, 
                 valorRateado, 
                 data_custo, 
-                id_fornecedor, 
-                id_filial, 
+                idFornecedorInt, // Usando o número
+                idFilialInt,     // Usando o número
                 sequencial, 
-                userId, 
+                idUserInt,       // Usando o número
                 numero_nf || null
             ]);
         }
@@ -1053,8 +1060,14 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
         if (connection) {
             await connection.rollback();
         }
-        console.error("Erro ao adicionar custo de frota:", error);
-        res.status(500).json({ error: 'Erro interno ao adicionar custo de frota.' });
+        // MUDANÇA 2: Exibindo o erro real no console do servidor
+        console.error("ERRO DETALHADO AO ADICIONAR CUSTO DE FROTA:", error);
+        
+        // MUDANÇA 3: Enviando o erro real de volta para o navegador
+        res.status(500).json({ 
+            error: 'Erro interno ao adicionar custo de frota.', 
+            details: error.message 
+        });
     } finally {
         if (connection) {
             await connection.end();
