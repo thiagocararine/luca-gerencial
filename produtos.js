@@ -4,7 +4,6 @@ const apiUrlBase = '/api';
 let gridInstance = null;
 let currentProduct = null;
 let resizeTimer;
-// Objeto para guardar as instâncias dos selects com busca
 let tomSelectInstances = {
     grupo: null,
     fabricante: null
@@ -20,7 +19,6 @@ function setupSidebar() {
     const sidebar = document.getElementById('sidebar');
     if (!sidebar) return;
 
-    // Lógica para Desktop (colapsar/expandir)
     const desktopToggleButton = document.getElementById('sidebar-toggle');
     if (desktopToggleButton) {
         const setDesktopSidebarState = (collapsed) => {
@@ -31,17 +29,14 @@ function setupSidebar() {
             document.getElementById('toggle-icon-expand').classList.toggle('hidden', !collapsed);
             localStorage.setItem('sidebar_collapsed', collapsed);
         };
-
         const isDesktopCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
         setDesktopSidebarState(isDesktopCollapsed);
-
         desktopToggleButton.addEventListener('click', () => {
             const currentlyCollapsed = sidebar.classList.contains('w-20');
             setDesktopSidebarState(!currentlyCollapsed);
         });
     }
 
-    // Lógica para Mobile (abrir/fechar com overlay)
     const mobileMenuButton = document.getElementById('mobile-menu-button');
     const overlay = document.getElementById('mobile-menu-overlay');
     if (mobileMenuButton && overlay) {
@@ -65,7 +60,6 @@ function loadCompanyLogo() {
         companyLogo.style.display = 'block';
     }
 }
-// --- FIM DA LÓGICA DA SIDEBAR ---
 
 function gerenciarAcessoModulos() {
     const userData = getUserData();
@@ -117,7 +111,6 @@ async function initProductsPage() {
     });
 }
 
-// Inicializa os selects de Grupo e Fabricante com busca (sem dependência)
 async function initializeFilterSelects() {
     const fetchAndCreateSelect = async (endpoint, elementId, placeholder) => {
         const selectElement = document.getElementById(elementId);
@@ -129,10 +122,11 @@ async function initializeFilterSelects() {
             const items = await response.json();
             const options = items.map(item => ({ value: item, text: item }));
 
-            tomSelectInstances[elementId.split('-')[1]] = new TomSelect(selectElement, {
+            const selectName = elementId.split('-')[1];
+            tomSelectInstances[selectName] = new TomSelect(selectElement, {
                 options: options,
                 placeholder: placeholder,
-                onChange: () => renderContent() // Apenas recarrega a tabela ao mudar
+                onChange: () => renderContent()
             });
 
         } catch (error) {
@@ -176,12 +170,10 @@ function setupEventListeners() {
         }
     });
 
-    // Listeners para filtros que NÃO são Tom Select
     document.getElementById('filter-search').addEventListener('keypress', (e) => { if (e.key === 'Enter') renderContent(); });
     document.getElementById('filter-filial').addEventListener('change', renderContent);
     document.getElementById('filter-status').addEventListener('change', renderContent);
 
-    // Event listeners do Modal
     modal.querySelector('#close-product-modal-btn').addEventListener('click', () => modal.classList.add('hidden'));
     
     modal.querySelector('#product-modal-tabs').addEventListener('click', (e) => {
@@ -298,8 +290,6 @@ function initializeProductsTable() {
             then: results => {
                 gridInstance.config.data = results.data;
                 return results.data.map(p => {
-                    // 1. GERA O HTML PARA O TOOLTIP
-                    // Se a API retornar 'estoque_detalhado', criamos um <span> especial.
                     const estoqueCell = p.estoque_detalhado
                         ? gridjs.html(`<span class="cursor-pointer underline decoration-dotted" data-tippy-content="${p.estoque_detalhado.replace(/\n/g, '<br>')}">${p.estoque_fisico_filial}</span>`)
                         : p.estoque_fisico_filial;
@@ -335,19 +325,25 @@ function initializeProductsTable() {
         sort: false,
         language: {
             'search': { 'placeholder': '🔍 Buscar...' },
-            'pagination': { 'previous': 'Anterior', 'next': 'Próximo', 'showing': 'Mostrando', 'to': 'a', 'of': 'de', 'results': 'resultados', },
-            'loading': 'Carregando...', 'noRecordsFound': 'Nenhum produto encontrado', 'error': 'Ocorreu um erro ao buscar os dados'
+            'pagination': {
+                'previous': 'Anterior',
+                'next': 'Próximo',
+                'showing': 'Mostrando',
+                'to': 'a',
+                'of': 'de',
+                'results': 'resultados',
+            },
+            'loading': 'Carregando...',
+            'noRecordsFound': 'Nenhum produto encontrado',
+            'error': 'Ocorreu um erro ao buscar os dados'
         }
     }).render(wrapper);
-
-    // 2. ATIVA A BIBLIOTECA DE TOOLTIP
-    // Este evento garante que, após a tabela ser desenhada na tela,
-    // o Tippy.js seja ativado para todos os elementos que precisam de tooltip.
+    
     gridInstance.on('ready', () => {
         tippy('[data-tippy-content]', {
             allowHTML: true,
-            theme: 'light-border', // Um tema simples e claro
-            placement: 'top',      // Aparece acima do número
+            theme: 'light-border',
+            placement: 'top',
         });
     });
 
@@ -441,8 +437,6 @@ async function openEditModal(rowData) {
 
         // ---- Resetar e Mostrar o Modal ----
         const allTabs = modal.querySelectorAll('.tab-button');
-        
-        // CORREÇÃO APLICADA AQUI: O seletor busca o data-tab correto
         const firstTab = modal.querySelector('[data-tab="dados-cadastrais"]');
         
         allTabs.forEach(tab => { 
@@ -478,7 +472,6 @@ async function saveProductDetails() {
         pd_fabr: document.getElementById('pd-fabr-input').value,
         pd_nmgr: document.getElementById('pd-nmgr-input').value,
         pd_unid: document.getElementById('pd-unid-input').value,
-        // Enviando os novos campos editáveis de estoque
         pd_estm: document.getElementById('pd-estm-input').value,
         pd_estx: document.getElementById('pd-estx-input').value,
         pd_cara: currentProduct.details.pd_cara || '' 
@@ -493,7 +486,7 @@ async function saveProductDetails() {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error);
         alert('Dados do produto salvos com sucesso!');
-        renderContent(); // Atualiza a tabela com os novos dados
+        renderContent();
     } catch (error) {
         alert('Erro ao salvar dados do produto: ' + error.message);
     } finally {
@@ -538,11 +531,6 @@ async function saveStockAdjustment() {
         btn.textContent = 'Confirmar Ajuste de Estoque';
     }
 }
-
-// --- LÓGICA DO LEITOR DE CÓDIGO DE BARRAS ---
-let activeCodeReader = null;
-let videoInputDevices = [];
-let currentDeviceIndex = 0;
 
 function startScannerForDevice(deviceId) {
     if (activeCodeReader) {
