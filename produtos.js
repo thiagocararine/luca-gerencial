@@ -157,13 +157,29 @@ function setupEventListeners() {
     document.getElementById('filter-filial').addEventListener('change', renderContent);
 
     modal.querySelector('#close-product-modal-btn').addEventListener('click', () => modal.classList.add('hidden'));
+    
+    // --- LÓGICA DAS ABAS CORRIGIDA AQUI ---
     modal.querySelector('#product-modal-tabs').addEventListener('click', (e) => {
         if (e.target.tagName !== 'BUTTON') return;
-        modal.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-        e.target.classList.add('active');
+
+        const allTabs = modal.querySelectorAll('.tab-button');
+        const targetTab = e.target;
+
+        // 1. Reseta todos os botões para o estilo inativo
+        allTabs.forEach(tab => {
+            tab.classList.remove('text-indigo-600', 'border-indigo-500'); // Remove classes ativas
+            tab.classList.add('text-gray-500', 'border-transparent');   // Adiciona classes inativas
+        });
+
+        // 2. Aplica o estilo ativo apenas no botão que foi clicado
+        targetTab.classList.remove('text-gray-500', 'border-transparent'); // Remove classes inativas
+        targetTab.classList.add('text-indigo-600', 'border-indigo-500');    // Adiciona classes ativas
+
+        // 3. Mostra o conteúdo da aba correta
         modal.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
-        document.getElementById(`${e.target.dataset.tab}-tab-content`).classList.remove('hidden');
+        document.getElementById(`${targetTab.dataset.tab}-tab-content`).classList.remove('hidden');
     });
+    
     document.getElementById('save-details-btn').addEventListener('click', saveProductDetails);
     document.getElementById('save-stock-btn').addEventListener('click', saveStockAdjustment);
     
@@ -356,7 +372,6 @@ async function openEditModal(rowData) {
         const data = await response.json();
         currentProduct = data;
         
-        // Preenche os campos do formulário
         document.getElementById('pd-codi-input').value = data.details.pd_codi;
         document.getElementById('pd-nome-input').value = data.details.pd_nome;
         document.getElementById('pd-barr-input').value = data.details.pd_barr || '';
@@ -371,11 +386,21 @@ async function openEditModal(rowData) {
         document.getElementById('ef-endere-input').value = stockInfo ? stockInfo.ef_endere : '';
         document.getElementById('ajuste-motivo-input').value = '';
 
-        // --- CORREÇÃO DAS ABAS AQUI ---
-        // Em vez de simular um clique, definimos o estado das abas manualmente
-        // Garante que a primeira aba (Detalhes) esteja sempre ativa ao abrir
-        modal.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-        modal.querySelector('[data-tab="details"]').classList.add('active');
+        // --- LÓGICA DE RESET DAS ABAS CORRIGIDA AQUI ---
+        const allTabs = modal.querySelectorAll('.tab-button');
+        const detailsTab = modal.querySelector('[data-tab="details"]');
+
+        // Reseta todos para inativo
+        allTabs.forEach(tab => {
+            tab.classList.remove('text-indigo-600', 'border-indigo-500');
+            tab.classList.add('text-gray-500', 'border-transparent');
+        });
+
+        // Ativa o primeiro (Detalhes)
+        detailsTab.classList.remove('text-gray-500', 'border-transparent');
+        detailsTab.classList.add('text-indigo-600', 'border-indigo-500');
+
+        // Mostra o conteúdo do primeiro
         modal.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
         document.getElementById('details-tab-content').classList.remove('hidden');
 
