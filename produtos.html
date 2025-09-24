@@ -28,9 +28,7 @@
         #scanner-laser { animation: scan 2s infinite ease-in-out; }
         @keyframes scan { 0% { transform: translateY(-60px); } 50% { transform: translateY(60px); } 100% { transform: translateY(-60px); } }
 
-        /* --- INÍCIO DO CSS DE AJUSTE PARA O TOM SELECT --- */
-
-        /* Sobrescreve o campo principal para parecer com um input do Tailwind */
+        /* --- CSS DE AJUSTE PARA O TOM SELECT --- */
         .ts-control {
             border-color: #d1d5db; /* gray-300 */
             border-radius: 0.375rem; /* rounded-md */
@@ -38,20 +36,14 @@
             padding-top: 0.4rem;
             padding-bottom: 0.4rem;
         }
-        
-        /* Adiciona o anel de foco azul do Tailwind */
         .ts-control.focus {
             border-color: #4f46e5 !important; /* indigo-500 */
             box-shadow: 0 0 0 1px #4f46e5 !important; /* ring-1 ring-indigo-500 */
         }
-
-        /* Sobrescreve as cores do dropdown para combinar com o tema */
         .ts-dropdown .option.active {
             background-color: #eef2ff; /* indigo-50 */
             color: #4338ca; /* indigo-700 */
         }
-
-        /* --- FIM DO CSS DE AJUSTE --- */
     </style>
 </head>
 <body class="h-full">
@@ -123,15 +115,15 @@
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-                        <div class="lg:col-span-2">
+                         <div class="lg:col-span-2">
                             <label for="filter-grupo" class="block text-sm font-medium text-gray-700 mb-1">Grupo</label>
-                            <select id="filter-grupo" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></select>
+                            <select id="filter-grupo"></select>
                         </div>
                         <div>
                             <label for="filter-fabricante" class="block text-sm font-medium text-gray-700 mb-1">Fabricante</label>
-                            <select id="filter-fabricante" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></select>
+                            <select id="filter-fabricante"></select>
                         </div>
-                        <div class="flex-shrink-0">
+                         <div class="flex-shrink-0">
                             <button id="barcode-scanner-btn" title="Ler Código de Barras" class="w-full inline-flex items-center justify-center p-2 border border-transparent rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
                                 <i data-feather="camera"></i><span class="ml-2">Scanner</span>
                             </button>
@@ -161,7 +153,7 @@
                     <button data-tab="dados-estoque" class="tab-button whitespace-nowrap py-3 px-2 border-b-2 font-medium text-sm text-indigo-600 border-indigo-500">Dados & Estoque</button>
                     <button data-tab="financeiro" class="tab-button whitespace-nowrap py-3 px-2 border-b-2 font-medium text-sm text-gray-500 border-transparent hover:text-gray-700">Financeiro & Preços</button>
                     <button data-tab="fiscal-outros" class="tab-button whitespace-nowrap py-3 px-2 border-b-2 font-medium text-sm text-gray-500 border-transparent hover:text-gray-700">Fiscal & Outros</button>
-                    <button data-tab="historico" class="tab-button whitespace-nowrap py-3 px-2 border-b-2 font-medium text-sm text-gray-500 border-transparent hover:text-gray-700"">Histórico</button>
+                    <button data-tab="historico" class="tab-button whitespace-nowrap py-3 px-2 border-b-2 font-medium text-sm text-gray-500 border-transparent hover:text-gray-700">Histórico</button>
                 </nav>
             </div>
 
@@ -267,9 +259,27 @@
                     </div>
                 </div>
             </div>
+
+            <div id="historico-tab-content" class="tab-content hidden mt-6 space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Última Alteração 1 (Compra)</label>
+                        <input type="text" id="pd-ula1-input" readonly class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Última Alteração 2 (Compra)</label>
+                        <input type="text" id="pd-ula2-input" readonly class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Últimas 20 Compras</label>
+                    <div id="ultimas-compras-lista" class="mt-1 p-2 border rounded-md bg-gray-50 h-48 overflow-y-auto text-sm">
+                        </div>
+                </div>
+            </div>
         </div>
     </div>
-
+    
     <div id="barcode-scanner-modal" class="modal hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-md m-4">
             <div class="flex justify-between items-center p-4 border-b">
@@ -297,8 +307,8 @@
     <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
     <script type="text/javascript" src="/assets/libs/zxing.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
-
-    <script src="produtos.js?v=4.4" defer></script> 
+    
+    <script src="produtos.js?v=4.6" defer></script> 
     
 </body>
 </html>
