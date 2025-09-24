@@ -1432,9 +1432,9 @@ async function handleVehicleCostFormSubmit(event) {
         classificacao_custo: document.getElementById('vehicle-cost-classification').value,
         descricao: document.getElementById('vehicle-cost-description').value,
         id_fornecedor: document.getElementById('vehicle-cost-fornecedor-id').value,
-        numero_nf: document.getElementById('vehicle-cost-nf').value || '0' // Pega a NF ou envia '0' se estiver vazia
         item_servico: document.getElementById('vehicle-cost-item-servico').value,
-        odometro_manutencao: document.getElementById('vehicle-cost-odometer').value
+        odometro_manutencao: document.getElementById('vehicle-cost-odometer').value,        
+        numero_nf: document.getElementById('vehicle-cost-nf').value || '0' // Pega a NF ou envia '0' se estiver vazia
     };
 
     if (!costData.id_veiculo) { alert('Por favor, selecione um veículo.'); saveBtn.disabled = false; return; }
@@ -1499,8 +1499,8 @@ async function handleFleetCostFormSubmit(event) {
         custo: document.getElementById('fleet-cost-value').value,
         data_custo: document.getElementById('fleet-cost-date').value,
         id_fornecedor: document.getElementById('fleet-cost-fornecedor-id').value,
+        filiais_rateio: selectedFiliais,        
         numero_nf: document.getElementById('fleet-cost-nf').value || '0' // Pega a NF ou envia '0' se estiver vazia
-        filiais_rateio: selectedFiliais
     };
     if (!costData.id_fornecedor) {
         alert('Por favor, associe um fornecedor ou marque como despesa interna.');
