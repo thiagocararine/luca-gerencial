@@ -997,6 +997,7 @@ router.post('/fornecedores/cnpj', authenticateToken, async (req, res) => {
 // --- SEÇÃO DE CUSTOS DE FROTA ---
 
 router.post('/custos-frota', authenticateToken, async (req, res) => {
+    // 1. ADICIONADO: Captura o 'numero_nf' do corpo da requisição
     const { descricao, custo, data_custo, id_fornecedor, filiais_rateio, numero_nf } = req.body;
     const { userId, nome: nomeUsuario, perfil } = req.user;
 
@@ -1005,8 +1006,9 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
     }
 
-    if (!descricao || !custo || !data_custo || id_fornecedor == null || !filiais_rateio || !Array.isArray(filiais_rateio) || filiais_rateio.length === 0) {
-        return res.status(400).json({ error: 'Dados inválidos.' });
+    // 2. ADICIONADO: Validação para o 'numero_nf'
+    if (!descricao || !custo || !data_custo || id_fornecedor == null || !filiais_rateio || !Array.isArray(filiais_rateio) || filiais_rateio.length === 0 || !numero_nf) {
+        return res.status(400).json({ error: 'Dados inválidos. Descrição, custo, data, fornecedor, filiais e Nº da NF são obrigatórios.' });
     }
 
     let connection;
@@ -1015,9 +1017,15 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
         await connection.beginTransaction();
         const sequencial = `CF-${Date.now()}`;
         const valorRateado = (parseFloat(custo) / filiais_rateio.length).toFixed(2);
-        const sqlInsert = `INSERT INTO custos_frota (descricao, custo, data_custo, id_fornecedor, id_filial, sequencial_rateio, id_user_lanc, numero_nf, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
+
+        // 3. ADICIONADO: Coluna 'numero_nf' na query SQL
+        const sqlInsert = `
+            INSERT INTO custos_frota 
+            (descricao, custo, data_custo, id_fornecedor, id_filial, sequencial_rateio, id_user_lanc, numero_nf, status) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
         
         for (const id_filial of filiais_rateio) {
+            // 4. ADICIONADO: Parâmetro 'numero_nf' na execução
             await connection.execute(sqlInsert, [descricao, valorRateado, data_custo, id_fornecedor, id_filial, sequencial, userId, numero_nf]);
         }
         
@@ -1027,12 +1035,12 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
             tipo_entidade: 'Custo de Frota',
             id_entidade: null, 
             tipo_acao: 'Criação',
-            numero_nf: numero_nf,
             descricao: `Criou custo de frota "${descricao}" (Seq: ${sequencial}) com valor total de R$ ${custo}.`
         });
 
         await connection.commit();
         res.status(201).json({ message: 'Custo de frota registado e rateado com sucesso!' });
+
     } catch (error) {
         if (connection) await connection.rollback();
         console.error("Erro ao adicionar custo de frota:", error);
