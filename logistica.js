@@ -1433,8 +1433,8 @@ async function handleVehicleCostFormSubmit(event) {
         descricao: document.getElementById('vehicle-cost-description').value,
         id_fornecedor: document.getElementById('vehicle-cost-fornecedor-id').value,
         item_servico: document.getElementById('vehicle-cost-item-servico').value,
-        odometro_manutencao: document.getElementById('vehicle-cost-odometer').value,        
-        numero_nf: document.getElementById('vehicle-cost-nf').value || '0' // Pega a NF ou envia '0' se estiver vazia
+        odometro_manutencao: document.getElementById('vehicle-cost-odometer').value,
+        numero_nf: document.getElementById('vehicle-cost-nf').value || '0'
     };
 
     if (!costData.id_veiculo) { alert('Por favor, selecione um veículo.'); saveBtn.disabled = false; return; }
@@ -1444,7 +1444,6 @@ async function handleVehicleCostFormSubmit(event) {
         saveBtn.disabled = false;
         return;
     }
-    // Lógica de validação do odômetro obrigatório
     if (costData.classificacao_custo === 'Preventiva' && !costData.odometro_manutencao) {
         alert('O odômetro é obrigatório para manutenções preventivas.');
         saveBtn.disabled = false;
@@ -1457,11 +1456,14 @@ async function handleVehicleCostFormSubmit(event) {
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify(costData)
         });
-        if (!response.ok) throw new Error('Falha ao salvar a despesa do veículo.');
+        if (!response.ok) {
+            const errorResult = await response.json();
+            throw new Error(errorResult.error || 'Falha ao salvar a despesa do veículo.');
+        }
 
         document.getElementById('vehicle-cost-modal').classList.add('hidden');
         alert('Despesa do veículo registada com sucesso!');
-        await loadRecentIndividualCosts(); // Atualiza a aba de histórico
+        await loadRecentIndividualCosts();
 
         if (costData.tipo_manutencao.toLowerCase().includes('manutenção')) {
             await loadVehicles();
@@ -1499,9 +1501,10 @@ async function handleFleetCostFormSubmit(event) {
         custo: document.getElementById('fleet-cost-value').value,
         data_custo: document.getElementById('fleet-cost-date').value,
         id_fornecedor: document.getElementById('fleet-cost-fornecedor-id').value,
-        filiais_rateio: selectedFiliais,        
-        numero_nf: document.getElementById('fleet-cost-nf').value || '0' // Pega a NF ou envia '0' se estiver vazia
+        filiais_rateio: selectedFiliais,
+        numero_nf: document.getElementById('fleet-cost-nf').value || '0'
     };
+    
     if (!costData.id_fornecedor) {
         alert('Por favor, associe um fornecedor ou marque como despesa interna.');
         saveBtn.disabled = false;
@@ -1518,7 +1521,10 @@ async function handleFleetCostFormSubmit(event) {
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify(costData)
         });
-        if (!response.ok) throw new Error('Falha ao salvar custo de frota.');
+        if (!response.ok) {
+             const errorResult = await response.json();
+             throw new Error(errorResult.error || 'Falha ao salvar custo de frota.');
+        }
         document.getElementById('fleet-cost-modal').classList.add('hidden');
         alert('Custo de frota registado com sucesso!');
         await loadFleetCosts();
