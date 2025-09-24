@@ -298,7 +298,8 @@ function initializeProductsTable() {
             then: results => {
                 gridInstance.config.data = results.data;
                 return results.data.map(p => {
-                    // Se a API retornar 'estoque_detalhado', criamos o HTML para o tooltip
+                    // 1. GERA O HTML PARA O TOOLTIP
+                    // Se a API retornar 'estoque_detalhado', criamos um <span> especial.
                     const estoqueCell = p.estoque_detalhado
                         ? gridjs.html(`<span class="cursor-pointer underline decoration-dotted" data-tippy-content="${p.estoque_detalhado.replace(/\n/g, '<br>')}">${p.estoque_fisico_filial}</span>`)
                         : p.estoque_fisico_filial;
@@ -334,28 +335,19 @@ function initializeProductsTable() {
         sort: false,
         language: {
             'search': { 'placeholder': '🔍 Buscar...' },
-            'pagination': {
-                'previous': 'Anterior',
-                'next': 'Próximo',
-                'showing': 'Mostrando',
-                'to': 'a',
-                'of': 'de',
-                'results': 'resultados',
-            },
-            'loading': 'Carregando...',
-            'noRecordsFound': 'Nenhum produto encontrado',
-            'error': 'Ocorreu um erro ao buscar os dados'
+            'pagination': { 'previous': 'Anterior', 'next': 'Próximo', 'showing': 'Mostrando', 'to': 'a', 'of': 'de', 'results': 'resultados', },
+            'loading': 'Carregando...', 'noRecordsFound': 'Nenhum produto encontrado', 'error': 'Ocorreu um erro ao buscar os dados'
         }
     }).render(wrapper);
 
-    // LÓGICA CORRIGIDA PARA ATIVAR OS TOOLTIPS
+    // 2. ATIVA A BIBLIOTECA DE TOOLTIP
+    // Este evento garante que, após a tabela ser desenhada na tela,
+    // o Tippy.js seja ativado para todos os elementos que precisam de tooltip.
     gridInstance.on('ready', () => {
-        // Esta função varre a tabela renderizada e ativa o Tippy.js
-        // em todos os elementos que têm o atributo 'data-tippy-content'
         tippy('[data-tippy-content]', {
             allowHTML: true,
-            theme: 'light-border',
-            placement: 'top',
+            theme: 'light-border', // Um tema simples e claro
+            placement: 'top',      // Aparece acima do número
         });
     });
 
