@@ -868,11 +868,11 @@ router.get('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
 });
 
 router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => {
-    const { id: id_veiculo } = req.params;
+    const { id: id_veiculo_str } = req.params; // Renomeado para evitar confusão
     const { data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_fornecedor, numero_nf, item_servico, odometro_manutencao } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
 
-    if (!data_manutencao || !custo || !tipo_manutencao || !classificacao_custo || !id_fornecedor) {
+    if (!data_manutencao || !custo || !tipo_manutencao || !classificacao_custo || id_fornecedor === null || id_fornecedor === undefined) {
         return res.status(400).json({ error: 'Todos os campos da manutenção são obrigatórios.' });
     }
 
@@ -881,9 +881,11 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
 
+        const id_veiculo = parseInt(id_veiculo_str, 10);
+
         const [vehicleData] = await connection.execute('SELECT id_filial FROM veiculos WHERE id = ?', [id_veiculo]);
         if (vehicleData.length === 0) {
-            await connection.rollback();
+            // Não precisa de rollback aqui, pois nada foi alterado ainda
             return res.status(404).json({ error: 'Veículo não encontrado.' });
         }
         const id_filial_veiculo = vehicleData[0].id_filial;
@@ -893,8 +895,28 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
             (id_veiculo, id_filial, data_manutencao, descricao, custo, tipo_manutencao, item_servico, odometro_manutencao, classificacao_custo, id_user_lanc, id_fornecedor, numero_nf, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Ativo')`;
 
-        await connection.execute(sqlInsert, [id_veiculo, id_filial_veiculo, data_manutencao, descricao, custo, tipo_manutencao, item_servico || null, odometro_manutencao || null, classificacao_custo, userId, id_fornecedor, numero_nf]);
+        // MUDANÇA 1: Tratamento do id_fornecedor para despesa interna
+        const idFornecedorFinal = (id_fornecedor === '0' || !id_fornecedor) ? null : parseInt(id_fornecedor, 10);
         
+        // MUDANÇA 2: Garantindo que odometro vazio vire NULL
+        const odometroFinal = odometro_manutencao ? parseInt(odometro_manutencao, 10) : null;
+        
+        await connection.execute(sqlInsert, [
+            id_veiculo, 
+            id_filial_veiculo, 
+            data_manutencao, 
+            descricao, 
+            custo, 
+            tipo_manutencao, 
+            item_servico || null, 
+            odometroFinal, // Usando a variável corrigida
+            classificacao_custo, 
+            parseInt(userId, 10), // Convertendo para número
+            idFornecedorFinal, // Usando a variável corrigida
+            numero_nf
+        ]);
+        
+        // ... (lógica de `registrarLog` e `UPDATE veiculos` permanece a mesma)
         if (classificacao_custo === 'Preventiva') {
             const proximaManutencao = new Date(data_manutencao);
             proximaManutencao.setMonth(proximaManutencao.getMonth() + 3);
@@ -921,9 +943,17 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
 
     } catch (error) {
         if(connection) await connection.rollback();
-        console.error("Erro ao adicionar manutenção:", error);
-        res.status(500).json({ error: 'Erro interno ao adicionar manutenção.' });
+        
+        console.error("Erro detalhado ao adicionar manutenção:", error);
+        
+        // MUDANÇA 3: Retorno do erro detalhado para o frontend
+        res.status(500).json({ 
+            error: 'Erro interno ao adicionar manutenção.',
+            details: error.message
+        });
+
     } finally {
+        // MUDANÇA 4: Gerenciamento correto da conexão
         if (connection) await connection.end();
     }
 });
