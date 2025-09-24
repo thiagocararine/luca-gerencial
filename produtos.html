@@ -6,6 +6,7 @@
     <title>Estoque e Produtos - Luca Gerencial</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <link rel="stylesheet" href="/assets/style.css">
     <link rel="icon" href="/assets/favicon.ico" type="image/x-icon">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -15,9 +16,7 @@
         [data-feather] { width: 1.25rem; height: 1.25rem; }
         .modal.hidden { display: none; }
         .gridjs-table { width: 100%; }
-        .gridjs-tr:hover .gridjs-td { background-color: #f3f4f6; cursor: pointer; }
         
-        /* CSS da Sidebar e Fundo */
         #sidebar.w-20 .sidebar-text { display: none; }
         #sidebar.w-20 .sidebar-link { justify-content: center; }
         #company-logo { transition: opacity 0.3s ease-in-out; }
@@ -78,27 +77,39 @@
             <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
                 <h2 class="text-2xl font-bold text-gray-900 mb-6">Gestão de Estoque e Produtos</h2>
                 
-                <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow mb-6">
-                    <div class="flex flex-wrap items-end gap-4">
-                        
-                        <div class="flex-grow min-w-[200px]">
+                <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow mb-6 space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="lg:col-span-2">
                             <label for="filter-search" class="block text-sm font-medium text-gray-700 mb-1">Buscar Produto</label>
                             <input type="text" id="filter-search" placeholder="Nome, cód. interno ou de barras..." class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                         </div>
-
-                        <div class="min-w-[180px]">
+                        <div>
                             <label for="filter-filial" class="block text-sm font-medium text-gray-700 mb-1">Filial</label>
-                            <select id="filter-filial" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                <option>A carregar...</option>
+                            <select id="filter-filial" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></select>
+                        </div>
+                        <div>
+                            <label for="filter-status" class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                            <select id="filter-status" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="ativos" selected>Apenas Ativos</option>
+                                <option value="cancelados">Apenas Cancelados</option>
+                                <option value="todos">Todos</option>
                             </select>
                         </div>
-
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                        <div class="lg:col-span-2">
+                            <label for="filter-grupo" class="block text-sm font-medium text-gray-700 mb-1">Grupo</label>
+                            <select id="filter-grupo" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></select>
+                        </div>
+                        <div>
+                            <label for="filter-fabricante" class="block text-sm font-medium text-gray-700 mb-1">Fabricante</label>
+                            <select id="filter-fabricante" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></select>
+                        </div>
                         <div class="flex-shrink-0">
-                            <button id="barcode-scanner-btn" title="Ler Código de Barras" class="inline-flex items-center justify-center p-2 border border-transparent rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
-                                <i data-feather="camera"></i>
+                            <button id="barcode-scanner-btn" title="Ler Código de Barras" class="w-full inline-flex items-center justify-center p-2 border border-transparent rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
+                                <i data-feather="camera"></i><span class="ml-2">Scanner</span>
                             </button>
                         </div>
-
                     </div>
                 </div>
 
@@ -108,78 +119,125 @@
     </div>
     
     <div id="product-edit-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-40">
-        <div class="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+        <div class="relative top-10 sm:top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
             <div class="flex justify-between items-center pb-3 border-b">
                 <div>
-                    <h3 class="text-lg font-medium leading-6 text-gray-900">Editar Produto</h3>
+                    <h3 class="text-lg font-medium leading-6 text-gray-900" id="product-modal-title">Editar Produto</h3>
                     <p id="product-modal-info" class="mt-1 text-sm text-gray-500">Carregando...</p>
                 </div>
                 <button id="close-product-modal-btn" class="p-1 rounded-full hover:bg-gray-200">
                     <svg data-feather="x" class="h-6 w-6 text-gray-500"></svg>
                 </button>
             </div>
+            
             <div id="product-modal-tabs" class="mt-4 border-b border-gray-200">
-                <nav class="-mb-px flex space-x-4" aria-label="Tabs">
-                    <button data-tab="details" class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm text-indigo-600 border-indigo-500 active">
-                        Dados Cadastrais
-                    </button>
-                    <button data-tab="stock" class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 border-transparent hover:border-gray-300">
-                        Ajuste de Estoque
-                    </button>
+                <nav class="-mb-px flex space-x-4 overflow-x-auto" aria-label="Tabs">
+                    <button data-tab="dados-estoque" class="tab-button whitespace-nowrap py-3 px-2 border-b-2 font-medium text-sm text-indigo-600 border-indigo-500">Dados & Estoque</button>
+                    <button data-tab="financeiro" class="tab-button whitespace-nowrap py-3 px-2 border-b-2 font-medium text-sm text-gray-500 border-transparent hover:text-gray-700">Financeiro & Preços</button>
+                    <button data-tab="fiscal-outros" class="tab-button whitespace-nowrap py-3 px-2 border-b-2 font-medium text-sm text-gray-500 border-transparent hover:text-gray-700">Fiscal & Outros</button>
                 </nav>
             </div>
-            <div id="details-tab-content" class="tab-content mt-6 space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            <div id="dados-estoque-tab-content" class="tab-content mt-6 space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
                     <div>
-                        <label for="pd-codi-input" class="block text-sm font-medium text-gray-700">Cód. Interno</label>
-                        <input type="text" id="pd-codi-input" readonly class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 cursor-not-allowed">
+                        <label class="block text-sm font-medium text-gray-700">Filial (Consulta)</label>
+                        <input type="text" id="pd-filial-info" readonly class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 cursor-not-allowed">
                     </div>
-                    <div>
-                        <label for="pd-nome-input" class="block text-sm font-medium text-gray-700">Nome do Produto</label>
+                     <div>
+                        <label class="block text-sm font-medium text-gray-700">Nome do Produto</label>
                         <input type="text" id="pd-nome-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                     </div>
                     <div>
-                        <label for="pd-barr-input" class="block text-sm font-medium text-gray-700">Cód. Barras</label>
+                        <label class="block text-sm font-medium text-gray-700">Cód. Barras</label>
                         <input type="text" id="pd-barr-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                     </div>
                     <div>
-                        <label for="pd-fabr-input" class="block text-sm font-medium text-gray-700">Fabricante</label>
+                        <label class="block text-sm font-medium text-gray-700">Cód. Interno</label>
+                        <input type="text" id="pd-codi-input" readonly class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 cursor-not-allowed">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Referência</label>
+                        <input type="text" id="pd-refe-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Fabricante</label>
                         <input type="text" id="pd-fabr-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                     </div>
                     <div>
-                        <label for="pd-unid-input" class="block text-sm font-medium text-gray-700">Unidade</label>
+                        <label class="block text-sm font-medium text-gray-700">Grupo</label>
+                        <input type="text" id="pd-nmgr-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Unidade</label>
                         <input type="text" id="pd-unid-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                     </div>
                 </div>
-                <div>
-                    <label for="pd-cara-input" class="block text-sm font-medium text-gray-700">Características</label>
-                    <textarea id="pd-cara-input" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></textarea>
-                </div>
-                <div class="pt-4 text-right">
-                    <button id="save-details-btn" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
-                        Salvar Dados Cadastrais
-                    </button>
+                <div class="border-t pt-4 mt-4">
+                    <h4 class="text-md font-semibold text-gray-800 mb-2">Ajuste de Estoque</h4>
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="ef-fisico-input" class="block text-sm font-medium text-gray-700">Nova Quantidade</label>
+                            <input type="number" id="ef-fisico-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                        </div>
+                         <div>
+                            <label for="ef-endere-input" class="block text-sm font-medium text-gray-700">Endereço</label>
+                            <input type="text" id="ef-endere-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <label for="ajuste-motivo-input" class="block text-sm font-medium text-gray-700">Motivo do Ajuste (Obrigatório)</label>
+                        <input type="text" id="ajuste-motivo-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <div class="pt-4 flex justify-end gap-3">
+                         <button id="save-details-btn" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">Salvar Dados</button>
+                         <button id="save-stock-btn" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">Confirmar Ajuste</button>
+                    </div>
                 </div>
             </div>
-            <div id="stock-tab-content" class="tab-content hidden mt-6 space-y-4">
-                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            <div id="financeiro-tab-content" class="tab-content hidden mt-6 space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                     <div>
+                        <label class="block text-sm font-medium text-gray-700">Preço de Compra</label>
+                        <input type="text" id="pd-pcom-input" readonly class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100">
+                    </div>
                     <div>
-                        <label for="ef-fisico-input" class="block text-sm font-medium text-gray-700">Nova Quantidade em Estoque</label>
-                        <input type="number" id="ef-fisico-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                        <label class="block text-sm font-medium text-gray-700">Preço de Custo</label>
+                        <input type="text" id="pd-pcus-input" readonly class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100">
                     </div>
                      <div>
-                        <label for="ef-endere-input" class="block text-sm font-medium text-gray-700">Endereço no Estoque</label>
-                        <input type="text" id="ef-endere-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                        <label class="block text-sm font-medium text-gray-700">Preço de Venda 1</label>
+                        <input type="text" id="pd-tpr1-input" readonly class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100">
                     </div>
                 </div>
-                <div>
-                    <label for="ajuste-motivo-input" class="block text-sm font-medium text-gray-700">Motivo do Ajuste (Obrigatório)</label>
-                    <input type="text" id="ajuste-motivo-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                </div>
-                <div class="pt-4 text-right">
-                    <button id="save-stock-btn" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
-                        Confirmar Ajuste de Estoque
-                    </button>
+                <button id="view-prices-btn" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium">Ver Tabela de Preços Completa ▼</button>
+                <div id="prices-table-container" class="hidden border-t pt-4 mt-2">
+                    </div>
+            </div>
+
+            <div id="fiscal-outros-tab-content" class="tab-content hidden mt-6 space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Status</label>
+                        <input type="text" id="pd-canc-status" readonly class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Código Fiscal (NCM)</label>
+                        <input type="text" id="pd-cfis-input" readonly class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Código CEST</label>
+                        <input type="text" id="pd-cest-input" readonly class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100">
+                    </div>
+                     <div>
+                        <label class="block text-sm font-medium text-gray-700">Peso Bruto</label>
+                        <input type="text" id="pd-pesb-input" readonly class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100">
+                    </div>
+                     <div>
+                        <label class="block text-sm font-medium text-gray-700">Peso Líquido</label>
+                        <input type="text" id="pd-pesl-input" readonly class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100">
+                    </div>
                 </div>
             </div>
         </div>
@@ -212,7 +270,7 @@
     <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
     <script type="text/javascript" src="/assets/libs/zxing.min.js"></script>
     
-    <script src="produtos.js?v=4.3" defer></script> 
+    <script src="produtos.js?v=4.4" defer></script> 
     
 </body>
 </html>

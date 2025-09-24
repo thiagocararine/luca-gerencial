@@ -64,10 +64,8 @@ function loadCompanyLogo() {
 
 function gerenciarAcessoModulos() {
     const userData = getUserData();
-    if (!userData || !userData.permissoes) {
-        console.error("Não foi possível obter as permissões do usuário.");
-        return;
-    }
+    if (!userData || !userData.permissoes) return;
+    
     const permissoesDoUsuario = userData.permissoes;
     const mapaModulos = {
         'lancamentos': 'despesas.html',
@@ -93,7 +91,6 @@ async function initProductsPage() {
         return;
     }
 
-    // Inicialização dos componentes da página
     feather.replace();
     setupSidebar();
     loadCompanyLogo();
@@ -106,6 +103,7 @@ async function initProductsPage() {
     
     gerenciarAcessoModulos();
     await populateFilialFilter();
+    await populateAdvancedFilters();
     setupEventListeners();
     
     renderContent(); 
@@ -114,6 +112,34 @@ async function initProductsPage() {
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(renderContent, 250);
     });
+}
+
+async function populateAdvancedFilters() {
+    const populate = async (endpoint, elementId) => {
+        const select = document.getElementById(elementId);
+        try {
+            const response = await fetch(`${apiUrlBase}/produtos/${endpoint}`, {
+                headers: { 'Authorization': `Bearer ${getToken()}` }
+            });
+            if (!response.ok) throw new Error(`Falha ao carregar ${endpoint}`);
+            const items = await response.json();
+            
+            select.innerHTML = `<option value="">Todos os ${endpoint}</option>`;
+            items.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item;
+                option.textContent = item;
+                select.appendChild(option);
+            });
+        } catch (error) {
+            select.innerHTML = `<option value="">Erro ao carregar</option>`;
+            console.error(error);
+        }
+    };
+    await Promise.all([
+        populate('grupos', 'filter-grupo'),
+        populate('fabricantes', 'filter-fabricante')
+    ]);
 }
 
 function renderContent() {
@@ -128,7 +154,7 @@ function renderContent() {
         wrapper.innerHTML = '';
         renderProductCards();
     } else {
-        wrapper.innerHTML = ''; // Limpa os cards se houver
+        wrapper.innerHTML = '';
         initializeProductsTable();
     }
 }
@@ -140,46 +166,38 @@ function setupEventListeners() {
     wrapper.addEventListener('click', (e) => {
         const targetCard = e.target.closest('.product-card');
         if (targetCard) {
-            const productData = {
-                pd_regi: targetCard.dataset.pdRegi,
-                pd_codi: targetCard.dataset.pdCodi,
-                pd_nome: targetCard.dataset.pdNome
-            };
+            const productData = { pd_regi: targetCard.dataset.pdRegi, pd_codi: targetCard.dataset.pdCodi, pd_nome: targetCard.dataset.pdNome };
             openEditModal(productData);
         }
     });
 
-    document.getElementById('filter-search').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            renderContent();
-        }
-    });
+    // Event listeners para os filtros
+    document.getElementById('filter-search').addEventListener('keypress', (e) => { if (e.key === 'Enter') renderContent(); });
     document.getElementById('filter-filial').addEventListener('change', renderContent);
+    document.getElementById('filter-status').addEventListener('change', renderContent);
+    document.getElementById('filter-grupo').addEventListener('change', renderContent);
+    document.getElementById('filter-fabricante').addEventListener('change', renderContent);
 
+    // Event listeners do Modal
     modal.querySelector('#close-product-modal-btn').addEventListener('click', () => modal.classList.add('hidden'));
     
-    // --- LÓGICA DAS ABAS CORRIGIDA AQUI ---
     modal.querySelector('#product-modal-tabs').addEventListener('click', (e) => {
         if (e.target.tagName !== 'BUTTON') return;
-
         const allTabs = modal.querySelectorAll('.tab-button');
-        const targetTab = e.target;
-
-        // 1. Reseta todos os botões para o estilo inativo
         allTabs.forEach(tab => {
-            tab.classList.remove('text-indigo-600', 'border-indigo-500'); // Remove classes ativas
-            tab.classList.add('text-gray-500', 'border-transparent');   // Adiciona classes inativas
+            tab.classList.remove('text-indigo-600', 'border-indigo-500');
+            tab.classList.add('text-gray-500', 'border-transparent');
         });
-
-        // 2. Aplica o estilo ativo apenas no botão que foi clicado
-        targetTab.classList.remove('text-gray-500', 'border-transparent'); // Remove classes inativas
-        targetTab.classList.add('text-indigo-600', 'border-indigo-500');    // Adiciona classes ativas
-
-        // 3. Mostra o conteúdo da aba correta
+        e.target.classList.remove('text-gray-500', 'border-transparent');
+        e.target.classList.add('text-indigo-600', 'border-indigo-500');
         modal.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
-        document.getElementById(`${targetTab.dataset.tab}-tab-content`).classList.remove('hidden');
+        document.getElementById(`${e.target.dataset.tab}-tab-content`).classList.remove('hidden');
     });
     
+    document.getElementById('view-prices-btn').addEventListener('click', () => {
+        document.getElementById('prices-table-container').classList.toggle('hidden');
+    });
+
     document.getElementById('save-details-btn').addEventListener('click', saveProductDetails);
     document.getElementById('save-stock-btn').addEventListener('click', saveStockAdjustment);
     
@@ -189,17 +207,11 @@ function setupEventListeners() {
 async function populateFilialFilter() {
     const selectElement = document.getElementById('filter-filial');
     try {
-        const response = await fetch(`${apiUrlBase}/produtos/filiais-com-estoque`, { 
-            headers: { 'Authorization': `Bearer ${getToken()}` } 
-        });
+        const response = await fetch(`${apiUrlBase}/produtos/filiais-com-estoque`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao carregar filiais com estoque.');
         const items = await response.json();
         
-        selectElement.innerHTML = '';
-        if (items.length === 0) {
-            selectElement.innerHTML = `<option value="">Nenhuma filial com estoque</option>`;
-            return;
-        }
+        selectElement.innerHTML = '<option value="">Todas as Filiais</option>';
         items.forEach(item => {
             const option = document.createElement('option');
             option.value = item.codigo; 
@@ -210,9 +222,7 @@ async function populateFilialFilter() {
         const userFilialData = getUserData();
         if (userFilialData && userFilialData.unidade) {
             const defaultOption = Array.from(selectElement.options).find(opt => opt.text === userFilialData.unidade);
-            if (defaultOption) {
-                selectElement.value = defaultOption.value;
-            }
+            if (defaultOption) selectElement.value = defaultOption.value;
         }
     } catch (error) {
         selectElement.innerHTML = `<option value="">Erro ao carregar</option>`;
@@ -223,12 +233,16 @@ async function populateFilialFilter() {
 async function renderProductCards() {
     const wrapper = document.getElementById('products-table');
     wrapper.innerHTML = `<p class="text-center p-8">A carregar produtos...</p>`;
-    const filialId = document.getElementById('filter-filial').value;
-    const search = document.getElementById('filter-search').value;
-    const url = new URL(`${apiUrlBase}/produtos`, window.location.origin);
-    url.searchParams.append('filialId', filialId);
-    url.searchParams.append('search', search);
-    url.searchParams.append('limit', 1000);
+    
+    const params = new URLSearchParams({
+        filialId: document.getElementById('filter-filial').value,
+        search: document.getElementById('filter-search').value,
+        status: document.getElementById('filter-status').value,
+        grupo: document.getElementById('filter-grupo').value,
+        fabricante: document.getElementById('filter-fabricante').value,
+        limit: 1000
+    });
+    const url = `${apiUrlBase}/produtos?${params.toString()}`;
 
     try {
         const response = await fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } });
@@ -239,12 +253,12 @@ async function renderProductCards() {
             wrapper.innerHTML = `<p class="text-center p-8 text-gray-500">Nenhum produto encontrado.</p>`;
             return;
         }
-
+        
         wrapper.innerHTML = '<div class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>';
         const gridContainer = wrapper.querySelector('.grid');
         result.data.forEach(product => {
             const card = document.createElement('div');
-            card.className = 'product-card bg-white p-4 rounded-lg shadow-md space-y-2 cursor-pointer hover:bg-gray-100 transition-colors';
+            card.className = 'product-card bg-white p-4 rounded-lg shadow-md space-y-2 cursor-pointer hover:bg-indigo-50 transition-colors';
             card.dataset.pdRegi = product.pd_regi;
             card.dataset.pdCodi = product.pd_codi;
             card.dataset.pdNome = product.pd_nome;
@@ -266,48 +280,32 @@ function initializeProductsTable() {
         gridInstance.destroy();
         gridInstance = null;
     }
-
     const wrapper = document.getElementById('products-table');
     wrapper.innerHTML = '';
-
+    
     gridInstance = new gridjs.Grid({
-        columns: [
-            'Cód. Interno',
-            'Nome do Produto',
-            'Cód. Barras',
-            'Estoque'
-        ],
+        columns: ['Cód. Interno', 'Nome do Produto', 'Cód. Barras', 'Estoque'],
         server: {
-            // --- CORREÇÃO APLICADA AQUI ---
-            // Vamos construir a URL dinamicamente sem usar 'prev' para evitar o 'undefined'
-            url: `${apiUrlBase}/produtos?filialId=${document.getElementById('filter-filial').value}&search=${document.getElementById('filter-search').value}`,
+            url: `${apiUrlBase}/produtos?filialId=${document.getElementById('filter-filial').value}` +
+                 `&search=${document.getElementById('filter-search').value}` +
+                 `&status=${document.getElementById('filter-status').value}` +
+                 `&grupo=${document.getElementById('filter-grupo').value}` +
+                 `&fabricante=${document.getElementById('filter-fabricante').value}`,
             headers: { 'Authorization': `Bearer ${getToken()}` },
             then: results => {
-                // O backend já envia o total, então usamos results.data para os dados
                 gridInstance.config.data = results.data;
-                return results.data.map(p => [
-                    p.pd_codi,
-                    p.pd_nome,
-                    p.pd_barr,
-                    p.estoque_fisico_filial
-                ]);
+                return results.data.map(p => [p.pd_codi, p.pd_nome, p.pd_barr, p.estoque_fisico_filial]);
             },
-            // O backend já envia o total, então usamos results.totalItems
             total: results => results.totalItems
         },
         pagination: {
             enabled: true,
             limit: 20,
             summary: true,
-            // Esta configuração garante que os parâmetros corretos (`page`) sejam enviados
             server: {
-                url: (prev, page, limit) => {
-                    const pageNumber = page + 1;
-                    return `${prev}&limit=${limit}&page=${pageNumber}`;
-                }
+                url: (prev, page, limit) => `${prev}&limit=${limit}&page=${page + 1}`
             }
         },
-        // O resto da configuração permanece igual...
         className: {
             table: 'w-full text-sm text-left text-gray-500',
             thead: 'text-xs text-gray-700 uppercase bg-gray-50',
@@ -326,7 +324,14 @@ function initializeProductsTable() {
         sort: false,
         language: {
             'search': { 'placeholder': '🔍 Buscar...' },
-            'pagination': { 'previous': 'Anterior', 'next': 'Próximo', 'showing': 'Mostrando', 'to': 'a', 'of': 'de', 'results': 'resultados' },
+            'pagination': {
+                'previous': 'Anterior',
+                'next': 'Próximo',
+                'showing': 'Mostrando',
+                'to': 'a',
+                'of': 'de',
+                'results': 'resultados',
+            },
             'loading': 'Carregando...',
             'noRecordsFound': 'Nenhum produto encontrado',
             'error': 'Ocorreu um erro ao buscar os dados'
@@ -334,23 +339,14 @@ function initializeProductsTable() {
     }).render(wrapper);
 
     gridInstance.on('rowClick', (event, row) => {
-        // Nova forma: Pegamos o código do produto da primeira célula
         const productCode = row.cells[0].data;
-
-        // Usamos o código para encontrar o objeto completo do produto na nossa lista de dados
         const rowData = gridInstance.config.data.find(p => p.pd_codi === productCode);
-
         if (rowData) {
-            // Efeito visual de clique na linha
             const tr = event.target.closest('tr');
             if (tr) {
                 tr.classList.add('bg-indigo-100');
-                setTimeout(() => {
-                    tr.classList.remove('bg-indigo-100');
-                }, 300); // Remove o destaque após 300ms
+                setTimeout(() => tr.classList.remove('bg-indigo-100'), 300);
             }
-            
-            // Abre o modal com os dados corretos
             openEditModal(rowData);
         } else {
             console.error('Não foi possível encontrar os dados para o produto de código:', productCode);
@@ -361,51 +357,63 @@ function initializeProductsTable() {
 
 async function openEditModal(rowData) {
     const modal = document.getElementById('product-edit-modal');
-    document.getElementById('product-modal-info').textContent = `${rowData.pd_codi} - ${rowData.pd_nome}`;
+    document.getElementById('product-modal-title').textContent = rowData.pd_nome;
+    document.getElementById('product-modal-info').textContent = `Cód: ${rowData.pd_codi} | Barras: ${rowData.pd_barr || 'N/A'}`;
     
     try {
-        const response = await fetch(`${apiUrlBase}/produtos/${rowData.pd_regi}`, {
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
+        const response = await fetch(`${apiUrlBase}/produtos/${rowData.pd_regi}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar detalhes do produto.');
-        
         const data = await response.json();
         currentProduct = data;
-        
-        document.getElementById('pd-codi-input').value = data.details.pd_codi;
+
+        // Aba "Dados & Estoque"
+        const filialSelect = document.getElementById('filter-filial');
+        document.getElementById('pd-filial-info').value = filialSelect.options[filialSelect.selectedIndex].text || 'Todas';
         document.getElementById('pd-nome-input').value = data.details.pd_nome;
         document.getElementById('pd-barr-input').value = data.details.pd_barr || '';
+        document.getElementById('pd-codi-input').value = data.details.pd_codi;
+        document.getElementById('pd-refe-input').value = data.details.pd_refe || '';
         document.getElementById('pd-fabr-input').value = data.details.pd_fabr || '';
+        document.getElementById('pd-nmgr-input').value = data.details.pd_nmgr || '';
         document.getElementById('pd-unid-input').value = data.details.pd_unid || '';
-        document.getElementById('pd-cara-input').value = data.details.pd_cara || '';
-        
-        const filialFilter = document.getElementById('filter-filial');
-        const stockInfo = data.stockByBranch.find(s => s.ef_idfili.toString() === filialFilter.value);
-        
+
+        const stockInfo = data.stockByBranch.find(s => s.ef_idfili.toString() === filialSelect.value);
         document.getElementById('ef-fisico-input').value = stockInfo ? stockInfo.ef_fisico : 0;
         document.getElementById('ef-endere-input').value = stockInfo ? stockInfo.ef_endere : '';
         document.getElementById('ajuste-motivo-input').value = '';
 
-        // --- LÓGICA DE RESET DAS ABAS CORRIGIDA AQUI ---
+        // Aba "Financeiro & Preços"
+        const formatCurrency = (value) => `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
+        document.getElementById('pd-pcom-input').value = formatCurrency(data.details.pd_pcom);
+        document.getElementById('pd-pcus-input').value = formatCurrency(data.details.pd_pcus);
+        document.getElementById('pd-tpr1-input').value = formatCurrency(data.details.pd_tpr1);
+        
+        const pricesContainer = document.getElementById('prices-table-container');
+        let pricesHtml = '<ul class="divide-y divide-gray-200">';
+        for (let i = 1; i <= 6; i++) {
+            pricesHtml += `<li class="py-2 flex justify-between text-sm"><span class="font-medium text-gray-600">Preço ${i}:</span><span class="text-gray-900">${formatCurrency(data.details[`pd_tpr${i}`])} (Margem: ${Number(data.details[`pd_vdp${i}`] || 0).toFixed(2).replace('.', ',')}%)</span></li>`;
+        }
+        pricesHtml += '</ul>';
+        pricesContainer.innerHTML = pricesHtml;
+        pricesContainer.classList.add('hidden');
+
+        // Aba "Fiscal & Outros"
+        document.getElementById('pd-canc-status').value = (data.details.pd_canc === 'S') ? 'Cancelado' : 'Ativo';
+        document.getElementById('pd-cfis-input').value = data.details.pd_cfis || 'N/A';
+        document.getElementById('pd-cest-input').value = data.details.pd_cest || 'N/A';
+        document.getElementById('pd-pesb-input').value = `${Number(data.details.pd_pesb || 0).toFixed(3).replace('.', ',')} kg`;
+        document.getElementById('pd-pesl-input').value = `${Number(data.details.pd_pesl || 0).toFixed(3).replace('.', ',')} kg`;
+
+        // Reset das abas
         const allTabs = modal.querySelectorAll('.tab-button');
-        const detailsTab = modal.querySelector('[data-tab="details"]');
-
-        // Reseta todos para inativo
-        allTabs.forEach(tab => {
-            tab.classList.remove('text-indigo-600', 'border-indigo-500');
-            tab.classList.add('text-gray-500', 'border-transparent');
-        });
-
-        // Ativa o primeiro (Detalhes)
-        detailsTab.classList.remove('text-gray-500', 'border-transparent');
-        detailsTab.classList.add('text-indigo-600', 'border-indigo-500');
-
-        // Mostra o conteúdo do primeiro
+        const firstTab = modal.querySelector('[data-tab="dados-estoque"]');
+        allTabs.forEach(tab => { tab.classList.remove('text-indigo-600', 'border-indigo-500'); tab.classList.add('text-gray-500', 'border-transparent'); });
+        firstTab.classList.remove('text-gray-500', 'border-transparent');
+        firstTab.classList.add('text-indigo-600', 'border-indigo-500');
         modal.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
-        document.getElementById('details-tab-content').classList.remove('hidden');
+        document.getElementById('dados-estoque-tab-content').classList.remove('hidden');
 
         modal.classList.remove('hidden');
-
     } catch(error) {
         alert(error.message);
     }
@@ -415,14 +423,18 @@ async function saveProductDetails() {
     if (!currentProduct) return;
     const btn = document.getElementById('save-details-btn');
     btn.disabled = true;
-    btn.textContent = 'A Salvar...';
+    btn.textContent = 'Salvando...';
+    
     const payload = {
         pd_nome: document.getElementById('pd-nome-input').value,
         pd_barr: document.getElementById('pd-barr-input').value,
+        pd_refe: document.getElementById('pd-refe-input').value,
         pd_fabr: document.getElementById('pd-fabr-input').value,
+        pd_nmgr: document.getElementById('pd-nmgr-input').value,
         pd_unid: document.getElementById('pd-unid-input').value,
-        pd_cara: document.getElementById('pd-cara-input').value,
+        pd_cara: currentProduct.details.pd_cara || '' 
     };
+
     try {
         const response = await fetch(`${apiUrlBase}/produtos/${currentProduct.details.pd_regi}`, {
             method: 'PUT',
@@ -437,7 +449,7 @@ async function saveProductDetails() {
         alert('Erro ao salvar dados do produto: ' + error.message);
     } finally {
         btn.disabled = false;
-        btn.textContent = 'Salvar Dados Cadastrais';
+        btn.textContent = 'Salvar Dados';
     }
 }
 

@@ -15,8 +15,11 @@ const dbConfigSei = {
 
 const mainDbName = process.env.DB_DATABASE || 'gerencial_lucamat';
 
+// ROTA PRINCIPAL DE BUSCA - ATUALIZADA COM NOVOS FILTROS
 router.get('/', authenticateToken, async (req, res) => {
-    const { filialId, search, page = 1, limit = 20 } = req.query;
+    // Adicionados novos filtros: status, grupo, fabricante
+    const { filialId, search, status = 'ativos', grupo, fabricante, page = 1, limit = 20 } = req.query;
+    
     let connection;
     try {
         connection = await mysql.createConnection(dbConfigSei);
@@ -24,14 +27,35 @@ router.get('/', authenticateToken, async (req, res) => {
         const params = [];
         let whereClauses = ["p.pd_codi IS NOT NULL AND p.pd_codi != ''"];
 
+        // Lógica do filtro de Status (Cancelados/Ativos)
+        if (status === 'ativos') {
+            whereClauses.push(`(p.pd_canc IS NULL OR p.pd_canc = 'N' OR p.pd_canc = '')`);
+        } else if (status === 'cancelados') {
+            whereClauses.push(`p.pd_canc = 'S'`);
+        }
+        // Se status for 'todos', não adiciona cláusula de cancelamento
+
         if (search) {
             whereClauses.push(`(p.pd_nome LIKE ? OR p.pd_codi LIKE ? OR p.pd_barr LIKE ?)`);
             const searchTerm = `%${search}%`;
             params.push(searchTerm, searchTerm, searchTerm);
         }
+
+        // Lógica do filtro de Grupo
+        if (grupo) {
+            whereClauses.push('p.pd_nmgr = ?');
+            params.push(grupo);
+        }
+
+        // Lógica do filtro de Fabricante
+        if (fabricante) {
+            whereClauses.push('p.pd_fabr = ?');
+            params.push(fabricante);
+        }
         
         const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
-        const countQuery = `SELECT COUNT(*) as total FROM produtos p ${whereSql}`;
+        
+        const countQuery = `SELECT COUNT(DISTINCT p.pd_regi) as total FROM produtos p ${whereSql}`;
         const [totalResult] = await connection.execute(countQuery, params);
         const totalItems = totalResult[0].total;
 
@@ -39,15 +63,52 @@ router.get('/', authenticateToken, async (req, res) => {
             SELECT p.pd_regi, p.pd_codi, p.pd_nome, p.pd_barr, COALESCE(e.ef_fisico, 0) as estoque_fisico_filial
             FROM produtos p
             LEFT JOIN estoque e ON p.pd_codi = e.ef_codigo AND e.ef_idfili = ?
-            ${whereSql} ORDER BY p.pd_nome ASC LIMIT ? OFFSET ?`;
+            ${whereSql} 
+            GROUP BY p.pd_regi
+            ORDER BY p.pd_nome ASC 
+            LIMIT ? OFFSET ?`;
         
         const finalParams = [filialId || null, ...params, parseInt(limit), offset];
         const [products] = await connection.execute(dataQuery, finalParams);
 
-        res.json({ totalItems, totalPages: Math.ceil(totalItems / limit), currentPage: parseInt(page), data: products });
+        res.json({ totalItems, data: products });
     } catch (error) {
         console.error("Erro ao buscar produtos:", error);
         res.status(500).json({ error: 'Erro interno do servidor ao buscar produtos.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// NOVA ROTA PARA BUSCAR A LISTA DE GRUPOS
+router.get('/grupos', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfigSei);
+        const [rows] = await connection.execute(
+            "SELECT DISTINCT pd_nmgr FROM produtos WHERE pd_nmgr IS NOT NULL AND pd_nmgr != '' ORDER BY pd_nmgr ASC"
+        );
+        res.json(rows.map(row => row.pd_nmgr));
+    } catch (error) {
+        console.error("Erro ao buscar grupos:", error);
+        res.status(500).json({ error: 'Erro ao buscar grupos de produtos.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// NOVA ROTA PARA BUSCAR A LISTA DE FABRICANTES
+router.get('/fabricantes', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfigSei);
+        const [rows] = await connection.execute(
+            "SELECT DISTINCT pd_fabr FROM produtos WHERE pd_fabr IS NOT NULL AND pd_fabr != '' ORDER BY pd_fabr ASC"
+        );
+        res.json(rows.map(row => row.pd_fabr));
+    } catch (error) {
+        console.error("Erro ao buscar fabricantes:", error);
+        res.status(500).json({ error: 'Erro ao buscar fabricantes.' });
     } finally {
         if (connection) await connection.end();
     }
@@ -108,7 +169,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
 router.put('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
-    const { pd_nome, pd_barr, pd_cara, pd_refe, pd_unid, pd_fabr, pd_pcom, pd_pcus, pd_vdp1 } = req.body;
+    // Nota: Adicionei os novos campos que podem ser editados no modal
+    const { pd_nome, pd_barr, pd_cara, pd_refe, pd_unid, pd_fabr, pd_nmgr } = req.body;
     if (!pd_nome || !pd_unid) {
         return res.status(400).json({ error: 'Nome e Unidade do produto são obrigatórios.' });
     }
@@ -118,9 +180,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
         const sql = `
             UPDATE produtos SET
                 pd_nome = ?, pd_barr = ?, pd_cara = ?, pd_refe = ?, pd_unid = ?,
-                pd_fabr = ?, pd_pcom = ?, pd_pcus = ?, pd_vdp1 = ?
+                pd_fabr = ?, pd_nmgr = ?
             WHERE pd_regi = ?`;
-        const params = [pd_nome, pd_barr, pd_cara, pd_refe, pd_unid, pd_fabr, pd_pcom, pd_pcus, pd_vdp1, id];
+        const params = [pd_nome, pd_barr, pd_cara, pd_refe, pd_unid, pd_fabr, pd_nmgr, id];
         await connection.execute(sql, params);
         res.json({ message: 'Dados do produto atualizados com sucesso!' });
     } catch (error) {
