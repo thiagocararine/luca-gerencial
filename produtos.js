@@ -298,6 +298,7 @@ function initializeProductsTable() {
             then: results => {
                 gridInstance.config.data = results.data;
                 return results.data.map(p => {
+                    // Se a API retornar 'estoque_detalhado', criamos o HTML para o tooltip
                     const estoqueCell = p.estoque_detalhado
                         ? gridjs.html(`<span class="cursor-pointer underline decoration-dotted" data-tippy-content="${p.estoque_detalhado.replace(/\n/g, '<br>')}">${p.estoque_fisico_filial}</span>`)
                         : p.estoque_fisico_filial;
@@ -346,8 +347,11 @@ function initializeProductsTable() {
             'error': 'Ocorreu um erro ao buscar os dados'
         }
     }).render(wrapper);
-    
+
+    // LÓGICA CORRIGIDA PARA ATIVAR OS TOOLTIPS
     gridInstance.on('ready', () => {
+        // Esta função varre a tabela renderizada e ativa o Tippy.js
+        // em todos os elementos que têm o atributo 'data-tippy-content'
         tippy('[data-tippy-content]', {
             allowHTML: true,
             theme: 'light-border',
@@ -365,9 +369,6 @@ function initializeProductsTable() {
                 setTimeout(() => tr.classList.remove('bg-indigo-100'), 300);
             }
             openEditModal(rowData);
-        } else {
-            console.error('Não foi possível encontrar os dados para o produto de código:', productCode);
-            alert('Ocorreu um erro ao tentar abrir os detalhes do produto.');
         }
     });
 }
@@ -397,11 +398,10 @@ async function openEditModal(rowData) {
         document.getElementById('pd-fabr-input').value = data.details.pd_fabr || '';
         document.getElementById('pd-nmgr-input').value = data.details.pd_nmgr || '';
         document.getElementById('pd-unid-input').value = data.details.pd_unid || '';
-
+        
         // ---- Aba "Estoque" ----
         document.getElementById('pd-estm-input').value = data.details.pd_estm || 0;
         document.getElementById('pd-estx-input').value = data.details.pd_estx || 0;
-
         const filialFilterValue = document.getElementById('filter-filial').value;
         const stockInfo = data.stockByBranch.find(s => s.ef_idfili.toString() === filialFilterValue);
         document.getElementById('ef-fisico-input').value = stockInfo ? stockInfo.ef_fisico : 0;
@@ -411,18 +411,14 @@ async function openEditModal(rowData) {
         // ---- Aba "Financeiro & Preços" ----
         const formatCurrency = (value) => `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
         const formatPercent = (value) => `${Number(value || 0).toFixed(2).replace('.', ',')} %`;
-        
         document.getElementById('pd-pcus-input').value = formatCurrency(data.details.pd_pcus);
         document.getElementById('pd-marg-input').value = formatPercent(data.details.pd_marg);
-        document.getElementById('pd-tpr1-input').value = formatCurrency(data.details.pd_tpr1); // CORRIGIDO
+        document.getElementById('pd-tpr1-input').value = formatCurrency(data.details.pd_tpr1);
         
         const pricesContainer = document.getElementById('prices-table-container');
         let pricesHtml = '<ul class="divide-y divide-gray-200">';
         for (let i = 1; i <= 6; i++) {
-            pricesHtml += `<li class="py-2 flex justify-between text-sm">
-                <span class="font-medium text-gray-600">Preço ${i}:</span>
-                <span class="text-gray-900">${formatCurrency(data.details[`pd_tpr${i}`])} (Margem Real: ${formatPercent(data.details[`pd_vdp${i}`])})</span>
-            </li>`;
+            pricesHtml += `<li class="py-2 flex justify-between text-sm"><span class="font-medium text-gray-600">Preço ${i}:</span><span class="text-gray-900">${formatCurrency(data.details[`pd_tpr${i}`])} (Margem Real: ${formatPercent(data.details[`pd_vdp${i}`])})</span></li>`;
         }
         pricesHtml += '</ul>';
         pricesContainer.innerHTML = pricesHtml;
@@ -444,9 +440,7 @@ async function openEditModal(rowData) {
         if (ultimasComprasRaw) {
             const comprasArray = ultimasComprasRaw.split('|').filter(item => item.trim() !== '');
             let comprasHtml = '<ul class="divide-y divide-gray-200">';
-            comprasArray.forEach(compra => {
-                comprasHtml += `<li class="py-1">${compra.trim()}</li>`;
-            });
+            comprasArray.forEach(compra => { comprasHtml += `<li class="py-1">${compra.trim()}</li>`; });
             comprasHtml += '</ul>';
             ultimasComprasLista.innerHTML = comprasHtml;
         } else {
@@ -455,18 +449,22 @@ async function openEditModal(rowData) {
 
         // ---- Resetar e Mostrar o Modal ----
         const allTabs = modal.querySelectorAll('.tab-button');
-        const firstTab = modal.querySelector('[data-tab="dados-estoque"]');
+        
+        // CORREÇÃO APLICADA AQUI: O seletor busca o data-tab correto
+        const firstTab = modal.querySelector('[data-tab="dados-cadastrais"]');
         
         allTabs.forEach(tab => { 
             tab.classList.remove('text-indigo-600', 'border-indigo-500'); 
             tab.classList.add('text-gray-500', 'border-transparent'); 
         });
         
-        firstTab.classList.remove('text-gray-500', 'border-transparent');
-        firstTab.classList.add('text-indigo-600', 'border-indigo-500');
+        if (firstTab) {
+            firstTab.classList.remove('text-gray-500', 'border-transparent');
+            firstTab.classList.add('text-indigo-600', 'border-indigo-500');
+        }
         
         modal.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
-        document.getElementById('dados-estoque-tab-content').classList.remove('hidden');
+        document.getElementById('dados-cadastrais-tab-content').classList.remove('hidden');
 
         modal.classList.remove('hidden');
 
