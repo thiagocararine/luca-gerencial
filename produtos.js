@@ -423,22 +423,96 @@ async function openEditModal(rowData) {
         document.getElementById('pd-pesb-input').value = `${Number(data.details.pd_pesb || 0).toFixed(3).replace('.', ',')} kg`;
         document.getElementById('pd-pesl-input').value = `${Number(data.details.pd_pesl || 0).toFixed(3).replace('.', ',')} kg`;
 
-        // ---- Aba "Histórico" ----
-        document.getElementById('pd-ula1-input').value = data.details.pd_ula1 || 'N/A';
-        document.getElementById('pd-ula2-input').value = data.details.pd_ula2 || 'N/A';
-
-        const ultimasComprasLista = document.getElementById('ultimas-compras-lista');
+        // ---- Aba "Histórico" (NOVA LÓGICA) ----
+        const historicoContainer = document.getElementById('historico-tab-content');
         const ultimasComprasRaw = data.details.pd_ulcm || '';
-        if (ultimasComprasRaw) {
-            const comprasArray = ultimasComprasRaw.split('|').filter(item => item.trim() !== '');
-            let comprasHtml = '<ul class="divide-y divide-gray-200">';
-            comprasArray.forEach(compra => { comprasHtml += `<li class="py-1">${compra.trim()}</li>`; });
-            comprasHtml += '</ul>';
-            ultimasComprasLista.innerHTML = comprasHtml;
-        } else {
-            ultimasComprasLista.innerHTML = '<p class="text-gray-500">Nenhum registro de compra encontrado.</p>';
+        
+        // 1. Pega a filial selecionada no filtro principal
+        const filialSelecionada = document.getElementById('filter-filial').value;
+
+        // 2. Quebra o texto bruto em registros individuais
+        let todosOsRegistros = ultimasComprasRaw.split('|').filter(item => item.trim() !== '');
+
+        // 3. Filtra os registros pela filial selecionada (se houver uma)
+        let registrosFiltrados = todosOsRegistros;
+        if (filialSelecionada) {
+            registrosFiltrados = todosOsRegistros.filter(registro => {
+                const partes = registro.split(',');
+                // Parte 16 (índice 15) contém a filial nos 5 primeiros caracteres
+                const filialDoRegistro = partes[15] ? partes[15].trim().substring(0, 5) : '';
+                return filialDoRegistro === filialSelecionada;
+            });
         }
 
+        // 4. Pega os dois últimos registros da lista (filtrada ou não)
+        const duasUltimasCompras = registrosFiltrados.slice(-2);
+
+        // 5. Monta a tabela de comparação
+        let historicoHtml = '';
+        if (duasUltimasCompras.length > 0) {
+            const parseCompra = (compraString) => {
+                // ASSUMINDO que o separador das partes é a VÍRGULA
+                const partes = compraString.split(',');
+                return {
+                    fornecedor: partes[0]?.trim() || 'N/A',
+                    nf: partes[1]?.trim() || 'N/A',
+                    data: partes[2]?.trim() || 'N/A',
+                    hora: partes[3]?.trim() || 'N/A',
+                    usuario: partes[4]?.trim() || 'N/A',
+                    quantidade: partes[5]?.trim() || 'N/A',
+                    preco: partes[6]?.trim() || 'N/A',
+                    controle: partes[13]?.trim() || 'N/A',
+                    estoqueAnterior: partes[14]?.trim() || 'N/A',
+                    filial: partes[15]?.trim().substring(0, 5) || 'N/A',
+                };
+            };
+            
+            const ultima = parseCompra(duasUltimasCompras[duasUltimasCompras.length - 1]);
+            const penultima = duasUltimasCompras.length > 1 ? parseCompra(duasUltimasCompras[0]) : null;
+
+            const atributos = [
+                { label: 'Fornecedor', key: 'fornecedor' },
+                { label: 'Nota Fiscal', key: 'nf' },
+                { label: 'Data/Hora', key: 'data', key2: 'hora' },
+                { label: 'Usuário', key: 'usuario' },
+                { label: 'Quantidade', key: 'quantidade' },
+                { label: 'Preço Compra', key: 'preco' },
+                { label: 'Nº Controle', key: 'controle' },
+                { label: 'Estoque Anterior', key: 'estoqueAnterior' },
+                { label: 'Filial', key: 'filial' },
+            ];
+
+            historicoHtml = `
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2">Atributo</th>
+                            <th class="px-4 py-2">${penultima ? 'Penúltima Compra' : 'Única Compra'}</th>
+                            ${penultima ? '<th class="px-4 py-2">Última Compra</th>' : ''}
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y">
+            `;
+
+            atributos.forEach(attr => {
+                const valorUltima = attr.key2 ? `${ultima[attr.key]} ${ultima[attr.key2]}` : ultima[attr.key];
+                const valorPenultima = penultima ? (attr.key2 ? `${penultima[attr.key]} ${penultima[attr.key2]}` : penultima[attr.key]) : null;
+
+                historicoHtml += `
+                    <tr>
+                        <td class="px-4 py-2 font-medium text-gray-800">${attr.label}</td>
+                        <td class="px-4 py-2">${valorPenultima || valorUltima}</td>
+                        ${penultima ? `<td class="px-4 py-2">${valorUltima}</td>` : ''}
+                    </tr>
+                `;
+            });
+            historicoHtml += '</tbody></table>';
+
+        } else {
+            historicoHtml = '<p class="text-gray-500 p-4 text-center">Nenhum histórico de compra encontrado para a filial selecionada.</p>';
+        }
+        historicoContainer.innerHTML = historicoHtml;
+        
         // ---- Resetar e Mostrar o Modal ----
         const allTabs = modal.querySelectorAll('.tab-button');
         const firstTab = modal.querySelector('[data-tab="dados-cadastrais"]');
