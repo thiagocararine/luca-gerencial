@@ -365,6 +365,7 @@ function initializeProductsTable() {
     });
 }
 
+// Substitua esta função inteira em produtos.js
 async function openEditModal(rowData) {
     const modal = document.getElementById('product-edit-modal');
     document.getElementById('product-modal-title').textContent = rowData.pd_nome;
@@ -423,36 +424,31 @@ async function openEditModal(rowData) {
         document.getElementById('pd-pesb-input').value = `${Number(data.details.pd_pesb || 0).toFixed(3).replace('.', ',')} kg`;
         document.getElementById('pd-pesl-input').value = `${Number(data.details.pd_pesl || 0).toFixed(3).replace('.', ',')} kg`;
 
-        // ---- Aba "Histórico" (NOVA LÓGICA) ----
+        // ---- Aba "Histórico" (LÓGICA CORRIGIDA) ----
         const historicoContainer = document.getElementById('historico-tab-content');
         const ultimasComprasRaw = data.details.pd_ulcm || '';
         
-        // 1. Pega a filial selecionada no filtro principal
         const filialSelecionada = document.getElementById('filter-filial').value;
 
-        // 2. Quebra o texto bruto em registros individuais
         let todosOsRegistros = ultimasComprasRaw.split('|').filter(item => item.trim() !== '');
 
-        // 3. Filtra os registros pela filial selecionada (se houver uma)
         let registrosFiltrados = todosOsRegistros;
         if (filialSelecionada) {
             registrosFiltrados = todosOsRegistros.filter(registro => {
-                const partes = registro.split(',');
-                // Parte 16 (índice 15) contém a filial nos 5 primeiros caracteres
+                // CORREÇÃO APLICADA AQUI: O separador agora é a quebra de linha (\n)
+                const partes = registro.split('\n');
                 const filialDoRegistro = partes[15] ? partes[15].trim().substring(0, 5) : '';
                 return filialDoRegistro === filialSelecionada;
             });
         }
 
-        // 4. Pega os dois últimos registros da lista (filtrada ou não)
         const duasUltimasCompras = registrosFiltrados.slice(-2);
 
-        // 5. Monta a tabela de comparação
         let historicoHtml = '';
         if (duasUltimasCompras.length > 0) {
             const parseCompra = (compraString) => {
-                // ASSUMINDO que o separador das partes é a VÍRGULA
-                const partes = compraString.split(',');
+                // CORREÇÃO APLICADA AQUI: O separador agora é a quebra de linha (\n)
+                const partes = compraString.split('\n');
                 return {
                     fornecedor: partes[0]?.trim() || 'N/A',
                     nf: partes[1]?.trim() || 'N/A',
@@ -486,9 +482,9 @@ async function openEditModal(rowData) {
                 <table class="w-full text-sm text-left">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-4 py-2">Atributo</th>
-                            <th class="px-4 py-2">${penultima ? 'Penúltima Compra' : 'Única Compra'}</th>
-                            ${penultima ? '<th class="px-4 py-2">Última Compra</th>' : ''}
+                            <th class="px-4 py-2 font-medium">Atributo</th>
+                            <th class="px-4 py-2 font-medium">${penultima ? 'Penúltima Compra' : 'Única Compra'}</th>
+                            ${penultima ? '<th class="px-4 py-2 font-medium">Última Compra</th>' : ''}
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y">
@@ -500,9 +496,9 @@ async function openEditModal(rowData) {
 
                 historicoHtml += `
                     <tr>
-                        <td class="px-4 py-2 font-medium text-gray-800">${attr.label}</td>
-                        <td class="px-4 py-2">${valorPenultima || valorUltima}</td>
-                        ${penultima ? `<td class="px-4 py-2">${valorUltima}</td>` : ''}
+                        <td class="px-4 py-2 font-semibold text-gray-800">${attr.label}</td>
+                        <td class="px-4 py-2 text-gray-600">${valorPenultima || valorUltima}</td>
+                        ${penultima ? `<td class="px-4 py-2 text-gray-600">${valorUltima}</td>` : ''}
                     </tr>
                 `;
             });
@@ -516,23 +512,21 @@ async function openEditModal(rowData) {
         // ---- Resetar e Mostrar o Modal ----
         const allTabs = modal.querySelectorAll('.tab-button');
         const firstTab = modal.querySelector('[data-tab="dados-cadastrais"]');
-        
         allTabs.forEach(tab => { 
             tab.classList.remove('text-indigo-600', 'border-indigo-500'); 
             tab.classList.add('text-gray-500', 'border-transparent'); 
         });
-        
         if (firstTab) {
             firstTab.classList.remove('text-gray-500', 'border-transparent');
             firstTab.classList.add('text-indigo-600', 'border-indigo-500');
         }
-        
         modal.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
         document.getElementById('dados-cadastrais-tab-content').classList.remove('hidden');
 
         modal.classList.remove('hidden');
 
     } catch(error) {
+        console.error("Erro em openEditModal:", error);
         alert(error.message);
     }
 }
