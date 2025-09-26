@@ -4,6 +4,7 @@ const apiUrlBase = '/api';
 let gridInstance = null;
 let currentProduct = null;
 let resizeTimer;
+let activeCodeReader = null;
 let tomSelectInstances = {
     grupo: null,
     fabricante: null
@@ -540,7 +541,10 @@ function startScannerForDevice(deviceId) {
         activeCodeReader.reset();
     }
     const hints = new Map();
-    const formats = [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E];
+    const formats = [
+        ZXing.BarcodeFormat.EAN_13, 
+        ZXing.BarcodeFormat.CODE_128 
+    ];
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
     activeCodeReader = new ZXing.BrowserMultiFormatReader(hints);
     activeCodeReader.decodeFromVideoDevice(deviceId, 'barcode-scanner-video', (result, err) => {
