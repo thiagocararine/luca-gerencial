@@ -285,6 +285,7 @@ async function renderProductCards() {
     }
 }
 
+// Substitua esta função inteira em produtos.js
 function initializeProductsTable() {
     if (gridInstance) {
         gridInstance.destroy();
@@ -312,7 +313,8 @@ function initializeProductsTable() {
                     return [p.pd_codi, p.pd_nome, p.pd_nmgr, p.pd_fabr, estoqueCell];
                 });
                 
-                // Ativa o Tippy depois que os dados são mapeados
+                // Ativa o Tippy depois que os dados são mapeados e prontos para renderizar.
+                // Usamos um setTimeout(0) para garantir que isso execute após o Grid.js atualizar o DOM.
                 setTimeout(() => {
                     tippy('[data-tippy-content]', {
                         allowHTML: true,
