@@ -366,7 +366,6 @@ function initializeProductsTable() {
 }
 
 // Substitua esta função inteira em produtos.js
-// Substitua esta função inteira em produtos.js
 async function openEditModal(rowData) {
     const modal = document.getElementById('product-edit-modal');
     document.getElementById('product-modal-title').textContent = rowData.pd_nome;
