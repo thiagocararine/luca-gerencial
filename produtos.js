@@ -198,6 +198,20 @@ function setupEventListeners() {
     document.getElementById('save-stock-btn').addEventListener('click', saveStockAdjustment);
     
     setupBarcodeScannerListeners();
+
+    // --- LÓGICA DO NOVO BOTÃO DE SCANNER DO MODAL ---
+    document.getElementById('scan-barcode-modal-btn').addEventListener('click', () => {
+        // Abre o modal do scanner que já existe
+        document.getElementById('barcode-scanner-modal').classList.remove('hidden');
+        
+        // Inicia o scanner, mas com um callback diferente
+        // para atualizar o campo do modal, e não o filtro da página.
+        startScannerForDevice(videoInputDevices[currentDeviceIndex]?.deviceId, (scannedText) => {
+            // Este é o código que será executado quando um código for lido
+            document.getElementById('pd-barr-input').value = scannedText;
+            stopBarcodeScanner(); // Fecha o modal do scanner
+        });
+    });
 }
 
 async function populateFilialFilter() {
@@ -297,7 +311,18 @@ function initializeProductsTable() {
 
                     return [p.pd_codi, p.pd_nome, p.pd_nmgr, p.pd_fabr, estoqueCell];
                 });
+                setTimeout(() => {
+                    tippy('[data-tippy-content]', {
+                        allowHTML: true,
+                        theme: 'light-border',
+                        placement: 'top',
+                        zIndex: 99999, 
+                    });
+                }, 0);
+
+                return mappedData;
             },
+            
             total: results => results.totalItems
         },
         pagination: {
@@ -340,17 +365,6 @@ function initializeProductsTable() {
         }
     }).render(wrapper);
     
-    gridInstance.on('ready', () => {
-        tippy('[data-tippy-content]', {
-            allowHTML: true,
-            theme: 'light-border',
-            placement: 'top',
-            // --- ESTA É A CORREÇÃO PRINCIPAL ---
-            // Força o tooltip a ter a camada mais alta possível
-            zIndex: 99999, 
-        });
-    });
-
     gridInstance.on('rowClick', (event, row) => {
         const productCode = row.cells[0].data;
         const rowData = gridInstance.config.data.find(p => p.pd_codi === productCode);
@@ -603,22 +617,27 @@ async function saveStockAdjustment() {
     }
 }
 
-function startScannerForDevice(deviceId) {
+function startScannerForDevice(deviceId, onScanSuccess) {
     if (activeCodeReader) {
         activeCodeReader.reset();
     }
     const hints = new Map();
-    const formats = [
-        ZXing.BarcodeFormat.EAN_13, 
-        ZXing.BarcodeFormat.CODE_128 
-    ];
+    const formats = [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E];
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+    
     activeCodeReader = new ZXing.BrowserMultiFormatReader(hints);
+    
     activeCodeReader.decodeFromVideoDevice(deviceId, 'barcode-scanner-video', (result, err) => {
         if (result) {
-            document.getElementById('filter-search').value = result.text;
-            stopBarcodeScanner();
-            renderContent();
+            // Se uma função de sucesso foi passada, use-a.
+            if (onScanSuccess) {
+                onScanSuccess(result.text);
+            } else {
+                // Senão, use o comportamento padrão (atualizar o filtro da página)
+                document.getElementById('filter-search').value = result.text;
+                stopBarcodeScanner();
+                renderContent();
+            }
         }
         if (err && !(err instanceof ZXing.NotFoundException)) {
             console.error("Erro de decodificação:", err);
