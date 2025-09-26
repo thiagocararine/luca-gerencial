@@ -304,13 +304,15 @@ function initializeProductsTable() {
             headers: { 'Authorization': `Bearer ${getToken()}` },
             then: results => {
                 gridInstance.config.data = results.data;
-                return results.data.map(p => {
+                const mappedData = results.data.map(p => {
                     const estoqueCell = p.estoque_detalhado
                         ? gridjs.html(`<span class="cursor-pointer underline decoration-dotted" data-tippy-content="${p.estoque_detalhado.replace(/\n/g, '<br>')}">${p.estoque_fisico_filial}</span>`)
                         : p.estoque_fisico_filial;
 
                     return [p.pd_codi, p.pd_nome, p.pd_nmgr, p.pd_fabr, estoqueCell];
                 });
+                
+                // Ativa o Tippy depois que os dados são mapeados
                 setTimeout(() => {
                     tippy('[data-tippy-content]', {
                         allowHTML: true,
@@ -322,7 +324,6 @@ function initializeProductsTable() {
 
                 return mappedData;
             },
-            
             total: results => results.totalItems
         },
         pagination: {
@@ -351,20 +352,11 @@ function initializeProductsTable() {
         sort: false,
         language: {
             'search': { 'placeholder': '🔍 Buscar...' },
-            'pagination': {
-                'previous': 'Anterior',
-                'next': 'Próximo',
-                'showing': 'Mostrando',
-                'to': 'a',
-                'of': 'de',
-                'results': 'resultados',
-            },
-            'loading': 'Carregando...',
-            'noRecordsFound': 'Nenhum produto encontrado',
-            'error': 'Ocorreu um erro ao buscar os dados'
+            'pagination': { 'previous': 'Anterior', 'next': 'Próximo', 'showing': 'Mostrando', 'to': 'a', 'of': 'de', 'results': 'resultados' },
+            'loading': 'Carregando...', 'noRecordsFound': 'Nenhum produto encontrado', 'error': 'Ocorreu um erro ao buscar os dados'
         }
     }).render(wrapper);
-    
+
     gridInstance.on('rowClick', (event, row) => {
         const productCode = row.cells[0].data;
         const rowData = gridInstance.config.data.find(p => p.pd_codi === productCode);
