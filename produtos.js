@@ -366,6 +366,7 @@ function initializeProductsTable() {
 }
 
 // Substitua esta função inteira em produtos.js
+// Substitua esta função inteira em produtos.js
 async function openEditModal(rowData) {
     const modal = document.getElementById('product-edit-modal');
     document.getElementById('product-modal-title').textContent = rowData.pd_nome;
@@ -402,7 +403,7 @@ async function openEditModal(rowData) {
         document.getElementById('ajuste-motivo-input').value = '';
 
         // ---- Aba "Financeiro & Preços" ----
-        const formatCurrency = (value) => `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
+        const formatCurrency = (value, decimals = 2) => `R$ ${Number(value || 0).toFixed(decimals).replace('.', ',')}`;
         const formatPercent = (value) => `${Number(value || 0).toFixed(2).replace('.', ',')} %`;
         document.getElementById('pd-pcus-input').value = formatCurrency(data.details.pd_pcus);
         document.getElementById('pd-marg-input').value = formatPercent(data.details.pd_marg);
@@ -424,20 +425,22 @@ async function openEditModal(rowData) {
         document.getElementById('pd-pesb-input').value = `${Number(data.details.pd_pesb || 0).toFixed(3).replace('.', ',')} kg`;
         document.getElementById('pd-pesl-input').value = `${Number(data.details.pd_pesl || 0).toFixed(3).replace('.', ',')} kg`;
 
-        // ---- Aba "Histórico" (LÓGICA CORRIGIDA) ----
+        // ---- Aba "Histórico" (LÓGICA 100% CORRIGIDA) ----
         const historicoContainer = document.getElementById('historico-tab-content');
         const ultimasComprasRaw = data.details.pd_ulcm || '';
         
         const filialSelecionada = document.getElementById('filter-filial').value;
 
-        let todosOsRegistros = ultimasComprasRaw.split('|').filter(item => item.trim() !== '');
+        // 1. Separa os registros de compra por QUEBRA DE LINHA
+        let todosOsRegistros = ultimasComprasRaw.split('\n').filter(item => item.trim() !== '');
 
+        // 2. Filtra os registros pela filial selecionada (se houver uma)
         let registrosFiltrados = todosOsRegistros;
         if (filialSelecionada) {
             registrosFiltrados = todosOsRegistros.filter(registro => {
-                // CORREÇÃO APLICADA AQUI: O separador agora é a quebra de linha (\n)
-                const partes = registro.split('\n');
-                const filialDoRegistro = partes[15] ? partes[15].trim().substring(0, 5) : '';
+                const partes = registro.split('|');
+                // A filial está na 18ª posição (índice 17)
+                const filialDoRegistro = partes[17] ? partes[17].trim() : '';
                 return filialDoRegistro === filialSelecionada;
             });
         }
@@ -447,34 +450,31 @@ async function openEditModal(rowData) {
         let historicoHtml = '';
         if (duasUltimasCompras.length > 0) {
             const parseCompra = (compraString) => {
-                // CORREÇÃO APLICADA AQUI: O separador agora é a quebra de linha (\n)
-                const partes = compraString.split('\n');
+                // 3. Separa as informações de CADA compra pelo PIPE
+                const partes = compraString.split('|');
                 return {
                     fornecedor: partes[0]?.trim() || 'N/A',
                     nf: partes[1]?.trim() || 'N/A',
                     data: partes[2]?.trim() || 'N/A',
                     hora: partes[3]?.trim() || 'N/A',
                     usuario: partes[4]?.trim() || 'N/A',
-                    quantidade: partes[5]?.trim() || 'N/A',
-                    preco: partes[6]?.trim() || 'N/A',
-                    controle: partes[13]?.trim() || 'N/A',
-                    estoqueAnterior: partes[14]?.trim() || 'N/A',
-                    filial: partes[15]?.trim().substring(0, 5) || 'N/A',
+                    quantidade: `${parseFloat(partes[5] || 0).toFixed(4).replace('.', ',')}`,
+                    preco: formatCurrency(partes[6], 4),
+                    controle: partes[14]?.trim() || 'N/A',
+                    estoqueAnterior: `${parseFloat(partes[15] || 0).toFixed(4).replace('.', ',')}`,
+                    filial: partes[17]?.trim() || 'N/A',
                 };
             };
             
+            // A ordem é invertida: a última compra é a mais recente.
             const ultima = parseCompra(duasUltimasCompras[duasUltimasCompras.length - 1]);
             const penultima = duasUltimasCompras.length > 1 ? parseCompra(duasUltimasCompras[0]) : null;
 
             const atributos = [
-                { label: 'Fornecedor', key: 'fornecedor' },
-                { label: 'Nota Fiscal', key: 'nf' },
-                { label: 'Data/Hora', key: 'data', key2: 'hora' },
-                { label: 'Usuário', key: 'usuario' },
-                { label: 'Quantidade', key: 'quantidade' },
-                { label: 'Preço Compra', key: 'preco' },
-                { label: 'Nº Controle', key: 'controle' },
-                { label: 'Estoque Anterior', key: 'estoqueAnterior' },
+                { label: 'Fornecedor', key: 'fornecedor' }, { label: 'Nota Fiscal', key: 'nf' },
+                { label: 'Data/Hora', key: 'data', key2: 'hora' }, { label: 'Usuário', key: 'usuario' },
+                { label: 'Quantidade', key: 'quantidade' }, { label: 'Preço Compra', key: 'preco' },
+                { label: 'Nº Controle', key: 'controle' }, { label: 'Estoque Anterior', key: 'estoqueAnterior' },
                 { label: 'Filial', key: 'filial' },
             ];
 
@@ -487,21 +487,21 @@ async function openEditModal(rowData) {
                             ${penultima ? '<th class="px-4 py-2 font-medium">Última Compra</th>' : ''}
                         </tr>
                     </thead>
-                    <tbody class="bg-white divide-y">
+                    <tbody class="bg-white divide-y divide-gray-200">
             `;
 
-            atributos.forEach(attr => {
-                const valorUltima = attr.key2 ? `${ultima[attr.key]} ${ultima[attr.key2]}` : ultima[attr.key];
-                const valorPenultima = penultima ? (attr.key2 ? `${penultima[attr.key]} ${penultima[attr.key2]}` : penultima[attr.key]) : null;
+            for (const attr of atributos) {
+                const valorPenultima = penultima ? (attr.key2 ? `${penultima[attr.key]} ${penultima[attr.key2]}` : penultima[attr.key]) : 'N/A';
+                const valorUltima = ultima ? (attr.key2 ? `${ultima[attr.key]} ${ultima[attr.key2]}` : ultima[attr.key]) : 'N/A';
 
                 historicoHtml += `
                     <tr>
                         <td class="px-4 py-2 font-semibold text-gray-800">${attr.label}</td>
-                        <td class="px-4 py-2 text-gray-600">${valorPenultima || valorUltima}</td>
+                        <td class="px-4 py-2 text-gray-600">${penultima ? valorPenultima : valorUltima}</td>
                         ${penultima ? `<td class="px-4 py-2 text-gray-600">${valorUltima}</td>` : ''}
                     </tr>
                 `;
-            });
+            }
             historicoHtml += '</tbody></table>';
 
         } else {
