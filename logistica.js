@@ -3054,6 +3054,8 @@ async function showChecklistReport(checklistId, vehicleInfo) {
         const data = await response.json();
         const { checklist, avarias } = data;
 
+        currentChecklistReportData = { checklist, avarias, vehicleInfo };
+
         // Preenche o cabeçalho do modal
         document.getElementById('report-vehicle-info').textContent = vehicleInfo;
         
