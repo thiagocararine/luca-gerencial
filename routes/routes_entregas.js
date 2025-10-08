@@ -69,17 +69,28 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             mysql.createConnection(dbConfig)
         ]);
 
+        // Consulta primeiro sem o tipo para dar um erro mais específico
+        const [davCheck] = await seiConnection.execute(
+            `SELECT cr_ndav, cr_tipo FROM cdavs WHERE cr_ndav = ?`,
+            [davNumber]
+        );
+
+        if (davCheck.length === 0) {
+            return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado.` });
+        }
+        if (davCheck[0].cr_tipo != 1) {
+            return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
+        }
+        
+        // Agora busca os dados completos
         const [davs] = await seiConnection.execute(
             `SELECT c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, cl.cl_docume 
              FROM cdavs c
              LEFT JOIN clientes cl ON c.cr_cdcl = cl.cl_codigo
-             WHERE c.cr_ndav = ? AND c.cr_tipo = 1`,
+             WHERE c.cr_ndav = ?`,
             [davNumber]
         );
-
-        if (davs.length === 0) {
-            return res.status(404).json({ error: 'Pedido (DAV) não encontrado ou não é um pedido de venda válido.' });
-        }
+        
         const davData = davs[0];
 
         const [itensDav] = await seiConnection.execute(
@@ -230,12 +241,79 @@ Retirado..: Balcão/Loja`;
 });
 
 
-// --- ENDPOINTS DE ROMANEIO (ESTRUTURA INICIAL) ---
-// (Estes serão implementados na próxima fase)
-router.get('/romaneios', authenticateToken, async (req, res) => res.json([]));
-router.post('/romaneios', authenticateToken, async (req, res) => res.status(201).json({ message: "A ser implementado." }));
+// --- ENDPOINTS DE ROMANEIO ---
+
+// Endpoint para listar veículos ativos para o modal de criação de romaneio
+router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const [veiculos] = await connection.execute(
+            "SELECT id, modelo, placa FROM veiculos WHERE status = 'Ativo' ORDER BY modelo ASC"
+        );
+        res.json(veiculos);
+    } catch (error) {
+        console.error("Erro ao buscar veículos disponíveis:", error);
+        res.status(500).json({ error: 'Erro ao buscar veículos.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// Lista os romaneios (por enquanto, apenas os "Em montagem")
+router.get('/romaneios', authenticateToken, async (req, res) => {
+    let connection;
+    const { status } = req.query;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        let query = `
+            SELECT r.id, r.data_criacao, r.nome_motorista, v.modelo as modelo_veiculo, v.placa as placa_veiculo 
+            FROM romaneios r
+            JOIN veiculos v ON r.id_veiculo = v.id
+        `;
+        const params = [];
+        if (status) {
+            query += ' WHERE r.status = ?';
+            params.push(status);
+        }
+        query += ' ORDER BY r.data_criacao DESC';
+
+        const [romaneios] = await connection.execute(query, params);
+        res.json(romaneios);
+    } catch (error) {
+        console.error("Erro ao buscar romaneios:", error);
+        res.status(500).json({ error: 'Erro ao buscar romaneios.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// Endpoint para criar um novo romaneio
+router.post('/romaneios', authenticateToken, async (req, res) => {
+    const { id_veiculo, nome_motorista } = req.body;
+    const { userId } = req.user;
+
+    if (!id_veiculo || !nome_motorista) {
+        return res.status(400).json({ error: 'Veículo e nome do motorista são obrigatórios.' });
+    }
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const [result] = await connection.execute(
+            'INSERT INTO romaneios (id_veiculo, nome_motorista, id_usuario_criacao) VALUES (?, ?, ?)',
+            [id_veiculo, nome_motorista, userId]
+        );
+        res.status(201).json({ message: "Romaneio criado com sucesso!", romaneioId: result.insertId });
+    } catch (error) {
+        console.error("Erro ao criar romaneio:", error);
+        res.status(500).json({ error: 'Erro interno ao criar o romaneio.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+
 router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => res.status(201).json({ message: "A ser implementado." }));
 
 
 module.exports = router;
-
