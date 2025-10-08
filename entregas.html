@@ -3,24 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Entregas e Expedição - Luca Gerencial</title>
+    <title>Entregas - Luca Gerencial</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="assets/style.css">
     <link rel="icon" href="assets/favicon.ico" type="image/x-icon">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.css" rel="stylesheet">
-
+    
     <style>
         body { font-family: 'Inter', sans-serif; }
         [data-feather] { width: 1.25rem; height: 1.25rem; }
         .modal.hidden { display: none; }
-        .page-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
-        .abstract-background { width: 100%; height: 100%; border-radius: 0; aspect-ratio: auto; }
         .tab-button.active { border-color: #4f46e5; color: #4f46e5; font-weight: 600; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
-        .action-btn { padding: 0.5rem 1rem; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 600; border: none; cursor: pointer; transition: background-color 0.2s; }
+        .page-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
+        .abstract-background { width: 100%; height: 100%; border-radius: 0; aspect-ratio: auto; }
+        .action-btn { 
+            padding: 0.5rem 1rem; border-radius: 0.375rem; color: white; 
+            font-size: 0.875rem; font-weight: 600; border: none; cursor: pointer;
+            transition: background-color 0.2s;
+        }
     </style>
 </head>
 <body class="h-full">
@@ -36,185 +39,113 @@
         <h2 class="text-center text-white text-xl font-semibold">Aguarde...</h2>
     </div>
 
-    <div class="flex h-full">
-        <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
-        
-        <nav id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-white/80 backdrop-blur-sm shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
-            <!-- Seu menu lateral (sidebar) completo vai aqui. Copie de outro arquivo como logistica.html e cole aqui, marcando este link como ativo. -->
-            <div class="flex flex-col h-full">
-                <div class="h-16 flex items-center justify-center border-b border-gray-200/50 px-4 gap-2">
-                    <img id="company-logo" src="" alt="Logo da Empresa" style="display: none; max-height: 40px;" class="max-h-10 max-w-10">
-                    <h1 class="text-xl font-bold text-indigo-600 overflow-hidden"><span class="sidebar-text">Luca Gerencial</span></h1>
+<div class="flex h-full">
+    <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
+    <nav id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-white/80 backdrop-blur-sm shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
+        <div class="flex flex-col h-full">
+            <div class="h-16 flex items-center justify-center border-b border-gray-200/50 px-4 gap-2">
+                <img id="company-logo" src="" alt="Logo da Empresa" style="display: none; max-height: 40px;" class="max-h-10 max-w-10">
+                <h1 class="text-xl font-bold text-indigo-600 overflow-hidden"><span class="sidebar-text">Luca Gerencial</span></h1>
+            </div>
+            <div class="flex-grow p-4">
+                <ul class="space-y-2">
+                    <li><a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="home"></span><span class="sidebar-text">Início / Dashboard</span></a></li>
+                    <li><a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="dollar-sign"></span><span class="sidebar-text">Lançamentos</span></a></li>
+                    <li><a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="truck"></span><span class="sidebar-text">Logística</span></a></li>
+                    <li><a href="entregas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium bg-indigo-50 text-indigo-700" aria-current="page"><span data-feather="package"></span><span class="sidebar-text">Entregas</span></a></li>
+                    <li><a href="checklist.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="check-square"></span><span class="sidebar-text">Checklist Veículos</span></a></li>
+                    <li><a href="produtos.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="archive"></span><span class="sidebar-text">Estoque / Produtos</span></a></li>
+                    <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="flex-1 flex flex-col min-w-0">
+        <header class="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
+            <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900"><span data-feather="menu"></span></button>
+            <div class="hidden md:block"></div>
+            <div class="flex items-center gap-4 ml-auto">
+                <span class="text-sm text-gray-700">Olá, <strong id="user-name" class="font-medium">Utilizador</strong>!</span>
+                <button id="logout-button" class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500">Sair</button>
+            </div>
+        </header>
+
+        <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">Módulo de Entregas e Expedição</h2>
+
+            <div class="border-b border-gray-200 mb-6">
+                <nav id="delivery-tabs" class="-mb-px flex space-x-6" aria-label="Tabs">
+                    <button class="tab-button active text-indigo-600 border-indigo-500 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="retirada-rapida">Retirada Rápida (Balcão)</button>
+                    <button class="tab-button text-gray-500 border-transparent hover:text-gray-700 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="romaneios">Gestão de Romaneios</button>
+                </nav>
+            </div>
+
+            <div id="retirada-rapida-content" class="tab-content active">
+                <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow-md mb-6 max-w-2xl mx-auto">
+                    <h3 class="font-semibold text-gray-800 mb-2">Conferência de Pedido para Retirada</h3>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="dav-search-input" placeholder="Digite o número do DAV..." class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <button id="search-dav-btn" class="action-btn bg-indigo-600 text-white hover:bg-indigo-700 flex items-center justify-center gap-2 px-4">
+                            <span data-feather="search" class="w-5 h-5"></span>
+                            <span>Buscar</span>
+                        </button>
+                    </div>
                 </div>
-                <div class="flex-grow p-4">
-                    <ul class="space-y-2">
-                         <li><a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="home"></span><span class="sidebar-text">Início / Dashboard</span></a></li>
-                        <li><a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="dollar-sign"></span><span class="sidebar-text">Lançamentos</span></a></li>
-                        <li><a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="truck"></span><span class="sidebar-text">Logística</span></a></li>
-                        <li><a href="entregas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium bg-indigo-50 text-indigo-700" aria-current="page"><span data-feather="package"></span><span class="sidebar-text">Entregas</span></a></li>
-                        <li><a href="checklist.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="check-square"></span><span class="sidebar-text">Checklist Veículos</span></a></li>
-                        <li><a href="produtos.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="archive"></span><span class="sidebar-text">Estoque / Produtos</span></a></li>
-                        <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
-                    </ul>
-                </div>
-                <div class="p-2 border-t border-gray-200/50">
-                    <button id="sidebar-toggle" class="w-full hidden md:flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none">
-                        <svg id="toggle-icon-collapse" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" /></svg>
-                        <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
+                <div id="dav-results-container" class="hidden mt-6"></div>
+            </div>
+
+            <div id="romaneios-content" class="tab-content">
+                 <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-semibold text-gray-800">Romaneios em Montagem</h3>
+                    <button id="create-romaneio-btn" class="action-btn bg-green-600 hover:bg-green-700 flex items-center gap-2">
+                        <span data-feather="plus-circle"></span>
+                        Criar Novo Romaneio
                     </button>
                 </div>
+                <div id="romaneios-list-container" class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow-md">
+                    <p class="text-center text-gray-500 p-4">Nenhum romaneio em montagem.</p>
+                </div>
             </div>
-        </nav>
 
-        <div class="flex-1 flex flex-col min-w-0">
-            <header class="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
-                <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900"><span data-feather="menu"></span></button>
-                <div class="hidden md:block"></div>
-                <div class="flex items-center gap-4 ml-auto">
-                    <span class="text-sm text-gray-700">Olá, <strong id="user-name" class="font-medium">Utilizador</strong>!</span>
-                    <button id="logout-button" class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500">Sair</button>
-                </div>
-            </header>
+        </main>
+    </div>
+</div>
 
-            <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-                <h2 class="text-2xl font-bold text-gray-900 mb-6">Expedição e Controle de Entregas</h2>
-                
-                <div class="border-b border-gray-200 mb-6">
-                    <nav id="delivery-tabs" class="-mb-px flex space-x-6" aria-label="Tabs">
-                        <button class="tab-button active py-3 px-2 border-b-2 font-medium text-sm" data-tab="retirada">Retirada Rápida (Balcão)</button>
-                        <button class="tab-button py-3 px-2 border-b-2 font-medium text-sm text-gray-500 border-transparent hover:text-gray-700" data-tab="romaneios">Gestão de Romaneios</button>
-                    </nav>
-                </div>
-                
-                <!-- Conteúdo da Aba de Retirada Rápida -->
-                <div id="retirada-content" class="tab-content active">
-                    <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow space-y-4">
-                        <div class="flex flex-col sm:flex-row items-end gap-4">
-                            <div class="flex-grow">
-                                <label for="dav-search-input" class="block text-sm font-medium text-gray-700">Número do Pedido (DAV)</label>
-                                <input type="number" id="dav-search-input" placeholder="Digite o número do DAV..." class="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                            </div>
-                            <button id="search-dav-btn" class="action-btn bg-indigo-600 text-white hover:bg-indigo-700 w-full sm:w-auto flex items-center justify-center gap-2">
-                                <span data-feather="search"></span>Buscar Pedido
-                            </button>
-                        </div>
-                    </div>
-                    <div id="dav-results-container" class="mt-6 hidden">
-                        <!-- Os resultados do DAV serão inseridos aqui via JS -->
-                    </div>
-                </div>
-
-                <!-- Conteúdo da Aba de Romaneios -->
-                <div id="romaneios-content" class="tab-content">
-                    <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow">
-                        <div class="flex justify-between items-center">
-                            <h3 class="text-lg font-semibold text-gray-800">Romaneios em Aberto</h3>
-                            <button id="create-romaneio-btn" class="action-btn bg-green-600 text-white hover:bg-green-700 flex items-center gap-2">
-                                <span data-feather="plus"></span>Criar Novo Romaneio
-                            </button>
-                        </div>
-                        <div id="romaneios-list-container" class="mt-4">
-                            <p class="text-center text-gray-500 p-4">Nenhum romaneio em montagem.</p>
-                        </div>
-                    </div>
-                </div>
-            </main>
+<!-- Modal para Criar Novo Romaneio -->
+<div id="create-romaneio-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex items-center justify-center p-4">
+    <div class="relative mx-auto w-full max-w-lg shadow-lg rounded-md bg-white">
+        <div class="flex items-start justify-between p-4 border-b">
+            <h3 class="text-xl font-semibold text-gray-900">Criar Novo Romaneio de Entrega</h3>
+            <button id="close-romaneio-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center">
+                <span data-feather="x"></span>
+            </button>
+        </div>
+        <form id="create-romaneio-form" class="p-6 space-y-4">
+            <div>
+                <label for="romaneio-veiculo-select" class="block text-sm font-medium text-gray-700">Veículo</label>
+                <select id="romaneio-veiculo-select" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></select>
+            </div>
+            <div>
+                <label for="romaneio-motorista-input" class="block text-sm font-medium text-gray-700">Nome do Motorista</label>
+                <input type="text" id="romaneio-motorista-input" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+            </div>
+        </form>
+        <div class="flex justify-end items-center p-4 border-t gap-4 bg-gray-50">
+            <button type="button" id="cancel-romaneio-creation-btn" class="action-btn bg-gray-500 hover:bg-gray-600">Cancelar</button>
+            <button type="submit" form="create-romaneio-form" id="save-romaneio-btn" class="action-btn bg-indigo-600 hover:bg-indigo-700">Salvar e Iniciar Montagem</button>
         </div>
     </div>
-    
-    <!-- Modal para Criar Novo Romaneio -->
-    <div id="create-romaneio-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-50 z-40 flex items-center justify-center p-4">
-        <div class="relative mx-auto w-full max-w-lg shadow-lg rounded-md bg-white">
-             <div class="flex items-start justify-between p-4 border-b">
-                <h3 class="text-xl font-semibold">Criar Novo Romaneio</h3>
-                <button id="close-romaneio-modal-btn" type="button" class="p-1.5"><span data-feather="x"></span></button>
-            </div>
-            <form id="create-romaneio-form" class="p-6 space-y-4">
-                 <div>
-                    <label for="romaneio-vehicle-select" class="block text-sm font-medium text-gray-700">Selecione o Veículo</label>
-                    <select id="romaneio-vehicle-select" required class="mt-1 w-full"></select>
-                </div>
-                 <div>
-                    <label for="romaneio-driver-name" class="block text-sm font-medium text-gray-700">Nome do Motorista</label>
-                    <input type="text" id="romaneio-driver-name" required class="mt-1 w-full rounded-md border-gray-300 shadow-sm">
-                </div>
-                <div class="flex justify-end pt-4 border-t">
-                    <button type="submit" class="action-btn bg-indigo-600 text-white hover:bg-indigo-700">Salvar e Iniciar Montagem</button>
-                </div>
-            </form>
-        </div>
-    </div>
+</div>
 
-    <!-- Modal para Montagem de Romaneio -->
-    <div id="mount-romaneio-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-50 z-40 flex items-center justify-center p-4">
-        <div class="relative mx-auto w-full max-w-7xl shadow-lg rounded-md bg-white h-[90vh] flex flex-col">
-             <div class="flex items-start justify-between p-4 border-b flex-shrink-0">
-                <div>
-                    <h3 class="text-xl font-semibold">Montagem do Romaneio</h3>
-                    <p id="mount-romaneio-info" class="text-sm text-gray-500"></p>
-                </div>
-                <button id="close-mount-romaneio-modal-btn" type="button" class="p-1.5"><span data-feather="x"></span></button>
-            </div>
-            <div class="flex-grow overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <!-- Coluna da Esquerda: Busca de DAV -->
-                <div class="space-y-4">
-                    <h4 class="font-semibold text-lg">1. Buscar e Adicionar Pedidos</h4>
-                    <div class="flex items-end gap-2">
-                        <div class="flex-grow">
-                            <label for="romaneio-dav-search" class="block text-sm font-medium text-gray-700">Número do DAV</label>
-                            <input type="number" id="romaneio-dav-search" class="mt-1 w-full rounded-md border-gray-300">
-                        </div>
-                        <button id="romaneio-search-dav-btn" class="action-btn bg-indigo-600 text-white h-10"><span data-feather="search"></span></button>
-                    </div>
-                    <div id="romaneio-dav-results" class="border rounded-lg p-4 bg-gray-50 min-h-[200px]">
-                        <p class="text-center text-gray-500">Busque um DAV para ver os itens.</p>
-                    </div>
-                </div>
-                <!-- Coluna da Direita: Itens no Romaneio -->
-                <div class="space-y-4">
-                     <h4 class="font-semibold text-lg">2. Itens no Caminhão</h4>
-                     <div id="romaneio-items-list" class="border rounded-lg p-4 bg-gray-50 min-h-[400px]">
-                         <p class="text-center text-gray-500">Nenhum item adicionado a este romaneio.</p>
-                     </div>
-                </div>
-            </div>
-            <div class="flex justify-between items-center p-4 border-t bg-gray-50 flex-shrink-0">
-                <button id="print-romaneio-btn" class="action-btn bg-gray-500 text-white hover:bg-gray-600 flex items-center gap-2">
-                    <span data-feather="printer"></span>Imprimir
-                </button>
-                <button id="finish-romaneio-btn" class="action-btn bg-green-600 text-white hover:bg-green-700 flex items-center gap-2">
-                    <span data-feather="send"></span>Finalizar e Iniciar Rota
-                </button>
-            </div>
-        </div>
-    </div>
-    
-    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
-    <script src="entregas.js?v=1.0" defer></script> 
-    <script>
-        // Script para a sidebar (copie de outro arquivo .html)
-        document.addEventListener('DOMContentLoaded', () => {
-            feather.replace();
-            const sidebar = document.getElementById('sidebar');
-            const desktopToggleButton = document.getElementById('sidebar-toggle');
-            if (desktopToggleButton) {
-                const setDesktopSidebarState = (collapsed) => {
-                    sidebar.classList.toggle('w-64', !collapsed);
-                    sidebar.classList.toggle('w-20', collapsed);
-                    document.querySelectorAll('.sidebar-text').forEach(el => el.classList.toggle('hidden', collapsed));
-                    document.getElementById('toggle-icon-collapse').classList.toggle('hidden', collapsed);
-                    document.getElementById('toggle-icon-expand').classList.toggle('hidden', !collapsed);
-                    localStorage.setItem('sidebar_collapsed', collapsed);
-                };
-                const isDesktopCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
-                setDesktopSidebarState(isDesktopCollapsed);
-                desktopToggleButton.addEventListener('click', () => {
-                    setDesktopSidebarState(!sidebar.classList.contains('w-20'));
-                });
-            }
-            // Lógica mobile... (copiar o restante)
-        });
-    </script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script src="entregas.js?v=1.3" defer></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        feather.replace();
+    });
+</script>
+
 </body>
 </html>
+
