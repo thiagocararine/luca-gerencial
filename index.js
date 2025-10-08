@@ -35,6 +35,7 @@ const dashboardRoutes = require('./routes/routes_dashboard');
 const settingsRoutes = require('./routes/routes_settings');
 const logisticaRoutes = require('./routes/routes_logistica');
 const produtosRoutes = require('./routes/routes_produtos');
+const entregasRoutes = require('./routes/routes_entregas');
 
 // 5. Utilização das Rotas com o prefixo /api
 const apiRouter = express.Router();
@@ -44,6 +45,7 @@ apiRouter.use('/dashboard', dashboardRoutes);
 apiRouter.use('/settings', settingsRoutes);
 apiRouter.use('/logistica', logisticaRoutes);
 apiRouter.use('/produtos', produtosRoutes);
+apiRouter.use('/entregas', entregasRoutes);
 
 app.use('/api', apiRouter);
 

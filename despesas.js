@@ -686,6 +686,7 @@ function gerenciarAcessoModulos() {
         'lancamentos': 'despesas.html',
         'logistica': 'logistica.html',
         'checklist': 'checklist.html',
+        'entregas': 'entregas.html',
         'produtos': 'produtos.html', // <-- LINHA ADICIONADA
         'configuracoes': 'settings.html'
     };

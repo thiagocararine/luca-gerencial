@@ -21,6 +21,7 @@ const ALL_MODULES = {
     'logistica': 'Logística',
     'checklist': 'Checklist',
     'produtos': 'Produtos',
+    'entregas': 'Entregas',
     'configuracoes': 'Configurações'
 };
 
@@ -823,6 +824,7 @@ function gerenciarAcessoModulos() {
     const mapaModulos = {
         'lancamentos': 'despesas.html',
         'logistica': 'logistica.html',
+        'entregas': 'entregas.html',
         'checklist': 'checklist.html',
         'produtos': 'produtos.html', // <-- LINHA ADICIONADA
         'configuracoes': 'settings.html'
