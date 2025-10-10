@@ -110,6 +110,7 @@ async function handleSearchDav() {
                 const error = await response.json();
                 errorMessage = error.error || 'Não foi possível buscar o pedido.';
             } catch (e) {
+                // Se a resposta não for JSON (ex: erro 502 com HTML), usa a mensagem padrão
                 errorMessage = 'Ocorreu um erro de comunicação com o servidor. Verifique o console do backend para mais detalhes.';
             }
             throw new Error(errorMessage);
@@ -126,6 +127,9 @@ async function handleSearchDav() {
 }
 
 function renderDavResults(data) {
+    // Adiciona log para depuração no navegador
+    console.log("Dados brutos recebidos da API:", JSON.stringify(data, null, 2));
+
     const { cliente, endereco, itens, data_hora_pedido, data_hora_caixa, vendedor, valor_total, filial_pedido, forma_pagamento } = data;
     const resultsContainer = document.getElementById('dav-results-container');
 
