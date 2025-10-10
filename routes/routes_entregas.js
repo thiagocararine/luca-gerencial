@@ -79,6 +79,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
     console.log(`[LOG] Iniciando busca para DAV: ${davNumber}`);
 
     try {
+        console.log('[LOG] Passo 1: Buscando dados do DAV na tabela cdavs...');
         const [davs] = await seiPool.execute(
             `SELECT c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, c.cr_edav, c.cr_erec, c.cr_nmvd, c.cr_tnot, c.cr_tipo, cl.cl_docume 
              FROM cdavs c
@@ -94,7 +95,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
         }
         const davData = davs[0];
-        console.log(`[LOG] DAV ${davNumber} encontrado. Buscando itens e históricos...`);
+        console.log(`[LOG] Passo 2: DAV ${davNumber} encontrado. Buscando itens e históricos em paralelo...`);
 
         const [itensDav, retiradasManuais, entregasRomaneio, historicoCompleto] = await Promise.all([
             seiPool.execute(
@@ -124,12 +125,13 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             )
         ]);
         
-        console.log(`[LOG] Dados brutos buscados. Itens: ${itensDav.length}, Retiradas: ${retiradasManuais.length}, Romaneios: ${entregasRomaneio.length}`);
+        console.log(`[LOG] Passo 3: Dados brutos buscados. Itens do DAV: ${itensDav.length}, Retiradas Manuais: ${retiradasManuais.length}, Itens em Romaneio: ${entregasRomaneio.length}`);
         
         if (itensDav.length === 0) {
             return res.status(404).json({ error: 'Nenhum item válido encontrado para este pedido.' });
         }
 
+        console.log('[LOG] Passo 4: Iniciando cálculo de saldos para cada item...');
         const itensComSaldo = [];
         for (const item of itensDav) {
             const idavsRegi = parseInt(`${item.it_ndav}${item.it_item}`, 10);
@@ -154,6 +156,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             });
         }
         
+        console.log('[LOG] Passo 5: Montando objeto de resposta...');
         const responseData = {
             dav_numero: davData.cr_ndav,
             data_criacao: davData.cr_edav,
@@ -175,7 +178,12 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         res.json(responseData);
 
     } catch (error) {
-        console.error(`[ERRO FATAL] Falha na rota /dav/${davNumber}:`, error);
+        // AGORA O LOG É MUITO MAIS DETALHADO
+        console.error(`\n--- [ERRO FATAL] ---`);
+        console.error(`Falha crítica ao processar a rota /dav/${davNumber}`);
+        console.error(`Mensagem: ${error.message}`);
+        console.error(`Stack Trace:`, error);
+        console.error(`--- [FIM DO ERRO] ---\n`);
         res.status(500).json({ error: 'Erro interno no servidor ao processar o pedido. Verifique os logs do servidor para mais detalhes.' });
     }
 });
