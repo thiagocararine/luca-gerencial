@@ -106,9 +106,17 @@ async function handleSearchDav() {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
 
+        // MELHORIA: Tratamento de erro aprimorado
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Não foi possível buscar o pedido.');
+            let errorMessage = `Erro ${response.status}: ${response.statusText}`;
+            try {
+                const error = await response.json();
+                errorMessage = error.error || 'Não foi possível buscar o pedido.';
+            } catch (e) {
+                // A resposta não era JSON, provavelmente um erro 502 com HTML.
+                errorMessage = 'Ocorreu um erro de comunicação com o servidor. Verifique o console do backend para mais detalhes.';
+            }
+            throw new Error(errorMessage);
         }
 
         const data = await response.json();
