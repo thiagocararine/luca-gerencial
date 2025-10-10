@@ -13,7 +13,7 @@ const dbConfigSei = {
     charset: 'utf8mb4'
 };
 
-// --- OTIMIZAÇÃO: Criação de Pools de Conexão ---
+// --- OTIMIZAZAÇÃO: Criação de Pools de Conexão ---
 const seiPool = mysql.createPool(dbConfigSei);
 const gerencialPool = mysql.createPool(dbConfig);
 
@@ -197,13 +197,18 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
         for (const item of itens) {
             const idavsRegiNum = parseInt(item.idavs_regi, 10);
 
-            // A validação de saldo agora é mais complexa e precisa de ambas as conexões
-            const [itemErpParaSaldo] = await seiPool.execute(`SELECT * FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`, [dav_numero, item.idavs_regi]);
+            // CORREÇÃO: Validação de saldo aprimorada para evitar falhas
+            const [itemErpParaSaldoRows] = await seiPool.execute(`SELECT * FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`, [dav_numero, item.idavs_regi]);
+            if(itemErpParaSaldoRows.length === 0) {
+                throw new Error(`Item ${item.pd_nome} não encontrado no DAV ${dav_numero} do ERP.`);
+            }
+            const itemErpParaSaldo = itemErpParaSaldoRows[0];
+            
             const [retiradaManualParaSaldo] = await gerencialPool.execute('SELECT SUM(quantidade_retirada) as total FROM entregas_manuais_log WHERE dav_numero = ? AND idavs_regi = ?', [dav_numero, idavsRegiNum]);
             const [entregaRomaneioParaSaldo] = await gerencialPool.execute('SELECT SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE dav_numero = ? AND idavs_regi = ?', [dav_numero, idavsRegiNum]);
 
             const { saldo } = await calcularSaldosItem(
-                itemErpParaSaldo[0],
+                itemErpParaSaldo,
                 retiradaManualParaSaldo[0],
                 entregaRomaneioParaSaldo[0]
             );
