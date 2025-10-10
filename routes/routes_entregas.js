@@ -50,8 +50,7 @@ function parseRetiradasAnteriores(it_reti) {
 
 
 /**
- * CORREÇÃO E OTIMIZAÇÃO: A função agora recebe os dados pré-buscados
- * e tem a assinatura correta para funcionar com a lógica otimizada.
+ * Calcula os saldos de um item.
  */
 function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem) {
     const totalEntregueApp = (parseFloat(retiradaManualDoItem?.total) || 0) + (parseFloat(entregaRomaneioDoItem?.total) || 0);
@@ -80,8 +79,11 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
 
     try {
         console.log('[LOG] Passo 1: Buscando dados do DAV na tabela cdavs...');
+        // AJUSTE: Buscando os novos campos cr_udav, cr_hdav, cr_ecem
         const [davs] = await seiPool.execute(
-            `SELECT c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, c.cr_edav, c.cr_erec, c.cr_nmvd, c.cr_tnot, c.cr_tipo, cl.cl_docume 
+            `SELECT c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, 
+                    c.cr_edav, c.cr_hdav, c.cr_ecem, c.cr_udav, 
+                    c.cr_tnot, c.cr_tipo, cl.cl_docume 
              FROM cdavs c
              LEFT JOIN clientes cl ON c.cr_cdcl = cl.cl_codigo
              WHERE CAST(c.cr_ndav AS UNSIGNED) = ?`,
@@ -97,7 +99,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         const davData = davs[0];
         console.log(`[LOG] Passo 2: DAV ${davNumber} encontrado. Buscando itens e históricos em paralelo...`);
 
-        // CORREÇÃO: Adicionado COLLATE utf8mb4_unicode_ci para resolver o erro "Illegal mix of collations"
         const historicoQuery = `
             (SELECT e.idavs_regi, e.data_retirada as data, e.quantidade_retirada as quantidade, u.nome_user COLLATE utf8mb4_unicode_ci as responsavel, 'Retirada no Balcão' as tipo
              FROM entregas_manuais_log e 
@@ -126,13 +127,13 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             gerencialPool.execute(historicoQuery, [davNumber, davNumber])
         ]);
         
-        console.log(`[LOG] Passo 3: Dados brutos buscados. Itens do DAV: ${itensDav.length}, Retiradas Manuais: ${retiradasManuais.length}, Itens em Romaneio: ${entregasRomaneio.length}`);
+        console.log(`[LOG] Passo 3: Dados brutos buscados. Itens: ${itensDav.length}, Retiradas: ${retiradasManuais.length}, Romaneios: ${entregasRomaneio.length}`);
         
         if (itensDav.length === 0) {
             return res.status(404).json({ error: 'Nenhum item válido encontrado para este pedido.' });
         }
 
-        console.log('[LOG] Passo 4: Iniciando cálculo de saldos para cada item...');
+        console.log('[LOG] Passo 4: Iniciando cálculo de saldos...');
         const itensComSaldo = [];
         for (const item of itensDav) {
             const idavsRegi = parseInt(`${item.it_ndav}${item.it_item}`, 10);
@@ -157,12 +158,20 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             });
         }
         
+        // AJUSTE: Combinando data e hora do pedido
+        const dataPedido = davData.cr_edav; // É um objeto Date
+        const horaPedido = davData.cr_hdav; // É uma string "HH:MM:SS"
+        if (dataPedido && horaPedido) {
+            const [hours, minutes, seconds] = horaPedido.split(':');
+            dataPedido.setHours(hours, minutes, seconds);
+        }
+
         console.log('[LOG] Passo 5: Montando objeto de resposta...');
         const responseData = {
             dav_numero: davData.cr_ndav,
-            data_criacao: davData.cr_edav,
-            data_recebimento_caixa: davData.cr_erec,
-            vendedor: davData.cr_nmvd,
+            data_hora_pedido: dataPedido,
+            data_hora_caixa: davData.cr_ecem,
+            vendedor: davData.cr_udav,
             valor_total: davData.cr_tnot,
             cliente: { nome: davData.cr_nmcl, doc: davData.cl_docume },
             endereco: {
@@ -179,7 +188,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         res.json(responseData);
 
     } catch (error) {
-        // AGORA O LOG É MUITO MAIS DETALHADO
         console.error(`\n--- [ERRO FATAL] ---`);
         console.error(`Falha crítica ao processar a rota /dav/${davNumber}`);
         console.error(`Mensagem: ${error.message}`);

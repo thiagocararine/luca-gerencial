@@ -126,7 +126,7 @@ async function handleSearchDav() {
 }
 
 function renderDavResults(data) {
-    const { cliente, endereco, itens, data_criacao, data_recebimento_caixa, vendedor, valor_total } = data;
+    const { cliente, endereco, itens, data_hora_pedido, data_hora_caixa, vendedor, valor_total } = data;
     const resultsContainer = document.getElementById('dav-results-container');
 
     const formatDateTime = (dateString) => {
@@ -137,6 +137,9 @@ function renderDavResults(data) {
     const formatCurrency = (value) => {
         return (parseFloat(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     };
+    
+    // Pega o responsável do caixa do primeiro item, se existir
+    const responsavelCaixaGeral = itens.length > 0 ? itens[0].responsavel_caixa : 'N/A';
 
     let itemsHtml = '<p class="text-center text-gray-500 p-4">Nenhum item encontrado para este pedido.</p>';
     const itemsComSaldo = itens.filter(item => item.quantidade_saldo > 0);
@@ -205,9 +208,8 @@ function renderDavResults(data) {
                     </div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mt-4 pt-4 border-t">
-                    <div><strong class="block text-gray-500">Vendedor</strong><span>${vendedor || 'N/A'}</span></div>
-                    <div><strong class="block text-gray-500">Data/Hora Pedido</strong><span>${formatDateTime(data_criacao)}</span></div>
-                    <div><strong class="block text-gray-500">Data/Hora Caixa</strong><span>${formatDateTime(data_recebimento_caixa)}</span></div>
+                    <div><strong class="block text-gray-500">Vendedor / Pedido</strong><span>${vendedor || 'N/A'} - ${formatDateTime(data_hora_pedido)}</span></div>
+                    <div><strong class="block text-gray-500">Caixa / Recebimento</strong><span>${responsavelCaixaGeral} - ${formatDateTime(data_hora_caixa)}</span></div>
                 </div>
             </div>
             <div class="space-y-4">
