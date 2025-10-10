@@ -52,7 +52,6 @@ function setupEventListeners() {
     document.getElementById('cancel-romaneio-creation-btn')?.addEventListener('click', () => document.getElementById('create-romaneio-modal').classList.add('hidden'));
     document.getElementById('create-romaneio-form')?.addEventListener('submit', handleCreateRomaneioSubmit);
 
-    // Adiciona listener para a funcionalidade de expandir histórico
     document.getElementById('dav-results-container').addEventListener('click', (event) => {
         const row = event.target.closest('.expandable-row');
         if (row) {
@@ -80,10 +79,9 @@ function handleTabSwitch(event) {
     button.classList.remove('text-gray-500', 'border-transparent');
 
     document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.remove('active');
         content.classList.add('hidden');
     });
-    document.getElementById(`${button.dataset.tab}-content`).classList.add('active');
+    document.getElementById(`${button.dataset.tab}-content`).classList.remove('hidden');
 }
 
 // --- Lógica de Retirada Rápida ---
@@ -131,16 +129,16 @@ function renderDavResults(data) {
     const { cliente, endereco, itens, data_criacao, data_recebimento_caixa, vendedor, valor_total } = data;
     const resultsContainer = document.getElementById('dav-results-container');
 
-    const formatDate = (dateString) => {
+    const formatDateTime = (dateString) => {
         if (!dateString) return 'N/A';
-        return new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+        return new Date(dateString).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
     };
     
     const formatCurrency = (value) => {
         return (parseFloat(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     };
 
-    let itemsHtml = '<p class="text-center text-gray-500 p-4">Nenhum item com saldo a entregar encontrado para este pedido.</p>';
+    let itemsHtml = '<p class="text-center text-gray-500 p-4">Nenhum item encontrado para este pedido.</p>';
     const itemsComSaldo = itens.filter(item => item.quantidade_saldo > 0);
 
     if (itens.length > 0) {
@@ -158,7 +156,7 @@ function renderDavResults(data) {
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     ${itens.map(item => `
-                        <tr class="expandable-row" data-idavs-regi="${item.idavs_regi}" title="Clique para ver o histórico de retiradas">
+                        <tr class="expandable-row ${item.historico && item.historico.length > 0 ? 'cursor-pointer hover:bg-gray-50' : ''}" data-idavs-regi="${item.idavs_regi}" title="Clique para ver o histórico de retiradas">
                             <td class="px-2 py-3 text-center text-gray-400">
                                 ${item.historico && item.historico.length > 0 ? '<i data-feather="chevron-down" class="transition-transform"></i>' : ''}
                             </td>
@@ -173,8 +171,8 @@ function renderDavResults(data) {
                         ${item.historico && item.historico.length > 0 ? `
                         <tr class="history-row">
                             <td colspan="6" class="p-3 bg-gray-50">
-                                <h5 class="text-xs font-bold mb-2">Histórico de Entregas:</h5>
-                                <ul class="text-xs space-y-1">
+                                <h5 class="text-xs font-bold mb-2 flex items-center gap-2"><i data-feather="archive" class="w-4 h-4"></i>Histórico de Entregas:</h5>
+                                <ul class="text-xs space-y-1 pl-4">
                                     ${item.historico.map(h => `
                                         <li class="flex justify-between border-b pb-1">
                                             <span>${new Date(h.data).toLocaleString('pt-BR')} - <strong>${h.quantidade} un.</strong> (${h.tipo})</span>
@@ -206,10 +204,10 @@ function renderDavResults(data) {
                         <p class="font-bold text-2xl text-indigo-600">${formatCurrency(valor_total)}</p>
                     </div>
                 </div>
-                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mt-4 pt-4 border-t">
-                    <div><strong class="block text-gray-500">Data do Pedido</strong><span>${formatDate(data_criacao)}</span></div>
-                    <div><strong class="block text-gray-500">Recebido no Caixa</strong><span>${formatDate(data_recebimento_caixa)}</span></div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mt-4 pt-4 border-t">
                     <div><strong class="block text-gray-500">Vendedor</strong><span>${vendedor || 'N/A'}</span></div>
+                    <div><strong class="block text-gray-500">Data/Hora Pedido</strong><span>${formatDateTime(data_criacao)}</span></div>
+                    <div><strong class="block text-gray-500">Data/Hora Caixa</strong><span>${formatDateTime(data_recebimento_caixa)}</span></div>
                 </div>
             </div>
             <div class="space-y-4">
@@ -234,6 +232,7 @@ function renderDavResults(data) {
 
     document.getElementById('confirm-retirada-btn')?.addEventListener('click', () => handleConfirmRetirada(data.dav_numero));
 }
+
 
 async function handleConfirmRetirada(davNumber) {
     const btn = document.getElementById('confirm-retirada-btn');
@@ -288,7 +287,6 @@ async function handleConfirmRetirada(davNumber) {
         }
 
         alert(result.message);
-        // Recarrega o DAV para mostrar os saldos atualizados
         handleSearchDav();
 
     } catch (error) {
