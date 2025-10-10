@@ -24,8 +24,9 @@ const dbConfigSei = {
  */
 async function calcularSaldoItem(gerencialConnection, seiConnection, davNumber, idavsRegi) {
     // 1. Pega os dados de quantidade do ERP
+    // CORREÇÃO: Utiliza CAST para comparar o valor numérico de it_ndav
     const [itensDav] = await seiConnection.execute(
-        `SELECT it_quan, it_qent, it_qtdv FROM idavs WHERE it_ndav = ? AND CONCAT(it_ndav, it_item) = ?`,
+        `SELECT it_quan, it_qent, it_qtdv FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`,
         [davNumber, idavsRegi]
     );
 
@@ -69,9 +70,9 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             mysql.createConnection(dbConfig)
         ]);
 
-        // Consulta primeiro sem o tipo para dar um erro mais específico
+        // CORREÇÃO: Utiliza CAST para ignorar os zeros à esquerda na busca
         const [davCheck] = await seiConnection.execute(
-            `SELECT cr_ndav, cr_tipo FROM cdavs WHERE cr_ndav = ?`,
+            `SELECT cr_ndav, cr_tipo FROM cdavs WHERE CAST(cr_ndav AS UNSIGNED) = ?`,
             [davNumber]
         );
 
@@ -82,19 +83,20 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
         }
         
-        // Agora busca os dados completos
+        // CORREÇÃO: Utiliza CAST para buscar os dados completos
         const [davs] = await seiConnection.execute(
             `SELECT c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, cl.cl_docume 
              FROM cdavs c
              LEFT JOIN clientes cl ON c.cr_cdcl = cl.cl_codigo
-             WHERE c.cr_ndav = ?`,
+             WHERE CAST(c.cr_ndav AS UNSIGNED) = ?`,
             [davNumber]
         );
         
         const davData = davs[0];
 
+        // CORREÇÃO: Utiliza CAST para buscar os itens
         const [itensDav] = await seiConnection.execute(
-            `SELECT it_ndav, it_item, it_codi, it_nome, it_quan, it_unid FROM idavs WHERE it_ndav = ? AND (it_canc IS NULL OR it_canc <> 1)`,
+            `SELECT it_ndav, it_item, it_codi, it_nome, it_quan, it_unid FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`,
             [davNumber]
         );
         
@@ -179,8 +181,9 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
             logsCriados.push(newLogId);
 
             // 3. Prepara e executa a escrita no campo `it_reti` do ERP
+            // CORREÇÃO: Utiliza CAST para buscar o item
             const [itemErpRows] = await seiConnection.execute(
-                `SELECT it_reti, it_codi, it_nome, it_unid FROM idavs WHERE it_ndav = ? AND CONCAT(it_ndav, it_item) = ? FOR UPDATE`,
+                `SELECT it_reti, it_codi, it_nome, it_unid FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ? FOR UPDATE`,
                 [dav_numero, item.idavs_regi]
             );
             
@@ -201,8 +204,9 @@ Retirado..: Balcão/Loja`;
 
             const textoFinal = (textoAntigo + novoTexto).trim();
 
+            // CORREÇÃO: Utiliza CAST para atualizar o item correto
             await seiConnection.execute(
-                `UPDATE idavs SET it_reti = ? WHERE it_ndav = ? AND CONCAT(it_ndav, it_item) = ?`,
+                `UPDATE idavs SET it_reti = ? WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`,
                 [textoFinal, dav_numero, item.idavs_regi]
             );
 
@@ -317,3 +321,4 @@ router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => res.s
 
 
 module.exports = router;
+

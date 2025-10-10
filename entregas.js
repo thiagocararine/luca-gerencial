@@ -357,4 +357,3 @@ function showLoader() {
 function hideLoader() {
     document.getElementById('global-loader').style.display = 'none';
 }
-
