@@ -4,9 +4,17 @@ const mysql = require('mysql2/promise');
 const { authenticateToken } = require('../middlewares');
 const dbConfig = require('../dbConfig'); // Conexão com gerencial_lucamat
 
+// Configuração de conexão para o banco de dados do ERP (SEI)
+const dbConfigSei = {
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_DATABASE_SEI,
+    charset: 'utf8mb4'
+};
+
 // --- OTIMIZAÇÃO: Criação de Pools de Conexão ---
-// Pools são mais eficientes do que criar uma nova conexão a cada requisição.
-const seiPool = mysql.createPool({ ...dbConfig, database: process.env.DB_DATABASE_SEI });
+const seiPool = mysql.createPool(dbConfigSei);
 const gerencialPool = mysql.createPool(dbConfig);
 
 
@@ -24,6 +32,23 @@ function parseUsuarioLiberacao(it_entr) {
 }
 
 /**
+ * Função para ler o campo de texto it_reti e somar as quantidades retiradas.
+ */
+function parseRetiradasAnteriores(it_reti) {
+    if (!it_reti || typeof it_reti !== 'string') {
+        return 0;
+    }
+    let totalRetirado = 0;
+    const regex = /Retirada\.\.:\s*(\d+[\.,]?\d*)/g;
+    let match;
+    while ((match = regex.exec(it_reti)) !== null) {
+        totalRetirado += parseFloat(match[1].replace(',', '.'));
+    }
+    return totalRetirado;
+}
+
+
+/**
  * OTIMIZAÇÃO: A função agora recebe listas de dados pré-buscados
  * para evitar múltiplas consultas ao banco de dados dentro de um loop.
  */
@@ -32,7 +57,9 @@ function calcularSaldosItem(itemErp, retiradasManuais, entregasRomaneio) {
     const totalEntregueApp = (parseFloat(retiradasManuais?.total) || 0) + (parseFloat(entregasRomaneio?.total) || 0);
     
     // Soma com o que já estava registrado como entregue ou devolvido no ERP
-    const totalEntregueERP = (parseFloat(itemErp.it_qent) || 0) + (parseFloat(itemErp.it_qtdv) || 0);
+    // E também com o que foi parseado do campo de texto de retiradas
+    const totalRetiradoDoLogERP = parseRetiradasAnteriores(itemErp.it_reti);
+    const totalEntregueERP = (parseFloat(itemErp.it_qent) || 0) + (parseFloat(itemErp.it_qtdv) || 0) + totalRetiradoDoLogERP;
 
     const saldo = parseFloat(itemErp.it_quan) - totalEntregueERP - totalEntregueApp;
 
@@ -68,7 +95,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         // --- OTIMIZAÇÃO: Busca todos os dados relacionados ao DAV de uma só vez ---
         const [itensDav, retiradasManuais, entregasRomaneio] = await Promise.all([
             seiPool.execute(
-                `SELECT it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`,
+                `SELECT it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`,
                 [davNumber]
             ),
             gerencialPool.execute(
@@ -169,20 +196,15 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
     const logsCriados = [];
 
     try {
-        // --- Validação pré-transação (mais rápido) ---
+        await gerencialConnection.beginTransaction();
+        await seiConnection.beginTransaction();
+
         for (const item of itens) {
             const { saldo } = await calcularSaldosItem(gerencialConnection, seiConnection, dav_numero, item.idavs_regi);
             if (item.quantidade_retirada > saldo) {
                 throw new Error(`Saldo insuficiente para o item ${item.pd_nome}. Saldo disponível: ${saldo}.`);
             }
-        }
 
-        // --- Início das Transações ---
-        await gerencialConnection.beginTransaction();
-        await seiConnection.beginTransaction();
-
-        for (const item of itens) {
-            // 1. Grava no nosso log
             const [logResult] = await gerencialConnection.execute(
                 `INSERT INTO entregas_manuais_log (dav_numero, idavs_regi, quantidade_retirada, id_usuario_conferencia) VALUES (?, ?, ?, ?)`,
                 [dav_numero, item.idavs_regi, item.quantidade_retirada, userId]
@@ -190,13 +212,11 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
             const newLogId = logResult.insertId;
             logsCriados.push(newLogId);
             
-            // 2. ATUALIZA A QUANTIDADE ENTREGUE (it_qent) NO ERP
             await seiConnection.execute(
                 `UPDATE idavs SET it_qent = it_qent + ? WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`,
                 [item.quantidade_retirada, dav_numero, item.idavs_regi]
             );
 
-            // 3. ANOTA A OPERAÇÃO NO CAMPO DE TEXTO (it_reti) DO ERP
             const [itemErpRows] = await seiConnection.execute(
                 `SELECT it_reti, it_codi, it_nome, it_unid, it_quan FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ? FOR UPDATE`,
                 [dav_numero, item.idavs_regi]
@@ -257,7 +277,7 @@ Retirado..: Retirada no Balcão via App`;
 });
 
 
-// --- ENDPOINTS DE ROMANEIO (sem alteração de performance por enquanto) ---
+// --- ENDPOINTS DE ROMANEIO ---
 router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
     try {
         const [veiculos] = await gerencialPool.execute(
