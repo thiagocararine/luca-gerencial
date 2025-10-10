@@ -20,12 +20,14 @@ const gerencialPool = mysql.createPool(dbConfig);
 
 /**
  * Função para extrair o usuário do campo it_entr.
+ * Exemplo de formato: "30/09/2025 15:23:50 THIAGOTI" -> "THIAGOTI"
  */
 function parseUsuarioLiberacao(it_entr) {
     if (!it_entr || typeof it_entr !== 'string') {
         return 'N/A';
     }
     const parts = it_entr.split(' ');
+    // O nome do usuário é geralmente a última parte
     return parts[parts.length - 1] || 'N/A';
 }
 
@@ -37,6 +39,7 @@ function parseRetiradasAnteriores(it_reti) {
         return 0;
     }
     let totalRetirado = 0;
+    // A regex busca por "Retirada..:" seguido de espaços e captura o número.
     const regex = /Retirada\.\.:\s*(\d+[\.,]?\d*)/g;
     let match;
     while ((match = regex.exec(it_reti)) !== null) {
@@ -47,7 +50,8 @@ function parseRetiradasAnteriores(it_reti) {
 
 
 /**
- * Calcula os saldos de um item.
+ * CORREÇÃO E OTIMIZAÇÃO: A função agora recebe os dados pré-buscados
+ * e tem a assinatura correta para funcionar com a lógica otimizada.
  */
 function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem) {
     const totalEntregueApp = (parseFloat(retiradaManualDoItem?.total) || 0) + (parseFloat(entregaRomaneioDoItem?.total) || 0);
@@ -64,7 +68,7 @@ function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem
 }
 
 
-// Rota principal para buscar dados de um DAV
+// Rota principal para buscar dados de um DAV (REATORADA PARA PERFORMANCE E ROBUSTEZ)
 router.get('/dav/:numero', authenticateToken, async (req, res) => {
     const davNumberStr = req.params.numero;
     const davNumber = parseInt(davNumberStr, 10);
@@ -75,10 +79,9 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
     console.log(`[LOG] Iniciando busca para DAV: ${davNumber}`);
 
     try {
+        console.log('[LOG] Passo 1: Buscando dados do DAV na tabela cdavs...');
         const [davs] = await seiPool.execute(
-            `SELECT c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, 
-                    c.cr_edav, c.cr_hdav, c.cr_ecem, c.cr_udav, c.cr_inde, c.cr_rece,
-                    c.cr_tnot, c.cr_tipo, cl.cl_docume 
+            `SELECT c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, c.cr_edav, c.cr_hdav, c.cr_ecem, c.cr_udav, c.cr_tnot, c.cr_tipo, cl.cl_docume 
              FROM cdavs c
              LEFT JOIN clientes cl ON c.cr_cdcl = cl.cl_codigo
              WHERE CAST(c.cr_ndav AS UNSIGNED) = ?`,
@@ -92,8 +95,9 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
         }
         const davData = davs[0];
-        console.log(`[LOG] DAV ${davNumber} encontrado. Buscando itens e históricos...`);
+        console.log(`[LOG] Passo 2: DAV ${davNumber} encontrado. Buscando itens e históricos em paralelo...`);
 
+        // CORREÇÃO: Adicionado COLLATE utf8mb4_unicode_ci para resolver o erro "Illegal mix of collations"
         const historicoQuery = `
             (SELECT e.idavs_regi, e.data_retirada as data, e.quantidade_retirada as quantidade, u.nome_user COLLATE utf8mb4_unicode_ci as responsavel, 'Retirada no Balcão' as tipo
              FROM entregas_manuais_log e 
@@ -122,13 +126,13 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             gerencialPool.execute(historicoQuery, [davNumber, davNumber])
         ]);
         
-        // --- PONTO DE DEPURAÇÃO ---
-        console.log("[DEBUG] Dados brutos da tabela 'idavs':", JSON.stringify(itensDav, null, 2));
+        console.log(`[LOG] Passo 3: Dados brutos buscados. Itens do DAV: ${itensDav.length}, Retiradas Manuais: ${retiradasManuais.length}, Itens em Romaneio: ${entregasRomaneio.length}`);
         
         if (itensDav.length === 0) {
             return res.status(404).json({ error: 'Nenhum item válido encontrado para este pedido.' });
         }
 
+        console.log('[LOG] Passo 4: Iniciando cálculo de saldos para cada item...');
         const itensComSaldo = [];
         for (const item of itensDav) {
             const idavsRegi = parseInt(`${item.it_ndav}${item.it_item}`, 10);
@@ -153,6 +157,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             });
         }
         
+        console.log('[LOG] Passo 5: Montando objeto de resposta...');
         const dataPedido = davData.cr_edav;
         const horaPedido = davData.cr_hdav;
         let dataHoraPedidoCompleta = null;
@@ -166,8 +171,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             data_hora_pedido: dataHoraPedidoCompleta,
             data_hora_caixa: davData.cr_ecem,
             vendedor: davData.cr_udav,
-            filial_pedido: davData.cr_inde,
-            forma_pagamento: davData.cr_rece,
             valor_total: davData.cr_tnot,
             cliente: { nome: davData.cr_nmcl, doc: davData.cl_docume },
             endereco: {
@@ -180,14 +183,16 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             itens: itensComSaldo
         };
         
-        console.log("[LOG] Resposta final pronta para ser enviada.");
+        console.log(`[LOG] Processamento do DAV ${davNumber} concluído com sucesso.`);
         res.json(responseData);
 
     } catch (error) {
-        console.error(`--- [ERRO FATAL] ---`);
+        // AGORA O LOG É MUITO MAIS DETALHADO
+        console.error(`\n--- [ERRO FATAL] ---`);
         console.error(`Falha crítica ao processar a rota /dav/${davNumber}`);
-        console.error(error);
-        console.error(`--- [FIM DO ERRO] ---`);
+        console.error(`Mensagem: ${error.message}`);
+        console.error(`Stack Trace:`, error);
+        console.error(`--- [FIM DO ERRO] ---\n`);
         res.status(500).json({ error: 'Erro interno no servidor ao processar o pedido. Verifique os logs do servidor para mais detalhes.' });
     }
 });
