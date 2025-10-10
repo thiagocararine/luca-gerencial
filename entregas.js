@@ -132,7 +132,6 @@ function renderDavResults(data) {
     const formatDateTime = (dateString) => {
         if (!dateString) return 'N/A';
         const date = new Date(dateString);
-        // Verifica se a data é válida antes de formatar
         if (isNaN(date.getTime())) {
             return 'Data inválida';
         }

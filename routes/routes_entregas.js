@@ -156,14 +156,14 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         const horaPedido = davData.cr_hdav;
         let dataHoraPedidoCompleta = null;
         if (dataPedido && horaPedido) {
-            const [year, month, day] = new Date(dataPedido).toISOString().split('T')[0].split('-');
-            dataHoraPedidoCompleta = new Date(`${year}-${month}-${day}T${horaPedido}`);
+            const datePart = new Date(dataPedido).toISOString().split('T')[0];
+            dataHoraPedidoCompleta = new Date(`${datePart}T${horaPedido}`);
         }
 
         const responseData = {
             dav_numero: davData.cr_ndav,
             data_hora_pedido: dataHoraPedidoCompleta,
-            data_hora_caixa: davData.cr_ecem,
+            data_hora_caixa: davData.cr_ecem, // Pode ser nulo, o frontend tratará
             vendedor: davData.cr_udav,
             valor_total: davData.cr_tnot,
             cliente: { nome: davData.cr_nmcl, doc: davData.cl_docume },
@@ -177,7 +177,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             itens: itensComSaldo
         };
         
-        console.log("[LOG] Resposta final pronta para ser enviada:", JSON.stringify(responseData, null, 2));
+        console.log("[LOG] Resposta final pronta para ser enviada.");
         res.json(responseData);
 
     } catch (error) {
