@@ -25,6 +25,7 @@ function initEntregasPage() {
     loadCompanyLogo();
     setupEventListeners();
     loadRomaneiosEmMontagem();
+    gerenciarAcessoModulos();
 }
 
 function loadCompanyLogo() {
@@ -46,11 +47,23 @@ function setupEventListeners() {
     });
     document.getElementById('delivery-tabs')?.addEventListener('click', handleTabSwitch);
 
-    // Listeners para o modal de criação de romaneio
     document.getElementById('create-romaneio-btn')?.addEventListener('click', openCreateRomaneioModal);
     document.getElementById('close-romaneio-modal-btn')?.addEventListener('click', () => document.getElementById('create-romaneio-modal').classList.add('hidden'));
     document.getElementById('cancel-romaneio-creation-btn')?.addEventListener('click', () => document.getElementById('create-romaneio-modal').classList.add('hidden'));
     document.getElementById('create-romaneio-form')?.addEventListener('submit', handleCreateRomaneioSubmit);
+
+    // Adiciona listener para a funcionalidade de expandir histórico
+    document.getElementById('dav-results-container').addEventListener('click', (event) => {
+        const row = event.target.closest('.expandable-row');
+        if (row) {
+            const historyRow = row.nextElementSibling;
+            if (historyRow && historyRow.classList.contains('history-row')) {
+                historyRow.classList.toggle('expanded');
+                const icon = row.querySelector('[data-feather="chevron-down"]');
+                icon.classList.toggle('rotate-180');
+            }
+        }
+    });
 }
 
 // --- Lógica de Abas ---
@@ -68,6 +81,7 @@ function handleTabSwitch(event) {
 
     document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.remove('active');
+        content.classList.add('hidden');
     });
     document.getElementById(`${button.dataset.tab}-content`).classList.add('active');
 }
@@ -108,33 +122,62 @@ async function handleSearchDav() {
 }
 
 function renderDavResults(data) {
-    const { cliente, endereco, itens } = data;
+    const { cliente, endereco, itens, data_criacao, data_recebimento_caixa, vendedor, valor_total } = data;
     const resultsContainer = document.getElementById('dav-results-container');
+
+    const formatDate = (dateString) => {
+        if (!dateString) return 'N/A';
+        return new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+    };
+    
+    const formatCurrency = (value) => {
+        return (parseFloat(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    };
 
     let itemsHtml = '<p class="text-center text-gray-500 p-4">Nenhum item com saldo a entregar encontrado para este pedido.</p>';
     const itemsComSaldo = itens.filter(item => item.quantidade_saldo > 0);
 
-    if (itemsComSaldo.length > 0) {
+    if (items.length > 0) {
         itemsHtml = `
             <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                     <tr>
+                        <th class="w-10"></th>
                         <th class="px-4 py-2 text-left font-medium text-gray-500">Produto</th>
                         <th class="px-2 py-2 text-center font-medium text-gray-500">Total</th>
+                        <th class="px-2 py-2 text-center font-medium text-gray-500">Entregue</th>
                         <th class="px-2 py-2 text-center font-medium text-gray-500">Saldo</th>
                         <th class="px-4 py-2 text-center font-medium text-gray-500">Qtd. a Retirar</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
-                    ${itemsComSaldo.map(item => `
-                        <tr data-idavs-regi="${item.idavs_regi}">
+                    ${itens.map(item => `
+                        <tr class="expandable-row" data-idavs-regi="${item.idavs_regi}" title="Clique para ver o histórico de retiradas">
+                            <td class="px-2 py-3 text-center text-gray-400">
+                                ${item.historico && item.historico.length > 0 ? '<i data-feather="chevron-down" class="transition-transform"></i>' : ''}
+                            </td>
                             <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome}</td>
                             <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_total}</td>
-                            <td class="px-2 py-3 text-center font-bold text-blue-600">${item.quantidade_saldo}</td>
-                            <td class="px-4 py-3">
-                                <input type="number" class="w-24 text-center rounded-md border-gray-300 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" data-item-id="${item.idavs_regi}">
+                            <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_entregue}</td>
+                            <td class="px-2 py-3 text-center font-bold ${item.quantidade_saldo > 0 ? 'text-blue-600' : 'text-green-600'}">${item.quantidade_saldo}</td>
+                            <td class="px-4 py-3 text-center">
+                                <input type="number" class="w-24 text-center rounded-md border-gray-300 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" data-item-id="${item.idavs_regi}" ${item.quantidade_saldo === 0 ? 'disabled' : ''}>
                             </td>
                         </tr>
+                        ${item.historico && item.historico.length > 0 ? `
+                        <tr class="history-row">
+                            <td colspan="6" class="p-3 bg-gray-50">
+                                <h5 class="text-xs font-bold mb-2">Histórico de Entregas:</h5>
+                                <ul class="text-xs space-y-1">
+                                    ${item.historico.map(h => `
+                                        <li class="flex justify-between border-b pb-1">
+                                            <span>${new Date(h.data).toLocaleString('pt-BR')} - <strong>${h.quantidade} un.</strong> (${h.tipo})</span>
+                                            <span>Resp: ${h.responsavel}</span>
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            </td>
+                        </tr>` : ''}
                     `).join('')}
                 </tbody>
             </table>
@@ -144,15 +187,27 @@ function renderDavResults(data) {
     resultsContainer.innerHTML = `
         <div class="bg-white/90 backdrop-blur-sm p-6 rounded-lg shadow-lg">
             <div class="border-b pb-4 mb-4">
-                <h3 class="text-lg font-semibold text-gray-900">${cliente.nome}</h3>
-                <p class="text-sm text-gray-500">${cliente.doc || 'Documento não informado'}</p>
-                <p class="text-sm text-gray-500 mt-2 flex items-center gap-2">
-                    <span data-feather="map-pin" class="w-4 h-4"></span>
-                    <span>${endereco.logradouro}, ${endereco.bairro} - ${endereco.cidade}</span>
-                </p>
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-900">${cliente.nome}</h3>
+                        <p class="text-sm text-gray-500">${cliente.doc || 'Documento não informado'}</p>
+                        <p class="text-sm text-gray-500 mt-2 flex items-center gap-2">
+                            <span data-feather="map-pin" class="w-4 h-4"></span>
+                            <span>${endereco.logradouro}, ${endereco.bairro} - ${endereco.cidade}</span>
+                        </p>
+                    </div>
+                    <div class="text-right flex-shrink-0 ml-4">
+                        <p class="font-bold text-2xl text-indigo-600">${formatCurrency(valor_total)}</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mt-4 pt-4 border-t">
+                    <div><strong class="block text-gray-500">Data do Pedido</strong><span>${formatDate(data_criacao)}</span></div>
+                    <div><strong class="block text-gray-500">Recebido no Caixa</strong><span>${formatDate(data_recebimento_caixa)}</span></div>
+                    <div><strong class="block text-gray-500">Vendedor</strong><span>${vendedor || 'N/A'}</span></div>
+                </div>
             </div>
             <div class="space-y-4">
-                <h4 class="font-semibold">Itens com Saldo para Retirada</h4>
+                <h4 class="font-semibold">Itens do Pedido</h4>
                 <div class="overflow-x-auto rounded-lg border">${itemsHtml}</div>
                 ${itemsComSaldo.length > 0 ? `
                 <div class="flex flex-col sm:flex-row justify-end items-center pt-4 border-t gap-4">
@@ -179,14 +234,16 @@ async function handleConfirmRetirada(davNumber) {
     btn.disabled = true;
 
     const itemsParaRetirar = [];
-    document.querySelectorAll('#dav-results-container tbody tr').forEach(row => {
+    document.querySelectorAll('#dav-results-container tbody tr.expandable-row').forEach(row => {
         const input = row.querySelector('input[type="number"]');
         const quantidade = parseFloat(input.value);
         if (quantidade > 0) {
+            const itemNome = row.querySelector('td:nth-child(2)').textContent;
             itemsParaRetirar.push({
                 idavs_regi: row.dataset.idavsRegi,
                 quantidade_retirada: quantidade,
-                quantidade_saldo: parseFloat(input.max)
+                quantidade_saldo: parseFloat(input.max),
+                pd_nome: itemNome
             });
         }
     });
@@ -197,10 +254,9 @@ async function handleConfirmRetirada(davNumber) {
         return;
     }
 
-    // Validação
     for (const item of itemsParaRetirar) {
         if (item.quantidade_retirada > item.quantidade_saldo) {
-            alert(`A quantidade a retirar para o item ${item.idavs_regi} excede o saldo disponível!`);
+            alert(`A quantidade a retirar para o item "${item.pd_nome}" excede o saldo disponível!`);
             btn.disabled = false;
             return;
         }
@@ -226,8 +282,8 @@ async function handleConfirmRetirada(davNumber) {
         }
 
         alert(result.message);
-        document.getElementById('dav-results-container').classList.add('hidden');
-        document.getElementById('dav-search-input').value = '';
+        // Recarrega o DAV para mostrar os saldos atualizados
+        handleSearchDav();
 
     } catch (error) {
         alert(`Erro: ${error.message}`);
@@ -243,6 +299,8 @@ async function handleConfirmRetirada(davNumber) {
 async function openCreateRomaneioModal() {
     const modal = document.getElementById('create-romaneio-modal');
     const vehicleSelect = document.getElementById('romaneio-veiculo-select');
+    if (!vehicleSelect) return;
+    
     vehicleSelect.innerHTML = '<option value="">Carregando veículos...</option>';
     
     showLoader();
@@ -351,9 +409,37 @@ async function loadRomaneiosEmMontagem() {
 
 // --- Funções de Loader e Utilitários ---
 function showLoader() {
-    document.getElementById('global-loader').style.display = 'flex';
+    const loader = document.getElementById('global-loader');
+    if (loader) loader.style.display = 'flex';
 }
 
 function hideLoader() {
-    document.getElementById('global-loader').style.display = 'none';
+    const loader = document.getElementById('global-loader');
+    if (loader) loader.style.display = 'none';
 }
+
+function gerenciarAcessoModulos() {
+    const userData = getUserData();
+    if (!userData || !userData.permissoes) {
+        return;
+    }
+    const permissoesDoUsuario = userData.permissoes;
+    const mapaModulos = {
+        'lancamentos': 'despesas.html',
+        'logistica': 'logistica.html',
+        'entregas': 'entregas.html',
+        'checklist': 'checklist.html',
+        'produtos': 'produtos.html',
+        'configuracoes': 'settings.html'
+    };
+    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
+        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
+        if (!permissao || !permissao.permitido) {
+            const link = document.querySelector(`#sidebar a[href="${href}"]`);
+            if (link && link.parentElement) {
+                link.parentElement.style.display = 'none';
+            }
+        }
+    }
+}
+

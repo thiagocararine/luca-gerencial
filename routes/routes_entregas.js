@@ -1,324 +1,445 @@
-const express = require('express');
-const router = express.Router();
-const mysql = require('mysql2/promise');
-const { authenticateToken } = require('../middlewares');
-const dbConfig = require('../dbConfig'); // Conexão com gerencial_lucamat
+document.addEventListener('DOMContentLoaded', initEntregasPage);
 
-// Configuração de conexão para o banco de dados do ERP (SEI)
-const dbConfigSei = {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_DATABASE_SEI,
-    charset: 'utf8mb4'
-};
+const apiUrlBase = '/api';
 
-/**
- * Função auxiliar para calcular o saldo de um item específico de um DAV.
- * Esta função é reutilizável e centraliza a lógica de cálculo.
- * @param {mysql.Connection} gerencialConnection - Conexão com o banco gerencial_lucamat.
- * @param {mysql.Connection} seiConnection - Conexão com o banco do ERP (sei).
- * @param {number} davNumber - Número do DAV.
- * @param {string} idavsRegi - ID único do item no DAV (ex: '123451' para item 1 do DAV 12345).
- * @returns {Promise<number>} O saldo disponível para entrega.
- */
-async function calcularSaldoItem(gerencialConnection, seiConnection, davNumber, idavsRegi) {
-    // 1. Pega os dados de quantidade do ERP
-    // CORREÇÃO: Utiliza CAST para comparar o valor numérico de it_ndav
-    const [itensDav] = await seiConnection.execute(
-        `SELECT it_quan, it_qent, it_qtdv FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`,
-        [davNumber, idavsRegi]
-    );
+// --- Funções de Inicialização e Autenticação ---
 
-    if (itensDav.length === 0) {
-        throw new Error(`Item com ID ${idavsRegi} não encontrado no DAV ${davNumber}.`);
+function getToken() { return localStorage.getItem('lucaUserToken'); }
+function getUserData() { 
+    const token = getToken(); 
+    if (!token) return null;
+    try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } 
+}
+function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html'; }
+
+function initEntregasPage() {
+    if (!getToken()) {
+        window.location.href = 'login.html';
+        return;
     }
-    const itemErp = itensDav[0];
+    const userData = getUserData();
+    if (userData && document.getElementById('user-name')) {
+        document.getElementById('user-name').textContent = userData.nome || 'Utilizador';
+    }
 
-    // 2. Pega as retiradas já registradas no Luca Gerencial
-    const [retiradasManuais] = await gerencialConnection.execute(
-        'SELECT SUM(quantidade_retirada) as total FROM entregas_manuais_log WHERE dav_numero = ? AND idavs_regi = ?',
-        [davNumber, idavsRegi]
-    );
-    const [entregasRomaneio] = await gerencialConnection.execute(
-        'SELECT SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE dav_numero = ? AND idavs_regi = ?',
-        [davNumber, idavsRegi]
-    );
+    loadCompanyLogo();
+    setupEventListeners();
+    loadRomaneiosEmMontagem();
+    gerenciarAcessoModulos();
+}
 
-    const totalRetiradoManualmente = parseFloat(retiradasManuais[0].total || 0);
-    const totalEmRomaneios = parseFloat(entregasRomaneio[0].total || 0);
+function loadCompanyLogo() {
+    const companyLogo = document.getElementById('company-logo');
+    const logoBase64 = localStorage.getItem('company_logo');
+    if (logoBase64 && companyLogo) {
+        companyLogo.src = logoBase64;
+        companyLogo.style.display = 'block';
+    }
+}
 
-    // 3. Calcula o saldo final
-    const saldo = parseFloat(itemErp.it_quan)
-                - parseFloat(itemErp.it_qtdv || 0)
-                - parseFloat(itemErp.it_qent || 0)
-                - totalRetiradoManualmente
-                - totalEmRomaneios;
+// --- Funções de Event Listeners ---
 
-    return Math.max(0, saldo); // Garante que não retorna saldo negativo
+function setupEventListeners() {
+    document.getElementById('logout-button')?.addEventListener('click', logout);
+    document.getElementById('search-dav-btn')?.addEventListener('click', handleSearchDav);
+    document.getElementById('dav-search-input')?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleSearchDav();
+    });
+    document.getElementById('delivery-tabs')?.addEventListener('click', handleTabSwitch);
+
+    document.getElementById('create-romaneio-btn')?.addEventListener('click', openCreateRomaneioModal);
+    document.getElementById('close-romaneio-modal-btn')?.addEventListener('click', () => document.getElementById('create-romaneio-modal').classList.add('hidden'));
+    document.getElementById('cancel-romaneio-creation-btn')?.addEventListener('click', () => document.getElementById('create-romaneio-modal').classList.add('hidden'));
+    document.getElementById('create-romaneio-form')?.addEventListener('submit', handleCreateRomaneioSubmit);
+
+    // Adiciona listener para a funcionalidade de expandir histórico
+    document.getElementById('dav-results-container').addEventListener('click', (event) => {
+        const row = event.target.closest('.expandable-row');
+        if (row) {
+            const historyRow = row.nextElementSibling;
+            if (historyRow && historyRow.classList.contains('history-row')) {
+                historyRow.classList.toggle('expanded');
+                const icon = row.querySelector('[data-feather="chevron-down"]');
+                icon.classList.toggle('rotate-180');
+            }
+        }
+    });
+}
+
+// --- Lógica de Abas ---
+
+function handleTabSwitch(event) {
+    const button = event.target.closest('.tab-button');
+    if (!button) return;
+
+    document.querySelectorAll('#delivery-tabs .tab-button').forEach(btn => {
+        btn.classList.remove('active', 'text-indigo-600', 'border-indigo-500');
+        btn.classList.add('text-gray-500', 'border-transparent');
+    });
+    button.classList.add('active', 'text-indigo-600', 'border-indigo-500');
+    button.classList.remove('text-gray-500', 'border-transparent');
+
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+        content.classList.add('hidden');
+    });
+    document.getElementById(`${button.dataset.tab}-content`).classList.add('active');
+}
+
+// --- Lógica de Retirada Rápida ---
+
+async function handleSearchDav() {
+    const davNumber = document.getElementById('dav-search-input').value;
+    const resultsContainer = document.getElementById('dav-results-container');
+    
+    if (!davNumber) {
+        alert('Por favor, digite o número do DAV.');
+        return;
+    }
+
+    showLoader();
+    resultsContainer.innerHTML = '<p class="text-center text-gray-500 p-4">Buscando informações do pedido...</p>';
+    resultsContainer.classList.remove('hidden');
+
+    try {
+        const response = await fetch(`${apiUrlBase}/entregas/dav/${davNumber}`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Não foi possível buscar o pedido.');
+        }
+
+        const data = await response.json();
+        renderDavResults(data);
+
+    } catch (error) {
+        resultsContainer.innerHTML = `<p class="text-center text-red-500 p-4">${error.message}</p>`;
+    } finally {
+        hideLoader();
+    }
+}
+
+function renderDavResults(data) {
+    const { cliente, endereco, itens, data_criacao, data_recebimento_caixa, vendedor, valor_total } = data;
+    const resultsContainer = document.getElementById('dav-results-container');
+
+    const formatDate = (dateString) => {
+        if (!dateString) return 'N/A';
+        return new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+    };
+    
+    const formatCurrency = (value) => {
+        return (parseFloat(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    };
+
+    let itemsHtml = '<p class="text-center text-gray-500 p-4">Nenhum item com saldo a entregar encontrado para este pedido.</p>';
+    const itemsComSaldo = itens.filter(item => item.quantidade_saldo > 0);
+
+    if (items.length > 0) {
+        itemsHtml = `
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="w-10"></th>
+                        <th class="px-4 py-2 text-left font-medium text-gray-500">Produto</th>
+                        <th class="px-2 py-2 text-center font-medium text-gray-500">Total</th>
+                        <th class="px-2 py-2 text-center font-medium text-gray-500">Entregue</th>
+                        <th class="px-2 py-2 text-center font-medium text-gray-500">Saldo</th>
+                        <th class="px-4 py-2 text-center font-medium text-gray-500">Qtd. a Retirar</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    ${itens.map(item => `
+                        <tr class="expandable-row" data-idavs-regi="${item.idavs_regi}" title="Clique para ver o histórico de retiradas">
+                            <td class="px-2 py-3 text-center text-gray-400">
+                                ${item.historico && item.historico.length > 0 ? '<i data-feather="chevron-down" class="transition-transform"></i>' : ''}
+                            </td>
+                            <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome}</td>
+                            <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_total}</td>
+                            <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_entregue}</td>
+                            <td class="px-2 py-3 text-center font-bold ${item.quantidade_saldo > 0 ? 'text-blue-600' : 'text-green-600'}">${item.quantidade_saldo}</td>
+                            <td class="px-4 py-3 text-center">
+                                <input type="number" class="w-24 text-center rounded-md border-gray-300 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" data-item-id="${item.idavs_regi}" ${item.quantidade_saldo === 0 ? 'disabled' : ''}>
+                            </td>
+                        </tr>
+                        ${item.historico && item.historico.length > 0 ? `
+                        <tr class="history-row">
+                            <td colspan="6" class="p-3 bg-gray-50">
+                                <h5 class="text-xs font-bold mb-2">Histórico de Entregas:</h5>
+                                <ul class="text-xs space-y-1">
+                                    ${item.historico.map(h => `
+                                        <li class="flex justify-between border-b pb-1">
+                                            <span>${new Date(h.data).toLocaleString('pt-BR')} - <strong>${h.quantidade} un.</strong> (${h.tipo})</span>
+                                            <span>Resp: ${h.responsavel}</span>
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            </td>
+                        </tr>` : ''}
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+
+    resultsContainer.innerHTML = `
+        <div class="bg-white/90 backdrop-blur-sm p-6 rounded-lg shadow-lg">
+            <div class="border-b pb-4 mb-4">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-900">${cliente.nome}</h3>
+                        <p class="text-sm text-gray-500">${cliente.doc || 'Documento não informado'}</p>
+                        <p class="text-sm text-gray-500 mt-2 flex items-center gap-2">
+                            <span data-feather="map-pin" class="w-4 h-4"></span>
+                            <span>${endereco.logradouro}, ${endereco.bairro} - ${endereco.cidade}</span>
+                        </p>
+                    </div>
+                    <div class="text-right flex-shrink-0 ml-4">
+                        <p class="font-bold text-2xl text-indigo-600">${formatCurrency(valor_total)}</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mt-4 pt-4 border-t">
+                    <div><strong class="block text-gray-500">Data do Pedido</strong><span>${formatDate(data_criacao)}</span></div>
+                    <div><strong class="block text-gray-500">Recebido no Caixa</strong><span>${formatDate(data_recebimento_caixa)}</span></div>
+                    <div><strong class="block text-gray-500">Vendedor</strong><span>${vendedor || 'N/A'}</span></div>
+                </div>
+            </div>
+            <div class="space-y-4">
+                <h4 class="font-semibold">Itens do Pedido</h4>
+                <div class="overflow-x-auto rounded-lg border">${itemsHtml}</div>
+                ${itemsComSaldo.length > 0 ? `
+                <div class="flex flex-col sm:flex-row justify-end items-center pt-4 border-t gap-4">
+                    <div>
+                        <label for="retirada-nome-cliente" class="block text-sm font-medium text-gray-700">Nome de quem retira (opcional)</label>
+                        <input type="text" id="retirada-nome-cliente" placeholder="Nome do cliente/portador" class="mt-1 w-full sm:w-64 rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <button id="confirm-retirada-btn" class="action-btn bg-green-600 text-white hover:bg-green-700 flex items-center gap-2 w-full sm:w-auto justify-center">
+                        <span data-feather="check-circle"></span>Confirmar Retirada
+                    </button>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+
+    feather.replace();
+
+    document.getElementById('confirm-retirada-btn')?.addEventListener('click', () => handleConfirmRetirada(data.dav_numero));
+}
+
+async function handleConfirmRetirada(davNumber) {
+    const btn = document.getElementById('confirm-retirada-btn');
+    btn.disabled = true;
+
+    const itemsParaRetirar = [];
+    document.querySelectorAll('#dav-results-container tbody tr.expandable-row').forEach(row => {
+        const input = row.querySelector('input[type="number"]');
+        const quantidade = parseFloat(input.value);
+        if (quantidade > 0) {
+            const itemNome = row.querySelector('td:nth-child(2)').textContent;
+            itemsParaRetirar.push({
+                idavs_regi: row.dataset.idavsRegi,
+                quantidade_retirada: quantidade,
+                quantidade_saldo: parseFloat(input.max),
+                pd_nome: itemNome
+            });
+        }
+    });
+
+    if (itemsParaRetirar.length === 0) {
+        alert("Nenhum item com quantidade maior que zero para retirar.");
+        btn.disabled = false;
+        return;
+    }
+
+    for (const item of itemsParaRetirar) {
+        if (item.quantidade_retirada > item.quantidade_saldo) {
+            alert(`A quantidade a retirar para o item "${item.pd_nome}" excede o saldo disponível!`);
+            btn.disabled = false;
+            return;
+        }
+    }
+
+    showLoader();
+    try {
+        const response = await fetch(`${apiUrlBase}/entregas/retirada-manual`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getToken()}`
+            },
+            body: JSON.stringify({
+                dav_numero: davNumber,
+                itens: itemsParaRetirar
+            })
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || 'Falha ao registrar retirada.');
+        }
+
+        alert(result.message);
+        // Recarrega o DAV para mostrar os saldos atualizados
+        handleSearchDav();
+
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        hideLoader();
+        btn.disabled = false;
+    }
 }
 
 
-// Rota principal para buscar dados de um DAV e calcular saldos
-router.get('/dav/:numero', authenticateToken, async (req, res) => {
-    const { numero: davNumber } = req.params;
-    let seiConnection, gerencialConnection;
+// --- Lógica de Gestão de Romaneios ---
 
-    try {
-        [seiConnection, gerencialConnection] = await Promise.all([
-            mysql.createConnection(dbConfigSei),
-            mysql.createConnection(dbConfig)
-        ]);
-
-        // CORREÇÃO: Utiliza CAST para ignorar os zeros à esquerda na busca
-        const [davCheck] = await seiConnection.execute(
-            `SELECT cr_ndav, cr_tipo FROM cdavs WHERE CAST(cr_ndav AS UNSIGNED) = ?`,
-            [davNumber]
-        );
-
-        if (davCheck.length === 0) {
-            return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado.` });
-        }
-        if (davCheck[0].cr_tipo != 1) {
-            return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
-        }
-        
-        // CORREÇÃO: Utiliza CAST para buscar os dados completos
-        const [davs] = await seiConnection.execute(
-            `SELECT c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, cl.cl_docume 
-             FROM cdavs c
-             LEFT JOIN clientes cl ON c.cr_cdcl = cl.cl_codigo
-             WHERE CAST(c.cr_ndav AS UNSIGNED) = ?`,
-            [davNumber]
-        );
-        
-        const davData = davs[0];
-
-        // CORREÇÃO: Utiliza CAST para buscar os itens
-        const [itensDav] = await seiConnection.execute(
-            `SELECT it_ndav, it_item, it_codi, it_nome, it_quan, it_unid FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`,
-            [davNumber]
-        );
-        
-        if (itensDav.length === 0) {
-            return res.status(404).json({ error: 'Nenhum item válido encontrado para este pedido.' });
-        }
-
-        const itensComSaldo = [];
-        for (const item of itensDav) {
-            const idavsRegi = `${item.it_ndav}${item.it_item}`;
-            const saldo = await calcularSaldoItem(gerencialConnection, seiConnection, davNumber, idavsRegi);
-
-            itensComSaldo.push({
-                idavs_regi: idavsRegi,
-                pd_codi: item.it_codi,
-                pd_nome: item.it_nome,
-                unidade: item.it_unid,
-                quantidade_total: parseFloat(item.it_quan),
-                quantidade_saldo: saldo
-            });
-        }
-        
-        const responseData = {
-            dav_numero: davData.cr_ndav,
-            cliente: { nome: davData.cr_nmcl, doc: davData.cl_docume },
-            endereco: {
-                logradouro: (davData.cr_dade || '').split(';')[0]?.trim(),
-                bairro: davData.cr_ebai,
-                cidade: davData.cr_ecid,
-                cep: davData.cr_ecep,
-                referencia: davData.cr_refe
-            },
-            itens: itensComSaldo
-        };
-
-        res.json(responseData);
-
-    } catch (error) {
-        console.error("Erro ao buscar dados do DAV:", error);
-        res.status(500).json({ error: 'Erro interno no servidor ao processar o pedido.' });
-    } finally {
-        if (seiConnection) await seiConnection.end();
-        if (gerencialConnection) await gerencialConnection.end();
-    }
-});
-
-
-// Rota para registrar uma retirada manual de produtos, incluindo o write-back no ERP
-router.post('/retirada-manual', authenticateToken, async (req, res) => {
-    const { dav_numero, itens } = req.body;
-    const { userId, nome: nomeUsuario } = req.user;
+async function openCreateRomaneioModal() {
+    const modal = document.getElementById('create-romaneio-modal');
+    const vehicleSelect = document.getElementById('romaneio-veiculo-select');
+    if (!vehicleSelect) return;
     
-    if (!dav_numero || !itens || !Array.isArray(itens) || itens.length === 0) {
-        return res.status(400).json({ error: 'Dados inválidos para registrar a retirada.' });
-    }
-
-    let gerencialConnection, seiConnection;
-    const logsCriados = [];
-
+    vehicleSelect.innerHTML = '<option value="">Carregando veículos...</option>';
+    
+    showLoader();
     try {
-        [gerencialConnection, seiConnection] = await Promise.all([
-            mysql.createConnection(dbConfig),
-            mysql.createConnection(dbConfigSei)
-        ]);
+        const response = await fetch(`${apiUrlBase}/entregas/veiculos-disponiveis`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error('Não foi possível carregar a lista de veículos.');
 
-        await gerencialConnection.beginTransaction();
-        await seiConnection.beginTransaction();
-
-        for (const item of itens) {
-            // 1. Re-valida o saldo no momento da transação para evitar race conditions
-            const saldoAtual = await calcularSaldoItem(gerencialConnection, seiConnection, dav_numero, item.idavs_regi);
-            if (item.quantidade_retirada > saldoAtual) {
-                throw new Error(`Saldo insuficiente para o item ${item.idavs_regi}. Saldo disponível: ${saldoAtual}.`);
-            }
-
-            // 2. Insere o log no banco gerencial
-            const [logResult] = await gerencialConnection.execute(
-                `INSERT INTO entregas_manuais_log (dav_numero, idavs_regi, quantidade_retirada, id_usuario_conferencia) VALUES (?, ?, ?, ?)`,
-                [dav_numero, item.idavs_regi, item.quantidade_retirada, userId]
-            );
-            const newLogId = logResult.insertId;
-            logsCriados.push(newLogId);
-
-            // 3. Prepara e executa a escrita no campo `it_reti` do ERP
-            // CORREÇÃO: Utiliza CAST para buscar o item
-            const [itemErpRows] = await seiConnection.execute(
-                `SELECT it_reti, it_codi, it_nome, it_unid FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ? FOR UPDATE`,
-                [dav_numero, item.idavs_regi]
-            );
-            
-            const itemErp = itemErpRows[0];
-            const textoAntigo = itemErp.it_reti || '';
-            const dataHora = new Date().toLocaleString('pt-BR');
-            
-            const novoTexto = `
---------------------------------------------------
-Lançamento: ${dataHora}  {${nomeUsuario}}
-Codigo....: ${itemErp.it_codi}
-Descrição.: ${itemErp.it_nome}
-Quantidade: ${item.quantidade_retirada}
-Unidade...: ${itemErp.it_unid}
-Retirada..: ${item.quantidade_retirada}
-Lançamento: App Gerencial ID ${newLogId}
-Retirado..: Balcão/Loja`;
-
-            const textoFinal = (textoAntigo + novoTexto).trim();
-
-            // CORREÇÃO: Utiliza CAST para atualizar o item correto
-            await seiConnection.execute(
-                `UPDATE idavs SET it_reti = ? WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`,
-                [textoFinal, dav_numero, item.idavs_regi]
-            );
-
-            // 4. Atualiza o status do log no gerencial para 'Sucesso'
-            await gerencialConnection.execute(
-                `UPDATE entregas_manuais_log SET erp_writeback_status = 'Sucesso' WHERE id = ?`,
-                [newLogId]
-            );
-        }
-
-        // Se tudo deu certo, commita as transações em ambos os bancos
-        await gerencialConnection.commit();
-        await seiConnection.commit();
-
-        res.status(201).json({ message: 'Retirada registrada e atualizada no ERP com sucesso!' });
-
-    } catch (error) {
-        // Se algo der errado, faz rollback em ambos os bancos
-        if (gerencialConnection) await gerencialConnection.rollback();
-        if (seiConnection) await seiConnection.rollback();
+        const veiculos = await response.json();
+        vehicleSelect.innerHTML = '<option value="">-- Selecione um Veículo --</option>';
+        veiculos.forEach(v => {
+            const option = document.createElement('option');
+            option.value = v.id;
+            option.textContent = `${v.modelo} - ${v.placa}`;
+            vehicleSelect.appendChild(option);
+        });
         
-        // Marca os logs como 'Falha' para auditoria
-        if (logsCriados.length > 0 && gerencialConnection) {
-            const updatePromises = logsCriados.map(logId => 
-                gerencialConnection.execute(`UPDATE entregas_manuais_log SET erp_writeback_status = 'Falha' WHERE id = ?`, [logId])
-            );
-            await Promise.all(updatePromises);
+        document.getElementById('create-romaneio-form').reset();
+        modal.classList.remove('hidden');
+
+    } catch (error) {
+        alert(error.message);
+    } finally {
+        hideLoader();
+    }
+}
+
+async function handleCreateRomaneioSubmit(event) {
+    event.preventDefault();
+    const btn = document.getElementById('save-romaneio-btn');
+    btn.disabled = true;
+    showLoader();
+
+    const payload = {
+        id_veiculo: document.getElementById('romaneio-veiculo-select').value,
+        nome_motorista: document.getElementById('romaneio-motorista-input').value
+    };
+
+    if (!payload.id_veiculo || !payload.nome_motorista) {
+        alert('Por favor, selecione um veículo e informe o nome do motorista.');
+        btn.disabled = false;
+        hideLoader();
+        return;
+    }
+
+    try {
+        const response = await fetch(`${apiUrlBase}/entregas/romaneios`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getToken()}`
+            },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Falha ao criar romaneio.');
+
+        alert('Romaneio criado com sucesso! Agora você pode adicionar os pedidos a ele.');
+        document.getElementById('create-romaneio-modal').classList.add('hidden');
+        await loadRomaneiosEmMontagem();
+
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        hideLoader();
+        btn.disabled = false;
+    }
+}
+
+async function loadRomaneiosEmMontagem() {
+    const container = document.getElementById('romaneios-list-container');
+    container.innerHTML = '<p class="text-center text-gray-500 p-4">Buscando romaneios...</p>';
+    
+    try {
+        const response = await fetch(`${apiUrlBase}/entregas/romaneios?status=Em montagem`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error('Falha ao buscar romaneios.');
+
+        const romaneios = await response.json();
+
+        if (romaneios.length === 0) {
+            container.innerHTML = '<p class="text-center text-gray-500 p-4">Nenhum romaneio em montagem no momento.</p>';
+            return;
         }
 
-        console.error("Erro ao registrar retirada manual:", error);
-        res.status(500).json({ error: error.message || 'Erro interno ao salvar a retirada.' });
-    } finally {
-        if (gerencialConnection) await gerencialConnection.end();
-        if (seiConnection) await seiConnection.end();
+        container.innerHTML = romaneios.map(r => `
+            <div class="border p-3 rounded-md bg-gray-50 hover:bg-indigo-50 transition-colors cursor-pointer mb-2" data-romaneio-id="${r.id}">
+                <div class="flex justify-between items-center">
+                    <p class="font-bold text-gray-800">Romaneio #${r.id}</p>
+                    <span class="text-sm font-semibold">${r.nome_motorista}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm text-gray-600 mt-1">
+                    <span>${r.modelo_veiculo} (${r.placa_veiculo})</span>
+                    <span>${new Date(r.data_criacao).toLocaleString('pt-BR')}</span>
+                </div>
+            </div>
+        `).join('');
+
+    } catch(error) {
+        container.innerHTML = `<p class="text-center text-red-500 p-4">${error.message}</p>`;
     }
-});
+}
 
 
-// --- ENDPOINTS DE ROMANEIO ---
+// --- Funções de Loader e Utilitários ---
+function showLoader() {
+    const loader = document.getElementById('global-loader');
+    if (loader) loader.style.display = 'flex';
+}
 
-// Endpoint para listar veículos ativos para o modal de criação de romaneio
-router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
-    let connection;
-    try {
-        connection = await mysql.createConnection(dbConfig);
-        const [veiculos] = await connection.execute(
-            "SELECT id, modelo, placa FROM veiculos WHERE status = 'Ativo' ORDER BY modelo ASC"
-        );
-        res.json(veiculos);
-    } catch (error) {
-        console.error("Erro ao buscar veículos disponíveis:", error);
-        res.status(500).json({ error: 'Erro ao buscar veículos.' });
-    } finally {
-        if (connection) await connection.end();
+function hideLoader() {
+    const loader = document.getElementById('global-loader');
+    if (loader) loader.style.display = 'none';
+}
+
+function gerenciarAcessoModulos() {
+    const userData = getUserData();
+    if (!userData || !userData.permissoes) {
+        return;
     }
-});
-
-// Lista os romaneios (por enquanto, apenas os "Em montagem")
-router.get('/romaneios', authenticateToken, async (req, res) => {
-    let connection;
-    const { status } = req.query;
-    try {
-        connection = await mysql.createConnection(dbConfig);
-        let query = `
-            SELECT r.id, r.data_criacao, r.nome_motorista, v.modelo as modelo_veiculo, v.placa as placa_veiculo 
-            FROM romaneios r
-            JOIN veiculos v ON r.id_veiculo = v.id
-        `;
-        const params = [];
-        if (status) {
-            query += ' WHERE r.status = ?';
-            params.push(status);
+    const permissoesDoUsuario = userData.permissoes;
+    const mapaModulos = {
+        'lancamentos': 'despesas.html',
+        'logistica': 'logistica.html',
+        'entregas': 'entregas.html',
+        'checklist': 'checklist.html',
+        'produtos': 'produtos.html',
+        'configuracoes': 'settings.html'
+    };
+    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
+        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
+        if (!permissao || !permissao.permitido) {
+            const link = document.querySelector(`#sidebar a[href="${href}"]`);
+            if (link && link.parentElement) {
+                link.parentElement.style.display = 'none';
+            }
         }
-        query += ' ORDER BY r.data_criacao DESC';
-
-        const [romaneios] = await connection.execute(query, params);
-        res.json(romaneios);
-    } catch (error) {
-        console.error("Erro ao buscar romaneios:", error);
-        res.status(500).json({ error: 'Erro ao buscar romaneios.' });
-    } finally {
-        if (connection) await connection.end();
     }
-});
-
-// Endpoint para criar um novo romaneio
-router.post('/romaneios', authenticateToken, async (req, res) => {
-    const { id_veiculo, nome_motorista } = req.body;
-    const { userId } = req.user;
-
-    if (!id_veiculo || !nome_motorista) {
-        return res.status(400).json({ error: 'Veículo e nome do motorista são obrigatórios.' });
-    }
-    let connection;
-    try {
-        connection = await mysql.createConnection(dbConfig);
-        const [result] = await connection.execute(
-            'INSERT INTO romaneios (id_veiculo, nome_motorista, id_usuario_criacao) VALUES (?, ?, ?)',
-            [id_veiculo, nome_motorista, userId]
-        );
-        res.status(201).json({ message: "Romaneio criado com sucesso!", romaneioId: result.insertId });
-    } catch (error) {
-        console.error("Erro ao criar romaneio:", error);
-        res.status(500).json({ error: 'Erro interno ao criar o romaneio.' });
-    } finally {
-        if (connection) await connection.end();
-    }
-});
-
-
-router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => res.status(201).json({ message: "A ser implementado." }));
-
-
-module.exports = router;
+}
 
