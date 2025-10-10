@@ -71,6 +71,7 @@ function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem
 // Rota principal para buscar dados de um DAV (REATORADA PARA PERFORMANCE)
 router.get('/dav/:numero', authenticateToken, async (req, res) => {
     const { numero: davNumber } = req.params;
+    console.log(`[LOG] Iniciando busca para DAV: ${davNumber}`);
 
     try {
         const [davs] = await seiPool.execute(
@@ -88,6 +89,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
         }
         const davData = davs[0];
+        console.log(`[LOG] DAV ${davNumber} encontrado. Buscando itens e históricos...`);
 
         // --- OTIMIZAÇÃO: Busca todos os dados relacionados ao DAV de uma só vez ---
         const [itensDav, retiradasManuais, entregasRomaneio, historicoCompleto] = await Promise.all([
@@ -103,7 +105,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 'SELECT idavs_regi, SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE dav_numero = ? GROUP BY idavs_regi',
                 [davNumber]
             ),
-            // OTIMIZAÇÃO: Busca todo o histórico de uma vez
             gerencialPool.execute(
                 `(SELECT e.idavs_regi, e.data_retirada as data, e.quantidade_retirada as quantidade, u.nome_user as responsavel, 'Retirada no Balcão' as tipo
                  FROM entregas_manuais_log e 
@@ -119,20 +120,22 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             )
         ]);
         
+        console.log(`[LOG] Dados brutos buscados. Itens: ${itensDav.length}, Retiradas: ${retiradasManuais.length}, Romaneios: ${entregasRomaneio.length}`);
+        
         if (itensDav.length === 0) {
             return res.status(404).json({ error: 'Nenhum item válido encontrado para este pedido.' });
         }
 
         const itensComSaldo = [];
         for (const item of itensDav) {
-            const idavsRegi = `${item.it_ndav}${item.it_item}`;
+            // AQUI ESTÁ A CORREÇÃO CRÍTICA: Convertendo o ID para número
+            const idavsRegi = parseInt(`${item.it_ndav}${item.it_item}`, 10);
             
             const retiradaManualDoItem = retiradasManuais.find(r => r.idavs_regi === idavsRegi);
             const entregaRomaneioDoItem = entregasRomaneio.find(r => r.idavs_regi === idavsRegi);
             
             const { saldo, entregue } = calcularSaldosItem(item, retiradaManualDoItem, entregaRomaneioDoItem);
             
-            // OTIMIZAÇÃO: Filtra o histórico em memória ao invés de consultar o banco
             const historicoDoItem = historicoCompleto.filter(h => h.idavs_regi === idavsRegi);
 
             itensComSaldo.push({
@@ -164,18 +167,18 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             },
             itens: itensComSaldo
         };
-
+        
+        console.log(`[LOG] Processamento do DAV ${davNumber} concluído com sucesso.`);
         res.json(responseData);
 
     } catch (error) {
-        console.error("Erro ao buscar dados do DAV:", error);
-        res.status(500).json({ error: 'Erro interno no servidor ao processar o pedido.' });
+        console.error(`[ERRO FATAL] Falha na rota /dav/${davNumber}:`, error);
+        res.status(500).json({ error: 'Erro interno no servidor ao processar o pedido. Verifique os logs do servidor para mais detalhes.' });
     }
 });
 
 // Rota para registrar uma retirada manual de produtos (REATORADA PARA PERFORMANCE)
 router.post('/retirada-manual', authenticateToken, async (req, res) => {
-    // ... (código existente sem alterações, pois já usava a lógica correta de transação)
     const { dav_numero, itens } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
     
@@ -192,13 +195,17 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
         await seiConnection.beginTransaction();
 
         for (const item of itens) {
+            const idavsRegiNum = parseInt(item.idavs_regi, 10);
+
             // A validação de saldo agora é mais complexa e precisa de ambas as conexões
-            // Esta função auxiliar precisa ser criada ou adaptada
+            const [itemErpParaSaldo] = await seiPool.execute(`SELECT * FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`, [dav_numero, item.idavs_regi]);
+            const [retiradaManualParaSaldo] = await gerencialPool.execute('SELECT SUM(quantidade_retirada) as total FROM entregas_manuais_log WHERE dav_numero = ? AND idavs_regi = ?', [dav_numero, idavsRegiNum]);
+            const [entregaRomaneioParaSaldo] = await gerencialPool.execute('SELECT SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE dav_numero = ? AND idavs_regi = ?', [dav_numero, idavsRegiNum]);
+
             const { saldo } = await calcularSaldosItem(
-                // Simula os objetos esperados pela função
-                (await seiPool.execute(`SELECT * FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`, [dav_numero, item.idavs_regi]))[0][0],
-                (await gerencialPool.execute('SELECT SUM(quantidade_retirada) as total FROM entregas_manuais_log WHERE dav_numero = ? AND idavs_regi = ?', [dav_numero, item.idavs_regi]))[0][0],
-                (await gerencialPool.execute('SELECT SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE dav_numero = ? AND idavs_regi = ?', [dav_numero, item.idavs_regi]))[0][0]
+                itemErpParaSaldo[0],
+                retiradaManualParaSaldo[0],
+                entregaRomaneioParaSaldo[0]
             );
 
             if (item.quantidade_retirada > saldo) {
@@ -207,7 +214,7 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
 
             const [logResult] = await gerencialConnection.execute(
                 `INSERT INTO entregas_manuais_log (dav_numero, idavs_regi, quantidade_retirada, id_usuario_conferencia) VALUES (?, ?, ?, ?)`,
-                [dav_numero, item.idavs_regi, item.quantidade_retirada, userId]
+                [dav_numero, idavsRegiNum, item.quantidade_retirada, userId]
             );
             const newLogId = logResult.insertId;
             logsCriados.push(newLogId);
@@ -239,7 +246,6 @@ Lançamento: App Gerencial ID ${newLogId}
 Portador..: App
 Retirado..: Retirada no Balcão via App`;
 
-            // CORREÇÃO SUTIL: Remove quebra de linha no início do texto
             const textoFinal = textoAntigo ? (textoAntigo + '\n' + novoTexto).trim() : novoTexto.trim();
 
             await seiConnection.execute(
