@@ -131,14 +131,18 @@ function renderDavResults(data) {
 
     const formatDateTime = (dateString) => {
         if (!dateString) return 'N/A';
-        return new Date(dateString).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+        const date = new Date(dateString);
+        // Verifica se a data é válida antes de formatar
+        if (isNaN(date.getTime())) {
+            return 'Data inválida';
+        }
+        return date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
     };
     
     const formatCurrency = (value) => {
         return (parseFloat(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     };
     
-    // Pega o responsável do caixa do primeiro item, se existir
     const responsavelCaixaGeral = itens.length > 0 ? itens[0].responsavel_caixa : 'N/A';
 
     let itemsHtml = '<p class="text-center text-gray-500 p-4">Nenhum item encontrado para este pedido.</p>';
@@ -163,10 +167,10 @@ function renderDavResults(data) {
                             <td class="px-2 py-3 text-center text-gray-400">
                                 ${item.historico && item.historico.length > 0 ? '<i data-feather="chevron-down" class="transition-transform"></i>' : ''}
                             </td>
-                            <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome}</td>
-                            <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_total}</td>
-                            <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_entregue}</td>
-                            <td class="px-2 py-3 text-center font-bold ${item.quantidade_saldo > 0 ? 'text-blue-600' : 'text-green-600'}">${item.quantidade_saldo}</td>
+                            <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome || 'Nome não definido'}</td>
+                            <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_total || 0}</td>
+                            <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_entregue || 0}</td>
+                            <td class="px-2 py-3 text-center font-bold ${item.quantidade_saldo > 0 ? 'text-blue-600' : 'text-green-600'}">${item.quantidade_saldo || 0}</td>
                             <td class="px-4 py-3 text-center">
                                 <input type="number" class="w-24 text-center rounded-md border-gray-300 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" data-item-id="${item.idavs_regi}" ${item.quantidade_saldo === 0 ? 'disabled' : ''}>
                             </td>
@@ -194,7 +198,7 @@ function renderDavResults(data) {
     resultsContainer.innerHTML = `
         <div class="bg-white/90 backdrop-blur-sm p-6 rounded-lg shadow-lg">
             <div class="border-b pb-4 mb-4">
-                <div class="flex justify-between items-start">
+                <div class="flex justify-between items-start flex-wrap gap-4">
                     <div>
                         <h3 class="text-xl font-semibold text-gray-900">${cliente.nome}</h3>
                         <p class="text-sm text-gray-500">${cliente.doc || 'Documento não informado'}</p>
@@ -203,13 +207,13 @@ function renderDavResults(data) {
                             <span>${endereco.logradouro}, ${endereco.bairro} - ${endereco.cidade}</span>
                         </p>
                     </div>
-                    <div class="text-right flex-shrink-0 ml-4">
+                    <div class="text-right flex-shrink-0">
                         <p class="font-bold text-2xl text-indigo-600">${formatCurrency(valor_total)}</p>
                     </div>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mt-4 pt-4 border-t">
-                    <div><strong class="block text-gray-500">Vendedor / Pedido</strong><span>${vendedor || 'N/A'} - ${formatDateTime(data_hora_pedido)}</span></div>
-                    <div><strong class="block text-gray-500">Caixa / Recebimento</strong><span>${responsavelCaixaGeral} - ${formatDateTime(data_hora_caixa)}</span></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-sm mt-4 pt-4 border-t">
+                    <div><strong class="block text-gray-500">Vendedor / Pedido:</strong><span>${vendedor || 'N/A'} - ${formatDateTime(data_hora_pedido)}</span></div>
+                    <div><strong class="block text-gray-500">Caixa / Recebimento:</strong><span>${responsavelCaixaGeral} - ${formatDateTime(data_hora_caixa)}</span></div>
                 </div>
             </div>
             <div class="space-y-4">
