@@ -20,12 +20,14 @@ const gerencialPool = mysql.createPool(dbConfig);
 
 /**
  * Função para extrair o usuário do campo it_entr.
+ * Exemplo de formato: "30/09/2025 15:23:50 THIAGOTI" -> "THIAGOTI"
  */
 function parseUsuarioLiberacao(it_entr) {
     if (!it_entr || typeof it_entr !== 'string') {
         return 'N/A';
     }
     const parts = it_entr.split(' ');
+    // O nome do usuário é geralmente a última parte
     return parts[parts.length - 1] || 'N/A';
 }
 
@@ -172,7 +174,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
 });
 
 // Rota para registrar uma retirada manual de produtos (REATORADA PARA PERFORMANCE)
-router.post('/retirada-manual', async (req, res) => {
+router.post('/retirada-manual', authenticateToken, async (req, res) => {
     // ... (código existente sem alterações, pois já usava a lógica correta de transação)
     const { dav_numero, itens } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
