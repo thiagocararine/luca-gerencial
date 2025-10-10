@@ -97,6 +97,19 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         const davData = davs[0];
         console.log(`[LOG] Passo 2: DAV ${davNumber} encontrado. Buscando itens e históricos em paralelo...`);
 
+        // CORREÇÃO: Adicionado COLLATE utf8mb4_unicode_ci para resolver o erro "Illegal mix of collations"
+        const historicoQuery = `
+            (SELECT e.idavs_regi, e.data_retirada as data, e.quantidade_retirada as quantidade, u.nome_user COLLATE utf8mb4_unicode_ci as responsavel, 'Retirada no Balcão' as tipo
+             FROM entregas_manuais_log e 
+             JOIN cad_user u ON e.id_usuario_conferencia = u.ID 
+             WHERE e.dav_numero = ?)
+             UNION ALL
+             (SELECT ri.idavs_regi, r.data_criacao as data, ri.quantidade_a_entregar as quantidade, r.nome_motorista COLLATE utf8mb4_unicode_ci as responsavel, 'Saída em Romaneio' as tipo
+             FROM romaneio_itens ri 
+             JOIN romaneios r ON ri.id_romaneio = r.id 
+             WHERE ri.dav_numero = ?)
+             ORDER BY data DESC`;
+
         const [itensDav, retiradasManuais, entregasRomaneio, historicoCompleto] = await Promise.all([
             seiPool.execute(
                 `SELECT it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`,
@@ -110,19 +123,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 'SELECT idavs_regi, SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE dav_numero = ? GROUP BY idavs_regi',
                 [davNumber]
             ),
-            gerencialPool.execute(
-                `(SELECT e.idavs_regi, e.data_retirada as data, e.quantidade_retirada as quantidade, u.nome_user as responsavel, 'Retirada no Balcão' as tipo
-                 FROM entregas_manuais_log e 
-                 JOIN cad_user u ON e.id_usuario_conferencia = u.ID 
-                 WHERE e.dav_numero = ?)
-                 UNION ALL
-                 (SELECT ri.idavs_regi, r.data_criacao as data, ri.quantidade_a_entregar as quantidade, r.nome_motorista as responsavel, 'Saída em Romaneio' as tipo
-                 FROM romaneio_itens ri 
-                 JOIN romaneios r ON ri.id_romaneio = r.id 
-                 WHERE ri.dav_numero = ?)
-                 ORDER BY data DESC`,
-                [davNumber, davNumber]
-            )
+            gerencialPool.execute(historicoQuery, [davNumber, davNumber])
         ]);
         
         console.log(`[LOG] Passo 3: Dados brutos buscados. Itens do DAV: ${itensDav.length}, Retiradas Manuais: ${retiradasManuais.length}, Itens em Romaneio: ${entregasRomaneio.length}`);
@@ -209,8 +210,9 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
 
         for (const item of itens) {
             const idavsRegiNum = parseInt(item.idavs_regi, 10);
+            const idavsRegiStr = String(item.idavs_regi);
 
-            const [itemErpParaSaldoRows] = await seiPool.execute(`SELECT * FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`, [dav_numero, item.idavs_regi]);
+            const [itemErpParaSaldoRows] = await seiPool.execute(`SELECT * FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`, [dav_numero, idavsRegiStr]);
             if(itemErpParaSaldoRows.length === 0) {
                 throw new Error(`Item ${item.pd_nome} não encontrado no DAV ${dav_numero} do ERP.`);
             }
@@ -238,12 +240,12 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
             
             await seiConnection.execute(
                 `UPDATE idavs SET it_qent = it_qent + ? WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`,
-                [item.quantidade_retirada, dav_numero, item.idavs_regi]
+                [item.quantidade_retirada, dav_numero, idavsRegiStr]
             );
 
             const [itemErpRows] = await seiConnection.execute(
                 `SELECT it_reti, it_codi, it_nome, it_unid, it_quan FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ? FOR UPDATE`,
-                [dav_numero, item.idavs_regi]
+                [dav_numero, idavsRegiStr]
             );
             
             const itemErp = itemErpRows[0];
@@ -267,7 +269,7 @@ Retirado..: Retirada no Balcão via App`;
 
             await seiConnection.execute(
                 `UPDATE idavs SET it_reti = ? WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`,
-                [textoFinal, dav_numero, item.idavs_regi]
+                [textoFinal, dav_numero, idavsRegiStr]
             );
 
             await gerencialConnection.execute(
