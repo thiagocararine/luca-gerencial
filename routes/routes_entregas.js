@@ -17,7 +17,7 @@ const dbConfigSei = {
  * Função auxiliar para calcular o saldo de um item específico de um DAV.
  */
 async function calcularSaldosItem(gerencialConnection, seiConnection, davNumber, idavsRegi) {
-    // CORREÇÃO: Usando CAST para comparar numericamente o DAV
+    // Usando CAST para comparar numericamente o DAV
     const [itensDav] = await seiConnection.execute(
         `SELECT it_quan, it_qent, it_qtdv FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`,
         [davNumber, idavsRegi]
@@ -59,7 +59,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             mysql.createConnection(dbConfig)
         ]);
 
-        // CORREÇÃO: A busca agora usa CAST para ignorar os zeros à esquerda e tratar a entrada como número.
+        // A busca agora usa CAST para ignorar os zeros à esquerda e tratar a entrada como número.
         const [davCheck] = await seiConnection.execute(
             `SELECT cr_ndav, cr_tipo FROM cdavs WHERE CAST(cr_ndav AS UNSIGNED) = ?`,
             [davNumber]
@@ -211,8 +211,8 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
             const textoAntigo = itemErp.it_reti || '';
             const dataHora = new Date().toLocaleString('pt-BR');
             
-            const novoTexto = `
---------------------------------------------------
+            // CORREÇÃO: Removida a quebra de linha no início do texto
+            const novoTexto = `--------------------------------------------------
 Lançamento: ${dataHora}  {${nomeUsuario}}
 Codigo....: ${itemErp.it_codi}
 Descrição.: ${itemErp.it_nome}
@@ -222,7 +222,8 @@ Retirada..: ${item.quantidade_retirada}
 Lançamento: App Gerencial ID ${newLogId}
 Retirado..: Balcão/Loja`;
 
-            const textoFinal = (textoAntigo + novoTexto).trim();
+            // Garante que haja uma quebra de linha se já houver texto
+            const textoFinal = textoAntigo ? (textoAntigo + '\n' + novoTexto).trim() : novoTexto.trim();
 
             await seiConnection.execute(
                 `UPDATE idavs SET it_reti = ? WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`,
