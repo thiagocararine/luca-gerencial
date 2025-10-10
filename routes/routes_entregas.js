@@ -13,7 +13,7 @@ const dbConfigSei = {
     charset: 'utf8mb4'
 };
 
-// --- OTIMIZAZAÇÃO: Criação de Pools de Conexão ---
+// --- OTIMIZAÇÃO: Criação de Pools de Conexão ---
 const seiPool = mysql.createPool(dbConfigSei);
 const gerencialPool = mysql.createPool(dbConfig);
 
@@ -68,9 +68,14 @@ function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem
 }
 
 
-// Rota principal para buscar dados de um DAV (REATORADA PARA PERFORMANCE)
+// Rota principal para buscar dados de um DAV (REATORADA PARA PERFORMANCE E ROBUSTEZ)
 router.get('/dav/:numero', authenticateToken, async (req, res) => {
-    const { numero: davNumber } = req.params;
+    const davNumberStr = req.params.numero;
+    const davNumber = parseInt(davNumberStr, 10);
+
+    if (isNaN(davNumber)) {
+        return res.status(400).json({ error: 'Número do DAV inválido.' });
+    }
     console.log(`[LOG] Iniciando busca para DAV: ${davNumber}`);
 
     try {
@@ -91,7 +96,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         const davData = davs[0];
         console.log(`[LOG] DAV ${davNumber} encontrado. Buscando itens e históricos...`);
 
-        // --- OTIMIZAÇÃO: Busca todos os dados relacionados ao DAV de uma só vez ---
         const [itensDav, retiradasManuais, entregasRomaneio, historicoCompleto] = await Promise.all([
             seiPool.execute(
                 `SELECT it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`,
@@ -128,7 +132,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
 
         const itensComSaldo = [];
         for (const item of itensDav) {
-            // AQUI ESTÁ A CORREÇÃO CRÍTICA: Convertendo o ID para número
             const idavsRegi = parseInt(`${item.it_ndav}${item.it_item}`, 10);
             
             const retiradaManualDoItem = retiradasManuais.find(r => r.idavs_regi === idavsRegi);
@@ -177,12 +180,14 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
     }
 });
 
-// Rota para registrar uma retirada manual de produtos (REATORADA PARA PERFORMANCE)
+// Rota para registrar uma retirada manual de produtos
 router.post('/retirada-manual', authenticateToken, async (req, res) => {
-    const { dav_numero, itens } = req.body;
+    const { dav_numero: davNumeroStr, itens } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
     
-    if (!dav_numero || !itens || !Array.isArray(itens) || itens.length === 0) {
+    const dav_numero = parseInt(davNumeroStr, 10);
+
+    if (isNaN(dav_numero) || !itens || !Array.isArray(itens) || itens.length === 0) {
         return res.status(400).json({ error: 'Dados inválidos para registrar a retirada.' });
     }
 
@@ -197,7 +202,6 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
         for (const item of itens) {
             const idavsRegiNum = parseInt(item.idavs_regi, 10);
 
-            // CORREÇÃO: Validação de saldo aprimorada para evitar falhas
             const [itemErpParaSaldoRows] = await seiPool.execute(`SELECT * FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`, [dav_numero, item.idavs_regi]);
             if(itemErpParaSaldoRows.length === 0) {
                 throw new Error(`Item ${item.pd_nome} não encontrado no DAV ${dav_numero} do ERP.`);
@@ -207,7 +211,7 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
             const [retiradaManualParaSaldo] = await gerencialPool.execute('SELECT SUM(quantidade_retirada) as total FROM entregas_manuais_log WHERE dav_numero = ? AND idavs_regi = ?', [dav_numero, idavsRegiNum]);
             const [entregaRomaneioParaSaldo] = await gerencialPool.execute('SELECT SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE dav_numero = ? AND idavs_regi = ?', [dav_numero, idavsRegiNum]);
 
-            const { saldo } = await calcularSaldosItem(
+            const { saldo } = calcularSaldosItem(
                 itemErpParaSaldo,
                 retiradaManualParaSaldo[0],
                 entregaRomaneioParaSaldo[0]
