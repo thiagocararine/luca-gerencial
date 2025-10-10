@@ -126,23 +126,19 @@ async function handleSearchDav() {
 }
 
 function renderDavResults(data) {
-    const { cliente, endereco, itens, data_hora_pedido, data_hora_caixa, vendedor, valor_total } = data;
+    const { cliente, endereco, itens, data_hora_pedido, data_hora_caixa, vendedor, valor_total, filial_pedido, forma_pagamento } = data;
     const resultsContainer = document.getElementById('dav-results-container');
 
     const formatDateTime = (dateString) => {
         if (!dateString) return 'N/A';
         const date = new Date(dateString);
-        if (isNaN(date.getTime())) {
-            return 'Data inválida';
-        }
+        if (isNaN(date.getTime())) return 'Data inválida';
         return date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
     };
     
-    const formatCurrency = (value) => {
-        return (parseFloat(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    };
+    const formatCurrency = (value) => (parseFloat(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     
-    const responsavelCaixaGeral = itens.length > 0 ? itens[0].responsavel_caixa : 'N/A';
+    const responsavelCaixaGeral = itens.length > 0 ? (itens.find(i => i.responsavel_caixa !== 'N/A')?.responsavel_caixa || 'N/A') : 'N/A';
 
     let itemsHtml = '<p class="text-center text-gray-500 p-4">Nenhum item encontrado para este pedido.</p>';
     const itemsComSaldo = itens.filter(item => item.quantidade_saldo > 0);
@@ -166,12 +162,12 @@ function renderDavResults(data) {
                             <td class="px-2 py-3 text-center text-gray-400">
                                 ${item.historico && item.historico.length > 0 ? '<i data-feather="chevron-down" class="transition-transform"></i>' : ''}
                             </td>
-                            <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome || 'Nome não definido'}</td>
-                            <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_total || 0}</td>
-                            <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_entregue || 0}</td>
-                            <td class="px-2 py-3 text-center font-bold ${item.quantidade_saldo > 0 ? 'text-blue-600' : 'text-green-600'}">${item.quantidade_saldo || 0}</td>
+                            <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome ?? 'Nome não definido'}</td>
+                            <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_total ?? 0}</td>
+                            <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_entregue ?? 0}</td>
+                            <td class="px-2 py-3 text-center font-bold ${item.quantidade_saldo > 0 ? 'text-blue-600' : 'text-green-600'}">${item.quantidade_saldo ?? 0}</td>
                             <td class="px-4 py-3 text-center">
-                                <input type="number" class="w-24 text-center rounded-md border-gray-300 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" data-item-id="${item.idavs_regi}" ${item.quantidade_saldo === 0 ? 'disabled' : ''}>
+                                <input type="number" class="w-24 text-center rounded-md border-gray-300 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" data-item-id="${item.idavs_regi}" ${item.quantidade_saldo > 0 ? '' : 'disabled'}>
                             </td>
                         </tr>
                         ${item.historico && item.historico.length > 0 ? `
@@ -210,9 +206,10 @@ function renderDavResults(data) {
                         <p class="font-bold text-2xl text-indigo-600">${formatCurrency(valor_total)}</p>
                     </div>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-sm mt-4 pt-4 border-t">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2 text-sm mt-4 pt-4 border-t">
                     <div><strong class="block text-gray-500">Vendedor / Pedido:</strong><span>${vendedor || 'N/A'} - ${formatDateTime(data_hora_pedido)}</span></div>
                     <div><strong class="block text-gray-500">Caixa / Recebimento:</strong><span>${responsavelCaixaGeral} - ${formatDateTime(data_hora_caixa)}</span></div>
+                    <div><strong class="block text-gray-500">Filial / Pagamento:</strong><span>${filial_pedido || 'N/A'} / ${forma_pagamento || 'N/A'}</span></div>
                 </div>
             </div>
             <div class="space-y-4">

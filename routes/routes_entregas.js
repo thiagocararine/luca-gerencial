@@ -75,9 +75,10 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
     console.log(`[LOG] Iniciando busca para DAV: ${davNumber}`);
 
     try {
+        // AJUSTE: Buscando os novos campos cr_udav, cr_hdav, cr_ecem, cr_inde, cr_rece
         const [davs] = await seiPool.execute(
             `SELECT c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, 
-                    c.cr_edav, c.cr_hdav, c.cr_ecem, c.cr_udav, 
+                    c.cr_edav, c.cr_hdav, c.cr_ecem, c.cr_udav, c.cr_inde, c.cr_rece,
                     c.cr_tnot, c.cr_tipo, cl.cl_docume 
              FROM cdavs c
              LEFT JOIN clientes cl ON c.cr_cdcl = cl.cl_codigo
@@ -165,6 +166,8 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             data_hora_pedido: dataHoraPedidoCompleta,
             data_hora_caixa: davData.cr_ecem, // Pode ser nulo, o frontend tratará
             vendedor: davData.cr_udav,
+            filial_pedido: davData.cr_inde,
+            forma_pagamento: davData.cr_rece,
             valor_total: davData.cr_tnot,
             cliente: { nome: davData.cr_nmcl, doc: davData.cl_docume },
             endereco: {
