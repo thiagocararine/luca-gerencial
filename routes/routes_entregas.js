@@ -157,6 +157,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         const horaPedido = davData.cr_hdav;
         let dataHoraPedidoCompleta = null;
         if (dataPedido && horaPedido) {
+            // Lógica mais segura para combinar data e hora
             const datePart = new Date(dataPedido).toISOString().split('T')[0];
             dataHoraPedidoCompleta = new Date(`${datePart}T${horaPedido}`);
         }
