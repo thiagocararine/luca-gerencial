@@ -195,34 +195,45 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
                 throw new Error(`Saldo insuficiente para o item ${item.pd_nome}. Saldo disponível: ${saldo}.`);
             }
 
+            // 1. Grava no nosso log
             const [logResult] = await gerencialConnection.execute(
                 `INSERT INTO entregas_manuais_log (dav_numero, idavs_regi, quantidade_retirada, id_usuario_conferencia) VALUES (?, ?, ?, ?)`,
                 [dav_numero, item.idavs_regi, item.quantidade_retirada, userId]
             );
             const newLogId = logResult.insertId;
             logsCriados.push(newLogId);
+            
+            // 2. ATUALIZA A QUANTIDADE ENTREGUE (it_qent) NO ERP
+            await seiConnection.execute(
+                `UPDATE idavs SET it_qent = it_qent + ? WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`,
+                [item.quantidade_retirada, dav_numero, item.idavs_regi]
+            );
 
+            // 3. ANOTA A OPERAÇÃO NO CAMPO DE TEXTO (it_reti) DO ERP
             const [itemErpRows] = await seiConnection.execute(
-                `SELECT it_reti, it_codi, it_nome, it_unid FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ? FOR UPDATE`,
+                `SELECT it_reti, it_codi, it_nome, it_unid, it_quan FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ? FOR UPDATE`,
                 [dav_numero, item.idavs_regi]
             );
             
             const itemErp = itemErpRows[0];
             const textoAntigo = itemErp.it_reti || '';
-            const dataHora = new Date().toLocaleString('pt-BR');
             
-            // CORREÇÃO: Removida a quebra de linha no início do texto
-            const novoTexto = `--------------------------------------------------
-Lançamento: ${dataHora}  {${nomeUsuario}}
+            // Formata a data para o padrão do ERP (YYYY/MM/DD HH:MM:SS)
+            const now = new Date();
+            const dataHoraERP = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+            
+            const novoTexto = `Lançamento: ${dataHoraERP}  {${nomeUsuario}}
 Codigo....: ${itemErp.it_codi}
 Descrição.: ${itemErp.it_nome}
-Quantidade: ${item.quantidade_retirada}
+Quantidade: ${parseFloat(itemErp.it_quan)}
 Unidade...: ${itemErp.it_unid}
+QT Entrega: ${item.quantidade_retirada}
+Saldo.....: Baixa via App Gerencial
 Retirada..: ${item.quantidade_retirada}
 Lançamento: App Gerencial ID ${newLogId}
-Retirado..: Balcão/Loja`;
+Portador..: App
+Retirado..: Retirada no Balcão via App`;
 
-            // Garante que haja uma quebra de linha se já houver texto
             const textoFinal = textoAntigo ? (textoAntigo + '\n' + novoTexto).trim() : novoTexto.trim();
 
             await seiConnection.execute(
@@ -230,6 +241,7 @@ Retirado..: Balcão/Loja`;
                 [textoFinal, dav_numero, item.idavs_regi]
             );
 
+            // 4. Marca nosso log como sincronizado com sucesso
             await gerencialConnection.execute(
                 `UPDATE entregas_manuais_log SET erp_writeback_status = 'Sucesso' WHERE id = ?`,
                 [newLogId]
