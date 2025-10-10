@@ -106,14 +106,12 @@ async function handleSearchDav() {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
 
-        // MELHORIA: Tratamento de erro aprimorado
         if (!response.ok) {
             let errorMessage = `Erro ${response.status}: ${response.statusText}`;
             try {
                 const error = await response.json();
                 errorMessage = error.error || 'Não foi possível buscar o pedido.';
             } catch (e) {
-                // A resposta não era JSON, provavelmente um erro 502 com HTML.
                 errorMessage = 'Ocorreu um erro de comunicação com o servidor. Verifique o console do backend para mais detalhes.';
             }
             throw new Error(errorMessage);
@@ -145,7 +143,7 @@ function renderDavResults(data) {
     let itemsHtml = '<p class="text-center text-gray-500 p-4">Nenhum item com saldo a entregar encontrado para este pedido.</p>';
     const itemsComSaldo = itens.filter(item => item.quantidade_saldo > 0);
 
-    if (items.length > 0) {
+    if (itens.length > 0) {
         itemsHtml = `
             <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
