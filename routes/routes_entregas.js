@@ -20,14 +20,12 @@ const gerencialPool = mysql.createPool(dbConfig);
 
 /**
  * Função para extrair o usuário do campo it_entr.
- * Exemplo de formato: "30/09/2025 15:23:50 THIAGOTI" -> "THIAGOTI"
  */
 function parseUsuarioLiberacao(it_entr) {
     if (!it_entr || typeof it_entr !== 'string') {
         return 'N/A';
     }
     const parts = it_entr.split(' ');
-    // O nome do usuário é geralmente a última parte
     return parts[parts.length - 1] || 'N/A';
 }
 
@@ -39,7 +37,6 @@ function parseRetiradasAnteriores(it_reti) {
         return 0;
     }
     let totalRetirado = 0;
-    // A regex busca por "Retirada..:" seguido de espaços e captura o número.
     const regex = /Retirada\.\.:\s*(\d+[\.,]?\d*)/g;
     let match;
     while ((match = regex.exec(it_reti)) !== null) {
@@ -67,7 +64,7 @@ function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem
 }
 
 
-// Rota principal para buscar dados de um DAV (REATORADA PARA PERFORMANCE E ROBUSTEZ)
+// Rota principal para buscar dados de um DAV
 router.get('/dav/:numero', authenticateToken, async (req, res) => {
     const davNumberStr = req.params.numero;
     const davNumber = parseInt(davNumberStr, 10);
@@ -78,8 +75,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
     console.log(`[LOG] Iniciando busca para DAV: ${davNumber}`);
 
     try {
-        console.log('[LOG] Passo 1: Buscando dados do DAV na tabela cdavs...');
-        // AJUSTE: Buscando os novos campos cr_udav, cr_hdav, cr_ecem
         const [davs] = await seiPool.execute(
             `SELECT c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, 
                     c.cr_edav, c.cr_hdav, c.cr_ecem, c.cr_udav, 
@@ -97,7 +92,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
         }
         const davData = davs[0];
-        console.log(`[LOG] Passo 2: DAV ${davNumber} encontrado. Buscando itens e históricos em paralelo...`);
+        console.log(`[LOG] DAV ${davNumber} encontrado. Buscando itens e históricos...`);
 
         const historicoQuery = `
             (SELECT e.idavs_regi, e.data_retirada as data, e.quantidade_retirada as quantidade, u.nome_user COLLATE utf8mb4_unicode_ci as responsavel, 'Retirada no Balcão' as tipo
@@ -127,13 +122,12 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             gerencialPool.execute(historicoQuery, [davNumber, davNumber])
         ]);
         
-        console.log(`[LOG] Passo 3: Dados brutos buscados. Itens: ${itensDav.length}, Retiradas: ${retiradasManuais.length}, Romaneios: ${entregasRomaneio.length}`);
+        console.log(`[LOG] Dados brutos buscados. Itens do DAV: ${itensDav.length}`);
         
         if (itensDav.length === 0) {
             return res.status(404).json({ error: 'Nenhum item válido encontrado para este pedido.' });
         }
 
-        console.log('[LOG] Passo 4: Iniciando cálculo de saldos...');
         const itensComSaldo = [];
         for (const item of itensDav) {
             const idavsRegi = parseInt(`${item.it_ndav}${item.it_item}`, 10);
@@ -158,18 +152,17 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             });
         }
         
-        // AJUSTE: Combinando data e hora do pedido
-        const dataPedido = davData.cr_edav; // É um objeto Date
-        const horaPedido = davData.cr_hdav; // É uma string "HH:MM:SS"
+        const dataPedido = davData.cr_edav;
+        const horaPedido = davData.cr_hdav;
+        let dataHoraPedidoCompleta = null;
         if (dataPedido && horaPedido) {
-            const [hours, minutes, seconds] = horaPedido.split(':');
-            dataPedido.setHours(hours, minutes, seconds);
+            const [year, month, day] = new Date(dataPedido).toISOString().split('T')[0].split('-');
+            dataHoraPedidoCompleta = new Date(`${year}-${month}-${day}T${horaPedido}`);
         }
 
-        console.log('[LOG] Passo 5: Montando objeto de resposta...');
         const responseData = {
             dav_numero: davData.cr_ndav,
-            data_hora_pedido: dataPedido,
+            data_hora_pedido: dataHoraPedidoCompleta,
             data_hora_caixa: davData.cr_ecem,
             vendedor: davData.cr_udav,
             valor_total: davData.cr_tnot,
@@ -184,15 +177,14 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             itens: itensComSaldo
         };
         
-        console.log(`[LOG] Processamento do DAV ${davNumber} concluído com sucesso.`);
+        console.log("[LOG] Resposta final pronta para ser enviada:", JSON.stringify(responseData, null, 2));
         res.json(responseData);
 
     } catch (error) {
-        console.error(`\n--- [ERRO FATAL] ---`);
+        console.error(`--- [ERRO FATAL] ---`);
         console.error(`Falha crítica ao processar a rota /dav/${davNumber}`);
-        console.error(`Mensagem: ${error.message}`);
-        console.error(`Stack Trace:`, error);
-        console.error(`--- [FIM DO ERRO] ---\n`);
+        console.error(error);
+        console.error(`--- [FIM DO ERRO] ---`);
         res.status(500).json({ error: 'Erro interno no servidor ao processar o pedido. Verifique os logs do servidor para mais detalhes.' });
     }
 });
