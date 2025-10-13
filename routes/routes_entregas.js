@@ -125,9 +125,8 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             ),
             gerencialPool.execute(historicoQuery, [davNumber, davNumber])
         ]);
-        
+
         console.log(`[LOG] Passo 3: Dados brutos buscados. Itens do DAV: ${itensDav.length}, Retiradas Manuais: ${retiradasManuais.length}, Itens em Romaneio: ${entregasRomaneio.length}`);
-        
         if (itensDav.length === 0) {
             return res.status(404).json({ error: 'Nenhum item válido encontrado para este pedido.' });
         }
