@@ -204,7 +204,7 @@ function renderDavResults(data) {
                     ${itens.map(item => `
                         <tr class="expandable-row ${item.historico && item.historico.length > 0 ? 'cursor-pointer hover:bg-gray-50' : ''}" data-idavs-regi="${item.idavs_regi}" title="Clique para ver o histórico de retiradas">
                             <td class="px-2 py-3 text-center text-gray-400">
-                                ${item.historico && item.historico.length > 0 ? '<i data-feather="chevron-down" class="transition-transform"></i>' : ''}
+                                ${item.historico && item.historico.length > 0 ? '<i data-feather="chevron-down" class="transition-transform history-chevron"></i>' : ''}
                             </td>
                             <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome ?? 'Nome não definido'}</td>
                             <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_total ?? 0}</td>
