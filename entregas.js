@@ -130,7 +130,7 @@ function renderDavResults(data) {
     // Adiciona log para depuração no navegador
     console.log("Dados brutos recebidos da API:", JSON.stringify(data, null, 2));
 
-    const { cliente, endereco, itens, data_hora_pedido, data_hora_caixa, vendedor, valor_total, filial_pedido, forma_pagamento } = data;
+    const { cliente, endereco, itens, data_hora_pedido, data_hora_caixa, vendedor, valor_total } = data;
     const resultsContainer = document.getElementById('dav-results-container');
 
     const formatDateTime = (dateString) => {
