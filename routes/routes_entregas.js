@@ -161,7 +161,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             
             const { saldo, entregue } = calcularSaldosItem(item, retiradaManualDoItem, entregaRomaneioDoItem);
             
-            const historicoDoItem = historicoCompleto.filter(h => h.idavs_regi === idavsRegi);
+            const historicoDoItem = historicoCompleto.filter(h => h.idavs_regi == idavsRegi);
 
             itensComSaldo.push({
                 idavs_regi: idavsRegi,
