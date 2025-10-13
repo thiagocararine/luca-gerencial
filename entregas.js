@@ -213,7 +213,6 @@ function renderDavResults(data) {
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2 text-sm mt-4 pt-4 border-t">
                     <div><strong class="block text-gray-500">Vendedor / Pedido:</strong><span>${vendedor || 'N/A'} - ${formatDateTime(data_hora_pedido)}</span></div>
                     <div><strong class="block text-gray-500">Caixa / Recebimento:</strong><span>${responsavelCaixaGeral} - ${formatDateTime(data_hora_caixa)}</span></div>
-                    <div><strong class="block text-gray-500">Filial / Pagamento:</strong><span>${filial_pedido || 'N/A'} / ${forma_pagamento || 'N/A'}</span></div>
                 </div>
             </div>
             <div class="space-y-4">
