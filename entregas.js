@@ -120,7 +120,24 @@ async function handleSearchDav() {
         renderDavResults(data);
 
     } catch (error) {
-        resultsContainer.innerHTML = `<p class="text-center text-red-500 p-4">${error.message}</p>`;
+        // --- INÍCIO DA ALTERAÇÃO ---
+        // Substituímos o <p> simples por um card de alerta completo.
+        resultsContainer.innerHTML = `
+            <div class="max-w-xl mx-auto bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg shadow-md" role="alert">
+                <div class="flex items-center">
+                    <div class="py-1">
+                        <span data-feather="alert-triangle" class="h-6 w-6 text-red-500 mr-3"></span>
+                    </div>
+                    <div>
+                        <p class="font-bold">Atenção!</p>
+                        <p class="text-sm">${error.message}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+        // É necessário chamar feather.replace() novamente para que o ícone seja renderizado
+        feather.replace();
+        // --- FIM DA ALTERAÇÃO ---
     } finally {
         hideLoader();
     }
