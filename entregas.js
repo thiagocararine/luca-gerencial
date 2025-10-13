@@ -127,10 +127,9 @@ async function handleSearchDav() {
 }
 
 function renderDavResults(data) {
-    // Adiciona log para depuração no navegador
     console.log("Dados brutos recebidos da API:", JSON.stringify(data, null, 2));
 
-    const { cliente, endereco, itens, data_hora_pedido, data_hora_caixa, vendedor, valor_total } = data;
+    const { cliente, endereco, itens, data_hora_pedido, data_hora_caixa, vendedor, valor_total, status_caixa } = data;
     const resultsContainer = document.getElementById('dav-results-container');
 
     const formatDateTime = (dateString) => {
@@ -143,6 +142,30 @@ function renderDavResults(data) {
     const formatCurrency = (value) => (parseFloat(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     
     const responsavelCaixaGeral = itens.length > 0 ? (itens.find(i => i.responsavel_caixa !== 'N/A')?.responsavel_caixa || 'N/A') : 'N/A';
+
+    let statusTagHtml = '';
+    let statusText = '';
+    let tagBgColor = '';
+    let tagTextColor = 'text-white';
+
+    switch (status_caixa) {
+        case '1':
+            statusText = 'Recebido';
+            tagBgColor = 'bg-green-600';
+            break;
+        case '2':
+            statusText = 'Estornado';
+            tagBgColor = 'bg-orange-500';
+            break;
+        case '3':
+            statusText = 'Cancelado';
+            tagBgColor = 'bg-red-600';
+            break;
+    }
+
+    if (statusText) {
+        statusTagHtml = `<span class="ml-3 inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${tagBgColor} ${tagTextColor}">${statusText}</span>`;
+    }
 
     let itemsHtml = '<p class="text-center text-gray-500 p-4">Nenhum item encontrado para este pedido.</p>';
     const itemsComSaldo = itens.filter(item => item.quantidade_saldo > 0);
@@ -199,7 +222,10 @@ function renderDavResults(data) {
             <div class="border-b pb-4 mb-4">
                 <div class="flex justify-between items-start flex-wrap gap-4">
                     <div>
-                        <h3 class="text-xl font-semibold text-gray-900">${cliente.nome}</h3>
+                        <h3 class="text-xl font-semibold text-gray-900 inline-flex items-center">
+                            ${cliente.nome} 
+                            ${statusTagHtml}
+                        </h3>
                         <p class="text-sm text-gray-500">${cliente.doc || 'Documento não informado'}</p>
                         <p class="text-sm text-gray-500 mt-2 flex items-center gap-2">
                             <span data-feather="map-pin" class="w-4 h-4"></span>
