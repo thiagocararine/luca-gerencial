@@ -112,7 +112,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
 
         const [itensDav, retiradasManuais, entregasRomaneio, historicoCompleto] = await Promise.all([
             seiPool.execute(
-                `SELECT it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`,
+                `SELECT it_regist, it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`,
                 [davNumber]
             ),
             gerencialPool.execute(
@@ -135,7 +135,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         console.log('[LOG] Passo 4: Iniciando cálculo de saldos para cada item...');
         const itensComSaldo = [];
         for (const item of itensDav) {
-            const idavsRegi = parseInt(`${String(item.it_ndav).trim()}${String(item.it_item).trim()}`, 10);
+            const idavsRegi = item.it_regist; // USA a chave primária real
             
             const retiradaManualDoItem = retiradasManuais.find(r => r.idavs_regi === idavsRegi);
             const entregaRomaneioDoItem = entregasRomaneio.find(r => r.idavs_regi === idavsRegi);
@@ -145,7 +145,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             const historicoDoItem = historicoCompleto.filter(h => h.idavs_regi === idavsRegi);
 
             itensComSaldo.push({
-                idavs_regi: idavsRegi,
+                idavs_regi: idavsRegi, // Envia o ID correto para o frontend
                 pd_codi: item.it_codi,
                 pd_nome: item.it_nome,
                 unidade: item.it_unid,
@@ -218,11 +218,10 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
 
         for (const item of itens) {
             const idavsRegiNum = parseInt(item.idavs_regi, 10);
-            const idavsRegiStr = String(item.idavs_regi);
 
-            const [itemErpParaSaldoRows] = await seiPool.execute(`SELECT * FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`, [dav_numero, idavsRegiStr]);
+            const [itemErpParaSaldoRows] = await seiPool.execute(`SELECT * FROM idavs WHERE it_regist = ?`, [idavsRegiNum]);
             if(itemErpParaSaldoRows.length === 0) {
-                throw new Error(`Item ${item.pd_nome} não encontrado no DAV ${dav_numero} do ERP.`);
+                throw new Error(`Item ${item.pd_nome} (ID: ${idavsRegiNum}) não encontrado no ERP.`);
             }
             const itemErpParaSaldo = itemErpParaSaldoRows[0];
             
@@ -247,13 +246,13 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
             logsCriados.push(newLogId);
             
             await seiConnection.execute(
-                `UPDATE idavs SET it_qent = it_qent + ? WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`,
-                [item.quantidade_retirada, dav_numero, idavsRegiStr]
+                `UPDATE idavs SET it_qent = it_qent + ? WHERE it_regist = ?`,
+                [item.quantidade_retirada, idavsRegiNum]
             );
 
             const [itemErpRows] = await seiConnection.execute(
-                `SELECT it_reti, it_codi, it_nome, it_unid, it_quan FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ? FOR UPDATE`,
-                [dav_numero, idavsRegiStr]
+                `SELECT it_reti, it_codi, it_nome, it_unid, it_quan FROM idavs WHERE it_regist = ? FOR UPDATE`,
+                [idavsRegiNum]
             );
             
             const itemErp = itemErpRows[0];
@@ -276,8 +275,8 @@ Retirado..: Retirada no Balcão via App`;
             const textoFinal = textoAntigo ? (textoAntigo + '\n' + novoTexto).trim() : novoTexto.trim();
 
             await seiConnection.execute(
-                `UPDATE idavs SET it_reti = ? WHERE CAST(it_ndav AS UNSIGNED) = ? AND CONCAT(it_ndav, it_item) = ?`,
-                [textoFinal, dav_numero, idavsRegiStr]
+                `UPDATE idavs SET it_reti = ? WHERE it_regist = ?`,
+                [textoFinal, idavsRegiNum]
             );
 
             await gerencialConnection.execute(

@@ -1,0 +1,108 @@
+it_item	varchar(3)	YES			
+it_fili	varchar(3)	YES			
+it_ndav	varchar(13)	YES	MUL		
+it_cmda	varchar(13)	YES			
+it_cdcl	varchar(14)	YES			
+it_codi	varchar(14)	YES	MUL		
+it_barr	varchar(14)	YES			
+it_nome	varchar(120)	YES			
+it_unid	varchar(2)	YES		UN	
+it_fabr	varchar(20)	YES			
+it_ende	varchar(10)	YES			
+it_prec	decimal(15,3)	YES		0.000	
+it_quan	decimal(15,4)	YES		0.0000	
+it_subt	decimal(15,2)	YES		0.00	
+it_vlun	decimal(15,4)	YES		0.0000	
+it_clcm	decimal(6,3)	YES		0.000	
+it_clla	decimal(6,3)	YES		0.000	
+it_clex	decimal(6,3)	YES		0.000	
+it_clmt	decimal(15,4)	YES		0.0000	
+it_ctcm	decimal(6,3)	YES		0.000	
+it_ctla	decimal(6,3)	YES		0.000	
+it_ctex	decimal(6,3)	YES		0.000	
+it_ctmt	decimal(15,4)	YES		0.0000	
+it_unpc	decimal(15,3)	YES		0.000	
+it_mdct	varchar(1)	YES		1	
+it_obsc	text	YES			
+it_vfre	decimal(15,2)	YES		0.00	
+it_vacr	decimal(15,2)	YES		0.00	
+it_vdes	decimal(15,2)	YES		0.00	
+it_pcim	decimal(6,2)	YES		0.00	
+it_pric	decimal(6,2)	YES		0.00	
+it_pipi	decimal(6,2)	YES		0.00	
+it_psub	decimal(6,2)	YES		0.00	
+it_piss	decimal(6,2)	YES		0.00	
+it_bcim	decimal(15,2)	YES		0.00	
+it_bric	decimal(15,2)	YES		0.00	
+it_bipi	decimal(15,2)	YES		0.00	
+it_bsub	decimal(15,2)	YES		0.00	
+it_biss	decimal(15,2)	YES		0.00	
+it_vcim	decimal(15,2)	YES		0.00	
+it_vric	decimal(15,2)	YES		0.00	
+it_vipi	decimal(15,2)	YES		0.00	
+it_vsub	decimal(15,2)	YES		0.00	
+it_viss	decimal(15,2)	YES		0.00	
+it_tiat	varchar(1)	YES			
+it_vdcd	varchar(4)	YES			
+it_nmvd	varchar(12)	YES			
+it_usac	varchar(12)	YES			
+it_inde	varchar(5)	YES			
+it_idfo	varchar(5)	YES			
+it_pper	decimal(6,2)	YES		0.00	
+it_cper	decimal(6,2)	YES		0.00	
+it_pbas	decimal(15,2)	YES		0.00	
+it_cbas	decimal(15,2)	YES		0.00	
+it_pval	decimal(15,2)	YES		0.00	
+it_cval	decimal(15,2)	YES		0.00	
+it_ncmc	varchar(8)	YES			
+it_cfop	varchar(4)	YES			
+it_cstc	varchar(4)	YES			
+it_cdfi	varchar(30)	YES			
+it_pibp	decimal(5,2)	YES		0.00	
+it_vibp	decimal(10,2)	YES		0.00	
+it_entr	varchar(40)	YES			
+it_rece	varchar(40)	YES			
+it_qent	decimal(15,4)	YES		0.0000	
+it_iddv	varchar(3)	YES			
+it_qtdv	decimal(14,4)	YES		0.0000	
+it_lanc	date	YES	MUL	0000-00-00	
+it_horl	time	YES		00:00:00	
+it_qtan	decimal(15,4)	YES		0.0000	
+it_expe	varchar(100)	YES			
+it_grup	varchar(20)	YES			
+it_sbg1	varchar(20)	YES			
+it_sbg2	varchar(20)	YES			
+it_estf	decimal(15,4)	NO		0.0000	
+it_tabe	varchar(1)	YES			
+it_reti	text	YES			
+it_cprc	decimal(15,4)	YES		0.0000	
+it_ctot	decimal(15,2)	YES		0.00	
+it_dcan	date	YES	MUL	0000-00-00	
+it_hcan	time	YES		00:00:00	
+it_aesf	decimal(15,4)	NO		0.0000	
+it_canc	varchar(1)	YES			
+it_dado	varchar(100)	YES			
+it_clie	varchar(120)	YES			
+it_pdof	varchar(1)	YES		F	
+it_futu	varchar(1)	YES		F	
+it_tped	varchar(1)	YES			
+it_refe	varchar(30)	YES			
+it_manu	decimal(15,3)	YES		0.000	
+it_auto	text	YES			
+it_ckit	varchar(200)	YES			
+it_qkiv	decimal(15,4)	YES		0.0000	
+it_qtid	decimal(15,4)	YES		0.0000	
+it_dibp	mediumblob	YES			
+it_ouin	mediumblob	YES			
+it_qdvu	decimal(14,4)	YES		0.0000	
+it_part	mediumblob	YES			
+it_seri	mediumblob	YES			
+it_emba	varchar(100)	YES			
+it_comi	decimal(6,2)	YES		0.00	
+it_eloc	decimal(15,4)	NO		0.0000	
+it_idof	mediumblob	YES			
+it_deso	mediumblob	YES			
+it_logi	decimal(15,4)	YES		0.0000	
+it_ctab	varchar(100)	YES			
+it_regist	int(11)	NO	PRI		auto_increment
+it_vidr	decimal(15,3)	YES		0.000	
