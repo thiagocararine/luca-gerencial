@@ -110,7 +110,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
              WHERE ri.dav_numero = ?)
              ORDER BY data DESC`;
 
-        const [itensDav, retiradasManuais, entregasRomaneio, historicoCompleto] = await Promise.all([
+        const allResults = await Promise.all([
             seiPool.execute(
                 `SELECT it_regist, it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`,
                 [davNumber]
@@ -126,7 +126,16 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             gerencialPool.execute(historicoQuery, [davNumber, davNumber])
         ]);
 
+        // Passo 2: Extrai APENAS os arrays de 'rows' de cada resultado.
+        // allResults[0] é o resultado da primeira query ([rows, fields]), então pegamos o primeiro elemento ([0]) que são as rows.
+        const itensDav = allResults[0][0];
+        const retiradasManuais = allResults[1][0];
+        const entregasRomaneio = allResults[2][0];
+        const historicoCompleto = allResults[3][0];
+        // --- FIM DA CORREÇÃO ---
+        
         console.log(`[LOG] Passo 3: Dados brutos buscados. Itens do DAV: ${itensDav.length}, Retiradas Manuais: ${retiradasManuais.length}, Itens em Romaneio: ${entregasRomaneio.length}`);
+        
         if (itensDav.length === 0) {
             return res.status(404).json({ error: 'Nenhum item válido encontrado para este pedido.' });
         }
