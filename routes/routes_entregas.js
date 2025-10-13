@@ -135,7 +135,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         console.log('[LOG] Passo 4: Iniciando cálculo de saldos para cada item...');
         const itensComSaldo = [];
         for (const item of itensDav) {
-            const idavsRegi = parseInt(`${item.it_ndav}${item.it_item}`, 10);
+            const idavsRegi = parseInt(`${String(item.it_ndav).trim()}${String(item.it_item).trim()}`, 10);
             
             const retiradaManualDoItem = retiradasManuais.find(r => r.idavs_regi === idavsRegi);
             const entregaRomaneioDoItem = entregasRomaneio.find(r => r.idavs_regi === idavsRegi);
@@ -149,7 +149,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 pd_codi: item.it_codi,
                 pd_nome: item.it_nome,
                 unidade: item.it_unid,
-                quantidade_total: parseFloat(item.it_quan),
+                quantidade_total: parseFloat(item.it_quan) || 0,
                 quantidade_entregue: entregue,
                 quantidade_saldo: saldo,
                 responsavel_caixa: parseUsuarioLiberacao(item.it_entr),
