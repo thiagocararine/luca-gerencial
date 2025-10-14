@@ -146,7 +146,7 @@ async function handleSearchDav() {
 function renderDavResults(data) {
     console.log("Dados brutos recebidos da API:", JSON.stringify(data, null, 2));
 
-    const { cliente, endereco, itens, data_hora_pedido, data_hora_caixa, vendedor, valor_total, status_caixa } = data;
+    const { cliente, endereco, itens, data_hora_pedido, vendedor, valor_total, status_caixa, caixa_info, fiscal_info, cancelamento_info } = data;
     const resultsContainer = document.getElementById('dav-results-container');
 
     const formatDateTime = (dateString) => {
@@ -157,8 +157,6 @@ function renderDavResults(data) {
     };
     
     const formatCurrency = (value) => (parseFloat(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    
-    const responsavelCaixaGeral = itens.length > 0 ? (itens.find(i => i.responsavel_caixa !== 'N/A')?.responsavel_caixa || 'N/A') : 'N/A';
 
     let statusTagHtml = '';
     let statusText = '';
@@ -166,118 +164,135 @@ function renderDavResults(data) {
     let tagTextColor = 'text-white';
 
     switch (status_caixa) {
-        case '1':
-            statusText = 'Recebido';
-            tagBgColor = 'bg-green-600';
-            break;
-        case '2':
-            statusText = 'Estornado';
-            tagBgColor = 'bg-orange-500';
-            break;
-        case '3':
-            statusText = 'Cancelado';
-            tagBgColor = 'bg-red-600';
-            break;
+        case '1': statusText = 'Recebido'; tagBgColor = 'bg-green-600'; break;
+        case '2': statusText = 'Estornado'; tagBgColor = 'bg-orange-500'; break;
+        case '3': statusText = 'Cancelado'; tagBgColor = 'bg-red-600'; break;
     }
-
     if (statusText) {
         statusTagHtml = `<span class="ml-3 inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${tagBgColor} ${tagTextColor}">${statusText}</span>`;
     }
 
-    let itemsHtml = '<p class="text-center text-gray-500 p-4">Nenhum item encontrado para este pedido.</p>';
-    const itemsComSaldo = itens.filter(item => item.quantidade_saldo > 0);
+    const fiscalTypeMap = { '1': 'NFe - Modelo 55', '2': 'NFCe - Modelo 65' };
+    const fiscalHtml = fiscal_info && fiscal_info.chave ? `
+        <div class="mt-4 pt-4 border-t">
+            <h4 class="font-semibold mb-2">Informações Fiscais</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <div><strong class="block text-gray-500">Documento:</strong><span>${fiscalTypeMap[fiscal_info.tipo] || 'Não identificado'} - Série ${fiscal_info.serie || 'N/A'}</span></div>
+                <div><strong class="block text-gray-500">Emissão:</strong><span>${formatDateTime(fiscal_info.data_emissao)} por ${fiscal_info.usuario || 'N/A'}</span></div>
+                <div class="md:col-span-2"><strong class="block text-gray-500">Chave NFe:</strong><span class="break-all">${fiscal_info.chave || 'Não informada'}</span></div>
+                <div><strong class="block text-gray-500">Protocolo:</strong><span>${fiscal_info.protocolo || 'Não informado'}</span></div>
+            </div>
+        </div>
+    ` : '';
 
-    if (itens.length > 0) {
-        itemsHtml = `
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="w-10"></th>
-                        <th class="px-4 py-2 text-left font-medium text-gray-500">Produto</th>
-                        <th class="px-2 py-2 text-center font-medium text-gray-500">Total</th>
-                        <th class="px-2 py-2 text-center font-medium text-gray-500">Entregue</th>
-                        <th class="px-2 py-2 text-center font-medium text-gray-500">Saldo</th>
-                        <th class="px-4 py-2 text-center font-medium text-gray-500">Qtd. a Retirar</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    ${itens.map(item => `
-                        <tr class="expandable-row ${item.historico && item.historico.length > 0 ? 'cursor-pointer hover:bg-gray-50' : ''}" data-idavs-regi="${item.idavs_regi}" title="Clique para ver o histórico de retiradas">
-                            <td class="px-2 py-3 text-center text-gray-400">
-                                ${item.historico && item.historico.length > 0 ? '<i data-feather="chevron-down" class="transition-transform history-chevron"></i>' : ''}
-                            </td>
-                            <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome ?? 'Nome não definido'}</td>
-                            <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_total ?? 0}</td>
-                            <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_entregue ?? 0}</td>
-                            <td class="px-2 py-3 text-center font-bold ${item.quantidade_saldo > 0 ? 'text-blue-600' : 'text-green-600'}">${item.quantidade_saldo ?? 0}</td>
-                            <td class="px-4 py-3 text-center">
-                                <input type="number" class="w-24 text-center rounded-md border-gray-300 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" data-item-id="${item.idavs_regi}" ${item.quantidade_saldo > 0 ? '' : 'disabled'}>
-                            </td>
+    if (status_caixa === '2' || status_caixa === '3') {
+        resultsContainer.innerHTML = `
+            <div class="bg-white/90 backdrop-blur-sm p-6 rounded-lg shadow-lg">
+                <div class="border-b pb-4 mb-4">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-xl font-semibold text-gray-900 inline-flex items-center">${cliente.nome} ${statusTagHtml}</h3>
+                            <p class="text-sm text-gray-500">${cliente.doc || 'Documento não informado'}</p>
+                        </div>
+                        <p class="font-bold text-2xl text-gray-600 line-through">${formatCurrency(valor_total)}</p>
+                    </div>
+                </div>
+                <div class="mt-4 pt-4 border-t bg-yellow-50 p-4 rounded-lg">
+                    <h4 class="font-semibold mb-2 text-yellow-800">Detalhes do ${statusText}</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                        <div><strong class="block text-gray-500">Usuário:</strong><span>${cancelamento_info.usuario || 'N/A'}</span></div>
+                        <div><strong class="block text-gray-500">Data/Hora:</strong><span>${formatDateTime(cancelamento_info.data_hora)}</span></div>
+                    </div>
+                </div>
+                ${fiscalHtml}
+            </div>
+        `;
+    } else {
+        let itemsHtml = '<p class="text-center text-gray-500 p-4">Nenhum item encontrado para este pedido.</p>';
+        const itemsComSaldo = itens.filter(item => item.quantidade_saldo > 0);
+        if (itens.length > 0) {
+            itemsHtml = `
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="w-10"></th>
+                            <th class="px-4 py-2 text-left font-medium text-gray-500">Produto</th>
+                            <th class="px-2 py-2 text-center font-medium text-gray-500">Total</th>
+                            <th class="px-2 py-2 text-center font-medium text-gray-500">Entregue</th>
+                            <th class="px-2 py-2 text-center font-medium text-gray-500">Saldo</th>
+                            <th class="px-4 py-2 text-center font-medium text-gray-500">Qtd. a Retirar</th>
                         </tr>
-                        ${item.historico && item.historico.length > 0 ? `
-                        <tr class="history-row">
-                            <td colspan="6" class="p-3 bg-gray-50">
-                                <h5 class="text-xs font-bold mb-2 flex items-center gap-2"><i data-feather="archive" class="w-4 h-4"></i>Histórico de Entregas:</h5>
-                                <ul class="text-xs space-y-1 pl-4">
-                                    ${item.historico.map(h => `
-                                        <li class="flex justify-between border-b pb-1">
-                                            <span>${new Date(h.data).toLocaleString('pt-BR')} - <strong>${h.quantidade} un.</strong> (${h.tipo})</span>
-                                            <span>Resp: ${h.responsavel}</span>
-                                        </li>
-                                    `).join('')}
-                                </ul>
-                            </td>
-                        </tr>` : ''}
-                    `).join('')}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        ${itens.map(item => `
+                            <tr class="expandable-row ${item.historico && item.historico.length > 0 ? 'cursor-pointer hover:bg-gray-50' : ''}" data-idavs-regi="${item.idavs_regi}" title="Clique para ver o histórico de retiradas">
+                                <td class="px-2 py-3 text-center text-gray-400">
+                                    ${item.historico && item.historico.length > 0 ? `<i data-feather="chevron-down" class="transition-transform history-chevron"></i>` : ''}
+                                </td>
+                                <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome ?? 'Nome não definido'}</td>
+                                <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_total ?? 0}</td>
+                                <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_entregue ?? 0}</td>
+                                <td class="px-2 py-3 text-center font-bold ${item.quantidade_saldo > 0 ? 'text-blue-600' : 'text-green-600'}">${item.quantidade_saldo ?? 0}</td>
+                                <td class="px-4 py-3 text-center">
+                                    <input type="number" class="w-24 text-center rounded-md border-gray-300 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" data-item-id="${item.idavs_regi}" ${item.quantidade_saldo > 0 ? '' : 'disabled'}>
+                                </td>
+                            </tr>
+                            ${item.historico && item.historico.length > 0 ? `
+                            <tr class="history-row">
+                                <td colspan="6" class="p-3 bg-gray-50">
+                                    <h5 class="text-xs font-bold mb-2 flex items-center gap-2"><i data-feather="archive" class="w-4 h-4"></i>Histórico de Entregas:</h5>
+                                    <ul class="text-xs space-y-1 pl-4">
+                                        ${item.historico.map(h => `
+                                            <li class="flex justify-between border-b pb-1">
+                                                <span>${new Date(h.data).toLocaleString('pt-BR')} - <strong>${h.quantidade} un.</strong> (${h.tipo})</span>
+                                                <span>Resp: ${h.responsavel}</span>
+                                            </li>
+                                        `).join('')}
+                                    </ul>
+                                </td>
+                            </tr>` : ''}
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        resultsContainer.innerHTML = `
+            <div class="bg-white/90 backdrop-blur-sm p-6 rounded-lg shadow-lg">
+                <div class="border-b pb-4 mb-4">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-xl font-semibold text-gray-900 inline-flex items-center">${cliente.nome} ${statusTagHtml}</h3>
+                            <p class="text-sm text-gray-500">${cliente.doc || 'Documento não informado'}</p>
+                        </div>
+                        <p class="font-bold text-2xl text-indigo-600">${formatCurrency(valor_total)}</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-sm mt-4 pt-4 border-t">
+                        <div><strong class="block text-gray-500">Vendedor / Pedido:</strong><span>${vendedor || 'N/A'} - ${formatDateTime(data_hora_pedido)}</span></div>
+                        <div><strong class="block text-gray-500">Caixa / Recebimento:</strong><span>${caixa_info.usuario || 'N/A'} - ${formatDateTime(caixa_info.data_hora)}</span></div>
+                    </div>
+                    ${fiscalHtml}
+                </div>
+                <div class="space-y-4">
+                    <h4 class="font-semibold">Itens do Pedido</h4>
+                    <div class="overflow-x-auto rounded-lg border">${itemsHtml}</div>
+                    ${itemsComSaldo.length > 0 ? `
+                    <div class="flex flex-col sm:flex-row justify-end items-center pt-4 border-t gap-4">
+                        <div>
+                            <label for="retirada-nome-cliente" class="block text-sm font-medium text-gray-700">Nome de quem retira (opcional)</label>
+                            <input type="text" id="retirada-nome-cliente" placeholder="Nome do cliente/portador" class="mt-1 w-full sm:w-64 rounded-md border-gray-300 shadow-sm">
+                        </div>
+                        <button id="confirm-retirada-btn" class="action-btn bg-green-600 text-white hover:bg-green-700 flex items-center gap-2 w-full sm:w-auto justify-center">
+                            <span data-feather="check-circle"></span>Confirmar Retirada
+                        </button>
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
         `;
     }
 
-    resultsContainer.innerHTML = `
-        <div class="bg-white/90 backdrop-blur-sm p-6 rounded-lg shadow-lg">
-            <div class="border-b pb-4 mb-4">
-                <div class="flex justify-between items-start flex-wrap gap-4">
-                    <div>
-                        <h3 class="text-xl font-semibold text-gray-900 inline-flex items-center">
-                            ${cliente.nome} 
-                            ${statusTagHtml}
-                        </h3>
-                        <p class="text-sm text-gray-500">${cliente.doc || 'Documento não informado'}</p>
-                        <p class="text-sm text-gray-500 mt-2 flex items-center gap-2">
-                            <span data-feather="map-pin" class="w-4 h-4"></span>
-                            <span>${endereco.logradouro}, ${endereco.bairro} - ${endereco.cidade}</span>
-                        </p>
-                    </div>
-                    <div class="text-right flex-shrink-0">
-                        <p class="font-bold text-2xl text-indigo-600">${formatCurrency(valor_total)}</p>
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2 text-sm mt-4 pt-4 border-t">
-                    <div><strong class="block text-gray-500">Vendedor / Pedido:</strong><span>${vendedor || 'N/A'} - ${formatDateTime(data_hora_pedido)}</span></div>
-                    <div><strong class="block text-gray-500">Caixa / Recebimento:</strong><span>${responsavelCaixaGeral} - ${formatDateTime(data_hora_caixa)}</span></div>
-                </div>
-            </div>
-            <div class="space-y-4">
-                <h4 class="font-semibold">Itens do Pedido</h4>
-                <div class="overflow-x-auto rounded-lg border">${itemsHtml}</div>
-                ${itemsComSaldo.length > 0 ? `
-                <div class="flex flex-col sm:flex-row justify-end items-center pt-4 border-t gap-4">
-                    <div>
-                        <label for="retirada-nome-cliente" class="block text-sm font-medium text-gray-700">Nome de quem retira (opcional)</label>
-                        <input type="text" id="retirada-nome-cliente" placeholder="Nome do cliente/portador" class="mt-1 w-full sm:w-64 rounded-md border-gray-300 shadow-sm">
-                    </div>
-                    <button id="confirm-retirada-btn" class="action-btn bg-green-600 text-white hover:bg-green-700 flex items-center gap-2 w-full sm:w-auto justify-center">
-                        <span data-feather="check-circle"></span>Confirmar Retirada
-                    </button>
-                </div>
-                ` : ''}
-            </div>
-        </div>
-    `;
-
     feather.replace();
-
     document.getElementById('confirm-retirada-btn')?.addEventListener('click', () => handleConfirmRetirada(data.dav_numero));
 }
 

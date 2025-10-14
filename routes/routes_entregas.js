@@ -80,7 +80,13 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
     try {
         console.log('[LOG] Passo 1: Buscando dados do DAV na tabela cdavs...');
         const [davs] = await seiPool.execute(
-            `SELECT c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, c.cr_edav, c.cr_hdav, c.cr_ecem, c.cr_udav, c.cr_tnot, c.cr_tipo, c.cr_reca, cl.cl_docume 
+            `SELECT 
+                c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, 
+                c.cr_edav, c.cr_hdav, c.cr_udav, c.cr_tnot, c.cr_tipo, c.cr_reca,
+                c.cr_urec, c.cr_erec, c.cr_hrec, 
+                c.cr_ecca, c.cr_hca, c.cr_usac,
+                c.cr_nfem, c.cr_chnf, c.cr_seri, c.cr_tnfs,
+                cl.cl_docume 
              FROM cdavs c
              LEFT JOIN clientes cl ON c.cr_cdcl = cl.cl_codigo
              WHERE CAST(c.cr_ndav AS UNSIGNED) = ?`,
@@ -90,28 +96,66 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         if (davs.length === 0) {
             return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado.` });
         }
-        if (davs[0].cr_tipo != 1) {
-            return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
-        }
         const davData = davs[0];
 
-        let statusMessage = '';
-        switch (davData.cr_reca) {
-            case '1':
-                break;
-            case '2':
-                statusMessage = `O Pedido (DAV) ${davNumber} foi estornado e não pode ser liberado para entrega.`;
-                return res.status(400).json({ error: statusMessage });
-            case '3':
-                statusMessage = `O Pedido (DAV) ${davNumber} está cancelado e não pode ser liberado para entrega.`;
-                return res.status(400).json({ error: statusMessage });
-            default:
-                statusMessage = `O Pedido (DAV) ${davNumber} não foi recebido no caixa e não pode ser liberado.`;
-                return res.status(400).json({ error: statusMessage });
+        if (davData.cr_tipo != 1) {
+            return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
+        }
+        if (davData.cr_reca === '' || davData.cr_reca === null) {
+            return res.status(400).json({ error: `O Pedido (DAV) ${davNumber} não foi recebido no caixa e não pode ser liberado.` });
         }
 
-        console.log(`[LOG] Passo 2: DAV ${davNumber} encontrado. Buscando itens e históricos em paralelo...`);
+        const combineDateTime = (date, time) => {
+            if (!date || !time) return null;
+            const datePart = new Date(date).toISOString().split('T')[0];
+            return new Date(`${datePart}T${time}`);
+        };
 
+        const nfemParts = (davData.cr_nfem || '').split(' ');
+        const fiscalInfo = {
+            data_emissao: nfemParts[0] && nfemParts[1] ? combineDateTime(nfemParts[0], nfemParts[1]) : null,
+            protocolo: nfemParts[2] || null,
+            usuario: nfemParts[3] || null,
+            chave: davData.cr_chnf,
+            serie: davData.cr_seri,
+            tipo: davData.cr_tnfs
+        };
+
+        const cancelamentoInfo = {
+            data_hora: combineDateTime(davData.cr_ecca, davData.cr_hca),
+            usuario: davData.cr_usac
+        };
+
+        const responseData = {
+            dav_numero: davData.cr_ndav,
+            data_hora_pedido: combineDateTime(davData.cr_edav, davData.cr_hdav),
+            vendedor: davData.cr_udav,
+            valor_total: davData.cr_tnot,
+            status_caixa: davData.cr_reca,
+            cliente: { nome: davData.cr_nmcl, doc: davData.cl_docume },
+            endereco: {
+                logradouro: (davData.cr_dade || '').split(';')[0]?.trim(),
+                bairro: davData.cr_ebai,
+                cidade: davData.cr_ecid,
+                cep: davData.cr_ecep,
+                referencia: davData.cr_refe
+            },
+            caixa_info: {
+                usuario: davData.cr_urec,
+                data_hora: combineDateTime(davData.cr_erec, davData.cr_hrec)
+            },
+            fiscal_info: fiscalInfo,
+            cancelamento_info: cancelamentoInfo,
+            itens: []
+        };
+
+        if (davData.cr_reca !== '1') {
+            console.log(`[LOG] Pedido ${davNumber} com status '${davData.cr_reca}'. Não buscará itens.`);
+            return res.json(responseData);
+        }
+        
+        console.log(`[LOG] Pedido ${davNumber} recebido. Buscando itens...`);
+        
         const historicoQuery = `
             (SELECT e.idavs_regi, e.data_retirada as data, e.quantidade_retirada as quantidade, u.nome_user COLLATE utf8mb4_unicode_ci as responsavel, 'Retirada no Balcão' as tipo
              FROM entregas_manuais_log e 
@@ -139,25 +183,22 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             ),
             gerencialPool.execute(historicoQuery, [davNumber, davNumber])
         ]);
-        
+
         const itensDav = allResults[0][0];
         const retiradasManuais = allResults[1][0];
         const entregasRomaneio = allResults[2][0];
         const historicoCompleto = allResults[3][0];
-        
-        console.log(`[LOG] Passo 3: Dados brutos buscados. Itens do DAV: ${itensDav.length}, Retiradas Manuais: ${retiradasManuais.length}, Itens em Romaneio: ${entregasRomaneio.length}`);
-        
+
         if (itensDav.length === 0) {
             return res.status(404).json({ error: 'Nenhum item válido encontrado para este pedido.' });
         }
-
-        console.log('[LOG] Passo 4: Iniciando cálculo de saldos para cada item...');
+        
         const itensComSaldo = [];
         for (const item of itensDav) {
             const idavsRegi = item.it_regist;
             
-            const retiradaManualDoItem = retiradasManuais.find(r => r.idavs_regi === idavsRegi);
-            const entregaRomaneioDoItem = entregasRomaneio.find(r => r.idavs_regi === idavsRegi);
+            const retiradaManualDoItem = retiradasManuais.find(r => r.idavs_regi == idavsRegi);
+            const entregaRomaneioDoItem = entregasRomaneio.find(r => r.idavs_regi == idavsRegi);
             
             const { saldo, entregue } = calcularSaldosItem(item, retiradaManualDoItem, entregaRomaneioDoItem);
             
@@ -176,33 +217,8 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             });
         }
         
-        console.log('[LOG] Passo 5: Montando objeto de resposta...');
-        const dataPedido = davData.cr_edav;
-        const horaPedido = davData.cr_hdav;
-        let dataHoraPedidoCompleta = null;
-        if (dataPedido && horaPedido) {
-            const datePart = new Date(dataPedido).toISOString().split('T')[0];
-            dataHoraPedidoCompleta = new Date(`${datePart}T${horaPedido}`);
-        }
+        responseData.itens = itensComSaldo;
 
-        const responseData = {
-            dav_numero: davData.cr_ndav,
-            data_hora_pedido: dataHoraPedidoCompleta,
-            data_hora_caixa: davData.cr_ecem,
-            vendedor: davData.cr_udav,
-            valor_total: davData.cr_tnot,
-            status_caixa: davData.cr_reca,
-            cliente: { nome: davData.cr_nmcl, doc: davData.cl_docume },
-            endereco: {
-                logradouro: (davData.cr_dade || '').split(';')[0]?.trim(),
-                bairro: davData.cr_ebai,
-                cidade: davData.cr_ecid,
-                cep: davData.cr_ecep,
-                referencia: davData.cr_refe
-            },
-            itens: itensComSaldo
-        };
-        
         console.log(`[LOG] Processamento do DAV ${davNumber} concluído com sucesso.`);
         res.json(responseData);
 
