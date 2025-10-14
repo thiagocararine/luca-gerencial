@@ -178,7 +178,7 @@ function renderDavResults(data) {
             <h4 class="font-semibold mb-2">Informações Fiscais</h4>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-sm">
                 <div><strong class="block text-gray-500">Documento:</strong><span>${fiscalTypeMap[fiscal_info.tipo] || 'Não identificado'} - Série ${fiscal_info.serie || 'N/A'}</span></div>
-                <div><strong class="block text-gray-500">Emissão:</strong><span>${formatDateTime(fiscal_info.data_emissao)} por ${fiscal_info.usuario || 'N/A'}</span></div>
+                <div><strong class="block text-gray-500">Número NF:</strong><span>${fiscal_info.numero_nf || 'N/A'}</span></div> <div class="md:col-span-2"><strong class="block text-gray-500">Emissão:</strong><span>${formatDateTime(fiscal_info.data_emissao)} por ${fiscal_info.usuario || 'N/A'}</span></div>
                 <div class="md:col-span-2"><strong class="block text-gray-500">Chave NFe:</strong><span class="break-all">${fiscal_info.chave || 'Não informada'}</span></div>
                 <div><strong class="block text-gray-500">Protocolo:</strong><span>${fiscal_info.protocolo || 'Não informado'}</span></div>
             </div>
@@ -295,7 +295,6 @@ function renderDavResults(data) {
     feather.replace();
     document.getElementById('confirm-retirada-btn')?.addEventListener('click', () => handleConfirmRetirada(data.dav_numero));
 }
-
 
 async function handleConfirmRetirada(davNumber) {
     const btn = document.getElementById('confirm-retirada-btn');

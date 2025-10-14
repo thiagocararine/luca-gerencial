@@ -84,8 +84,8 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, 
                 c.cr_edav, c.cr_hdav, c.cr_udav, c.cr_tnot, c.cr_tipo, c.cr_reca,
                 c.cr_urec, c.cr_erec, c.cr_hrec, 
-                c.cr_ecca, c.cr_hcan, c.cr_usac,
-                c.cr_nfem, c.cr_chnf, c.cr_seri, c.cr_tnfs,
+                c.cr_ecan, c.cr_hcan, c.cr_usac, -- CORREÇÃO: Alterado de cr_ecca para cr_ecan
+                c.cr_nfem, c.cr_chnf, c.cr_seri, c.cr_tnfs, c.cr_nota, -- ADIÇÃO: Incluído o campo cr_nota
                 cl.cl_docume 
              FROM cdavs c
              LEFT JOIN clientes cl ON c.cr_cdcl = cl.cl_codigo
@@ -106,23 +106,14 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         }
 
         const combineDateTime = (date, time) => {
-            // 1. Se a data for nula, indefinida, ou uma "data zero" do banco, retorna nulo imediatamente.
             if (!date || (typeof date === 'string' && date.startsWith('0000-00-00'))) {
                 return null;
             }
-
-            // Cria o objeto de data
             const dateObject = new Date(date);
-            
-            // 2. Verifica se o objeto de data criado é válido. Se não for, retorna nulo.
             if (isNaN(dateObject.getTime())) {
                 return null;
             }
-
-            // Se a hora não for fornecida, usa um valor padrão para evitar erros.
             const validTime = time || '00:00:00';
-
-            // 3. Agora que sabemos que a data é válida, podemos formatá-la com segurança.
             const datePart = dateObject.toISOString().split('T')[0];
             return new Date(`${datePart}T${validTime}`);
         };
@@ -134,11 +125,12 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             usuario: nfemParts[3] || null,
             chave: davData.cr_chnf,
             serie: davData.cr_seri,
-            tipo: davData.cr_tnfs
+            tipo: davData.cr_tnfs,
+            numero_nf: davData.cr_nota // ADIÇÃO: Incluído o número da NF
         };
 
         const cancelamentoInfo = {
-            data_hora: combineDateTime(davData.cr_ecca, davData.cr_hca),
+            data_hora: combineDateTime(davData.cr_ecan, davData.cr_hcan), // CORREÇÃO: Alterado de cr_ecca para cr_ecan
             usuario: davData.cr_usac
         };
 
@@ -212,12 +204,9 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         const itensComSaldo = [];
         for (const item of itensDav) {
             const idavsRegi = item.it_regist;
-            
             const retiradaManualDoItem = retiradasManuais.find(r => r.idavs_regi == idavsRegi);
             const entregaRomaneioDoItem = entregasRomaneio.find(r => r.idavs_regi == idavsRegi);
-            
             const { saldo, entregue } = calcularSaldosItem(item, retiradaManualDoItem, entregaRomaneioDoItem);
-            
             const historicoDoItem = historicoCompleto.filter(h => h.idavs_regi == idavsRegi);
 
             itensComSaldo.push({
@@ -234,7 +223,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         }
         
         responseData.itens = itensComSaldo;
-
         console.log(`[LOG] Processamento do DAV ${davNumber} concluído com sucesso.`);
         res.json(responseData);
 
