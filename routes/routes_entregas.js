@@ -50,10 +50,14 @@ function parseRetiradasAnteriores(it_reti) {
 
 
 function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem) {
-    const totalEntregueNoErp = (parseFloat(itemErp.it_qent) || 0) + (parseFloat(itemErp.it_qtdv) || 0);
+    // CORREÇÃO: Subtraímos a quantidade devolvida (it_qtdv) da entregue (it_qent) para obter o valor líquido.
+    // ESTA É A CORREÇÃO PRINCIPAL.
+    const totalEntregueNoErp = (parseFloat(itemErp.it_qent) || 0) - (parseFloat(itemErp.it_qtdv) || 0);
 
+    // Soma qualquer quantidade que esteja em rota de entrega pelo nosso app.
     const totalEmRomaneioApp = parseFloat(entregaRomaneioDoItem?.total) || 0;
 
+    // O total indisponível é a soma do que foi efetivamente entregue (líquido) mais o que está em rota.
     const totalIndisponivel = totalEntregueNoErp + totalEmRomaneioApp;
     
     const quantidadeTotalPedido = parseFloat(itemErp.it_quan) || 0;
@@ -61,7 +65,9 @@ function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem
     const saldo = quantidadeTotalPedido - totalIndisponivel;
 
     return {
+        // Garante que o saldo nunca seja negativo.
         saldo: Math.max(0, saldo), 
+        // A quantidade "entregue" que mostramos ao usuário é o total indisponível (líquido).
         entregue: totalIndisponivel 
     };
 }
@@ -84,8 +90,8 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, 
                 c.cr_edav, c.cr_hdav, c.cr_udav, c.cr_tnot, c.cr_tipo, c.cr_reca,
                 c.cr_urec, c.cr_erec, c.cr_hrec, 
-                c.cr_ecan, c.cr_hcan, c.cr_usac, -- CORREÇÃO: Alterado de cr_ecca para cr_ecan
-                c.cr_nfem, c.cr_chnf, c.cr_seri, c.cr_tnfs, c.cr_nota, -- ADIÇÃO: Incluído o campo cr_nota
+                c.cr_ecan, c.cr_hcan, c.cr_usac,
+                c.cr_nfem, c.cr_chnf, c.cr_seri, c.cr_tnfs, c.cr_nota,
                 cl.cl_docume 
              FROM cdavs c
              LEFT JOIN clientes cl ON c.cr_cdcl = cl.cl_codigo
@@ -126,11 +132,11 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             chave: davData.cr_chnf,
             serie: davData.cr_seri,
             tipo: davData.cr_tnfs,
-            numero_nf: davData.cr_nota // ADIÇÃO: Incluído o número da NF
+            numero_nf: davData.cr_nota
         };
 
         const cancelamentoInfo = {
-            data_hora: combineDateTime(davData.cr_ecan, davData.cr_hcan), // CORREÇÃO: Alterado de cr_ecca para cr_ecan
+            data_hora: combineDateTime(davData.cr_ecan, davData.cr_hcan),
             usuario: davData.cr_usac
         };
 
@@ -215,15 +221,10 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 pd_nome: item.it_nome,
                 unidade: item.it_unid,
                 quantidade_total: parseFloat(item.it_quan) || 0,
-                quantidade_entregue: entregue, // Este é o valor LÍQUIDO (entregue - devolvido)
+                quantidade_entregue: entregue,
                 quantidade_saldo: saldo,
-                
-                // --- ADIÇÃO ---
-                // Enviando os valores brutos para o front-end
                 quantidade_devolvida: parseFloat(item.it_qtdv) || 0,
                 quantidade_entregue_bruta: parseFloat(item.it_qent) || 0,
-                // --- FIM DA ADIÇÃO ---
-
                 responsavel_caixa: parseUsuarioLiberacao(item.it_entr),
                 historico: historicoDoItem
             });

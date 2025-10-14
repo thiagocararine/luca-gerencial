@@ -239,7 +239,7 @@ function renderDavResults(data) {
                             <th class="px-4 py-2 text-left font-medium text-gray-500">Produto</th>
                             <th class="px-2 py-2 text-center font-medium text-gray-500">Total</th>
                             <th class="px-2 py-2 text-center font-medium text-gray-500">Entregue (Líq.)</th>
-                            <th class="px-2 py-2 text-center font-medium text-gray-500">Devolvido</th> {/* ADIÇÃO DE COLUNA */}
+                            <th class="px-2 py-2 text-center font-medium text-gray-500">Devolvido</th>
                             <th class="px-2 py-2 text-center font-medium text-gray-500">Saldo</th>
                             <th class="px-4 py-2 text-center font-medium text-gray-500">Qtd. a Retirar</th>
                         </tr>
@@ -266,9 +266,7 @@ function renderDavResults(data) {
                                     </td>
                                     <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome ?? 'Nome não definido'}</td>
                                     <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_total ?? 0}</td>
-                                    <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_entregue ?? 0}</td>
-                                    
-                                    {/* ADIÇÃO DE CÉLULA */}
+                                    <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_entregue ?? 0}</td>                                
                                     <td class="px-2 py-3 text-center text-orange-600 font-semibold">
                                         ${item.quantidade_devolvida > 0 ? item.quantidade_devolvida : '-'}
                                     </td>
@@ -280,7 +278,7 @@ function renderDavResults(data) {
                                 </tr>
                                 ${item.historico && item.historico.length > 0 ? `
                                 <tr class="history-row">
-                                    <td colspan="7" class="p-3 bg-gray-50">{/* Colspan atualizado para 7 */}
+                                    <td colspan="7" class="p-3 bg-gray-50">
                                         <h5 class="text-xs font-bold mb-2 flex items-center gap-2"><i data-feather="archive" class="w-4 h-4"></i>Histórico de Entregas:</h5>
                                         <ul class="text-xs space-y-1 pl-4">
                                             ${item.historico.map(h => `
@@ -292,7 +290,7 @@ function renderDavResults(data) {
                                         </ul>
                                     </td>
                                 </tr>` : ''}
-                                ${invalidReturnHtml} {/* Injeção do HTML de alerta */}
+                                ${invalidReturnHtml}
                             `;
                         }).join('')}
                     </tbody>
