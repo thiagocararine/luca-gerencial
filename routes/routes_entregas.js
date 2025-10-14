@@ -106,9 +106,25 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         }
 
         const combineDateTime = (date, time) => {
-            if (!date || !time) return null;
-            const datePart = new Date(date).toISOString().split('T')[0];
-            return new Date(`${datePart}T${time}`);
+            // 1. Se a data for nula, indefinida, ou uma "data zero" do banco, retorna nulo imediatamente.
+            if (!date || (typeof date === 'string' && date.startsWith('0000-00-00'))) {
+                return null;
+            }
+
+            // Cria o objeto de data
+            const dateObject = new Date(date);
+            
+            // 2. Verifica se o objeto de data criado é válido. Se não for, retorna nulo.
+            if (isNaN(dateObject.getTime())) {
+                return null;
+            }
+
+            // Se a hora não for fornecida, usa um valor padrão para evitar erros.
+            const validTime = time || '00:00:00';
+
+            // 3. Agora que sabemos que a data é válida, podemos formatá-la com segurança.
+            const datePart = dateObject.toISOString().split('T')[0];
+            return new Date(`${datePart}T${validTime}`);
         };
 
         const nfemParts = (davData.cr_nfem || '').split(' ');
