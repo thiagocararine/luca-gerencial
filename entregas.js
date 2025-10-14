@@ -238,40 +238,63 @@ function renderDavResults(data) {
                             <th class="w-10"></th>
                             <th class="px-4 py-2 text-left font-medium text-gray-500">Produto</th>
                             <th class="px-2 py-2 text-center font-medium text-gray-500">Total</th>
-                            <th class="px-2 py-2 text-center font-medium text-gray-500">Entregue</th>
+                            <th class="px-2 py-2 text-center font-medium text-gray-500">Entregue (Líq.)</th>
+                            <th class="px-2 py-2 text-center font-medium text-gray-500">Devolvido</th> {/* ADIÇÃO DE COLUNA */}
                             <th class="px-2 py-2 text-center font-medium text-gray-500">Saldo</th>
                             <th class="px-4 py-2 text-center font-medium text-gray-500">Qtd. a Retirar</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
-                        ${itens.map(item => `
-                            <tr class="expandable-row ${item.historico && item.historico.length > 0 ? 'cursor-pointer hover:bg-gray-50' : ''}" data-idavs-regi="${item.idavs_regi}" title="Clique para ver o histórico de retiradas">
-                                <td class="px-2 py-3 text-center text-gray-400">
-                                    ${item.historico && item.historico.length > 0 ? `<i data-feather="chevron-down" class="transition-transform history-chevron"></i>` : ''}
-                                </td>
-                                <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome ?? 'Nome não definido'}</td>
-                                <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_total ?? 0}</td>
-                                <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_entregue ?? 0}</td>
-                                <td class="px-2 py-3 text-center font-bold ${item.quantidade_saldo > 0 ? 'text-blue-600' : 'text-green-600'}">${item.quantidade_saldo ?? 0}</td>
-                                <td class="px-4 py-3 text-center">
-                                    <input type="number" class="w-24 text-center rounded-md border-gray-300 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" data-item-id="${item.idavs_regi}" ${item.quantidade_saldo > 0 ? '' : 'disabled'}>
-                                </td>
-                            </tr>
-                            ${item.historico && item.historico.length > 0 ? `
-                            <tr class="history-row">
-                                <td colspan="6" class="p-3 bg-gray-50">
-                                    <h5 class="text-xs font-bold mb-2 flex items-center gap-2"><i data-feather="archive" class="w-4 h-4"></i>Histórico de Entregas:</h5>
-                                    <ul class="text-xs space-y-1 pl-4">
-                                        ${item.historico.map(h => `
-                                            <li class="flex justify-between border-b pb-1">
-                                                <span>${new Date(h.data).toLocaleString('pt-BR')} - <strong>${h.quantidade} un.</strong> (${h.tipo})</span>
-                                                <span>Resp: ${h.responsavel}</span>
-                                            </li>
-                                        `).join('')}
-                                    </ul>
-                                </td>
-                            </tr>` : ''}
-                        `).join('')}
+                        ${itens.map(item => {
+                            // Lógica para criar o alerta de devolução inválida
+                            let invalidReturnHtml = '';
+                            if (item.quantidade_devolvida > item.quantidade_entregue_bruta) {
+                                invalidReturnHtml = `
+                                    <tr class="bg-yellow-100 border-l-4 border-yellow-500">
+                                        <td colspan="7" class="px-4 py-2 text-sm text-yellow-800 flex items-center gap-2">
+                                            <i data-feather="alert-triangle" class="w-4 h-4"></i>
+                                            <strong>Alerta:</strong> A quantidade devolvida (${item.quantidade_devolvida}) é maior que a quantidade entregue bruta (${item.quantidade_entregue_bruta}).
+                                        </td>
+                                    </tr>
+                                `;
+                            }
+
+                            return `
+                                <tr class="expandable-row ${item.historico && item.historico.length > 0 ? 'cursor-pointer hover:bg-gray-50' : ''}" data-idavs-regi="${item.idavs_regi}" title="Clique para ver o histórico de retiradas">
+                                    <td class="px-2 py-3 text-center text-gray-400">
+                                        ${item.historico && item.historico.length > 0 ? `<i data-feather="chevron-down" class="transition-transform history-chevron"></i>` : ''}
+                                    </td>
+                                    <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome ?? 'Nome não definido'}</td>
+                                    <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_total ?? 0}</td>
+                                    <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_entregue ?? 0}</td>
+                                    
+                                    {/* ADIÇÃO DE CÉLULA */}
+                                    <td class="px-2 py-3 text-center text-orange-600 font-semibold">
+                                        ${item.quantidade_devolvida > 0 ? item.quantidade_devolvida : '-'}
+                                    </td>
+
+                                    <td class="px-2 py-3 text-center font-bold ${item.quantidade_saldo > 0 ? 'text-blue-600' : 'text-green-600'}">${item.quantidade_saldo ?? 0}</td>
+                                    <td class="px-4 py-3 text-center">
+                                        <input type="number" class="w-24 text-center rounded-md border-gray-300 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" data-item-id="${item.idavs_regi}" ${item.quantidade_saldo > 0 ? '' : 'disabled'}>
+                                    </td>
+                                </tr>
+                                ${item.historico && item.historico.length > 0 ? `
+                                <tr class="history-row">
+                                    <td colspan="7" class="p-3 bg-gray-50">{/* Colspan atualizado para 7 */}
+                                        <h5 class="text-xs font-bold mb-2 flex items-center gap-2"><i data-feather="archive" class="w-4 h-4"></i>Histórico de Entregas:</h5>
+                                        <ul class="text-xs space-y-1 pl-4">
+                                            ${item.historico.map(h => `
+                                                <li class="flex justify-between border-b pb-1">
+                                                    <span>${new Date(h.data).toLocaleString('pt-BR')} - <strong>${h.quantidade} un.</strong> (${h.tipo})</span>
+                                                    <span>Resp: ${h.responsavel}</span>
+                                                </li>
+                                            `).join('')}
+                                        </ul>
+                                    </td>
+                                </tr>` : ''}
+                                ${invalidReturnHtml} {/* Injeção do HTML de alerta */}
+                            `;
+                        }).join('')}
                     </tbody>
                 </table>
             `;

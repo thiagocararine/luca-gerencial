@@ -215,8 +215,15 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 pd_nome: item.it_nome,
                 unidade: item.it_unid,
                 quantidade_total: parseFloat(item.it_quan) || 0,
-                quantidade_entregue: entregue,
+                quantidade_entregue: entregue, // Este é o valor LÍQUIDO (entregue - devolvido)
                 quantidade_saldo: saldo,
+                
+                // --- ADIÇÃO ---
+                // Enviando os valores brutos para o front-end
+                quantidade_devolvida: parseFloat(item.it_qtdv) || 0,
+                quantidade_entregue_bruta: parseFloat(item.it_qent) || 0,
+                // --- FIM DA ADIÇÃO ---
+
                 responsavel_caixa: parseUsuarioLiberacao(item.it_entr),
                 historico: historicoDoItem
             });
