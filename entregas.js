@@ -176,11 +176,7 @@ function renderDavResults(data) {
     const fiscalHtml = fiscal_info && fiscal_info.chave ? `
         <div class="mt-4 pt-4 border-t">
             <h4 class="font-semibold text-gray-800 mb-3">Informações Fiscais</h4>
-            
-            {/* Usamos um grid de até 3 colunas para melhor organização */}
             <div class="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 text-sm">
-
-                {/* Linha 1: Informações principais do documento */}
                 <div>
                     <strong class="block text-gray-500">Documento</strong>
                     <span>${fiscalTypeMap[fiscal_info.tipo] || 'Não identificado'}</span>
@@ -193,14 +189,10 @@ function renderDavResults(data) {
                     <strong class="block text-gray-500">Série</strong>
                     <span>${fiscal_info.serie || 'N/A'}</span>
                 </div>
-
-                {/* Linha 2: Chave NFe ocupando a linha inteira */}
                 <div class="md:col-span-3">
                     <strong class="block text-gray-500">Chave NFe</strong>
                     <span class="break-all font-mono text-xs">${fiscal_info.chave || 'Não informada'}</span>
                 </div>
-
-                {/* Linha 3: Emissão e Protocolo */}
                 <div class="md:col-span-2">
                     <strong class="block text-gray-500">Emissão</strong>
                     <span>${formatDateTime(fiscal_info.data_emissao)} por ${fiscal_info.usuario || 'N/A'}</span>
