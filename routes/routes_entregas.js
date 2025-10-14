@@ -84,7 +84,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, 
                 c.cr_edav, c.cr_hdav, c.cr_udav, c.cr_tnot, c.cr_tipo, c.cr_reca,
                 c.cr_urec, c.cr_erec, c.cr_hrec, 
-                c.cr_ecca, c.cr_hca, c.cr_usac,
+                c.cr_ecca, c.cr_hcan, c.cr_usac,
                 c.cr_nfem, c.cr_chnf, c.cr_seri, c.cr_tnfs,
                 cl.cl_docume 
              FROM cdavs c
