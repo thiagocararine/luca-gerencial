@@ -50,25 +50,26 @@ function parseRetiradasAnteriores(it_reti) {
 
 
 function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem) {
-    // CORREÇÃO: Subtraímos a quantidade devolvida (it_qtdv) da entregue (it_qent) para obter o valor líquido.
-    // ESTA É A CORREÇÃO PRINCIPAL.
-    const totalEntregueNoErp = (parseFloat(itemErp.it_qent) || 0) - (parseFloat(itemErp.it_qtdv) || 0);
+    const quantidadeTotalPedido = parseFloat(itemErp.it_quan) || 0;
+    const totalEntregueBruto = parseFloat(itemErp.it_qent) || 0; // Total que já saiu
+    const totalDevolvido = parseFloat(itemErp.it_qtdv) || 0;    // Total que já voltou
+
+    // LÓGICA FINAL E SIMPLIFICADA:
+    // 1. Calcula o que está efetivamente com o cliente (Entregue Líquido).
+    const entregueLiquido = totalEntregueBruto - totalDevolvido;
 
     // Soma qualquer quantidade que esteja em rota de entrega pelo nosso app.
     const totalEmRomaneioApp = parseFloat(entregaRomaneioDoItem?.total) || 0;
 
-    // O total indisponível é a soma do que foi efetivamente entregue (líquido) mais o que está em rota.
-    const totalIndisponivel = totalEntregueNoErp + totalEmRomaneioApp;
+    // O total indisponível é a soma do que está com o cliente mais o que está em rota.
+    const totalIndisponivel = entregueLiquido + totalEmRomaneioApp;
     
-    const quantidadeTotalPedido = parseFloat(itemErp.it_quan) || 0;
-    
+    // 2. O saldo a retirar é o total do pedido menos o que está indisponível.
     const saldo = quantidadeTotalPedido - totalIndisponivel;
 
     return {
-        // Garante que o saldo nunca seja negativo.
         saldo: Math.max(0, saldo), 
-        // A quantidade "entregue" que mostramos ao usuário é o total indisponível (líquido).
-        entregue: totalIndisponivel 
+        entregue: Math.max(0, totalIndisponivel) // Garante que o valor exibido não seja negativo
     };
 }
 
