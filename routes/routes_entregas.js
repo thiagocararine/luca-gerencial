@@ -443,7 +443,171 @@ router.post('/romaneios', authenticateToken, async (req, res) => {
     }
 });
 
-router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => res.status(201).json({ message: "A ser implementado." }));
+
+router.get('/romaneios/:id', authenticateToken, async (req, res) => {
+    const romaneioId = parseInt(req.params.id, 10);
+    if (isNaN(romaneioId)) {
+        return res.status(400).json({ error: 'ID do Romaneio inválido.' });
+    }
+
+    try {
+        // Busca os dados básicos do romaneio
+        const [romaneioDetails] = await gerencialPool.execute(
+            `SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, r.status, 
+                    v.modelo as modelo_veiculo, v.placa as placa_veiculo 
+             FROM romaneios r
+             JOIN veiculos v ON r.id_veiculo = v.id
+             WHERE r.id = ?`,
+            [romaneioId]
+        );
+
+        if (romaneioDetails.length === 0) {
+            return res.status(404).json({ error: 'Romaneio não encontrado.' });
+        }
+        const romaneioData = romaneioDetails[0];
+
+        // Busca os itens já adicionados a este romaneio
+        // Juntamos com idavs para pegar o nome do produto
+        const [items] = await gerencialPool.execute(
+            `SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar, 
+                    idavs_sei.it_nome as produto_nome, idavs_sei.it_unid as produto_unidade
+             FROM romaneio_itens ri
+             LEFT JOIN ${dbConfigSei.database}.idavs idavs_sei ON ri.idavs_regi = idavs_sei.it_regist 
+             WHERE ri.id_romaneio = ?`,
+            [romaneioId]
+        );
+
+        res.json({ ...romaneioData, itens: items });
+
+    } catch (error) {
+        console.error(`Erro ao buscar detalhes do romaneio ${romaneioId}:`, error);
+        res.status(500).json({ error: 'Erro interno ao buscar detalhes do romaneio.' });
+    }
+});
+
+
+/**
+ * Rota para adicionar itens de um DAV a um romaneio existente.
+ * Body esperado: { dav_numero: "12345", itens: [{ idavs_regi: 1, quantidade_a_entregar: 2 }, ...] }
+ */
+router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => {
+    const romaneioId = parseInt(req.params.id, 10);
+    const { dav_numero: davNumeroStr, itens } = req.body;
+    const davNumero = parseInt(davNumeroStr, 10);
+
+    if (isNaN(romaneioId) || isNaN(davNumero) || !itens || !Array.isArray(itens) || itens.length === 0) {
+        return res.status(400).json({ error: 'Dados inválidos para adicionar itens ao romaneio.' });
+    }
+
+    const gerencialConnection = await gerencialPool.getConnection();
+
+    try {
+        await gerencialConnection.beginTransaction();
+
+        // Verifica se o romaneio existe e está 'Em montagem'
+        const [romaneioStatusRows] = await gerencialConnection.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [romaneioId]);
+        if (romaneioStatusRows.length === 0 || romaneioStatusRows[0].status !== 'Em montagem') {
+            throw new Error('Romaneio não encontrado ou não está mais em montagem.');
+        }
+
+        for (const itemParaAdicionar of itens) {
+            const idavsRegi = parseInt(itemParaAdicionar.idavs_regi, 10);
+            const quantidadeAEntregar = parseFloat(itemParaAdicionar.quantidade_a_entregar);
+
+            if (isNaN(idavsRegi) || isNaN(quantidadeAEntregar) || quantidadeAEntregar <= 0) {
+                throw new Error(`Dados inválidos para o item ID ${itemParaAdicionar.idavs_regi}.`);
+            }
+
+            // --- Validação de Saldo ---
+            // 1. Busca os dados do item no ERP (SEI)
+            const [itemErpRows] = await seiPool.execute(
+                `SELECT it_regist, it_quan, it_qent, it_qtdv FROM idavs WHERE it_regist = ?`,
+                [idavsRegi]
+            );
+            if (itemErpRows.length === 0) {
+                throw new Error(`Item com ID ${idavsRegi} não encontrado no ERP.`);
+            }
+            const itemErp = itemErpRows[0];
+
+            // 2. Busca o total já alocado para este item em *outros* romaneios
+            const [alocadoEmRomaneiosRows] = await gerencialPool.execute(
+                'SELECT SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE idavs_regi = ? AND id_romaneio != ?',
+                [idavsRegi, romaneioId] // Exclui o romaneio atual da soma
+            );
+            const alocadoEmRomaneios = alocadoEmRomaneiosRows[0] || { total: 0 };
+            
+            // 3. Calcula o saldo disponível usando a função correta
+            // Passamos { total: alocadoEmRomaneios.total } como 'entregaRomaneioDoItem'
+            const { saldo: saldoDisponivel } = calcularSaldosItem(itemErp, null, { total: alocadoEmRomaneios.total });
+
+            // 4. Compara o saldo com a quantidade a entregar
+            if (quantidadeAEntregar > saldoDisponivel) {
+                 throw new Error(`Saldo insuficiente para o item ID ${idavsRegi}. Saldo disponível: ${saldoDisponivel}, Tentando adicionar: ${quantidadeAEntregar}.`);
+            }
+            // --- Fim da Validação de Saldo ---
+
+            // Insere o item na tabela romaneio_itens
+            await gerencialConnection.execute(
+                `INSERT INTO romaneio_itens (id_romaneio, dav_numero, idavs_regi, quantidade_a_entregar) VALUES (?, ?, ?, ?)`,
+                [romaneioId, davNumero, idavsRegi, quantidadeAEntregar]
+            );
+            console.log(`[LOG] Item ${idavsRegi} (Qtd: ${quantidadeAEntregar}) adicionado ao Romaneio ${romaneioId}`);
+        }
+
+        await gerencialConnection.commit();
+        res.status(201).json({ message: 'Itens adicionados ao romaneio com sucesso!' });
+
+    } catch (error) {
+        await gerencialConnection.rollback();
+        console.error(`Erro ao adicionar itens ao romaneio ${romaneioId}:`, error);
+        // Retorna a mensagem de erro específica (ex: saldo insuficiente)
+        res.status(error.message.includes('Saldo insuficiente') ? 400 : 500).json({ error: error.message || 'Erro interno ao adicionar itens.' });
+    } finally {
+        gerencialConnection.release();
+    }
+});
+
+
+// Rota para remover um item de um romaneio (implementação básica)
+router.delete('/romaneios/:id/itens/:itemId', authenticateToken, async (req, res) => {
+    const romaneioId = parseInt(req.params.id, 10);
+    const romaneioItemId = parseInt(req.params.itemId, 10); // ID da linha em romaneio_itens
+
+    if (isNaN(romaneioId) || isNaN(romaneioItemId)) {
+        return res.status(400).json({ error: 'IDs inválidos.' });
+    }
+
+    const gerencialConnection = await gerencialPool.getConnection();
+    try {
+        await gerencialConnection.beginTransaction();
+
+        // Verifica se o romaneio está 'Em montagem' antes de permitir a remoção
+        const [romaneioStatusRows] = await gerencialConnection.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [romaneioId]);
+         if (romaneioStatusRows.length === 0 || romaneioStatusRows[0].status !== 'Em montagem') {
+            throw new Error('Romaneio não encontrado ou não está mais em montagem.');
+        }
+
+        // Deleta o item específico
+        const [deleteResult] = await gerencialConnection.execute(
+            'DELETE FROM romaneio_itens WHERE id = ? AND id_romaneio = ?',
+            [romaneioItemId, romaneioId]
+        );
+
+        if (deleteResult.affectedRows === 0) {
+            throw new Error('Item não encontrado neste romaneio ou já removido.');
+        }
+
+        await gerencialConnection.commit();
+        res.json({ message: 'Item removido do romaneio com sucesso.' });
+
+    } catch (error) {
+        await gerencialConnection.rollback();
+        console.error(`Erro ao remover item ${romaneioItemId} do romaneio ${romaneioId}:`, error);
+        res.status(500).json({ error: error.message || 'Erro interno ao remover item.' });
+    } finally {
+        gerencialConnection.release();
+    }
+});
 
 module.exports = router;
 
