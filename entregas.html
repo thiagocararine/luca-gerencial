@@ -126,6 +126,48 @@
                             <p class="text-center text-gray-500 p-4">Nenhum romaneio em montagem.</p>
                         </div>
                     </div>
+                    <div id="romaneio-detail-view" class="hidden space-y-6">                        
+                        <button id="back-to-romaneio-list-btn" class="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                            <span data-feather="arrow-left" class="w-4 h-4"></span> Voltar para a Lista
+                        </button>
+
+                        <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow">
+                            <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b pb-3 mb-3">
+                                <h3 class="text-lg font-semibold text-gray-800">Romaneio #<span id="detail-romaneio-id"></span></h3>
+                                <span id="detail-romaneio-status" class="px-2 py-0.5 text-xs font-semibold rounded-full"></span>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-2 text-sm text-gray-600">
+                                <div><strong class="block text-gray-500">Motorista:</strong> <span id="detail-romaneio-motorista"></span></div>
+                                <div><strong class="block text-gray-500">Veículo:</strong> <span id="detail-romaneio-veiculo"></span></div>
+                                <div><strong class="block text-gray-500">Data Criação:</strong> <span id="detail-romaneio-data"></span></div>
+                                <div><strong class="block text-gray-500">Filial Origem:</strong> <span id="detail-romaneio-filial"></span></div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow space-y-4">
+                            <h4 class="font-semibold text-gray-800">Adicionar Pedido ao Romaneio</h4>
+                            <div class="flex rounded-md shadow-sm max-w-sm">
+                                <input type="number" id="dav-search-input-romaneio" class="block w-full rounded-none rounded-l-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" placeholder="Digite o número do DAV">
+                                <button id="search-dav-btn-romaneio" class="relative -ml-px inline-flex items-center space-x-2 rounded-r-md border border-gray-300 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">
+                                    <span data-feather="search" class="h-5 w-5 text-gray-400"></span>
+                                    <span>Buscar</span>
+                                </button>
+                            </div>
+                            <div id="dav-results-romaneio-container" class="hidden">
+                                {/* */}
+                            </div>
+                        </div>
+
+                        <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow space-y-4">
+                            <h4 class="font-semibold text-gray-800">Itens Atuais no Romaneio</h4>
+                            <div id="current-romaneio-items-container" class="overflow-x-auto">
+                                <p class="text-center text-gray-500 p-4">Nenhum item adicionado a este romaneio ainda.</p>
+                            </div>
+                        </div>
+                        
+                        {/* */}
+
+                    </div>
                 </div>
             </div>
         </main>
