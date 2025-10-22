@@ -79,15 +79,31 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
     const davNumberStr = req.params.numero;
     const davNumber = parseInt(davNumberStr, 10);
 
+    // Pega a unidade (filial) do usuário logado a partir do token
+    const { unidade: filialUsuario } = req.user;
+
     if (isNaN(davNumber)) {
         return res.status(400).json({ error: 'Número do DAV inválido.' });
     }
-    console.log(`[LOG] Iniciando busca para DAV: ${davNumber}`);
+    console.log(`[LOG] Iniciando busca para DAV: ${davNumber} pelo usuário da filial: ${filialUsuario}`);
 
     try {
-        console.log('[LOG] Passo 1: Buscando dados do DAV na tabela cdavs...');
-        const [davs] = await seiPool.execute(
-            `SELECT 
+        // MAPEAMENTO DAS FILIAIS (NOME NO TOKEN -> CÓDIGO NO BANCO)
+        // Este mapa traduz o nome da filial do usuário para o código 'cr_inde' do banco.
+        const filialMap = {
+            'Santa Cruz da Serra': 'LUCAM',
+            'Piabetá': 'VMNAF',
+            'Parada Angélica': 'TNASC',
+            'Nova Campinas': 'LCMAT'
+            // Adicione outras filiais aqui se necessário
+        };
+
+        // LÓGICA DE FILTRAGEM
+        const needsFilialFilter = filialUsuario !== 'escritorio';
+
+        // MONTAGEM DINÂMICA DA QUERY
+        let davQuery = `
+            SELECT 
                 c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, 
                 c.cr_edav, c.cr_hdav, c.cr_udav, c.cr_tnot, c.cr_tipo, c.cr_reca,
                 c.cr_urec, c.cr_erec, c.cr_hrec, 
@@ -96,10 +112,25 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 cl.cl_docume 
              FROM cdavs c
              LEFT JOIN clientes cl ON c.cr_cdcl = cl.cl_codigo
-             WHERE CAST(c.cr_ndav AS UNSIGNED) = ?`,
-            [davNumber]
-        );
+             WHERE CAST(c.cr_ndav AS UNSIGNED) = ?
+        `;
+        const queryParams = [davNumber];
 
+        if (needsFilialFilter) {
+            const filialCode = filialMap[filialUsuario];
+            // Se não encontrarmos um código para a filial do usuário, ele não poderá ver nenhum pedido.
+            if (!filialCode) {
+                console.log(`[SECURITY] Usuário da filial "${filialUsuario}" não mapeada tentou acesso. Acesso negado.`);
+                return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado.` });
+            }
+            davQuery += ' AND c.cr_inde = ?';
+            queryParams.push(filialCode);
+        }
+
+        console.log('[LOG] Passo 1: Buscando dados do DAV na tabela cdavs...');
+        const [davs] = await seiPool.execute(davQuery, queryParams);
+        
+        // O restante da função continua exatamente como estava, pois a filtragem já foi feita.
         if (davs.length === 0) {
             return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado.` });
         }
