@@ -1011,7 +1011,7 @@ function renderEligibleDavs(davs) {
                     <span data-feather="chevron-down" class="w-4 h-4"></span> Ver Itens
                 </button>
             </div>
-            {/* Container para os itens deste DAV (inicialmente oculto) */}
+            <!-- Container para os itens deste DAV (inicialmente oculto) -->
             <div class="dav-items-container mt-3 pt-3 border-t border-gray-200 hidden">
                 <p class="text-center text-xs text-gray-400">Carregando itens...</p>
             </div>
