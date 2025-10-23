@@ -49,39 +49,50 @@ function setupEventListeners() {
     });
     document.getElementById('delivery-tabs')?.addEventListener('click', handleTabSwitch);
 
+    // Listeners para Criar Romaneio (mantidos)
     document.getElementById('create-romaneio-btn')?.addEventListener('click', openCreateRomaneioModal);
     document.getElementById('close-romaneio-modal-btn')?.addEventListener('click', () => document.getElementById('create-romaneio-modal').classList.add('hidden'));
     document.getElementById('cancel-romaneio-creation-btn')?.addEventListener('click', () => document.getElementById('create-romaneio-modal').classList.add('hidden'));
     document.getElementById('create-romaneio-form')?.addEventListener('submit', handleCreateRomaneioSubmit);
-    // NOVO: Listener para clicar em um romaneio na lista
+
+    // Listener para clicar em um romaneio na lista (mantido)
     document.getElementById('romaneios-list-container')?.addEventListener('click', handleRomaneioClick);
-    
-    // NOVO: Listener para o botão Voltar da visão detalhada
+
+    // Listener para o botão Voltar da visão detalhada (mantido)
     document.getElementById('back-to-romaneio-list-btn')?.addEventListener('click', showRomaneioListView);
 
-    // NOVO: Listeners para busca de DAV dentro do romaneio
-    document.getElementById('search-dav-btn-romaneio')?.addEventListener('click', handleSearchDavForRomaneio);
-    document.getElementById('dav-search-input-romaneio')?.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleSearchDavForRomaneio();
-    });
+    // --- NOVOS Listeners para filtros de DAVs elegíveis ---
+    document.getElementById('apply-dav-filters-btn')?.addEventListener('click', applyDavFiltersAndLoad);
+    document.getElementById('clear-dav-filters-btn')?.addEventListener('click', clearDavFilters);
+    // Listener para expandir/recolher itens de um DAV na lista de elegíveis
+    document.getElementById('eligible-davs-list')?.addEventListener('click', handleToggleDavItems);
+    // Listener para o botão principal de adicionar itens
+    document.getElementById('add-selected-items-to-romaneio-btn')?.addEventListener('click', handleAddSelectedItemsToRomaneio);
+    // --- FIM DOS NOVOS LISTENERS ---
 
-    // NOVO: Listener para adicionar itens selecionados (precisa ser no container que conterá o botão)
-    document.getElementById('dav-results-romaneio-container')?.addEventListener('click', handleAddItemsClick);
-
-    // NOVO: Listener para remover itens do romaneio atual
+    // Listener para remover itens do romaneio atual (mantido)
     document.getElementById('current-romaneio-items-container')?.addEventListener('click', handleRemoveItemClick);
 
+    // Listener para expandir histórico na Retirada Rápida (mantido)
     document.getElementById('dav-results-container').addEventListener('click', (event) => {
         const row = event.target.closest('.expandable-row');
         if (row) {
             const historyRow = row.nextElementSibling;
             if (historyRow && historyRow.classList.contains('history-row')) {
                 historyRow.classList.toggle('expanded');
-                const icon = row.querySelector('[data-feather="chevron-down"]');
-                icon.classList.toggle('rotate-180');
+                // Ajuste para usar a classe que adicionamos ao ícone
+                const icon = row.querySelector('.history-chevron');
+                if (icon) {
+                    icon.classList.toggle('rotate-180');
+                }
             }
         }
     });
+
+    // Define a data padrão no filtro de DAVs elegíveis ao carregar a página
+    const today = new Date().toISOString().split('T')[0];
+    const dateFilterInput = document.getElementById('romaneio-filter-data');
+    if (dateFilterInput) dateFilterInput.value = today;
 }
 
 // --- Lógica de Abas ---
@@ -591,27 +602,35 @@ function showRomaneioListView() {
 
     loadRomaneiosEmMontagem(); // Recarrega a lista
 }
+
 async function showRomaneioDetailView(romaneioId) {
     showLoader();
     document.getElementById('romaneios-list-container').style.display = 'none';
-    document.getElementById('create-romaneio-btn').style.display = 'none'; // Esconde o botão de criar
+    document.getElementById('create-romaneio-btn').style.display = 'none';
     document.getElementById('romaneio-detail-view').classList.remove('hidden');
-    
+
     // Limpa containers antes de carregar
     document.getElementById('current-romaneio-items-container').innerHTML = '<p class="text-center text-gray-500 p-4">Carregando itens...</p>';
-    document.getElementById('dav-results-romaneio-container').innerHTML = '';
-    document.getElementById('dav-results-romaneio-container').classList.add('hidden');
-    document.getElementById('dav-search-input-romaneio').value = '';
+    document.getElementById('eligible-davs-list').innerHTML = '<p class="text-center text-gray-500 p-4">Carregando...</p>'; // Limpa busca anterior
+
+    // Define a data padrão no filtro (caso tenha sido alterada)
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('romaneio-filter-data').value = today;
+    document.getElementById('romaneio-filter-bairro').value = '';
+    document.getElementById('romaneio-filter-cidade').value = '';
+    document.getElementById('romaneio-filter-dav').value = '';
 
 
     try {
         const response = await fetch(`${apiUrlBase}/entregas/romaneios/${romaneioId}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
-        if (!response.ok) throw new Error('Falha ao carregar detalhes do romaneio.');
-        
+        if (!response.ok) {
+             const errorData = await response.json().catch(() => ({ error: 'Falha ao carregar detalhes do romaneio.' }));
+             throw new Error(errorData.error || 'Falha ao carregar detalhes do romaneio.');
+        }
         const romaneioData = await response.json();
-        
+
         // Popula o cabeçalho
         document.getElementById('detail-romaneio-id').textContent = romaneioData.id;
         document.getElementById('detail-romaneio-motorista').textContent = romaneioData.nome_motorista;
@@ -623,19 +642,33 @@ async function showRomaneioDetailView(romaneioId) {
         const statusSpan = document.getElementById('detail-romaneio-status');
         statusSpan.textContent = romaneioData.status || 'Desconhecido';
         currentRomaneioStatus = romaneioData.status; // Armazena o status atual
-        // TODO: Adicionar classes de cor com base no status (ex: bg-blue-100 text-blue-800 for 'Em montagem')
-        statusSpan.className = 'px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-100 text-blue-800'; // Exemplo
-        
-        renderCurrentRomaneioItems(romaneioData.itens);
-        feather.replace(); // Garante que ícones (como o de voltar) sejam renderizados
+        // Define classe de cor com base no status (ajuste as cores/classes conforme necessário)
+        let statusColorClasses = 'bg-gray-100 text-gray-800'; // Default
+        if (romaneioData.status === 'Em montagem') statusColorClasses = 'bg-blue-100 text-blue-800';
+        else if (romaneioData.status === 'Pronto para Sair') statusColorClasses = 'bg-yellow-100 text-yellow-800';
+        else if (romaneioData.status === 'Em Rota') statusColorClasses = 'bg-purple-100 text-purple-800';
+        else if (romaneioData.status === 'Concluído') statusColorClasses = 'bg-green-100 text-green-800';
+        else if (romaneioData.status === 'Cancelado') statusColorClasses = 'bg-red-100 text-red-800';
+        statusSpan.className = `px-2 py-0.5 text-xs font-semibold rounded-full ${statusColorClasses}`;
+
+        renderCurrentRomaneioItems(romaneioData.itens); // Renderiza os itens que já estão no romaneio
+        feather.replace();
+
+        // Dispara a busca inicial de DAVs elegíveis com a data de hoje
+        await applyDavFiltersAndLoad();
 
     } catch (error) {
         alert(error.message);
-        showRomaneioListView(); // Volta para a lista em caso de erro
+        showRomaneioListView(); // Volta para a lista em caso de erro grave
     } finally {
         hideLoader();
     }
 }
+
+/**
+ * Função renderCurrentRomaneioItems (MODIFICADA para agrupar por DAV)
+ * Renderiza os itens que já estão no romaneio, agrupados por pedido.
+ */
 function renderCurrentRomaneioItems(items) {
     const container = document.getElementById('current-romaneio-items-container');
     if (!items || items.length === 0) {
@@ -643,36 +676,55 @@ function renderCurrentRomaneioItems(items) {
         return;
     }
 
-    container.innerHTML = `
-        <table class="min-w-full divide-y divide-gray-200 text-sm">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-3 py-2 text-left font-medium text-gray-500">DAV</th>
-                    <th class="px-3 py-2 text-left font-medium text-gray-500">Produto</th>
-                    <th class="px-3 py-2 text-center font-medium text-gray-500">Qtd.</th>
-                    <th class="px-3 py-2 text-center font-medium text-gray-500">Ação</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-                ${items.map(item => `
-                    <tr data-romaneio-item-id="${item.romaneio_item_id}">
-                        <td class="px-3 py-2 whitespace-nowrap">${item.dav_numero}</td>
-                        <td class="px-3 py-2">${item.produto_nome || 'Nome Indisponível'} (${item.produto_unidade})</td>
-                        <td class="px-3 py-2 text-center font-semibold">${item.quantidade_a_entregar}</td>
-                        <td class="px-3 py-2 text-center">
-                            ${currentRomaneioStatus === 'Em montagem' ? `
-                            <button class="remove-item-btn text-red-500 hover:text-red-700" title="Remover item do romaneio">
-                                <span data-feather="x-circle" class="w-4 h-4"></span>
-                            </button>
-                            ` : ''}
-                        </td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    `;
+    // Agrupa os itens por DAV usando reduce
+    const itemsGroupedByDav = items.reduce((acc, item) => {
+        const dav = item.dav_numero;
+        // Se o DAV ainda não existe no acumulador, inicializa
+        if (!acc[dav]) {
+            acc[dav] = {
+                cliente_nome: item.cliente_nome || 'Cliente não informado', // Pega o nome do cliente do primeiro item encontrado para este DAV
+                itens: [] // Cria um array para os itens deste DAV
+            };
+        }
+        // Adiciona o item atual ao array de itens do DAV correspondente
+        acc[dav].itens.push(item);
+        return acc; // Retorna o acumulador atualizado
+    }, {}); // Inicia com um objeto vazio
+
+    // Gera o HTML agrupado iterando sobre o objeto criado
+    container.innerHTML = Object.entries(itemsGroupedByDav).map(([davNumero, data]) => `
+        <div class="border rounded-md overflow-hidden mb-3 shadow-sm">
+            {/* Cabeçalho do Grupo DAV */}
+            <div class="bg-gray-100 p-2 border-b flex justify-between items-center">
+                <p class="font-semibold text-sm text-gray-700">Pedido ${davNumero} - ${data.cliente_nome}</p>
+                {/* Poderia adicionar um botão aqui para remover TODOS os itens deste DAV, se desejado */}
+            </div>
+            {/* Tabela de Itens para este DAV */}
+            <table class="min-w-full text-xs">
+                {/* O thead pode ser omitido ou simplificado, pois o contexto já está no cabeçalho do grupo */}
+                <tbody class="divide-y divide-gray-100">
+                    ${data.itens.map(item => `
+                        <tr data-romaneio-item-id="${item.romaneio_item_id}"> {/* ID da linha em romaneio_itens */}
+                            <td class="px-3 py-1.5 text-gray-700">${item.produto_nome || 'Nome Indisponível'} (${item.produto_unidade || 'UN'})</td>
+                            <td class="px-3 py-1.5 text-center font-semibold text-gray-800 w-16">${item.quantidade_a_entregar}</td>
+                            <td class="px-3 py-1.5 text-center w-12">
+                                {/* Botão de remover só aparece se o romaneio estiver 'Em montagem' */}
+                                ${currentRomaneioStatus === 'Em montagem' ? `
+                                <button class="remove-item-btn text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-100" title="Remover item do romaneio">
+                                    <span data-feather="x-circle" class="w-3 h-3"></span>
+                                </button>
+                                ` : ''}
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `).join('');
+
     feather.replace(); // Renderiza os ícones de remover
 }
+
 async function handleSearchDavForRomaneio() {
     const davNumber = document.getElementById('dav-search-input-romaneio').value;
     const resultsContainer = document.getElementById('dav-results-romaneio-container');
@@ -835,6 +887,7 @@ async function handleAddItemsClick(event) {
 }
 
 /**
+ * Função handleRemoveItemClick (Mantida)
  * Chamada quando o botão de remover item é clicado.
  */
 async function handleRemoveItemClick(event) {
@@ -848,12 +901,12 @@ async function handleRemoveItemClick(event) {
 
     const tableRow = button.closest('tr');
     const romaneioItemId = tableRow.dataset.romaneioItemId;
-    
+
     if (!romaneioItemId) {
          alert("Erro: Não foi possível identificar o item a ser removido.");
          return;
     }
-    
+
     if (!confirm(`Tem certeza que deseja remover este item do romaneio?`)) {
         return;
     }
@@ -869,13 +922,276 @@ async function handleRemoveItemClick(event) {
         if (!response.ok) {
             throw new Error(result.error || 'Falha ao remover item.');
         }
-        
+
         alert(result.message);
-        await showRomaneioDetailView(currentRomaneioId); // Recarrega a view
+        // Recarrega a view detalhada para atualizar a lista de itens atuais
+        await showRomaneioDetailView(currentRomaneioId);
 
     } catch (error) {
          alert(`Erro: ${error.message}`);
     } finally {
         hideLoader();
+    }
+}
+
+function clearDavFilters() {
+    document.getElementById('romaneio-filter-bairro').value = '';
+    document.getElementById('romaneio-filter-cidade').value = '';
+    document.getElementById('romaneio-filter-dav').value = '';
+    // Define a data para hoje novamente
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('romaneio-filter-data').value = today;
+    applyDavFiltersAndLoad(); // Busca com os filtros limpos (apenas data de hoje)
+}
+
+/**
+ * NOVA FUNÇÃO: Lê os filtros, monta a query e busca os DAVs elegíveis.
+ */
+async function applyDavFiltersAndLoad() {
+    const listContainer = document.getElementById('eligible-davs-list');
+    listContainer.innerHTML = '<p class="text-center text-gray-500 p-4">Buscando pedidos...</p>';
+    showLoader();
+
+    const params = new URLSearchParams();
+    const data = document.getElementById('romaneio-filter-data').value;
+    const bairro = document.getElementById('romaneio-filter-bairro').value;
+    const cidade = document.getElementById('romaneio-filter-cidade').value;
+    const davNumero = document.getElementById('romaneio-filter-dav').value;
+
+    if (!data) {
+        alert('Selecione uma data.');
+        listContainer.innerHTML = '<p class="text-center text-orange-500 p-4">Selecione uma data para buscar pedidos.</p>';
+        hideLoader();
+        return;
+    }
+    params.append('data', data);
+    if (bairro) params.append('bairro', bairro);
+    if (cidade) params.append('cidade', cidade);
+    if (davNumero) params.append('davNumero', davNumero);
+
+    try {
+        const response = await fetch(`${apiUrlBase}/entregas/eligible-davs?${params.toString()}`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (!response.ok) {
+             const errorData = await response.json().catch(() => ({ error: 'Falha ao buscar pedidos elegíveis.' }));
+             throw new Error(errorData.error || 'Falha ao buscar pedidos elegíveis.');
+        }
+
+        const davs = await response.json();
+        renderEligibleDavs(davs);
+
+    } catch (error) {
+        listContainer.innerHTML = `<p class="text-center text-red-500 p-4">${error.message}</p>`;
+    } finally {
+        hideLoader();
+    }
+}
+
+/**
+ * NOVA FUNÇÃO: Renderiza a lista de DAVs elegíveis encontrados pelos filtros.
+ */
+function renderEligibleDavs(davs) {
+    const listContainer = document.getElementById('eligible-davs-list');
+    if (!davs || davs.length === 0) {
+        listContainer.innerHTML = '<p class="text-center text-gray-500 p-4">Nenhum pedido encontrado com os filtros aplicados.</p>';
+        return;
+    }
+
+    listContainer.innerHTML = davs.map(dav => `
+        <div class="border rounded-md p-3 bg-gray-50/80 dav-container" data-dav-numero="${dav.cr_ndav}">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <div>
+                        <p class="font-semibold text-gray-800">DAV: ${dav.cr_ndav} - ${dav.cr_nmcl || 'Cliente não informado'}</p>
+                        <p class="text-xs text-gray-500">${dav.cr_ebai || 'Bairro não inf.'} / ${dav.cr_ecid || 'Cidade não inf.'} (${dav.cr_inde})</p>
+                    </div>
+                </div>
+                <button class="toggle-items-btn text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-1">
+                    <span data-feather="chevron-down" class="w-4 h-4"></span> Ver Itens
+                </button>
+            </div>
+            {/* Container para os itens deste DAV (inicialmente oculto) */}
+            <div class="dav-items-container mt-3 pt-3 border-t border-gray-200 hidden">
+                <p class="text-center text-xs text-gray-400">Carregando itens...</p>
+            </div>
+        </div>
+    `).join('');
+    feather.replace();
+}
+
+/**
+ * NOVA FUNÇÃO: Manipula o clique no botão "Ver Itens" / "Ocultar Itens".
+ */
+async function handleToggleDavItems(event) {
+    const button = event.target.closest('.toggle-items-btn');
+    if (!button) return;
+
+    const davContainer = button.closest('.dav-container');
+    const davNumero = davContainer.dataset.davNumero;
+    const itemsContainer = davContainer.querySelector('.dav-items-container');
+    const icon = button.querySelector('svg'); // Pega o ícone
+
+    const isHidden = itemsContainer.classList.contains('hidden');
+
+    if (isHidden) {
+        // Expandir: Buscar e mostrar itens
+        button.innerHTML = '<span data-feather="chevron-up" class="w-4 h-4"></span> Ocultar Itens';
+        itemsContainer.classList.remove('hidden');
+        itemsContainer.innerHTML = '<p class="text-center text-xs text-gray-400">Carregando itens...</p>';
+        feather.replace(); // Atualiza o ícone
+        showLoader(); // Mostra loader global brevemente
+
+        try {
+            // Reutiliza a rota GET /dav/:numero para buscar os detalhes e itens
+            const response = await fetch(`${apiUrlBase}/entregas/dav/${davNumero}`, {
+                headers: { 'Authorization': `Bearer ${getToken()}` }
+            });
+             if (!response.ok) {
+                 const errorData = await response.json().catch(() => ({ error: 'Falha ao buscar itens do DAV.' }));
+                 throw new Error(errorData.error || 'Falha ao buscar itens do DAV.');
+            }
+            const davData = await response.json();
+
+            const itemsComSaldo = davData.itens.filter(item => item.quantidade_saldo > 0);
+            if (itemsComSaldo.length === 0) {
+                itemsContainer.innerHTML = '<p class="text-center text-xs text-orange-500">Nenhum item com saldo disponível neste pedido.</p>';
+            } else {
+                // Renderiza a tabela de itens com checkboxes e inputs
+                itemsContainer.innerHTML = `
+                    <table class="min-w-full text-xs mb-2">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="w-8 px-1 py-1">Sel.</th>
+                                <th class="px-2 py-1 text-left font-medium text-gray-500">Produto</th>
+                                <th class="px-1 py-1 text-center font-medium text-gray-500">Saldo</th>
+                                <th class="px-2 py-1 text-center font-medium text-gray-500">Qtd. Entregar</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                        ${itemsComSaldo.map(item => `
+                            <tr data-idavs-regi="${item.idavs_regi}">
+                                <td class="px-1 py-1 text-center"><input type="checkbox" class="eligible-item-checkbox rounded border-gray-300 h-4 w-4 focus:ring-indigo-500"></td>
+                                <td class="px-2 py-1">${item.pd_nome} (${item.unidade})</td>
+                                <td class="px-1 py-1 text-center font-semibold text-blue-600">${item.quantidade_saldo}</td>
+                                <td class="px-2 py-1 text-center">
+                                    <input type="number" class="eligible-item-qty w-16 text-center rounded border-gray-300 shadow-sm text-xs p-1 focus:border-indigo-500 focus:ring-indigo-500" value="0" min="0" max="${item.quantidade_saldo}">
+                                </td>
+                            </tr>
+                        `).join('')}
+                        </tbody>
+                    </table>`;
+            }
+
+        } catch (error) {
+            itemsContainer.innerHTML = `<p class="text-center text-xs text-red-500">${error.message}</p>`;
+        } finally {
+            hideLoader(); // Esconde loader global
+        }
+
+    } else {
+        // Recolher: Esconder itens
+        button.innerHTML = '<span data-feather="chevron-down" class="w-4 h-4"></span> Ver Itens';
+        itemsContainer.classList.add('hidden');
+        feather.replace(); // Atualiza o ícone
+    }
+}
+
+/**
+ * NOVA FUNÇÃO: Coleta todos os itens selecionados e envia para adicionar ao romaneio.
+ */
+async function handleAddSelectedItemsToRomaneio() {
+    const button = document.getElementById('add-selected-items-to-romaneio-btn');
+    if (!currentRomaneioId) {
+        alert("Erro: Selecione um romaneio primeiro.");
+        return;
+    }
+
+    const itensParaAdicionarPayload = []; // Array que será enviado para a API
+    let hasInvalidQuantity = false;
+    let itemsFound = false;
+
+    // Itera sobre todos os containers de DAV que estão visíveis (expandidos)
+    document.querySelectorAll('#eligible-davs-list .dav-container').forEach(davContainer => {
+        const itemsContainer = davContainer.querySelector('.dav-items-container:not(.hidden)');
+        if (!itemsContainer) return; // Pula se os itens não estiverem visíveis
+
+        const davNumero = davContainer.dataset.davNumero;
+
+        // Itera sobre as linhas da tabela de itens DENTRO do container visível
+        itemsContainer.querySelectorAll('tbody tr').forEach(row => {
+            const checkbox = row.querySelector('.eligible-item-checkbox');
+            const qtyInput = row.querySelector('.eligible-item-qty');
+            if (!checkbox || !qtyInput) return; // Pula se não encontrar os elementos
+
+            const idavsRegi = row.dataset.idavsRegi;
+            const quantidade = parseFloat(qtyInput.value);
+            const saldoMax = parseFloat(qtyInput.max);
+
+            if (checkbox.checked && quantidade > 0) {
+                itemsFound = true; // Marcar que encontramos pelo menos um item
+                if (quantidade > saldoMax) {
+                    alert(`Quantidade para o item ${idavsRegi} (DAV ${davNumero}) excede o saldo (${saldoMax}). Ajuste antes de continuar.`);
+                    qtyInput.style.borderColor = 'red'; // Destaca o campo inválido
+                    qtyInput.focus();
+                    hasInvalidQuantity = true;
+                    return; // Para a iteração interna (forEach da linha)
+                } else {
+                    qtyInput.style.borderColor = ''; // Limpa destaque se estava inválido antes
+                }
+                itensParaAdicionarPayload.push({
+                    dav_numero: davNumero, // Inclui o DAV de origem
+                    idavs_regi: idavsRegi,
+                    quantidade_a_entregar: quantidade
+                });
+            } else if (checkbox.checked && quantidade <= 0) {
+                 alert(`A quantidade para o item ${idavsRegi} (DAV ${davNumero}) deve ser maior que zero se selecionado.`);
+                 qtyInput.style.borderColor = 'red';
+                 qtyInput.focus();
+                 hasInvalidQuantity = true;
+                 return;
+            } else {
+                 qtyInput.style.borderColor = ''; // Limpa destaque
+            }
+        });
+        if (hasInvalidQuantity) return; // Para a iteração externa (forEach do container)
+    });
+
+    if (hasInvalidQuantity) return; // Não continua se houve erro de quantidade
+
+    if (!itemsFound) {
+        alert("Nenhum item selecionado com quantidade maior que zero para adicionar.");
+        return;
+    }
+
+    showLoader();
+    button.disabled = true;
+
+    try {
+        const response = await fetch(`${apiUrlBase}/entregas/romaneios/${currentRomaneioId}/itens`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getToken()}`
+            },
+            body: JSON.stringify(itensParaAdicionarPayload) // Envia o array diretamente
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || 'Falha ao adicionar itens.');
+        }
+
+        alert(result.message);
+        // Recarrega a view detalhada para atualizar a lista de itens atuais
+        await showRomaneioDetailView(currentRomaneioId);
+        // Limpa a lista de DAVs elegíveis para forçar nova busca se necessário
+        document.getElementById('eligible-davs-list').innerHTML = '<p class="text-center text-gray-500 p-4">Use os filtros acima para buscar pedidos.</p>';
+
+    } catch (error) {
+        alert(`Erro: ${error.message}`);
+    } finally {
+        hideLoader();
+        button.disabled = false;
     }
 }

@@ -112,7 +112,9 @@
                     <div id="dav-results-container" class="hidden"></div>
                 </div>
 
-                <div id="romaneios-content" class="tab-content space-y-6 hidden">
+                <div id="romaneios-content" class="tab-content space-y-6 hidden"> <!-- Garanta que 'hidden' esteja aqui -->
+
+                    <!-- Botão Criar Novo Romaneio e Lista Inicial -->
                     <div class="flex justify-end">
                         <button id="create-romaneio-btn" class="action-btn bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-2">
                             <span data-feather="plus-circle"></span>Criar Novo Romaneio
@@ -122,13 +124,21 @@
                         <h3 class="text-lg font-semibold text-gray-800 mb-2">Romaneios em Montagem</h3>
                         <div id="romaneios-list-container" class="space-y-3">
                             <p class="text-center text-gray-500 p-4">Nenhum romaneio em montagem.</p>
+                            <!-- A lista de romaneios será carregada aqui pelo JS -->
                         </div>
                     </div>
-                    <div id="romaneio-detail-view" class="hidden space-y-6">                        
+
+                    <!--{/* ============================================== */}
+                    {/* SEÇÃO DETALHADA DO ROMANEIO (Início)      */}
+                    {/* ============================================== */}-->
+                    <div id="romaneio-detail-view" class="hidden space-y-6">
+
+                        <!--{/* Botão Voltar */}-->
                         <button id="back-to-romaneio-list-btn" class="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
                             <span data-feather="arrow-left" class="w-4 h-4"></span> Voltar para a Lista
                         </button>
 
+                        {/* Cabeçalho do Romaneio */}
                         <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow">
                             <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b pb-3 mb-3">
                                 <h3 class="text-lg font-semibold text-gray-800">Romaneio #<span id="detail-romaneio-id"></span></h3>
@@ -142,26 +152,70 @@
                             </div>
                         </div>
 
+                        {/* --- NOVA SEÇÃO: BUSCAR E ADICIONAR PEDIDOS --- */}
                         <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow space-y-4">
-                            <h4 class="font-semibold text-gray-800">Adicionar Pedido ao Romaneio</h4>
-                            <div class="flex rounded-md shadow-sm max-w-sm">
-                                <input type="number" id="dav-search-input-romaneio" class="block w-full rounded-none rounded-l-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" placeholder="Digite o número do DAV">
-                                <button id="search-dav-btn-romaneio" class="relative -ml-px inline-flex items-center space-x-2 rounded-r-md border border-gray-300 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">
-                                    <span data-feather="search" class="h-5 w-5 text-gray-400"></span>
-                                    <span>Buscar</span>
+                            <h4 class="font-semibold text-gray-800">Buscar Pedidos Elegíveis para Adicionar</h4>
+
+                            {/* Filtros */}
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pb-4 border-b">
+                                <div>
+                                    <label for="romaneio-filter-data" class="block text-sm font-medium text-gray-700">Data Recebimento</label>
+                                    <input type="date" id="romaneio-filter-data" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                </div>
+                                <div>
+                                    <label for="romaneio-filter-bairro" class="block text-sm font-medium text-gray-700">Bairro</label>
+                                    <input type="text" id="romaneio-filter-bairro" placeholder="Filtrar por bairro" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                </div>
+                                <div>
+                                    <label for="romaneio-filter-cidade" class="block text-sm font-medium text-gray-700">Cidade</label>
+                                    <input type="text" id="romaneio-filter-cidade" placeholder="Filtrar por cidade" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                </div>
+                                <div>
+                                    <label for="romaneio-filter-dav" class="block text-sm font-medium text-gray-700">Nº DAV Específico</label>
+                                    <input type="number" id="romaneio-filter-dav" placeholder="Buscar DAV" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                </div>
+                                <div class="md:col-span-2 lg:col-span-4 flex justify-end gap-2">
+                                    <button id="clear-dav-filters-btn" class="action-btn bg-gray-500 hover:bg-gray-600 px-3 py-1.5 text-xs">Limpar Filtros</button>
+                                    <button id="apply-dav-filters-btn" class="action-btn bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-xs flex items-center gap-1">
+                                        <span data-feather="search" class="w-4 h-4"></span>Buscar Pedidos
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Lista de DAVs Elegíveis */}
+                            <div id="eligible-davs-list" class="space-y-3 max-h-96 overflow-y-auto border rounded-md p-2 bg-gray-50/50">
+                                <p class="text-center text-gray-500 p-4 text-sm">Use os filtros acima para buscar pedidos.</p>
+                                {/* O JS preencherá esta área */}
+                            </div>
+
+                            {/* Botão de Adicionar */}
+                            <div class="flex justify-end pt-4 border-t">
+                                <button id="add-selected-items-to-romaneio-btn" class="action-btn bg-green-600 text-white hover:bg-green-700 flex items-center gap-2">
+                                    <span data-feather="plus-circle"></span>Adicionar Selecionados ao Romaneio
                                 </button>
                             </div>
-                            <div id="dav-results-romaneio-container" class="hidden">
-                            </div>
                         </div>
+                        {/* --- FIM DA NOVA SEÇÃO --- */}
 
+
+                        {/* --- SEÇÃO ATUALIZADA: ITENS NO ROMANEIO --- */}
                         <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow space-y-4">
                             <h4 class="font-semibold text-gray-800">Itens Atuais no Romaneio</h4>
-                            <div id="current-romaneio-items-container" class="overflow-x-auto">
+                            <div id="current-romaneio-items-container" class="space-y-4">
                                 <p class="text-center text-gray-500 p-4">Nenhum item adicionado a este romaneio ainda.</p>
+                                {/* O JS preencherá esta área no formato PEDIDO > ITEM */}
                             </div>
                         </div>
+                        {/* --- FIM DA SEÇÃO ATUALIZADA --- */}
+
+
+                        {/* TODO: Adicionar botões de Ações do Romaneio aqui (Marcar como Pronto, etc.) */}
+
                     </div>
+                    {/* ============================================== */}
+                    {/* SEÇÃO DETALHADA DO ROMANEIO (Fim)        */}
+                    {/* ============================================== */}
+
                 </div>
             </div>
         </main>

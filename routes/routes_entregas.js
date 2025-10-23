@@ -443,126 +443,88 @@ router.post('/romaneios', authenticateToken, async (req, res) => {
 });
 
 
-router.get('/romaneios/:id', authenticateToken, async (req, res) => {
-    const romaneioId = parseInt(req.params.id, 10);
-    if (isNaN(romaneioId)) {
-        return res.status(400).json({ error: 'ID do Romaneio inválido.' });
-    }
-
-    try {
-        // Busca os dados básicos do romaneio
-        const [romaneioDetails] = await gerencialPool.execute(
-            `SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, r.status, 
-                    v.modelo as modelo_veiculo, v.placa as placa_veiculo 
-             FROM romaneios r
-             JOIN veiculos v ON r.id_veiculo = v.id
-             WHERE r.id = ?`,
-            [romaneioId]
-        );
-
-        if (romaneioDetails.length === 0) {
-            return res.status(404).json({ error: 'Romaneio não encontrado.' });
-        }
-        const romaneioData = romaneioDetails[0];
-
-        // Busca os itens já adicionados a este romaneio
-        // Juntamos com idavs para pegar o nome do produto
-        const [items] = await gerencialPool.execute(
-            `SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar, 
-                    idavs_sei.it_nome as produto_nome, idavs_sei.it_unid as produto_unidade
-             FROM romaneio_itens ri
-             LEFT JOIN ${dbConfigSei.database}.idavs idavs_sei ON ri.idavs_regi = idavs_sei.it_regist 
-             WHERE ri.id_romaneio = ?`,
-            [romaneioId]
-        );
-
-        res.json({ ...romaneioData, itens: items });
-
-    } catch (error) {
-        console.error(`Erro ao buscar detalhes do romaneio ${romaneioId}:`, error);
-        res.status(500).json({ error: 'Erro interno ao buscar detalhes do romaneio.' });
-    }
-});
-
-
 /**
  * Rota para adicionar itens de um DAV a um romaneio existente.
  * Body esperado: { dav_numero: "12345", itens: [{ idavs_regi: 1, quantidade_a_entregar: 2 }, ...] }
  */
 router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => {
     const romaneioId = parseInt(req.params.id, 10);
-    const { dav_numero: davNumeroStr, itens } = req.body;
-    const davNumero = parseInt(davNumeroStr, 10);
+    const itensParaAdicionar = req.body; // Recebe o array de itens diretamente
 
-    if (isNaN(romaneioId) || isNaN(davNumero) || !itens || !Array.isArray(itens) || itens.length === 0) {
-        return res.status(400).json({ error: 'Dados inválidos para adicionar itens ao romaneio.' });
+    if (isNaN(romaneioId) || !Array.isArray(itensParaAdicionar) || itensParaAdicionar.length === 0) {
+        return res.status(400).json({ error: 'Dados inválidos para adicionar itens ao romaneio. É esperado um array de itens.' });
     }
 
     const gerencialConnection = await gerencialPool.getConnection();
-
     try {
         await gerencialConnection.beginTransaction();
 
         // Verifica se o romaneio existe e está 'Em montagem'
         const [romaneioStatusRows] = await gerencialConnection.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [romaneioId]);
         if (romaneioStatusRows.length === 0 || romaneioStatusRows[0].status !== 'Em montagem') {
-            throw new Error('Romaneio não encontrado ou não está mais em montagem.');
+            await gerencialConnection.rollback(); // Libera o lock
+            return res.status(400).json({ error: 'Romaneio não encontrado ou não está mais em montagem.' });
         }
 
-        for (const itemParaAdicionar of itens) {
-            const idavsRegi = parseInt(itemParaAdicionar.idavs_regi, 10);
-            const quantidadeAEntregar = parseFloat(itemParaAdicionar.quantidade_a_entregar);
+        // Mapeia todos os IDs de itens únicos para buscar dados do ERP de forma eficiente
+        const allIdavsRegi = [...new Set(itensParaAdicionar.map(item => parseInt(item.idavs_regi, 10)))].filter(id => !isNaN(id));
+        if (allIdavsRegi.length === 0) {
+             throw new Error("Nenhum ID de item válido encontrado nos dados enviados.");
+        }
 
-            if (isNaN(idavsRegi) || isNaN(quantidadeAEntregar) || quantidadeAEntregar <= 0) {
-                throw new Error(`Dados inválidos para o item ID ${itemParaAdicionar.idavs_regi}.`);
+        // Busca dados dos itens do ERP
+        const [itemErpRows] = await seiPool.execute(`SELECT it_regist, it_nome, it_quan, it_qent, it_qtdv FROM idavs WHERE it_regist IN (?)`, [allIdavsRegi]);
+        const itemErpMap = new Map(itemErpRows.map(i => [i.it_regist, i]));
+
+        // Busca quantidades já alocadas em OUTROS romaneios para esses itens
+        const [alocadoEmRomaneiosRows] = await gerencialPool.execute(
+            'SELECT idavs_regi, SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE idavs_regi IN (?) AND id_romaneio != ? GROUP BY idavs_regi',
+            [allIdavsRegi, romaneioId]
+        );
+        const alocadoMap = new Map(alocadoEmRomaneiosRows.map(i => [i.idavs_regi, i.total]));
+
+        // Itera sobre os itens enviados pelo front-end para validação e inserção
+        for (const item of itensParaAdicionar) {
+            const idavsRegi = parseInt(item.idavs_regi, 10);
+            const quantidadeAEntregar = parseFloat(item.quantidade_a_entregar);
+            const davNumero = parseInt(item.dav_numero, 10);
+
+            // Validação básica dos dados recebidos
+            if (isNaN(idavsRegi) || isNaN(quantidadeAEntregar) || quantidadeAEntregar <= 0 || isNaN(davNumero)) {
+                throw new Error(`Dados inválidos para o item ID ${item.idavs_regi} do DAV ${item.dav_numero}. Verifique os valores.`);
             }
 
-            // --- Validação de Saldo ---
-            // 1. Busca os dados do item no ERP (SEI)
-            const [itemErpRows] = await seiPool.execute(
-                `SELECT it_regist, it_quan, it_qent, it_qtdv FROM idavs WHERE it_regist = ?`,
-                [idavsRegi]
-            );
-            if (itemErpRows.length === 0) {
-                throw new Error(`Item com ID ${idavsRegi} não encontrado no ERP.`);
-            }
-            const itemErp = itemErpRows[0];
+            // Validação de Saldo
+            const itemErp = itemErpMap.get(idavsRegi);
+            if (!itemErp) { throw new Error(`Item ${idavsRegi} não encontrado no ERP.`); }
 
-            // 2. Busca o total já alocado para este item em *outros* romaneios
-            const [alocadoEmRomaneiosRows] = await gerencialPool.execute(
-                'SELECT SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE idavs_regi = ? AND id_romaneio != ?',
-                [idavsRegi, romaneioId] // Exclui o romaneio atual da soma
-            );
-            const alocadoEmRomaneios = alocadoEmRomaneiosRows[0] || { total: 0 };
-            
-            // 3. Calcula o saldo disponível usando a função correta
-            // Passamos { total: alocadoEmRomaneios.total } como 'entregaRomaneioDoItem'
-            const { saldo: saldoDisponivel } = calcularSaldosItem(itemErp, null, { total: alocadoEmRomaneios.total });
+            const alocadoEmOutros = alocadoMap.get(idavsRegi) || 0;
+            // Usa a função calcularSaldosItem para obter o saldo real disponível
+            const { saldo: saldoDisponivel } = calcularSaldosItem(itemErp, null, { total: alocadoEmOutros });
 
-            // 4. Compara o saldo com a quantidade a entregar
             if (quantidadeAEntregar > saldoDisponivel) {
-                 throw new Error(`Saldo insuficiente para o item ID ${idavsRegi}. Saldo disponível: ${saldoDisponivel}, Tentando adicionar: ${quantidadeAEntregar}.`);
+                 throw new Error(`Saldo insuficiente para ${itemErp.it_nome || `item ID ${idavsRegi}`} (DAV ${davNumero}). Saldo: ${saldoDisponivel}, Tentando: ${quantidadeAEntregar}.`);
             }
-            // --- Fim da Validação de Saldo ---
 
             // Insere o item na tabela romaneio_itens
             await gerencialConnection.execute(
                 `INSERT INTO romaneio_itens (id_romaneio, dav_numero, idavs_regi, quantidade_a_entregar) VALUES (?, ?, ?, ?)`,
                 [romaneioId, davNumero, idavsRegi, quantidadeAEntregar]
             );
-            console.log(`[LOG] Item ${idavsRegi} (Qtd: ${quantidadeAEntregar}) adicionado ao Romaneio ${romaneioId}`);
+            console.log(`[LOG] Item ${idavsRegi} (DAV: ${davNumero}, Qtd: ${quantidadeAEntregar}) adicionado ao Romaneio ${romaneioId}`);
         }
 
         await gerencialConnection.commit();
         res.status(201).json({ message: 'Itens adicionados ao romaneio com sucesso!' });
 
     } catch (error) {
-        await gerencialConnection.rollback();
+        await gerencialConnection.rollback(); // Garante rollback em caso de erro
         console.error(`Erro ao adicionar itens ao romaneio ${romaneioId}:`, error);
-        // Retorna a mensagem de erro específica (ex: saldo insuficiente)
-        res.status(error.message.includes('Saldo insuficiente') ? 400 : 500).json({ error: error.message || 'Erro interno ao adicionar itens.' });
+        // Retorna a mensagem de erro específica (ex: saldo insuficiente) ou uma genérica
+        res.status(error.message.includes('Saldo insuficiente') || error.message.includes('inválidos') || error.message.includes('não encontrado') ? 400 : 500)
+           .json({ error: error.message || 'Erro interno ao adicionar itens.' });
     } finally {
-        gerencialConnection.release();
+        gerencialConnection.release(); // Libera a conexão de volta para o pool
     }
 });
 
@@ -608,5 +570,116 @@ router.delete('/romaneios/:id/itens/:itemId', authenticateToken, async (req, res
     }
 });
 
-module.exports = router;
+/** Busca DAVs elegíveis para adicionar a um romaneio, com filtros.
+ * Query Params: data (YYYY-MM-DD, obrigatório), bairro?, cidade?, davNumero?
+ */
+router.get('/eligible-davs', authenticateToken, async (req, res) => {
+    const { data, bairro, cidade, davNumero } = req.query;
+    const { unidade: filialUsuario } = req.user; // Obtém a unidade (filial) do token
 
+    if (!data) {
+        return res.status(400).json({ error: "O filtro de data é obrigatório." });
+    }
+
+    try {
+        // Mapeamento das filiais (necessário para aplicar filtro de segurança)
+        const filialMap = {
+            'Santa Cruz da Serra': 'LUCAM',
+            'Piabetá': 'VMNAF',
+            'Parada Angélica': 'TNASC',
+            'Nova Campinas': 'LCMAT'
+            // Adicione outras filiais aqui se necessário
+        };
+        const adminFiliais = ['escritorio', 'Escritório (Lojas)'];
+        const needsFilialFilter = !adminFiliais.includes(filialUsuario);
+
+        // Query base para buscar DAVs com status Recebido ('1'), na data especificada,
+        // e que tenham pelo menos um item com saldo > 0.
+        // Usamos DISTINCT para evitar duplicatas se um DAV tiver múltiplos itens com saldo.
+        let query = `
+            SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde
+            FROM cdavs c
+            JOIN idavs i ON c.cr_ndav = i.it_ndav -- Garante que o DAV tem itens
+            WHERE c.cr_reca = '1' -- Status Recebido
+              AND DATE(c.cr_erec) = ? -- Filtro por data de recebimento (ajuste o campo se for cr_edav)
+              AND (i.it_quan - (i.it_qent - i.it_qtdv)) > 0 -- Garante que há saldo em pelo menos um item
+        `;
+        const params = [data];
+
+        // Adiciona filtros opcionais
+        if (bairro) { query += ' AND c.cr_ebai LIKE ?'; params.push(`%${bairro}%`); }
+        if (cidade) { query += ' AND c.cr_ecid LIKE ?'; params.push(`%${cidade}%`); }
+        if (davNumero) { query += ' AND CAST(c.cr_ndav AS UNSIGNED) = ?'; params.push(parseInt(davNumero, 10)); }
+
+        // Aplica o filtro de filial para usuários não-admin
+        if (needsFilialFilter) {
+            const filialCode = filialMap[filialUsuario];
+            if (!filialCode) {
+                console.warn(`[ELIGIBLE DAVs] Usuário da filial "${filialUsuario}" não mapeada.`);
+                return res.json([]); // Retorna lista vazia se não tem permissão
+            }
+            query += ' AND c.cr_inde = ?';
+            params.push(filialCode);
+        }
+
+        query += ' ORDER BY c.cr_ebai, c.cr_nmcl'; // Ordena para agrupar visualmente
+
+        const [davs] = await seiPool.execute(query, params);
+        res.json(davs);
+
+    } catch (error) {
+        console.error("Erro ao buscar DAVs elegíveis:", error);
+        res.status(500).json({ error: 'Erro interno ao buscar DAVs.' });
+    }
+});
+
+/**
+ * Rota GET /romaneios/:id (MODIFICADA para ordenar itens por DAV e incluir nome do cliente)
+ * Busca os detalhes de um romaneio específico, incluindo os itens já adicionados,
+ * ordenados para exibição agrupada.
+ */
+router.get('/romaneios/:id', authenticateToken, async (req, res) => {
+    const romaneioId = parseInt(req.params.id, 10);
+    if (isNaN(romaneioId)) {
+        return res.status(400).json({ error: 'ID do Romaneio inválido.' });
+    }
+
+    try {
+        // Busca os dados básicos do romaneio
+        const [romaneioDetails] = await gerencialPool.execute(
+            `SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, r.status,
+                    v.modelo as modelo_veiculo, v.placa as placa_veiculo
+             FROM romaneios r
+             JOIN veiculos v ON r.id_veiculo = v.id
+             WHERE r.id = ?`,
+            [romaneioId]
+        );
+
+        if (romaneioDetails.length === 0) {
+            return res.status(404).json({ error: 'Romaneio não encontrado.' });
+        }
+        const romaneioData = romaneioDetails[0];
+
+        // Busca os itens JÁ ADICIONADOS, ordenando por DAV e depois por nome do produto.
+        // Adicionamos LEFT JOIN com cdavs para obter o nome do cliente.
+        const [items] = await gerencialPool.execute(
+            `SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar,
+                    idavs_sei.it_nome as produto_nome, idavs_sei.it_unid as produto_unidade,
+                    cdavs_sei.cr_nmcl as cliente_nome -- Adiciona nome do cliente para exibição
+             FROM romaneio_itens ri
+             LEFT JOIN ${dbConfigSei.database}.idavs idavs_sei ON ri.idavs_regi = idavs_sei.it_regist
+             LEFT JOIN ${dbConfigSei.database}.cdavs cdavs_sei ON ri.dav_numero = cdavs_sei.cr_ndav -- Junta com cdavs
+             WHERE ri.id_romaneio = ?
+             ORDER BY ri.dav_numero ASC, idavs_sei.it_nome ASC`, // Ordena aqui
+            [romaneioId]
+        );
+
+        res.json({ ...romaneioData, itens: items }); // Envia os itens ordenados
+
+    } catch (error) {
+        console.error(`Erro ao buscar detalhes do romaneio ${romaneioId}:`, error);
+        res.status(500).json({ error: 'Erro interno ao buscar detalhes do romaneio.' });
+    }
+});
+
+module.exports = router;
