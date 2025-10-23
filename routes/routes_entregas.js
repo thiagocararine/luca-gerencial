@@ -99,7 +99,8 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         };
 
         // LÓGICA DE FILTRAGEM
-        const needsFilialFilter = filialUsuario !== 'escritorio';
+        const adminFiliais = ['escritorio', 'Escritório (Lojas)']; // Lista de filiais com acesso total
+        const needsFilialFilter = !adminFiliais.includes(filialUsuario); // Aplica filtro SE NÃO estiver na lista
 
         // MONTAGEM DINÂMICA DA QUERY
         let davQuery = `
