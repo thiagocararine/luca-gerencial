@@ -73,7 +73,6 @@ function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem
     };
 }
 
-
 // Rota principal para buscar dados de um DAV (REATORADA PARA PERFORMANCE E ROBUSTEZ)
 router.get('/dav/:numero', authenticateToken, async (req, res) => {
     const davNumberStr = req.params.numero;
@@ -99,8 +98,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         };
 
         // LÓGICA DE FILTRAGEM
-        const adminFiliais = ['escritorio', 'Escritório (Lojas)']; // Lista de filiais com acesso total
-        const needsFilialFilter = !adminFiliais.includes(filialUsuario); // Aplica filtro SE NÃO estiver na lista
+        const needsFilialFilter = filialUsuario !== 'escritorio';
 
         // MONTAGEM DINÂMICA DA QUERY
         let davQuery = `
