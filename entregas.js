@@ -938,10 +938,14 @@ function clearDavFilters() {
     document.getElementById('romaneio-filter-bairro').value = '';
     document.getElementById('romaneio-filter-cidade').value = '';
     document.getElementById('romaneio-filter-dav').value = '';
+    // Reseta o checkbox
+    document.getElementById('romaneio-filter-entrega-marcada').checked = false;
+    // Reseta os radio buttons para 'recebimento'
+    document.getElementById('radio-data-recebimento').checked = true;
     // Define a data para hoje novamente
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('romaneio-filter-data').value = today;
-    applyDavFiltersAndLoad(); // Busca com os filtros limpos (apenas data de hoje)
+    applyDavFiltersAndLoad(); // Busca com os filtros limpos
 }
 
 /**
@@ -953,18 +957,19 @@ async function applyDavFiltersAndLoad() {
     showLoader();
 
     const params = new URLSearchParams();
+
+    // Lê os valores dos filtros
     const data = document.getElementById('romaneio-filter-data').value;
     const bairro = document.getElementById('romaneio-filter-bairro').value;
     const cidade = document.getElementById('romaneio-filter-cidade').value;
     const davNumero = document.getElementById('romaneio-filter-dav').value;
+    const apenasEntregaMarcada = document.getElementById('romaneio-filter-entrega-marcada').checked;
+    const tipoData = document.querySelector('input[name="tipo-data-filter"]:checked').value;
 
-    if (!data) {
-        alert('Selecione uma data.');
-        listContainer.innerHTML = '<p class="text-center text-orange-500 p-4">Selecione uma data para buscar pedidos.</p>';
-        hideLoader();
-        return;
-    }
-    params.append('data', data);
+    // Adiciona os parâmetros à URL
+    if (data) params.append('data', data); else { alert('Selecione uma data.'); listContainer.innerHTML = '<p class="text-center text-orange-500 p-4">Selecione uma data para buscar pedidos.</p>'; hideLoader(); return; }
+    if (tipoData) params.append('tipoData', tipoData); else { alert('Selecione o tipo de data (Recebimento/Entrega).'); listContainer.innerHTML = '<p class="text-center text-orange-500 p-4">Selecione o tipo de data.</p>'; hideLoader(); return; } // Segurança adicional
+    if (apenasEntregaMarcada) params.append('apenasEntregaMarcada', 'true');
     if (bairro) params.append('bairro', bairro);
     if (cidade) params.append('cidade', cidade);
     if (davNumero) params.append('davNumero', davNumero);
@@ -979,7 +984,7 @@ async function applyDavFiltersAndLoad() {
         }
 
         const davs = await response.json();
-        renderEligibleDavs(davs);
+        renderEligibleDavs(davs); // Renderiza a lista com os resultados
 
     } catch (error) {
         listContainer.innerHTML = `<p class="text-center text-red-500 p-4">${error.message}</p>`;

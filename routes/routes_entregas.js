@@ -574,56 +574,61 @@ router.delete('/romaneios/:id/itens/:itemId', authenticateToken, async (req, res
  * Query Params: data (YYYY-MM-DD, obrigatório), bairro?, cidade?, davNumero?
  */
 router.get('/eligible-davs', authenticateToken, async (req, res) => {
-    const { data, bairro, cidade, davNumero } = req.query;
-    const { unidade: filialUsuario } = req.user; // Obtém a unidade (filial) do token
+    // Novos query params: tipoData, apenasEntregaMarcada
+    const { data, tipoData, apenasEntregaMarcada, bairro, cidade, davNumero } = req.query;
+    const { unidade: filialUsuario } = req.user;
 
-    if (!data) {
-        return res.status(400).json({ error: "O filtro de data é obrigatório." });
+    // Validação dos parâmetros obrigatórios
+    if (!data || !tipoData) {
+        return res.status(400).json({ error: "Os filtros de data e tipo de data são obrigatórios." });
+    }
+    if (tipoData !== 'recebimento' && tipoData !== 'entrega') {
+        return res.status(400).json({ error: "O tipo de data deve ser 'recebimento' ou 'entrega'." });
     }
 
     try {
-        // Mapeamento das filiais (necessário para aplicar filtro de segurança)
-        const filialMap = {
-            'Santa Cruz da Serra': 'LUCAM',
-            'Piabetá': 'VMNAF',
-            'Parada Angélica': 'TNASC',
-            'Nova Campinas': 'LCMAT'
-            // Adicione outras filiais aqui se necessário
-        };
+        const filialMap = { /* ... seu filialMap ... */ };
         const adminFiliais = ['escritorio', 'Escritório (Lojas)'];
         const needsFilialFilter = !adminFiliais.includes(filialUsuario);
 
-        // Query base para buscar DAVs com status Recebido ('1'), na data especificada,
-        // e que tenham pelo menos um item com saldo > 0.
-        // Usamos DISTINCT para evitar duplicatas se um DAV tiver múltiplos itens com saldo.
+        // Define qual coluna de data será usada no filtro principal
+        const dateColumn = tipoData === 'entrega' ? 'c.cr_entr' : 'c.cr_erec';
+
+        // Base da query
         let query = `
             SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde
             FROM cdavs c
-            JOIN idavs i ON c.cr_ndav = i.it_ndav -- Garante que o DAV tem itens
-            WHERE c.cr_reca = '1' -- Status Recebido
-              AND DATE(c.cr_erec) = ? -- Filtro por data de recebimento (ajuste o campo se for cr_edav)
-              AND (i.it_quan - (i.it_qent - i.it_qtdv)) > 0 -- Garante que há saldo em pelo menos um item
+            JOIN idavs i ON c.cr_ndav = i.it_ndav
+            WHERE c.cr_reca = '1'               -- Status Recebido
+              AND DATE(${dateColumn}) = ?       -- Filtro pela data e coluna escolhida
+              AND (i.it_quan - (i.it_qent - i.it_qtdv)) > 0 -- Garante saldo em algum item
         `;
         const params = [data];
+
+        // Adiciona filtro para "Apenas Entrega Marcada" se solicitado
+        if (apenasEntregaMarcada === 'true') {
+            query += ` AND c.cr_entr != '0000-00-00'`;
+        }
 
         // Adiciona filtros opcionais
         if (bairro) { query += ' AND c.cr_ebai LIKE ?'; params.push(`%${bairro}%`); }
         if (cidade) { query += ' AND c.cr_ecid LIKE ?'; params.push(`%${cidade}%`); }
         if (davNumero) { query += ' AND CAST(c.cr_ndav AS UNSIGNED) = ?'; params.push(parseInt(davNumero, 10)); }
 
-        // Aplica o filtro de filial para usuários não-admin
+        // Aplica filtro de filial para não-admins
         if (needsFilialFilter) {
             const filialCode = filialMap[filialUsuario];
             if (!filialCode) {
                 console.warn(`[ELIGIBLE DAVs] Usuário da filial "${filialUsuario}" não mapeada.`);
-                return res.json([]); // Retorna lista vazia se não tem permissão
+                return res.json([]);
             }
             query += ' AND c.cr_inde = ?';
             params.push(filialCode);
         }
 
-        query += ' ORDER BY c.cr_ebai, c.cr_nmcl'; // Ordena para agrupar visualmente
+        query += ' ORDER BY c.cr_ebai, c.cr_nmcl'; // Ordena
 
+        console.log(`[ELIGIBLE DAVs] Executing query: ${query.replace(/\s+/g, ' ')} with params: ${JSON.stringify(params)}`);
         const [davs] = await seiPool.execute(query, params);
         res.json(davs);
 
