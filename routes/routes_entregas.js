@@ -98,7 +98,9 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         };
 
         // LÓGICA DE FILTRAGEM
-        const needsFilialFilter = filialUsuario !== 'escritorio';
+        const adminFiliais = ['escritorio', 'escritório (lojas)'];
+        const filialUsuarioNormalizada = filialUsuario ? filialUsuario.trim().toLowerCase() : ''; // Normaliza a filial do usuário
+        const needsFilialFilter = !adminFiliais.includes(filialUsuarioNormalizada); // Compara strings normalizadas
 
         // MONTAGEM DINÂMICA DA QUERY
         let davQuery = `
