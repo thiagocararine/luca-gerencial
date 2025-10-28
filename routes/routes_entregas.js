@@ -127,6 +127,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         }
 
         console.log('[LOG] Passo 1: Buscando dados do DAV na tabela cdavs...');
+        console.log('DEBUG: Executando /dav/:numero Query:', davQuery.replace(/\s+/g, ' '), 'Params:', queryParams);
         const [davs] = await seiPool.execute(davQuery, queryParams);
         
         // O restante da função continua exatamente como estava, pois a filtragem já foi feita.
@@ -135,9 +136,9 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         }
         const davData = davs[0];
 
-        if (davData.cr_tipo != 1) {
-            return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
-        }
+        //if (davData.cr_tipo != 1) {
+            //return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
+        //}
         if (davData.cr_reca === '' || davData.cr_reca === null) {
             return res.status(400).json({ error: `O Pedido (DAV) ${davNumber} não foi recebido no caixa e não pode ser liberado.` });
         }
