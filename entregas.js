@@ -42,46 +42,50 @@ function loadCompanyLogo() {
 // --- Funções de Event Listeners ---
 
 function setupEventListeners() {
+    // --- Listeners Existentes (Mantidos) ---
     document.getElementById('logout-button')?.addEventListener('click', logout);
+    // Aba Retirada Rápida
     document.getElementById('search-dav-btn')?.addEventListener('click', handleSearchDav);
     document.getElementById('dav-search-input')?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleSearchDav();
     });
+    // Troca de Abas
     document.getElementById('delivery-tabs')?.addEventListener('click', handleTabSwitch);
-
-    // Listeners para Criar Romaneio (mantidos)
+    // Modal Criar Romaneio
     document.getElementById('create-romaneio-btn')?.addEventListener('click', openCreateRomaneioModal);
     document.getElementById('close-romaneio-modal-btn')?.addEventListener('click', () => document.getElementById('create-romaneio-modal').classList.add('hidden'));
     document.getElementById('cancel-romaneio-creation-btn')?.addEventListener('click', () => document.getElementById('create-romaneio-modal').classList.add('hidden'));
     document.getElementById('create-romaneio-form')?.addEventListener('submit', handleCreateRomaneioSubmit);
-
-    // Listener para clicar em um romaneio na lista (mantido)
+    // Clicar em Romaneio na Lista
     document.getElementById('romaneios-list-container')?.addEventListener('click', handleRomaneioClick);
-
-    // Listener para o botão Voltar da visão detalhada (mantido)
+    // Botão Voltar da Visão Detalhada
     document.getElementById('back-to-romaneio-list-btn')?.addEventListener('click', showRomaneioListView);
 
     // --- NOVOS Listeners para filtros de DAVs elegíveis ---
-    document.getElementById('apply-dav-filters-btn')?.addEventListener('click', applyDavFiltersAndLoad);
+    document.getElementById('apply-dav-filters-btn')?.addEventListener('click', applyDavFiltersAndLoad); // Botão principal de busca na API
     document.getElementById('clear-dav-filters-btn')?.addEventListener('click', clearDavFilters);
-    // Listener para expandir/recolher itens de um DAV na lista de elegíveis
-    document.getElementById('eligible-davs-list')?.addEventListener('click', handleToggleDavItems);
-    // Listener para o botão principal de adicionar itens
-    document.getElementById('add-selected-items-to-romaneio-btn')?.addEventListener('click', handleAddSelectedItemsToRomaneio);
-    // --- FIM DOS NOVOS LISTENERS ---
+    // Listeners para filtros dinâmicos (Bairro, Cidade, DAV) - agora filtram a lista JÁ exibida
+    document.getElementById('romaneio-filter-bairro')?.addEventListener('change', filterDisplayedDavs);
+    document.getElementById('romaneio-filter-cidade')?.addEventListener('change', filterDisplayedDavs);
+    document.getElementById('romaneio-filter-dav')?.addEventListener('change', filterDisplayedDavs);
+    // --- FIM DOS NOVOS LISTENERS DE FILTRO ---
 
-    // Listener para remover itens do romaneio atual (mantido)
+    // Listener para expandir/recolher itens de um DAV na lista de elegíveis (Novo/Atualizado)
+    document.getElementById('eligible-davs-list')?.addEventListener('click', handleToggleDavItems);
+    // Listener para o botão principal de adicionar itens (Novo/Atualizado)
+    document.getElementById('add-selected-items-to-romaneio-btn')?.addEventListener('click', handleAddSelectedItemsToRomaneio);
+
+    // Listener para remover itens do romaneio atual (Mantido)
     document.getElementById('current-romaneio-items-container')?.addEventListener('click', handleRemoveItemClick);
 
-    // Listener para expandir histórico na Retirada Rápida (mantido)
+    // Listener para expandir histórico na Retirada Rápida (Mantido e Corrigido)
     document.getElementById('dav-results-container').addEventListener('click', (event) => {
         const row = event.target.closest('.expandable-row');
         if (row) {
             const historyRow = row.nextElementSibling;
             if (historyRow && historyRow.classList.contains('history-row')) {
                 historyRow.classList.toggle('expanded');
-                // Ajuste para usar a classe que adicionamos ao ícone
-                const icon = row.querySelector('.history-chevron');
+                const icon = row.querySelector('.history-chevron'); // Usa a classe correta
                 if (icon) {
                     icon.classList.toggle('rotate-180');
                 }
@@ -89,10 +93,12 @@ function setupEventListeners() {
         }
     });
 
-    // Define a data padrão no filtro de DAVs elegíveis ao carregar a página
+    // --- Define a data padrão no filtro de DAVs elegíveis ao carregar a página ---
     const today = new Date().toISOString().split('T')[0];
     const dateFilterInput = document.getElementById('romaneio-filter-data');
-    if (dateFilterInput) dateFilterInput.value = today;
+    if (dateFilterInput) {
+        dateFilterInput.value = today;
+    }
 }
 
 // --- Lógica de Abas ---
@@ -935,17 +941,88 @@ async function handleRemoveItemClick(event) {
 }
 
 function clearDavFilters() {
+    // Limpa os selects dinâmicos
     document.getElementById('romaneio-filter-bairro').value = '';
     document.getElementById('romaneio-filter-cidade').value = '';
     document.getElementById('romaneio-filter-dav').value = '';
-    // Reseta o checkbox
-    document.getElementById('romaneio-filter-entrega-marcada').checked = false;
-    // Reseta os radio buttons para 'recebimento'
-    document.getElementById('radio-data-recebimento').checked = true;
+
+    // Reseta para os novos padrões
+    document.getElementById('romaneio-filter-entrega-marcada').checked = true; // Marcado por padrão
+    document.getElementById('radio-data-entrega').checked = true;          // Tipo "Entrega" por padrão
+
     // Define a data para hoje novamente
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('romaneio-filter-data').value = today;
-    applyDavFiltersAndLoad(); // Busca com os filtros limpos
+
+    // Dispara a busca com os filtros padrão resetados
+    applyDavFiltersAndLoad();
+}
+
+function populateDynamicFilters(davs, filterType) {
+    let selectElement;
+    let dataKey;
+    let placeholder;
+
+    // Identifica qual <select> e qual campo dos dados usar
+    if (filterType === 'bairro') {
+        selectElement = document.getElementById('romaneio-filter-bairro');
+        dataKey = 'cr_ebai'; // Nome da coluna no objeto DAV vindo da API
+        placeholder = 'Todos os Bairros';
+    } else if (filterType === 'cidade') {
+        selectElement = document.getElementById('romaneio-filter-cidade');
+        dataKey = 'cr_ecid'; // Nome da coluna no objeto DAV vindo da API
+        placeholder = 'Todas as Cidades';
+    } else if (filterType === 'dav') {
+        selectElement = document.getElementById('romaneio-filter-dav');
+        dataKey = 'cr_ndav'; // Nome da coluna no objeto DAV vindo da API
+        placeholder = 'Todos os DAVs';
+    } else {
+        console.error("Tipo de filtro dinâmico inválido:", filterType);
+        return; // Tipo de filtro inválido
+    }
+
+    if (!selectElement) {
+        console.error("Elemento select não encontrado para o filtro:", filterType);
+        return;
+    }
+
+    // Extrai valores únicos da lista de DAVs para a chave especificada
+    const uniqueValues = [...new Set(davs.map(dav => dav[dataKey]))]
+                         .filter(value => value != null && value !== '') // Remove nulos/vazios
+                         .sort((a, b) => String(a).localeCompare(String(b))); // Ordena alfabeticamente/numericamente
+
+    // Limpa opções antigas e adiciona o placeholder padrão
+    selectElement.innerHTML = `<option value="">${placeholder}</option>`;
+
+    // Adiciona as novas opções únicas ao <select>
+    uniqueValues.forEach(value => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        selectElement.appendChild(option);
+    });
+}
+
+function filterDisplayedDavs() {
+    // Lê os valores selecionados nos filtros secundários
+    const bairroFilter = document.getElementById('romaneio-filter-bairro').value;
+    const cidadeFilter = document.getElementById('romaneio-filter-cidade').value;
+    const davFilter = document.getElementById('romaneio-filter-dav').value;
+
+    // Filtra a lista original (currentEligibleDavs) que foi retornada pela API
+    const filteredDavs = currentEligibleDavs.filter(dav => {
+        // Verifica se o DAV corresponde a cada filtro selecionado
+        // Se um filtro estiver vazio (""), ele não restringe (corresponde a qualquer valor)
+        const matchBairro = !bairroFilter || dav.cr_ebai === bairroFilter;
+        const matchCidade = !cidadeFilter || dav.cr_ecid === cidadeFilter;
+        const matchDav = !davFilter || dav.cr_ndav == davFilter; // Usar == por segurança (string vs número)
+
+        // O DAV só passa se corresponder a TODOS os filtros ativos
+        return matchBairro && matchCidade && matchDav;
+    });
+
+    // Re-renderiza a lista na tela APENAS com os DAVs que passaram no filtro local
+    renderEligibleDavs(filteredDavs);
 }
 
 /**
@@ -954,27 +1031,44 @@ function clearDavFilters() {
 async function applyDavFiltersAndLoad() {
     const listContainer = document.getElementById('eligible-davs-list');
     listContainer.innerHTML = '<p class="text-center text-gray-500 p-4">Buscando pedidos...</p>';
+    // Limpa filtros dinâmicos antigos antes de buscar novos dados
+    populateDynamicFilters([], 'bairro');
+    populateDynamicFilters([], 'cidade');
+    populateDynamicFilters([], 'dav');
     showLoader();
 
     const params = new URLSearchParams();
 
-    // Lê os valores dos filtros
+    // Lê os valores dos filtros PRIMÁRIOS que vão para a API
     const data = document.getElementById('romaneio-filter-data').value;
-    const bairro = document.getElementById('romaneio-filter-bairro').value;
-    const cidade = document.getElementById('romaneio-filter-cidade').value;
-    const davNumero = document.getElementById('romaneio-filter-dav').value;
     const apenasEntregaMarcada = document.getElementById('romaneio-filter-entrega-marcada').checked;
     const tipoData = document.querySelector('input[name="tipo-data-filter"]:checked').value;
 
-    // Adiciona os parâmetros à URL
-    if (data) params.append('data', data); else { alert('Selecione uma data.'); listContainer.innerHTML = '<p class="text-center text-orange-500 p-4">Selecione uma data para buscar pedidos.</p>'; hideLoader(); return; }
-    if (tipoData) params.append('tipoData', tipoData); else { alert('Selecione o tipo de data (Recebimento/Entrega).'); listContainer.innerHTML = '<p class="text-center text-orange-500 p-4">Selecione o tipo de data.</p>'; hideLoader(); return; } // Segurança adicional
-    if (apenasEntregaMarcada) params.append('apenasEntregaMarcada', 'true');
-    if (bairro) params.append('bairro', bairro);
-    if (cidade) params.append('cidade', cidade);
-    if (davNumero) params.append('davNumero', davNumero);
+    // Valida e adiciona os parâmetros à URL
+    if (data) {
+        params.append('data', data);
+    } else {
+        alert('Selecione uma data.');
+        listContainer.innerHTML = '<p class="text-center text-orange-500 p-4">Selecione uma data para buscar pedidos.</p>';
+        hideLoader();
+        return;
+    }
+    if (tipoData) {
+        params.append('tipoData', tipoData);
+    } else {
+        // Isso não deve acontecer devido ao radio button ter um default, mas é uma segurança
+        alert('Selecione o tipo de data (Recebimento/Entrega).');
+        listContainer.innerHTML = '<p class="text-center text-orange-500 p-4">Selecione o tipo de data.</p>';
+        hideLoader();
+        return;
+    }
+    if (apenasEntregaMarcada) {
+        params.append('apenasEntregaMarcada', 'true');
+    }
+    // Bairro, Cidade, DAV específico NÃO SÃO enviados aqui
 
     try {
+        // Faz a requisição à API com os filtros primários
         const response = await fetch(`${apiUrlBase}/entregas/eligible-davs?${params.toString()}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
@@ -983,8 +1077,15 @@ async function applyDavFiltersAndLoad() {
              throw new Error(errorData.error || 'Falha ao buscar pedidos elegíveis.');
         }
 
-        const davs = await response.json();
-        renderEligibleDavs(davs); // Renderiza a lista com os resultados
+        currentEligibleDavs = await response.json(); // Armazena a lista completa retornada
+
+        // Popula os <select> de Bairro, Cidade e DAV com base nos resultados
+        populateDynamicFilters(currentEligibleDavs, 'bairro');
+        populateDynamicFilters(currentEligibleDavs, 'cidade');
+        populateDynamicFilters(currentEligibleDavs, 'dav');
+
+        // Renderiza a lista completa inicialmente (antes de aplicar filtros locais)
+        renderEligibleDavs(currentEligibleDavs);
 
     } catch (error) {
         listContainer.innerHTML = `<p class="text-center text-red-500 p-4">${error.message}</p>`;
@@ -999,30 +1100,34 @@ async function applyDavFiltersAndLoad() {
 function renderEligibleDavs(davs) {
     const listContainer = document.getElementById('eligible-davs-list');
     if (!davs || davs.length === 0) {
+        // Mensagem ajustada para indicar que pode ser resultado de filtros
         listContainer.innerHTML = '<p class="text-center text-gray-500 p-4">Nenhum pedido encontrado com os filtros aplicados.</p>';
         return;
     }
 
+    // Gera o HTML para cada DAV na lista fornecida
     listContainer.innerHTML = davs.map(dav => `
         <div class="border rounded-md p-3 bg-gray-50/80 dav-container" data-dav-numero="${dav.cr_ndav}">
             <div class="flex justify-between items-center">
                 <div class="flex items-center gap-3">
+                    {/* Informações do DAV */}
                     <div>
                         <p class="font-semibold text-gray-800">DAV: ${dav.cr_ndav} - ${dav.cr_nmcl || 'Cliente não informado'}</p>
-                        <p class="text-xs text-gray-500">${dav.cr_ebai || 'Bairro não inf.'} / ${dav.cr_ecid || 'Cidade não inf.'} (${dav.cr_inde})</p>
+                        <p class="text-xs text-gray-500">${dav.cr_ebai || 'Bairro não inf.'} / ${dav.cr_ecid || 'Cidade não inf.'} (${dav.cr_inde || 'Filial?'})</p> {/* Mostra código da filial */}
                     </div>
                 </div>
+                {/* Botão para expandir/recolher itens */}
                 <button class="toggle-items-btn text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-1">
                     <span data-feather="chevron-down" class="w-4 h-4"></span> Ver Itens
                 </button>
             </div>
-            <!-- Container para os itens deste DAV (inicialmente oculto) -->
+            {/* Container onde os itens do DAV serão carregados quando expandido */}
             <div class="dav-items-container mt-3 pt-3 border-t border-gray-200 hidden">
-                <p class="text-center text-xs text-gray-400">Carregando itens...</p>
+                {/* O conteúdo (tabela de itens) é carregado pela função handleToggleDavItems */}
             </div>
         </div>
     `).join('');
-    feather.replace();
+    feather.replace(); // Garante que os ícones (chevron-down) sejam renderizados
 }
 
 /**
