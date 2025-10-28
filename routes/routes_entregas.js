@@ -218,9 +218,13 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
 
         const allResults = await Promise.all([
             seiPool.execute(
-                `SELECT it_regist, it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`,
-                [davNumber]
+                // --- ALTERAÇÃO AQUI: Adicionado it_inde ---
+                `SELECT it_regist, it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti, it_inde 
+                FROM idavs 
+                WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`,
+                [davNumber] // Parâmetro permanece o mesmo
             ),
+            // As outras chamadas (gerencialPool.execute) permanecem iguais
             gerencialPool.execute(
                 'SELECT idavs_regi, SUM(quantidade_retirada) as total FROM entregas_manuais_log WHERE dav_numero = ? GROUP BY idavs_regi',
                 [davNumber]
@@ -259,6 +263,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 quantidade_saldo: saldo,
                 quantidade_devolvida: parseFloat(item.it_qtdv) || 0,
                 quantidade_entregue_bruta: parseFloat(item.it_qent) || 0,
+                item_filial_codigo: item.it_inde,
                 responsavel_caixa: parseUsuarioLiberacao(item.it_entr),
                 historico: historicoDoItem
             });
