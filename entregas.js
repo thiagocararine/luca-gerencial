@@ -1110,20 +1110,16 @@ function renderEligibleDavs(davs) {
         <div class="border rounded-md p-3 bg-gray-50/80 dav-container" data-dav-numero="${dav.cr_ndav}">
             <div class="flex justify-between items-center">
                 <div class="flex items-center gap-3">
-                    {/* Informações do DAV */}
                     <div>
                         <p class="font-semibold text-gray-800">DAV: ${dav.cr_ndav} - ${dav.cr_nmcl || 'Cliente não informado'}</p>
-                        <p class="text-xs text-gray-500">${dav.cr_ebai || 'Bairro não inf.'} / ${dav.cr_ecid || 'Cidade não inf.'} (${dav.cr_inde || 'Filial?'})</p> {/* Mostra código da filial */}
+                        <p class="text-xs text-gray-500">${dav.cr_ebai || 'Bairro não inf.'} / ${dav.cr_ecid || 'Cidade não inf.'} (${dav.cr_inde || 'Filial?'})</p>
                     </div>
                 </div>
-                {/* Botão para expandir/recolher itens */}
                 <button class="toggle-items-btn text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-1">
                     <span data-feather="chevron-down" class="w-4 h-4"></span> Ver Itens
                 </button>
             </div>
-            {/* Container onde os itens do DAV serão carregados quando expandido */}
             <div class="dav-items-container mt-3 pt-3 border-t border-gray-200 hidden">
-                {/* O conteúdo (tabela de itens) é carregado pela função handleToggleDavItems */}
             </div>
         </div>
     `).join('');
