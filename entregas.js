@@ -1296,7 +1296,12 @@ async function handleConfirmAddItems() {
 
 async function handleOpenAddItemsModal() {
     const modal = document.getElementById('add-items-to-romaneio-modal');
-    const modalItemsList = document.getElementById('modal-items-list');
+    
+    // --- CORREÇÃO AQUI ---
+    // O ID correto do container é 'eligible-davs-list', não 'modal-items-list'
+    const modalItemsList = document.getElementById('eligible-davs-list'); 
+    // --- FIM DA CORREÇÃO ---
+    
     const modalRomaneioIdSpan = document.getElementById('modal-romaneio-id');
     const filialFilterSelect = document.getElementById('modal-item-filial-filter');
 
@@ -1307,6 +1312,7 @@ async function handleOpenAddItemsModal() {
 
     // Reseta o estado do modal
     modalRomaneioIdSpan.textContent = currentRomaneioId;
+    // Agora 'modalItemsList' não será nulo
     modalItemsList.innerHTML = '<p class="text-center text-gray-500 p-4">Use os filtros acima para buscar pedidos.</p>';
     filialFilterSelect.innerHTML = '<option value="">Todas as Filiais</option>';
     itemsForModal = []; // Limpa dados de itens anteriores
