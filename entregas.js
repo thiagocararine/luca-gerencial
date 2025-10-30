@@ -1022,17 +1022,13 @@ function renderEligibleDavs(davs) {
         <div class="border rounded-md p-3 bg-gray-50/80 dav-container-eligible" data-dav-numero="${dav.cr_ndav}">
             <div class="flex justify-between items-center">
                 <div class="flex items-center gap-3">
-                    {/* Checkbox para selecionar o DAV */}
                     <input type="checkbox" value="${dav.cr_ndav}" class="eligible-dav-checkbox rounded border-gray-400 h-5 w-5 text-indigo-600 focus:ring-indigo-500">
-                    {/* Informações do DAV */}
                     <div>
                         <p class="font-semibold text-gray-800">DAV: ${dav.cr_ndav} - ${dav.cr_nmcl || 'Cliente não informado'}</p>
                         <p class="text-xs text-gray-500">${dav.cr_ebai || 'Bairro não inf.'} / ${dav.cr_ecid || 'Cidade não inf.'} (${dav.cr_inde || 'Filial?'})</p>
                     </div>
                 </div>
-                {/* Removemos o botão "Ver Itens" daqui */}
             </div>
-            {/* Removemos o container de itens daqui */}
         </div>
     `).join('');
     // feather.replace(); // Não precisa mais aqui se não houver ícones
