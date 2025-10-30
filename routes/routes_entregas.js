@@ -77,9 +77,7 @@ function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem
 router.get('/dav/:numero', authenticateToken, async (req, res) => {
     const davNumberStr = req.params.numero;
     const davNumber = parseInt(davNumberStr, 10);
-
-    // Pega a unidade (filial) do usuário logado a partir do token
-    const { unidade: filialUsuario } = req.user;
+    const { unidade: filialUsuario } = req.user; // Pega a filial do usuário logado
 
     if (isNaN(davNumber)) {
         return res.status(400).json({ error: 'Número do DAV inválido.' });
@@ -87,8 +85,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
     console.log(`[LOG] Iniciando busca para DAV: ${davNumber} pelo usuário da filial: ${filialUsuario}`);
 
     try {
-        // MAPEAMENTO DAS FILIAIS (NOME NO TOKEN -> CÓDIGO NO BANCO)
-        // Este mapa traduz o nome da filial do usuário para o código 'cr_inde' do banco.
         const filialMap = {
             'Santa Cruz da Serra': 'LUCAM',
             'Piabetá': 'VMNAF',
@@ -97,12 +93,12 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             // Adicione outras filiais aqui se necessário
         };
 
-        // LÓGICA DE FILTRAGEM
+        // Lógica de permissão de filial (Robusta)
         const adminFiliais = ['escritorio', 'escritório (lojas)'];
-        const filialUsuarioNormalizada = filialUsuario ? filialUsuario.trim().toLowerCase() : ''; // Normaliza a filial do usuário
-        const needsFilialFilter = !adminFiliais.includes(filialUsuarioNormalizada); // Compara strings normalizadas
+        const filialUsuarioNormalizada = filialUsuario ? filialUsuario.trim().toLowerCase() : '';
+        const needsFilialFilter = !adminFiliais.includes(filialUsuarioNormalizada);
 
-        // MONTAGEM DINÂMICA DA QUERY
+        // Busca dados do cabeçalho do DAV
         let davQuery = `
             SELECT 
                 c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, 
@@ -110,6 +106,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 c.cr_urec, c.cr_erec, c.cr_hrec, 
                 c.cr_ecan, c.cr_hcan, c.cr_usac,
                 c.cr_nfem, c.cr_chnf, c.cr_seri, c.cr_tnfs, c.cr_nota,
+                c.cr_fili, c.cr_inde,
                 cl.cl_docume 
              FROM cdavs c
              LEFT JOIN clientes cl ON c.cr_cdcl = cl.cl_codigo
@@ -119,40 +116,35 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
 
         if (needsFilialFilter) {
             const filialCode = filialMap[filialUsuario];
-            // Se não encontrarmos um código para a filial do usuário, ele não poderá ver nenhum pedido.
             if (!filialCode) {
-                console.log(`[SECURITY] Usuário da filial "${filialUsuario}" não mapeada tentou acesso. Acesso negado.`);
-                return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado.` });
+                console.warn(`[SECURITY] Usuário da filial "${filialUsuario}" (não mapeada ou sem permissão total) tentou acesso. Acesso negado.`);
+                return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado ou acesso não permitido para sua filial.` });
             }
             davQuery += ' AND c.cr_inde = ?';
             queryParams.push(filialCode);
+        } else {
+             console.log(`[LOG] Usuário da filial "${filialUsuario}" tem acesso irrestrito. Nenhum filtro de filial aplicado.`);
         }
 
         console.log('[LOG] Passo 1: Buscando dados do DAV na tabela cdavs...');
-        console.log('DEBUG: Executando /dav/:numero Query:', davQuery.replace(/\s+/g, ' '), 'Params:', queryParams);
         const [davs] = await seiPool.execute(davQuery, queryParams);
-        
-        // O restante da função continua exatamente como estava, pois a filtragem já foi feita.
+
         if (davs.length === 0) {
-            return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado.` });
+            return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado` + (needsFilialFilter ? ` para sua filial.` : '.') });
         }
         const davData = davs[0];
 
-        //if (davData.cr_tipo != 1) {
-            //return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
-        //}
-        if (davData.cr_reca === '' || davData.cr_reca === null) {
-            return res.status(400).json({ error: `O Pedido (DAV) ${davNumber} não foi recebido no caixa e não pode ser liberado.` });
+        // Verificação de orçamento
+        if (davData.cr_tipo != 1) {
+            return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
         }
+        // Verificação de status 'recebido' foi removida daqui intencionalmente
 
+        // Funções helper de formatação
         const combineDateTime = (date, time) => {
-            if (!date || (typeof date === 'string' && date.startsWith('0000-00-00'))) {
-                return null;
-            }
+            if (!date || (typeof date === 'string' && date.startsWith('0000-00-00'))) return null;
             const dateObject = new Date(date);
-            if (isNaN(dateObject.getTime())) {
-                return null;
-            }
+            if (isNaN(dateObject.getTime())) return null;
             const validTime = time || '00:00:00';
             const datePart = dateObject.toISOString().split('T')[0];
             return new Date(`${datePart}T${validTime}`);
@@ -168,18 +160,20 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             tipo: davData.cr_tnfs,
             numero_nf: davData.cr_nota
         };
-
         const cancelamentoInfo = {
             data_hora: combineDateTime(davData.cr_ecan, davData.cr_hcan),
             usuario: davData.cr_usac
         };
 
+        // Monta o objeto de resposta principal
         const responseData = {
             dav_numero: davData.cr_ndav,
             data_hora_pedido: combineDateTime(davData.cr_edav, davData.cr_hdav),
             vendedor: davData.cr_udav,
             valor_total: davData.cr_tnot,
             status_caixa: davData.cr_reca,
+            filial_pedido_nome: davData.cr_fili,
+            filial_pedido_codigo: davData.cr_inde,
             cliente: { nome: davData.cr_nmcl, doc: davData.cl_docume },
             endereco: {
                 logradouro: (davData.cr_dade || '').split(';')[0]?.trim(),
@@ -197,6 +191,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             itens: []
         };
 
+        // Se o pedido não estiver "Recebido", não adianta buscar itens para retirada/romaneio
         if (davData.cr_reca !== '1') {
             console.log(`[LOG] Pedido ${davNumber} com status '${davData.cr_reca}'. Não buscará itens.`);
             return res.json(responseData);
@@ -216,15 +211,15 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
              WHERE ri.dav_numero = ?)
              ORDER BY data DESC`;
 
+        // Busca dados dos itens e históricos em paralelo
         const allResults = await Promise.all([
             seiPool.execute(
                 // --- ALTERAÇÃO AQUI: Adicionado it_inde ---
                 `SELECT it_regist, it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti, it_inde 
-                FROM idavs 
-                WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`,
-                [davNumber] // Parâmetro permanece o mesmo
+                 FROM idavs 
+                 WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`,
+                [davNumber]
             ),
-            // As outras chamadas (gerencialPool.execute) permanecem iguais
             gerencialPool.execute(
                 'SELECT idavs_regi, SUM(quantidade_retirada) as total FROM entregas_manuais_log WHERE dav_numero = ? GROUP BY idavs_regi',
                 [davNumber]
@@ -245,6 +240,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'Nenhum item válido encontrado para este pedido.' });
         }
         
+        // Processa cada item para calcular saldos
         const itensComSaldo = [];
         for (const item of itensDav) {
             const idavsRegi = item.it_regist;
@@ -253,6 +249,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             const { saldo, entregue } = calcularSaldosItem(item, retiradaManualDoItem, entregaRomaneioDoItem);
             const historicoDoItem = historicoCompleto.filter(h => h.idavs_regi == idavsRegi);
 
+            // --- ALTERAÇÃO AQUI: Adicionado item_filial_codigo ---
             itensComSaldo.push({
                 idavs_regi: idavsRegi,
                 pd_codi: item.it_codi,
@@ -263,7 +260,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 quantidade_saldo: saldo,
                 quantidade_devolvida: parseFloat(item.it_qtdv) || 0,
                 quantidade_entregue_bruta: parseFloat(item.it_qent) || 0,
-                item_filial_codigo: item.it_inde,
+                item_filial_codigo: item.it_inde, // <-- CAMPO ADICIONADO
                 responsavel_caixa: parseUsuarioLiberacao(item.it_entr),
                 historico: historicoDoItem
             });
@@ -409,18 +406,50 @@ router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
 });
 
 router.get('/romaneios', authenticateToken, async (req, res) => {
-    const { status } = req.query;
+    // Adiciona 'filial' aos parâmetros de query
+    const { status, filial } = req.query;
+    // Pega a filial do usuário logado
+    const { unidade: filialUsuario } = req.user;
+
     try {
         let query = `
-            SELECT r.id, r.data_criacao, r.nome_motorista, v.modelo as modelo_veiculo, v.placa as placa_veiculo 
+            SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, 
+                   v.modelo as modelo_veiculo, v.placa as placa_veiculo 
             FROM romaneios r
             JOIN veiculos v ON r.id_veiculo = v.id
         `;
         const params = [];
+        const conditions = [];
+
+        // 1. Adiciona filtro de status (ex: "Em montagem")
         if (status) {
-            query += ' WHERE r.status = ?';
+            conditions.push('r.status = ?');
             params.push(status);
         }
+
+        // 2. Lógica de filtro de filial (ATUALIZADA)
+        const adminFiliais = ['escritorio', 'escritório (lojas)'];
+        const filialUsuarioNormalizada = filialUsuario ? filialUsuario.trim().toLowerCase() : '';
+        const isUsuarioAdmin = adminFiliais.includes(filialUsuarioNormalizada);
+
+        if (isUsuarioAdmin) {
+            // Usuário admin: se ele enviou um filtro de filial, usa-o
+            if (filial) {
+                conditions.push('r.filial_origem = ?');
+                params.push(filial);
+            }
+            // Se ele não enviou filtro (filial = ""), não faz nada (vê todas)
+        } else {
+            // Usuário comum: força o filtro para a própria filial
+            conditions.push('r.filial_origem = ?');
+            params.push(filialUsuario); // Usa o nome da filial do token (ex: "Santa Cruz da Serra")
+        }
+
+        // Monta a cláusula WHERE
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ');
+        }
+
         query += ' ORDER BY r.data_criacao DESC';
 
         const [romaneios] = await gerencialPool.execute(query, params);

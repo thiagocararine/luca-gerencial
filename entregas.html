@@ -32,7 +32,8 @@
         .expandable-row { cursor: pointer; }
         .history-row { display: none; }
         .history-row.expanded { display: table-row; }
-
+        
+        /* Removemos as regras .tab-content e .tab-content.active daqui */
     </style>
 </head>
 <body class="h-full">
@@ -112,24 +113,44 @@
                     <div id="dav-results-container" class="hidden"></div>
                 </div>
 
-                <div id="romaneios-content" class="tab-content space-y-6 hidden"> <!-- Garanta que 'hidden' esteja aqui -->
+                <div id="romaneios-content" class="tab-content space-y-6 hidden">
 
-                    <!-- Botão Criar Novo Romaneio e Lista Inicial -->
-                    <div class="flex justify-end">
-                        <button id="create-romaneio-btn" class="action-btn bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-2">
-                            <span data-feather="plus-circle"></span>Criar Novo Romaneio
-                        </button>
-                    </div>
-                    <div>
-                        <h3 class="text-lg font-semibold text-gray-800 mb-2">Romaneios em Montagem</h3>
-                        <div id="romaneios-list-container" class="space-y-3">
-                            <p class="text-center text-gray-500 p-4">Nenhum romaneio em montagem.</p>
+                    <div id="romaneio-main-filter-container" class="hidden">
+                        <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow">
+                            <div class="flex flex-col sm:flex-row gap-4 items-end">
+                                <div class="flex-grow">
+                                    <label for="romaneio-main-filial-filter" class="block text-sm font-medium text-gray-700">Filtrar Romaneios por Filial</label>
+                                    <select id="romaneio-main-filial-filter" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                        <option value="">Todas as Filiais</option>
+                                        </select>
+                                </div>
+                                <button id="romaneio-main-filter-btn" class="action-btn bg-blue-600 hover:bg-blue-700 w-full sm:w-auto flex items-center justify-center gap-1">
+                                    <span data-feather="search" class="w-4 h-4"></span>Buscar
+                                </button>
+                            </div>
                         </div>
                     </div>
+                    
+                    <div id="romaneio-list-view">
+                        <div class="flex justify-end">
+                            <button id="create-romaneio-btn" class="action-btn bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-2">
+                                <span data-feather="plus-circle"></span>Criar Novo Romaneio
+                            </button>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-800 mb-2 mt-4">Romaneios em Montagem</h3>
+                            <div id="romaneios-list-container" class="space-y-3">
+                                <p class="text-center text-gray-500 p-4">Nenhum romaneio em montagem.</p>
+                                </div>
+                        </div>
+                    </div>
+
                     <div id="romaneio-detail-view" class="hidden space-y-6">
+
                         <button id="back-to-romaneio-list-btn" class="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
                             <span data-feather="arrow-left" class="w-4 h-4"></span> Voltar para a Lista
                         </button>
+
                         <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow">
                             <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b pb-3 mb-3">
                                 <h3 class="text-lg font-semibold text-gray-800">Romaneio #<span id="detail-romaneio-id"></span></h3>
@@ -142,86 +163,17 @@
                                 <div><strong class="block text-gray-500">Filial Origem:</strong> <span id="detail-romaneio-filial"></span></div>
                             </div>
                         </div>
-                        <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow space-y-4">
-                            <h4 class="font-semibold text-gray-800">Buscar Pedidos Elegíveis</h4>
-                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4 pb-4 border-b">
-                                <div class="xl:col-span-1">
-                                    <label for="romaneio-filter-data" class="block text-sm font-medium text-gray-700">Data</label>
-                                    <input type="date" id="romaneio-filter-data" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                    <div class="mt-2 flex gap-x-4">
-                                        <div class="flex items-center gap-x-1">
-                                            <input type="radio" id="radio-data-recebimento" name="tipo-data-filter" value="recebimento" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600">
-                                            <label for="radio-data-recebimento" class="text-xs text-gray-600">Recebimento</label>
-                                        </div>
-                                        <div class="flex items-center gap-x-1">
-                                            <input type="radio" id="radio-data-entrega" name="tipo-data-filter" value="entrega" checked class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600">
-                                            <label for="radio-data-entrega" class="text-xs text-gray-600">Entrega</label>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label for="romaneio-filter-bairro" class="block text-sm font-medium text-gray-700">Bairro</label>
-                                    <input type="text" id="romaneio-filter-bairro" placeholder="Filtrar por bairro" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                </div>
-                                <div>
-                                    <label for="romaneio-filter-cidade" class="block text-sm font-medium text-gray-700">Cidade</label>
-                                    <input type="text" id="romaneio-filter-cidade" placeholder="Filtrar por cidade" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                </div>
-                                <div>
-                                    <label for="romaneio-filter-dav" class="block text-sm font-medium text-gray-700">Nº DAV Específico</label>
-                                    <input type="number" id="romaneio-filter-dav" placeholder="Buscar DAV" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                </div>
-                                <div class="flex items-end pb-2">
-                                    <div class="flex items-center h-full">
-                                        <input type="checkbox" id="romaneio-filter-entrega-marcada" checked class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                                        <label for="romaneio-filter-entrega-marcada" class="ml-2 block text-sm text-gray-700">Apenas Pedidos com Entrega Marcada</label>
-                                    </div>
-                                </div>
-                                <div class="md:col-span-2 lg:col-span-4 xl:col-span-5 flex justify-end gap-2 mt-2">
-                                    <button id="clear-dav-filters-btn" class="action-btn bg-gray-500 hover:bg-gray-600 px-3 py-1.5 text-xs">Limpar Filtros</button>
-                                    <button id="apply-dav-filters-btn" class="action-btn bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-xs flex items-center gap-1">
-                                        <span data-feather="search" class="w-4 h-4"></span>Buscar Pedidos
-                                    </button>
-                                </div>
-                            </div>
-                            <div id="eligible-davs-list" class="space-y-3 max-h-96 overflow-y-auto border rounded-md p-2 bg-gray-50/50">
-                                <p class="text-center text-gray-500 p-4 text-sm">Use os filtros acima para buscar pedidos.</p>
-                            </div>
-                            <div class="flex justify-end pt-4 border-t">
-                                <button id="prepare-items-modal-btn" class="action-btn bg-purple-600 text-white hover:bg-purple-700 flex items-center gap-2">
-                                    <span data-feather="list"></span>Preparar Itens dos DAVs Selecionados
-                                </button>
-                            </div>
+
+                        <div class="flex justify-start pt-2">
+                             <button id="open-add-items-modal-btn" class="action-btn bg-purple-600 text-white hover:bg-purple-700 flex items-center gap-2">
+                                <span data-feather="plus"></span>Adicionar Pedidos/Itens ao Romaneio
+                            </button>
                         </div>
+
                         <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow space-y-4">
                             <h4 class="font-semibold text-gray-800">Itens Atuais no Romaneio</h4>
                             <div id="current-romaneio-items-container" class="space-y-4">
-                                <p class="text-center text-gray-500 p-4">Nenhum item adicionado a este romaneio ainda.</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="add-items-to-romaneio-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
-                        <div class="relative mx-auto w-full max-w-3xl shadow-lg rounded-md bg-white">
-                            <div class="flex items-start justify-between p-4 border-b">
-                                <h3 class="text-xl font-semibold text-gray-900">Adicionar Itens ao Romaneio #<span id="modal-romaneio-id"></span></h3>
-                                <button id="close-add-items-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center">
-                                    <span data-feather="x"></span>
-                                </button>
-                            </div>
-                            <div class="p-6 space-y-4">
-                                <div>
-                                    <label for="modal-item-filial-filter" class="block text-sm font-medium text-gray-700">Filtrar Itens por Filial de Origem:</label>
-                                    <select id="modal-item-filial-filter" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                        <option value="">Todas as Filiais</option>
-                                    </select>
-                                </div>
-                                <div id="modal-items-list" class="max-h-96 overflow-y-auto border rounded-md p-2 bg-gray-50/50">
-                                    <p class="text-center text-gray-500 p-4">Carregando itens dos DAVs selecionados...</p>
-                                </div>
-                            </div>
-                            <div class="flex justify-end items-center p-4 border-t gap-4">
-                                <button type="button" id="cancel-add-items-btn" class="action-btn bg-gray-500 hover:bg-gray-600">Cancelar</button>
-                                <button type="button" id="confirm-add-items-btn" class="action-btn bg-green-600 hover:bg-green-700">Confirmar Adição</button>
+                                 <p class="text-center text-gray-500 p-4">Nenhum item adicionado a este romaneio ainda.</p>
                             </div>
                         </div>
                     </div>
@@ -231,7 +183,6 @@
     </div>
 </div>
 
-<!-- Modal de Criação de Romaneio -->
 <div id="create-romaneio-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex items-center justify-center p-4">
     <div class="relative mx-auto w-full max-w-lg shadow-lg rounded-md bg-white">
         <div class="flex items-start justify-between p-4 border-b">
@@ -257,14 +208,87 @@
     </div>
 </div>
 
+<div id="add-items-to-romaneio-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+    <div class="relative mx-auto w-full max-w-5xl shadow-lg rounded-md bg-white">
+        
+        <div class="flex items-start justify-between p-4 border-b">
+            <h3 class="text-xl font-semibold text-gray-900">Adicionar Itens ao Romaneio #<span id="modal-romaneio-id"></span></h3>
+            <button id="close-add-items-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 rounded-lg p-1.5 ml-auto inline-flex items-center">
+                <span data-feather="x"></span>
+            </button>
+        </div>
+
+        <div class="p-6 space-y-4" style="max-height: 80vh; overflow-y: auto;">
+            
+            <h4 class="font-semibold text-gray-800">1. Buscar Pedidos Elegíveis</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4 pb-4 border-b">
+                <div class="xl:col-span-1">
+                    <label for="romaneio-filter-data" class="block text-sm font-medium text-gray-700">Data</label>
+                    <input type="date" id="romaneio-filter-data" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <div class="mt-2 flex gap-x-4">
+                        <div class="flex items-center gap-x-1">
+                            <input type="radio" id="radio-data-recebimento" name="tipo-data-filter" value="recebimento" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600">
+                            <label for="radio-data-recebimento" class="text-xs text-gray-600">Recebimento</label>
+                        </div>
+                        <div class="flex items-center gap-x-1">
+                            <input type="radio" id="radio-data-entrega" name="tipo-data-filter" value="entrega" checked class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600">
+                            <label for="radio-data-entrega" class="text-xs text-gray-600">Entrega</label>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label for="romaneio-filter-bairro" class="block text-sm font-medium text-gray-700">Bairro</label>
+                    <input type="text" id="romaneio-filter-bairro" placeholder="Filtrar por bairro" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label for="romaneio-filter-cidade" class="block text-sm font-medium text-gray-700">Cidade</label>
+                    <input type="text" id="romaneio-filter-cidade" placeholder="Filtrar por cidade" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label for="romaneio-filter-dav" class="block text-sm font-medium text-gray-700">Nº DAV Específico</label>
+                    <input type="number" id="romaneio-filter-dav" placeholder="Buscar DAV" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                </div>
+                <div class="flex items-end pb-2">
+                    <div class="flex items-center h-full">
+                         <input type="checkbox" id="romaneio-filter-entrega-marcada" checked class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                         <label for="romaneio-filter-entrega-marcada" class="ml-2 block text-sm text-gray-700">Apenas Pedidos com Entrega Marcada</label>
+                    </div>
+                </div>
+                <div class="md:col-span-2 lg:col-span-4 xl:col-span-5 flex justify-end gap-2 mt-2">
+                    <button id="clear-dav-filters-btn" class="action-btn bg-gray-500 hover:bg-gray-600 px-3 py-1.5 text-xs">Limpar Filtros</button>
+                    <button id="apply-dav-filters-btn" class="action-btn bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-xs flex items-center gap-1">
+                        <span data-feather="search" class="w-4 h-4"></span>Buscar Pedidos
+                    </button>
+                </div>
+            </div>
+
+            <h4 class="font-semibold text-gray-800">2. Selecionar Itens</h4>
+            <div>
+                <label for="modal-item-filial-filter" class="block text-sm font-medium text-gray-700">Filtrar Itens por Filial de Origem:</label>
+                <select id="modal-item-filial-filter" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="">Todas as Filiais</option>
+                </select>
+            </div>
+            
+            <div id="eligible-davs-list" class="space-y-3 max-h-64 overflow-y-auto border rounded-md p-2 bg-gray-50/50">
+                 <p class="text-center text-gray-500 p-4 text-sm">Use os filtros acima para buscar pedidos.</p>
+                 </div>
+        </div>
+
+        <div class="flex justify-end items-center p-4 border-t gap-4 bg-gray-50 rounded-b-md">
+            <button type="button" id="cancel-add-items-btn" class="action-btn bg-gray-500 hover:bg-gray-600">Cancelar</button>
+            <button type="button" id="add-selected-items-to-romaneio-btn" class="action-btn bg-green-600 hover:bg-green-700">Adicionar Itens Selecionados</button>
+        </div>
+    </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script src="entregas.js?v=1.3" defer></script>
+<script src="entregas.js?v=1.4" defer></script>
 <script>
+    // Script da Sidebar (para colapsar/expandir e menu mobile)
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
 
-        // Lógica da Sidebar
         const sidebar = document.getElementById('sidebar');
         const desktopToggleButton = document.getElementById('sidebar-toggle');
         const mobileMenuButton = document.getElementById('mobile-menu-button');
@@ -272,11 +296,16 @@
 
         if (desktopToggleButton) {
             const setDesktopSidebarState = (collapsed) => {
-                sidebar.classList.toggle('w-64', !collapsed);
-                sidebar.classList.toggle('w-20', collapsed);
+                sidebar.classList.toggle('w-64', !collapsed); // Largura total
+                sidebar.classList.toggle('w-20', collapsed); // Largura colapsada
                 document.querySelectorAll('.sidebar-text').forEach(el => el.classList.toggle('hidden', collapsed));
+                document.getElementById('company-logo')?.classList.toggle('hidden', collapsed); // Esconde logo
                 document.getElementById('toggle-icon-collapse').classList.toggle('hidden', collapsed);
                 document.getElementById('toggle-icon-expand').classList.toggle('hidden', !collapsed);
+                // Ajusta justificado centralizado
+                sidebar.querySelectorAll('.sidebar-link').forEach(link => {
+                    link.classList.toggle('justify-center', collapsed);
+                });
                 localStorage.setItem('sidebar_collapsed', collapsed);
             };
 
@@ -303,4 +332,3 @@
 </script>
 </body>
 </html>
-
