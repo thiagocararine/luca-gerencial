@@ -28,12 +28,9 @@
         }
         .action-btn:disabled { background-color: #9ca3af; cursor: not-allowed; }
 
-        /* Estilo para a linha do histórico que pode ser expandida */
         .expandable-row { cursor: pointer; }
         .history-row { display: none; }
         .history-row.expanded { display: table-row; }
-        
-        /* Regras CSS conflitantes .tab-content foram REMOVIDAS daqui */
     </style>
 </head>
 <body class="h-full">
@@ -174,7 +171,7 @@
                             <h4 class="font-semibold text-gray-800">Itens Atuais no Romaneio</h4>
                             <div id="current-romaneio-items-container" class="space-y-4">
                                  <p class="text-center text-gray-500 p-4">Nenhum item adicionado a este romaneio ainda.</p>
-                                 </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -238,15 +235,21 @@
                 </div>
                 <div>
                     <label for="romaneio-filter-bairro" class="block text-sm font-medium text-gray-700">Bairro</label>
-                    <input type="text" id="romaneio-filter-bairro" placeholder="Filtrar por bairro" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <select id="romaneio-filter-bairro" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">Todos os Bairros</option>
+                        </select>
                 </div>
                 <div>
                     <label for="romaneio-filter-cidade" class="block text-sm font-medium text-gray-700">Cidade</label>
-                    <input type="text" id="romaneio-filter-cidade" placeholder="Filtrar por cidade" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <select id="romaneio-filter-cidade" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">Todas as Cidades</option>
+                        </select>
                 </div>
                 <div>
                     <label for="romaneio-filter-dav" class="block text-sm font-medium text-gray-700">Nº DAV Específico</label>
-                    <input type="number" id="romaneio-filter-dav" placeholder="Buscar DAV" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <select id="romaneio-filter-dav" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">Todos os DAVs</option>
+                        </select>
                 </div>
                 <div class="flex items-end pb-2">
                     <div class="flex items-center h-full">
@@ -267,7 +270,7 @@
                 <label for="modal-item-filial-filter" class="block text-sm font-medium text-gray-700">Filtrar Itens por Filial de Origem:</label>
                 <select id="modal-item-filial-filter" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
                     <option value="">Todas as Filiais</option>
-                    </select>
+                </select>
             </div>
             
             <div id="eligible-davs-list" class="space-y-3 max-h-64 overflow-y-auto border rounded-md p-2 bg-gray-50/50">
@@ -282,9 +285,8 @@
     </div>
 </div>
 
-
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script src="entregas.js?v=1.5" defer></script>
+<script src="entregas.js?v=1.6" defer></script>
 <script>
     // Script da Sidebar (para colapsar/expandir e menu mobile)
     document.addEventListener('DOMContentLoaded', () => {
