@@ -822,7 +822,11 @@ async function handleOpenAddItemsModal() {
     const modal = document.getElementById('add-items-to-romaneio-modal');
     const modalItemsList = document.getElementById('eligible-davs-list');
     const modalRomaneioIdSpan = document.getElementById('modal-romaneio-id');
-    const filialFilterSelect = document.getElementById('modal-item-filial-filter');
+    
+    // --- CORREÇÃO AQUI ---
+    // O ID correto do filtro de filial no HTML é 'romaneio-filter-filial'
+    const filialFilterSelect = document.getElementById('romaneio-filter-filial'); 
+    // --- FIM DA CORREÇÃO ---
 
     if (!currentRomaneioId) {
         alert("Erro: Romaneio não identificado.");
@@ -831,8 +835,15 @@ async function handleOpenAddItemsModal() {
 
     // Reseta o estado do modal
     modalRomaneioIdSpan.textContent = currentRomaneioId;
+    
+    // Esta linha agora deve funcionar
     modalItemsList.innerHTML = '<p class="text-center text-gray-500 p-4">Use os filtros acima para buscar pedidos.</p>';
-    filialFilterSelect.innerHTML = '<option value="">Todas as Filiais</option>';
+    
+    // E esta linha também
+    if (filialFilterSelect) { // Adiciona uma verificação de segurança
+        filialFilterSelect.innerHTML = '<option value="">Todas as Filiais</option>';
+    }
+    
     itemsForModal = []; // Limpa dados de itens anteriores
     currentEligibleDavs = []; // Limpa dados de DAVs anteriores
 
@@ -848,6 +859,22 @@ async function handleOpenAddItemsModal() {
     populateDynamicFilters([], 'bairro');
     populateDynamicFilters([], 'cidade');
     populateDynamicFilters([], 'dav');
+    
+    // Popula o filtro de filial (que agora é o do DAV, não do item)
+    // Precisamos mostrar este filtro se o usuário for admin
+    const adminFiliais = ['escritorio', 'escritório (lojas)'];
+    const userData = getUserData();
+    const filialUsuarioNormalizada = (userData && userData.unidade) ? userData.unidade.trim().toLowerCase() : '';
+    const isAdminFilial = adminFiliais.includes(filialUsuarioNormalizada);
+    
+    const modalFilialContainer = document.getElementById('modal-filial-filter-container');
+    if (isAdminFilial && modalFilialContainer) {
+        modalFilialContainer.classList.remove('hidden');
+        // Popula o filtro de filial do pedido
+        await popularSelect(filialFilterSelect, 'Unidades', getToken(), 'Todas as Filiais');
+    } else if (modalFilialContainer) {
+        modalFilialContainer.classList.add('hidden');
+    }
 
     modal.classList.remove('hidden');
     
