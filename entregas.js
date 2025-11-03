@@ -1,23 +1,21 @@
 document.addEventListener('DOMContentLoaded', initEntregasPage);
 
+// ==========================================================
+//               VARIÁVEIS GLOBAIS
+// ==========================================================
 const apiUrlBase = '/api';
-let currentRomaneioId = null; 
-let currentRomaneioStatus = null; // Para saber se podemos adicionar/remover itens
-let currentEligibleDavs = []; // Armazena a lista completa retornada pela API
-let itemsForModal = [];     // <-- NOVA: Armazena os itens detalhados para o modal
+let currentRomaneioId = null;     // Guarda o ID do romaneio sendo visto/editado
+let currentRomaneioStatus = null; // Guarda o status do romaneio sendo visto
+let currentEligibleDavs = []; // Armazena a lista completa de DAVs elegíveis (da API)
+let itemsForModal = [];     // Armazena os itens detalhados (com saldo) carregados no modal
 
-// --- Funções de Inicialização e Autenticação ---
-
-function getToken() { return localStorage.getItem('lucaUserToken'); }
-function getUserData() { 
-    const token = getToken(); 
-    if (!token) return null;
-    try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } 
-}
-function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html'; }
+// ==========================================================
+//               INICIALIZAÇÃO E AUTENTICAÇÃO
+// ==========================================================
 
 function initEntregasPage() {
-    if (!getToken()) {
+    const token = getToken();
+    if (!token) {
         window.location.href = 'login.html';
         return;
     }
@@ -29,23 +27,24 @@ function initEntregasPage() {
     loadCompanyLogo();
     setupEventListeners();
     
-    // --- INÍCIO DA ALTERAÇÃO ---
     // Lógica para exibir o filtro principal de filial
     const adminFiliais = ['escritorio', 'escritório (lojas)'];
-    const filialUsuarioNormalizada = userData.unidade ? userData.unidade.trim().toLowerCase() : '';
+    const filialUsuarioNormalizada = (userData && userData.unidade) ? userData.unidade.trim().toLowerCase() : '';
     const isAdminFilial = adminFiliais.includes(filialUsuarioNormalizada);
     
     const mainFilterContainer = document.getElementById('romaneio-main-filter-container');
     if (isAdminFilial && mainFilterContainer) {
         mainFilterContainer.classList.remove('hidden');
         // Popula o filtro principal de filiais
-        popularSelect(document.getElementById('romaneio-main-filial-filter'), 'Unidades', getToken(), 'Todas as Filiais');
+        popularSelect(document.getElementById('romaneio-main-filial-filter'), 'Unidades', token, 'Todas as Filiais');
     } else if (mainFilterContainer) {
         mainFilterContainer.classList.add('hidden');
     }
-    // --- FIM DA ALTERAÇÃO ---
 
-    loadRomaneiosEmMontagem(); // Carga inicial de romaneios
+    // A carga inicial é tratada pela troca de aba, mas garantimos a visão correta
+    document.getElementById('retirada-content').classList.remove('hidden');
+    document.getElementById('romaneios-content').classList.add('hidden');
+    
     gerenciarAcessoModulos();
 }
 
@@ -58,12 +57,13 @@ function loadCompanyLogo() {
     }
 }
 
-// --- Funções de Event Listeners ---
+// ==========================================================
+//               SETUP DE EVENT LISTENERS
+// ==========================================================
 
 function setupEventListeners() {
-    // --- Listeners Existentes (Mantidos) ---
+    // --- Listeners Globais / Aba 1 (Retirada Rápida) ---
     document.getElementById('logout-button')?.addEventListener('click', logout);
-    // Aba Retirada Rápida
     document.getElementById('search-dav-btn')?.addEventListener('click', handleSearchDav);
     document.getElementById('dav-search-input')?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleSearchDav();
@@ -82,20 +82,20 @@ function setupEventListeners() {
         }
     });
 
-    // Troca de Abas
+    // --- Troca de Abas ---
     document.getElementById('delivery-tabs')?.addEventListener('click', handleTabSwitch);
 
-    // Modal Criar Romaneio
+    // --- Modal Criar Romaneio ---
     document.getElementById('create-romaneio-btn')?.addEventListener('click', openCreateRomaneioModal);
     document.getElementById('close-romaneio-modal-btn')?.addEventListener('click', () => document.getElementById('create-romaneio-modal').classList.add('hidden'));
     document.getElementById('cancel-romaneio-creation-btn')?.addEventListener('click', () => document.getElementById('create-romaneio-modal').classList.add('hidden'));
     document.getElementById('create-romaneio-form')?.addEventListener('submit', handleCreateRomaneioSubmit);
 
-    // --- Listeners da Tela Principal de Romaneios ---
-    document.getElementById('romaneio-main-filter-btn')?.addEventListener('click', loadRomaneiosEmMontagem); // Botão de filtro principal
+    // --- Tela Principal de Romaneios (Aba 2) ---
+    document.getElementById('romaneio-main-filter-btn')?.addEventListener('click', loadRomaneiosEmMontagem);
     document.getElementById('romaneios-list-container')?.addEventListener('click', handleRomaneioClick);
     
-    // --- Listeners da Tela de Detalhe ---
+    // --- Tela de Detalhe do Romaneio (Aba 2) ---
     document.getElementById('back-to-romaneio-list-btn')?.addEventListener('click', showRomaneioListView);
     document.getElementById('open-add-items-modal-btn')?.addEventListener('click', handleOpenAddItemsModal);
     document.getElementById('current-romaneio-items-container')?.addEventListener('click', handleRemoveItemClick);
@@ -106,19 +106,14 @@ function setupEventListeners() {
     document.getElementById('confirm-add-items-btn')?.addEventListener('click', handleConfirmAddItems); // Botão final
     
     // --- Listeners dos Filtros (Dentro do Modal) ---
-    // Filtros Primários (disparam busca na API)
     document.getElementById('apply-dav-filters-btn')?.addEventListener('click', applyDavFiltersAndLoad);
     document.getElementById('clear-dav-filters-btn')?.addEventListener('click', clearDavFilters);
+    // Dispara busca ao mudar filtros primários
     document.getElementById('romaneio-filter-data')?.addEventListener('change', applyDavFiltersAndLoad);
     document.querySelectorAll('input[name="tipo-data-filter"]').forEach(radio => radio.addEventListener('change', applyDavFiltersAndLoad));
     document.getElementById('romaneio-filter-entrega-marcada')?.addEventListener('change', applyDavFiltersAndLoad);
 
-    // Filtros Secundários (filtram localmente)
-    document.getElementById('romaneio-filter-bairro')?.addEventListener('change', filterDisplayedDavs);
-    document.getElementById('romaneio-filter-cidade')?.addEventListener('change', filterDisplayedDavs);
-    document.getElementById('romaneio-filter-dav')?.addEventListener('change', filterDisplayedDavs);
-
-    // Filtro de Item (local)
+    // Filtro de Item (local, dentro do modal)
     document.getElementById('modal-item-filial-filter')?.addEventListener('change', handleModalFilialFilterChange);
 
     // Lista de DAVs Elegíveis (Expandir e Checkbox Mestre)
@@ -135,7 +130,9 @@ function setupEventListeners() {
     }
 }
 
-// --- Lógica de Abas ---
+// ==========================================================
+//               LÓGICA DE ABAS E NAVEGAÇÃO
+// ==========================================================
 
 function handleTabSwitch(event) {
     const button = event.target.closest('.tab-button');
@@ -149,7 +146,7 @@ function handleTabSwitch(event) {
     button.classList.add('active', 'text-indigo-600', 'border-indigo-500');
     button.classList.remove('text-gray-500', 'border-transparent');
 
-    // Lógica de visibilidade do conteúdo (usando 'hidden')
+    // Lógica de visibilidade do conteúdo
     document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.add('hidden');
     });
@@ -158,15 +155,52 @@ function handleTabSwitch(event) {
          targetContent.classList.remove('hidden');
     }
 
-    // --- ALTERAÇÃO AQUI ---
     // Se trocou para a aba de romaneios, recarrega a lista
     if (button.dataset.tab === 'romaneios') {
+        showRomaneioListView(false); // Garante que a visão de lista esteja ativa
         loadRomaneiosEmMontagem();
     }
-    // --- FIM DA ALTERAÇÃO ---
 }
 
-// --- Lógica de Retirada Rápida ---
+function showRomaneioListView(reloadList = true) {
+    // Mostra a tela de lista
+    const mainFilterContainer = document.getElementById('romaneio-main-filter-container');
+    const userData = getUserData();
+    const adminFiliais = ['escritorio', 'escritório (lojas)'];
+    const filialUsuarioNormalizada = (userData && userData.unidade) ? userData.unidade.trim().toLowerCase() : '';
+    const isAdminFilial = adminFiliais.includes(filialUsuarioNormalizada);
+    
+    if (isAdminFilial && mainFilterContainer) {
+        mainFilterContainer.style.display = 'block';
+    } else if (mainFilterContainer) {
+        mainFilterContainer.style.display = 'none';
+    }
+
+    const listView = document.getElementById('romaneio-list-view');
+    if (listView) listView.style.display = 'block';
+    
+    document.getElementById('create-romaneio-btn').style.display = 'flex';
+    
+    // Esconde a tela de detalhe
+    document.getElementById('romaneio-detail-view').classList.add('hidden');
+    
+    // Garante que o modal de adição de itens também esteja fechado
+    document.getElementById('add-items-to-romaneio-modal').classList.add('hidden');
+
+    // Limpa estado global
+    currentRomaneioId = null;
+    currentRomaneioStatus = null;
+    currentEligibleDavs = [];
+    itemsForModal = [];
+
+    if (reloadList) {
+        loadRomaneiosEmMontagem();
+    }
+}
+
+// ==========================================================
+//               ABA 1: RETIRADA RÁPIDA (BALCÃO)
+// ==========================================================
 
 async function handleSearchDav() {
     const davNumber = document.getElementById('dav-search-input').value;
@@ -192,8 +226,7 @@ async function handleSearchDav() {
                 const error = await response.json();
                 errorMessage = error.error || 'Não foi possível buscar o pedido.';
             } catch (e) {
-                // Se a resposta não for JSON (ex: erro 502 com HTML), usa a mensagem padrão
-                errorMessage = 'Ocorreu um erro de comunicação com o servidor. Verifique o console do backend para mais detalhes.';
+                errorMessage = 'Ocorreu um erro de comunicação com o servidor.';
             }
             throw new Error(errorMessage);
         }
@@ -202,8 +235,6 @@ async function handleSearchDav() {
         renderDavResults(data);
 
     } catch (error) {
-        // --- INÍCIO DA ALTERAÇÃO ---
-        // Substituímos o <p> simples por um card de alerta completo.
         resultsContainer.innerHTML = `
             <div class="max-w-xl mx-auto bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg shadow-md" role="alert">
                 <div class="flex items-center">
@@ -217,18 +248,16 @@ async function handleSearchDav() {
                 </div>
             </div>
         `;
-        // É necessário chamar feather.replace() novamente para que o ícone seja renderizado
         feather.replace();
-        // --- FIM DA ALTERAÇÃO ---
     } finally {
         hideLoader();
     }
 }
 
 function renderDavResults(data) {
-    console.log("Dados brutos recebidos da API:", JSON.stringify(data, null, 2));
+    console.log("Dados brutos (Retirada Rápida) recebidos da API:", JSON.stringify(data, null, 2));
 
-    const { cliente, endereco, itens, data_hora_pedido, vendedor, valor_total, status_caixa, caixa_info, fiscal_info, cancelamento_info } = data;
+    const { cliente, endereco, itens, data_hora_pedido, vendedor, valor_total, status_caixa, filial_pedido_nome, filial_pedido_codigo, caixa_info, fiscal_info, cancelamento_info } = data;
     const resultsContainer = document.getElementById('dav-results-container');
 
     const formatDateTime = (dateString) => {
@@ -295,6 +324,7 @@ function renderDavResults(data) {
                         <div>
                             <h3 class="text-xl font-semibold text-gray-900 inline-flex items-center">${cliente.nome} ${statusTagHtml}</h3>
                             <p class="text-sm text-gray-500">${cliente.doc || 'Documento não informado'}</p>
+                            <p class="text-sm text-gray-500 mt-1"><strong class="text-gray-600">Filial do Pedido:</strong> ${filial_pedido_nome || filial_pedido_codigo || 'N/A'}</p>
                         </div>
                         <p class="font-bold text-2xl text-gray-600 line-through">${formatCurrency(valor_total)}</p>
                     </div>
@@ -311,7 +341,7 @@ function renderDavResults(data) {
         `;
     } else {
         let itemsHtml = '<p class="text-center text-gray-500 p-4">Nenhum item encontrado para este pedido.</p>';
-        const itemsComSaldo = itens.filter(item => item.quantidade_saldo > 0);
+        const itemsComSaldoDisponivel = itens.filter(item => item.quantidade_saldo > 0);
         if (itens.length > 0) {
             itemsHtml = `
                 <table class="min-w-full divide-y divide-gray-200 text-sm">
@@ -328,7 +358,6 @@ function renderDavResults(data) {
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
                         ${itens.map(item => {
-                            // Lógica para criar o alerta de devolução inválida
                             let invalidReturnHtml = '';
                             if (item.quantidade_devolvida > item.quantidade_entregue_bruta) {
                                 invalidReturnHtml = `
@@ -346,13 +375,12 @@ function renderDavResults(data) {
                                     <td class="px-2 py-3 text-center text-gray-400">
                                         ${item.historico && item.historico.length > 0 ? `<i data-feather="chevron-down" class="transition-transform history-chevron"></i>` : ''}
                                     </td>
-                                    <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome ?? 'Nome não definido'}</td>
+                                    <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome ?? 'Nome não definido'} (${item.unidade})</td>
                                     <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_total ?? 0}</td>
                                     <td class="px-2 py-3 text-center text-gray-600">${item.quantidade_entregue ?? 0}</td>                                
                                     <td class="px-2 py-3 text-center text-orange-600 font-semibold">
                                         ${item.quantidade_devolvida > 0 ? item.quantidade_devolvida : '-'}
                                     </td>
-
                                     <td class="px-2 py-3 text-center font-bold ${item.quantidade_saldo > 0 ? 'text-blue-600' : 'text-green-600'}">${item.quantidade_saldo ?? 0}</td>
                                     <td class="px-4 py-3 text-center">
                                         <input type="number" class="w-24 text-center rounded-md border-gray-300 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" data-item-id="${item.idavs_regi}" ${item.quantidade_saldo > 0 ? '' : 'disabled'}>
@@ -390,16 +418,17 @@ function renderDavResults(data) {
                         </div>
                         <p class="font-bold text-2xl text-indigo-600">${formatCurrency(valor_total)}</p>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-sm mt-4 pt-4 border-t">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2 text-sm mt-4 pt-4 border-t">
                         <div><strong class="block text-gray-500">Vendedor / Pedido:</strong><span>${vendedor || 'N/A'} - ${formatDateTime(data_hora_pedido)}</span></div>
                         <div><strong class="block text-gray-500">Caixa / Recebimento:</strong><span>${caixa_info.usuario || 'N/A'} - ${formatDateTime(caixa_info.data_hora)}</span></div>
+                        <div><strong class="block text-gray-500">Filial do Pedido:</strong><span>${filial_pedido_nome || filial_pedido_codigo || 'N/A'}</span></div>
                     </div>
                     ${fiscalHtml}
                 </div>
                 <div class="space-y-4">
                     <h4 class="font-semibold">Itens do Pedido</h4>
                     <div class="overflow-x-auto rounded-lg border">${itemsHtml}</div>
-                    ${itemsComSaldo.length > 0 ? `
+                    ${itemsComSaldoDisponivel.length > 0 ? `
                     <div class="flex flex-col sm:flex-row justify-end items-center pt-4 border-t gap-4">
                         <div>
                             <label for="retirada-nome-cliente" class="block text-sm font-medium text-gray-700">Nome de quem retira (opcional)</label>
@@ -426,15 +455,17 @@ async function handleConfirmRetirada(davNumber) {
     const itemsParaRetirar = [];
     document.querySelectorAll('#dav-results-container tbody tr.expandable-row').forEach(row => {
         const input = row.querySelector('input[type="number"]');
-        const quantidade = parseFloat(input.value);
-        if (quantidade > 0) {
-            const itemNome = row.querySelector('td:nth-child(2)').textContent;
-            itemsParaRetirar.push({
-                idavs_regi: row.dataset.idavsRegi,
-                quantidade_retirada: quantidade,
-                quantidade_saldo: parseFloat(input.max),
-                pd_nome: itemNome
-            });
+        if (input) {
+            const quantidade = parseFloat(input.value);
+            if (quantidade > 0) {
+                const itemNome = row.querySelector('td:nth-child(2)').textContent;
+                itemsParaRetirar.push({
+                    idavs_regi: row.dataset.idavsRegi,
+                    quantidade_retirada: quantidade,
+                    quantidade_saldo: parseFloat(input.max),
+                    pd_nome: itemNome
+                });
+            }
         }
     });
 
@@ -446,7 +477,7 @@ async function handleConfirmRetirada(davNumber) {
 
     for (const item of itemsParaRetirar) {
         if (item.quantidade_retirada > item.quantidade_saldo) {
-            alert(`A quantidade a retirar para o item "${item.pd_nome}" excede o saldo disponível!`);
+            alert(`A quantidade a retirar para o item "${item.pd_nome}" (${item.quantidade_retirada}) excede o saldo disponível (${item.quantidade_saldo})!`);
             btn.disabled = false;
             return;
         }
@@ -456,10 +487,7 @@ async function handleConfirmRetirada(davNumber) {
     try {
         const response = await fetch(`${apiUrlBase}/entregas/retirada-manual`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${getToken()}`
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify({
                 dav_numero: davNumber,
                 itens: itemsParaRetirar
@@ -472,18 +500,27 @@ async function handleConfirmRetirada(davNumber) {
         }
 
         alert(result.message);
-        handleSearchDav();
+        // Recarrega os dados do DAV após a retirada
+        const davSearchInput = document.getElementById('dav-search-input');
+        if (davSearchInput) {
+            davSearchInput.value = davNumber; // Garante que o número esteja no input
+            handleSearchDav(); // Chama a função de busca
+        }
 
     } catch (error) {
         alert(`Erro: ${error.message}`);
     } finally {
         hideLoader();
-        btn.disabled = false;
+        // O botão será re-renderizado e re-habilitado pelo renderDavResults
     }
 }
 
 
-// --- Lógica de Gestão de Romaneios ---
+// ==========================================================
+//               ABA 2: GESTÃO DE ROMANEIOS
+// ==========================================================
+
+// --- Tela Principal: Criar e Listar Romaneios ---
 
 async function openCreateRomaneioModal() {
     const modal = document.getElementById('create-romaneio-modal');
@@ -539,10 +576,7 @@ async function handleCreateRomaneioSubmit(event) {
     try {
         const response = await fetch(`${apiUrlBase}/entregas/romaneios`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${getToken()}`
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify(payload)
         });
         const result = await response.json();
@@ -550,7 +584,7 @@ async function handleCreateRomaneioSubmit(event) {
 
         alert('Romaneio criado com sucesso! Agora você pode adicionar os pedidos a ele.');
         document.getElementById('create-romaneio-modal').classList.add('hidden');
-        await loadRomaneiosEmMontagem();
+        await loadRomaneiosEmMontagem(); // Recarrega a lista
 
     } catch (error) {
         alert(`Erro: ${error.message}`);
@@ -562,9 +596,9 @@ async function handleCreateRomaneioSubmit(event) {
 
 async function loadRomaneiosEmMontagem() {
     const container = document.getElementById('romaneios-list-container');
+    if (!container) return;
     container.innerHTML = '<p class="text-center text-gray-500 p-4">Buscando romaneios...</p>';
     
-    // --- INÍCIO DA ALTERAÇÃO ---
     // Lê o valor do novo filtro principal de filial
     const filialFiltradaInput = document.getElementById('romaneio-main-filial-filter');
     const filialFiltrada = (filialFiltradaInput && filialFiltradaInput.offsetParent !== null) // Verifica se está visível
@@ -575,10 +609,8 @@ async function loadRomaneiosEmMontagem() {
     if (filialFiltrada) {
         params.append('filial', filialFiltrada);
     }
-    // --- FIM DA ALTERAÇÃO ---
     
     try {
-        // A requisição agora envia o parâmetro 'filial' se houver
         const response = await fetch(`${apiUrlBase}/entregas/romaneios?${params.toString()}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
@@ -594,7 +626,6 @@ async function loadRomaneiosEmMontagem() {
             return;
         }
 
-        // Renderiza a lista de romaneios (incluindo filial_origem)
         container.innerHTML = romaneios.map(r => `
             <div class="border p-3 rounded-md bg-gray-50 hover:bg-indigo-50 transition-colors cursor-pointer mb-2" data-romaneio-id="${r.id}">
                 <div class="flex justify-between items-center">
@@ -617,41 +648,7 @@ async function loadRomaneiosEmMontagem() {
 }
 
 
-// --- Funções de Loader e Utilitários ---
-function showLoader() {
-    const loader = document.getElementById('global-loader');
-    if (loader) loader.style.display = 'flex';
-}
-
-function hideLoader() {
-    const loader = document.getElementById('global-loader');
-    if (loader) loader.style.display = 'none';
-}
-
-function gerenciarAcessoModulos() {
-    const userData = getUserData();
-    if (!userData || !userData.permissoes) {
-        return;
-    }
-    const permissoesDoUsuario = userData.permissoes;
-    const mapaModulos = {
-        'lancamentos': 'despesas.html',
-        'logistica': 'logistica.html',
-        'entregas': 'entregas.html',
-        'checklist': 'checklist.html',
-        'produtos': 'produtos.html',
-        'configuracoes': 'settings.html'
-    };
-    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
-        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
-        if (!permissao || !permissao.permitido) {
-            const link = document.querySelector(`#sidebar a[href="${href}"]`);
-            if (link && link.parentElement) {
-                link.parentElement.style.display = 'none';
-            }
-        }
-    }
-}
+// --- Tela de Detalhe do Romaneio ---
 
 function handleRomaneioClick(event) {
     const romaneioDiv = event.target.closest('[data-romaneio-id]');
@@ -663,40 +660,17 @@ function handleRomaneioClick(event) {
     }
 }
 
-function showRomaneioListView() {
-    // Mostra a tela de lista
-    document.getElementById('romaneio-main-filter-container').style.display = 'block'; // Mostra filtros principais
-    document.getElementById('create-romaneio-btn').style.display = 'flex';
-    document.getElementById('romaneios-list-container').style.display = 'block';
-    
-    // Esconde a tela de detalhe
-    document.getElementById('romaneio-detail-view').classList.add('hidden');
-    
-    // Garante que o modal de adição de itens também esteja fechado
-    document.getElementById('add-items-to-romaneio-modal').classList.add('hidden');
-
-    // Limpa estado global
-    currentRomaneioId = null;
-    currentRomaneioStatus = null;
-    currentEligibleDavs = [];
-    itemsForModal = [];
-
-    // Recarrega a lista principal de romaneios
-    loadRomaneiosEmMontagem();
-}
-
 async function showRomaneioDetailView(romaneioId) {
     showLoader();
     // Esconde a tela de lista
     document.getElementById('romaneio-main-filter-container').style.display = 'none';
     document.getElementById('create-romaneio-btn').style.display = 'none';
-    document.getElementById('romaneios-list-container').style.display = 'none';
+    document.getElementById('romaneio-list-view').style.display = 'none';
     
     // Mostra a tela de detalhe
     const detailView = document.getElementById('romaneio-detail-view');
     detailView.classList.remove('hidden');
     
-    // Limpa o container de itens atuais
     document.getElementById('current-romaneio-items-container').innerHTML = '<p class="text-center text-gray-500 p-4">Carregando itens...</p>';
 
     try {
@@ -741,19 +715,14 @@ async function showRomaneioDetailView(romaneioId) {
             openModalBtn.style.display = 'flex';
         }
 
-
     } catch (error) {
         alert(error.message);
-        showRomaneioListView(); // Volta para a lista em caso de erro grave
+        showRomaneioListView(false); // Volta para a lista em caso de erro grave
     } finally {
         hideLoader();
     }
 }
 
-/**
- * Função renderCurrentRomaneioItems (MODIFICADA para agrupar por DAV)
- * Renderiza os itens que já estão no romaneio, agrupados por pedido.
- */
 function renderCurrentRomaneioItems(items) {
     const container = document.getElementById('current-romaneio-items-container');
     if (!items || items.length === 0) {
@@ -761,39 +730,32 @@ function renderCurrentRomaneioItems(items) {
         return;
     }
 
-    // Agrupa os itens por DAV usando reduce
+    // Agrupa os itens por DAV
     const itemsGroupedByDav = items.reduce((acc, item) => {
         const dav = item.dav_numero;
-        // Se o DAV ainda não existe no acumulador, inicializa
         if (!acc[dav]) {
             acc[dav] = {
-                cliente_nome: item.cliente_nome || 'Cliente não informado', // Pega o nome do cliente do primeiro item encontrado para este DAV
-                itens: [] // Cria um array para os itens deste DAV
+                cliente_nome: item.cliente_nome || 'Cliente não informado',
+                itens: []
             };
         }
-        // Adiciona o item atual ao array de itens do DAV correspondente
         acc[dav].itens.push(item);
-        return acc; // Retorna o acumulador atualizado
-    }, {}); // Inicia com um objeto vazio
+        return acc;
+    }, {});
 
-    // Gera o HTML agrupado iterando sobre o objeto criado
+    // Gera o HTML agrupado
     container.innerHTML = Object.entries(itemsGroupedByDav).map(([davNumero, data]) => `
         <div class="border rounded-md overflow-hidden mb-3 shadow-sm">
-            {/* Cabeçalho do Grupo DAV */}
             <div class="bg-gray-100 p-2 border-b flex justify-between items-center">
                 <p class="font-semibold text-sm text-gray-700">Pedido ${davNumero} - ${data.cliente_nome}</p>
-                {/* Poderia adicionar um botão aqui para remover TODOS os itens deste DAV, se desejado */}
             </div>
-            {/* Tabela de Itens para este DAV */}
             <table class="min-w-full text-xs">
-                {/* O thead pode ser omitido ou simplificado, pois o contexto já está no cabeçalho do grupo */}
                 <tbody class="divide-y divide-gray-100">
                     ${data.itens.map(item => `
-                        <tr data-romaneio-item-id="${item.romaneio_item_id}"> {/* ID da linha em romaneio_itens */}
+                        <tr data-romaneio-item-id="${item.romaneio_item_id}">
                             <td class="px-3 py-1.5 text-gray-700">${item.produto_nome || 'Nome Indisponível'} (${item.produto_unidade || 'UN'})</td>
                             <td class="px-3 py-1.5 text-center font-semibold text-gray-800 w-16">${item.quantidade_a_entregar}</td>
                             <td class="px-3 py-1.5 text-center w-12">
-                                {/* Botão de remover só aparece se o romaneio estiver 'Em montagem' */}
                                 ${currentRomaneioStatus === 'Em montagem' ? `
                                 <button class="remove-item-btn text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-100" title="Remover item do romaneio">
                                     <span data-feather="x-circle" class="w-3 h-3"></span>
@@ -807,13 +769,9 @@ function renderCurrentRomaneioItems(items) {
         </div>
     `).join('');
 
-    feather.replace(); // Renderiza os ícones de remover
+    feather.replace();
 }
 
-/**
- * Função handleRemoveItemClick (Mantida)
- * Chamada quando o botão de remover item é clicado.
- */
 async function handleRemoveItemClick(event) {
     const button = event.target.closest('.remove-item-btn');
     if (!button) return;
@@ -830,7 +788,7 @@ async function handleRemoveItemClick(event) {
          alert("Erro: Não foi possível identificar o item a ser removido.");
          return;
     }
-
+    
     if (!confirm(`Tem certeza que deseja remover este item do romaneio?`)) {
         return;
     }
@@ -846,10 +804,9 @@ async function handleRemoveItemClick(event) {
         if (!response.ok) {
             throw new Error(result.error || 'Falha ao remover item.');
         }
-
+        
         alert(result.message);
-        // Recarrega a view detalhada para atualizar a lista de itens atuais
-        await showRomaneioDetailView(currentRomaneioId);
+        await showRomaneioDetailView(currentRomaneioId); // Recarrega a view
 
     } catch (error) {
          alert(`Erro: ${error.message}`);
@@ -858,454 +815,12 @@ async function handleRemoveItemClick(event) {
     }
 }
 
-function clearDavFilters() {
-    // Limpa os selects dinâmicos
-    document.getElementById('romaneio-filter-bairro').value = '';
-    document.getElementById('romaneio-filter-cidade').value = '';
-    document.getElementById('romaneio-filter-dav').value = '';
 
-    // Reseta para os novos padrões
-    document.getElementById('romaneio-filter-entrega-marcada').checked = true; // Marcado por padrão
-    document.getElementById('radio-data-entrega').checked = true;          // Tipo "Entrega" por padrão
-
-    // Define a data para hoje novamente
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('romaneio-filter-data').value = today;
-
-    // Dispara a busca com os filtros padrão resetados
-    applyDavFiltersAndLoad();
-}
-
-/**
- * NOVA FUNÇÃO: Lê os filtros, monta a query e busca os DAVs elegíveis.
- */
-async function applyDavFiltersAndLoad() {
-    const listContainer = document.getElementById('eligible-davs-list');
-    listContainer.innerHTML = '<p class="text-center text-gray-500 p-4">Buscando pedidos...</p>';
-    showLoader();
-    currentEligibleDavs = []; // Limpa a lista anterior
-
-    const params = new URLSearchParams();
-    const data = document.getElementById('romaneio-filter-data').value;
-    const apenasEntregaMarcada = document.getElementById('romaneio-filter-entrega-marcada').checked;
-    const tipoData = document.querySelector('input[name="tipo-data-filter"]:checked').value;
-    // Filtros de texto livre
-    const bairro = document.getElementById('romaneio-filter-bairro').value;
-    const cidade = document.getElementById('romaneio-filter-cidade').value;
-    const davNumero = document.getElementById('romaneio-filter-dav').value;
-
-
-    if (!data || !tipoData) {
-        alert('Data e Tipo de Data são obrigatórios.');
-        listContainer.innerHTML = '<p class="text-center text-orange-500 p-4">Selecione Data e Tipo de Data.</p>';
-        hideLoader();
-        return;
-    }
-    params.append('data', data);
-    params.append('tipoData', tipoData);
-    if (apenasEntregaMarcada) params.append('apenasEntregaMarcada', 'true');
-    // Adiciona filtros de texto livre se preenchidos
-    if (bairro) params.append('bairro', bairro);
-    if (cidade) params.append('cidade', cidade);
-    if (davNumero) params.append('davNumero', davNumero);
-
-    try {
-        const response = await fetch(`${apiUrlBase}/entregas/eligible-davs?${params.toString()}`, {
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
-        if (!response.ok) {
-             const errorData = await response.json().catch(() => ({ error: 'Falha ao buscar pedidos elegíveis.' }));
-             throw new Error(errorData.error || 'Falha ao buscar pedidos elegíveis.');
-        }
-
-        currentEligibleDavs = await response.json(); // Armazena a lista completa
-
-        renderEligibleDavs(currentEligibleDavs); // Renderiza a lista com checkboxes
-
-    } catch (error) {
-        listContainer.innerHTML = `<p class="text-center text-red-500 p-4">${error.message}</p>`;
-    } finally {
-        hideLoader();
-    }
-}
-
-/**
- * NOVA FUNÇÃO: Renderiza a lista de DAVs elegíveis encontrados pelos filtros.
- */
-function renderEligibleDavs(davs) {
-    const listContainer = document.getElementById('eligible-davs-list');
-    if (!davs || davs.length === 0) {
-        listContainer.innerHTML = '<p class="text-center text-gray-500 p-4">Nenhum pedido encontrado com os filtros aplicados.</p>';
-        return;
-    }
-
-    listContainer.innerHTML = davs.map(dav => `
-        <div class="border rounded-md p-3 bg-gray-50/80 dav-container-eligible" data-dav-numero="${dav.cr_ndav}">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center gap-3">
-                    <input type="checkbox" value="${dav.cr_ndav}" class="eligible-dav-checkbox rounded border-gray-400 h-5 w-5 text-indigo-600 focus:ring-indigo-500">
-                    <div>
-                        <p class="font-semibold text-gray-800">DAV: ${dav.cr_ndav} - ${dav.cr_nmcl || 'Cliente não informado'}</p>
-                        <p class="text-xs text-gray-500">${dav.cr_ebai || 'Bairro não inf.'} / ${dav.cr_ecid || 'Cidade não inf.'} (${dav.cr_inde || 'Filial?'})</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `).join('');
-    // feather.replace(); // Não precisa mais aqui se não houver ícones
-}
-
-
-/**
- * NOVA FUNÇÃO: Coleta todos os itens selecionados e envia para adicionar ao romaneio.
- */
-async function handleAddSelectedItemsToRomaneio() {
-    const button = document.getElementById('add-selected-items-to-romaneio-btn');
-    if (!currentRomaneioId) {
-        alert("Erro: Selecione um romaneio primeiro.");
-        return;
-    }
-
-    const itensParaAdicionarPayload = []; // Array que será enviado para a API
-    let hasInvalidQuantity = false;
-    let itemsFound = false;
-
-    // Itera sobre todos os containers de DAV que estão visíveis (expandidos)
-    document.querySelectorAll('#eligible-davs-list .dav-container').forEach(davContainer => {
-        const itemsContainer = davContainer.querySelector('.dav-items-container:not(.hidden)');
-        if (!itemsContainer) return; // Pula se os itens não estiverem visíveis
-
-        const davNumero = davContainer.dataset.davNumero;
-
-        // Itera sobre as linhas da tabela de itens DENTRO do container visível
-        itemsContainer.querySelectorAll('tbody tr').forEach(row => {
-            const checkbox = row.querySelector('.eligible-item-checkbox');
-            const qtyInput = row.querySelector('.eligible-item-qty');
-            if (!checkbox || !qtyInput) return; // Pula se não encontrar os elementos
-
-            const idavsRegi = row.dataset.idavsRegi;
-            const quantidade = parseFloat(qtyInput.value);
-            const saldoMax = parseFloat(qtyInput.max);
-
-            if (checkbox.checked && quantidade > 0) {
-                itemsFound = true; // Marcar que encontramos pelo menos um item
-                if (quantidade > saldoMax) {
-                    alert(`Quantidade para o item ${idavsRegi} (DAV ${davNumero}) excede o saldo (${saldoMax}). Ajuste antes de continuar.`);
-                    qtyInput.style.borderColor = 'red'; // Destaca o campo inválido
-                    qtyInput.focus();
-                    hasInvalidQuantity = true;
-                    return; // Para a iteração interna (forEach da linha)
-                } else {
-                    qtyInput.style.borderColor = ''; // Limpa destaque se estava inválido antes
-                }
-                itensParaAdicionarPayload.push({
-                    dav_numero: davNumero, // Inclui o DAV de origem
-                    idavs_regi: idavsRegi,
-                    quantidade_a_entregar: quantidade
-                });
-            } else if (checkbox.checked && quantidade <= 0) {
-                 alert(`A quantidade para o item ${idavsRegi} (DAV ${davNumero}) deve ser maior que zero se selecionado.`);
-                 qtyInput.style.borderColor = 'red';
-                 qtyInput.focus();
-                 hasInvalidQuantity = true;
-                 return;
-            } else {
-                 qtyInput.style.borderColor = ''; // Limpa destaque
-            }
-        });
-        if (hasInvalidQuantity) return; // Para a iteração externa (forEach do container)
-    });
-
-    if (hasInvalidQuantity) return; // Não continua se houve erro de quantidade
-
-    if (!itemsFound) {
-        alert("Nenhum item selecionado com quantidade maior que zero para adicionar.");
-        return;
-    }
-
-    showLoader();
-    button.disabled = true;
-
-    try {
-        const response = await fetch(`${apiUrlBase}/entregas/romaneios/${currentRomaneioId}/itens`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${getToken()}`
-            },
-            body: JSON.stringify(itensParaAdicionarPayload) // Envia o array diretamente
-        });
-
-        const result = await response.json();
-        if (!response.ok) {
-            throw new Error(result.error || 'Falha ao adicionar itens.');
-        }
-
-        alert(result.message);
-        // Recarrega a view detalhada para atualizar a lista de itens atuais
-        await showRomaneioDetailView(currentRomaneioId);
-        // Limpa a lista de DAVs elegíveis para forçar nova busca se necessário
-        document.getElementById('eligible-davs-list').innerHTML = '<p class="text-center text-gray-500 p-4">Use os filtros acima para buscar pedidos.</p>';
-
-    } catch (error) {
-        alert(`Erro: ${error.message}`);
-    } finally {
-        hideLoader();
-        button.disabled = false;
-    }
-}
-
-async function handlePrepareItemsModal() {
-    const selectedDavNumbers = [];
-    document.querySelectorAll('#eligible-davs-list .eligible-dav-checkbox:checked').forEach(checkbox => {
-        selectedDavNumbers.push(checkbox.value);
-    });
-
-    if (selectedDavNumbers.length === 0) {
-        alert("Selecione pelo menos um DAV para preparar os itens.");
-        return;
-    }
-
-    const modal = document.getElementById('add-items-to-romaneio-modal');
-    const modalItemsList = document.getElementById('modal-items-list');
-    const modalRomaneioIdSpan = document.getElementById('modal-romaneio-id');
-    const filialFilterSelect = document.getElementById('modal-item-filial-filter');
-
-    modalRomaneioIdSpan.textContent = currentRomaneioId || '?';
-    modalItemsList.innerHTML = '<p class="text-center text-gray-500 p-4">Carregando itens dos DAVs selecionados...</p>';
-    filialFilterSelect.innerHTML = '<option value="">Todas as Filiais</option>'; // Reseta filtro
-    itemsForModal = []; // Limpa dados anteriores
-    modal.classList.remove('hidden');
-    showLoader();
-
-    try {
-        // Busca detalhes de todos os DAVs selecionados em paralelo
-        const promises = selectedDavNumbers.map(davNum =>
-            fetch(`${apiUrlBase}/entregas/dav/${davNum}`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
-                .then(res => res.ok ? res.json() : Promise.reject(`Falha ao buscar DAV ${davNum}`))
-        );
-
-        const results = await Promise.all(promises);
-
-        // Agrupa todos os itens válidos (com saldo > 0)
-        itemsForModal = results.flatMap(davData =>
-            davData.itens
-                .filter(item => item.quantidade_saldo > 0)
-                .map(item => ({ // Adiciona info do DAV a cada item
-                    ...item,
-                    dav_numero: davData.dav_numero,
-                    cliente_nome: davData.cliente.nome
-                }))
-        );
-
-        if (itemsForModal.length === 0) {
-            modalItemsList.innerHTML = '<p class="text-center text-orange-500 p-4">Nenhum item com saldo disponível encontrado nos DAVs selecionados.</p>';
-            return;
-        }
-
-        // Popula o filtro de filial com base nos itens encontrados
-        const uniqueFiliais = [...new Set(itemsForModal.map(item => item.item_filial_codigo))]
-                              .filter(Boolean) // Remove nulos/undefined
-                              .sort();
-        uniqueFiliais.forEach(filialCode => {
-            const option = document.createElement('option');
-            option.value = filialCode;
-            option.textContent = filialCode; // TODO: Mapear código para nome se desejar
-            filialFilterSelect.appendChild(option);
-        });
-
-        // Renderiza os itens no modal (sem filtro inicial)
-        renderItemsInModal(itemsForModal);
-
-    } catch (error) {
-        console.error("Erro ao preparar modal:", error);
-        modalItemsList.innerHTML = `<p class="text-center text-red-500 p-4">Erro ao carregar itens: ${error}</p>`;
-    } finally {
-        hideLoader();
-    }
-}
-
-function renderItemsInModal(items, filialFilter = "") {
-    const modalItemsList = document.getElementById('modal-items-list');
-
-    // Filtra os itens pela filial selecionada (se houver)
-    const filteredItems = filialFilter
-        ? items.filter(item => item.item_filial_codigo === filialFilter)
-        : items;
-
-    if (filteredItems.length === 0) {
-        modalItemsList.innerHTML = `<p class="text-center text-gray-500 p-4">Nenhum item encontrado ${filialFilter ? `para a filial ${filialFilter}` : 'nos DAVs selecionados'}.</p>`;
-        return;
-    }
-
-    // Agrupa os itens filtrados por DAV
-    const itemsGroupedByDav = filteredItems.reduce((acc, item) => {
-        const dav = item.dav_numero;
-        if (!acc[dav]) {
-            acc[dav] = { cliente_nome: item.cliente_nome, itens: [] };
-        }
-        acc[dav].itens.push(item);
-        return acc;
-    }, {});
-
-    // Gera o HTML agrupado para o modal
-    modalItemsList.innerHTML = Object.entries(itemsGroupedByDav).map(([davNumero, data]) => `
-        <div class="border rounded-md overflow-hidden mb-3 shadow-sm modal-dav-group" data-dav-numero="${davNumero}">
-            <div class="bg-gray-100 p-2 border-b flex justify-between items-center">
-                <div class="flex items-center gap-2">
-                     <input type="checkbox" class="modal-master-checkbox rounded border-gray-400 h-4 w-4 text-indigo-600 focus:ring-indigo-500" title="Selecionar/Deselecionar Todos deste DAV">
-                     <p class="font-semibold text-sm text-gray-700">Pedido ${davNumero} - ${data.cliente_nome}</p>
-                </div>
-            </div>
-            <table class="min-w-full text-xs">
-                <thead class="bg-gray-50">
-                     <tr>
-                        <th class="w-8 px-1 py-1">Sel.</th>
-                        <th class="px-2 py-1 text-left font-medium text-gray-500">Produto</th>
-                        <th class="px-1 py-1 text-center font-medium text-gray-500">Filial</th>
-                        <th class="px-1 py-1 text-center font-medium text-gray-500">Saldo</th>
-                        <th class="px-2 py-1 text-center font-medium text-gray-500">Qtd. Entregar</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-                    ${data.itens.map(item => `
-                        <tr data-idavs-regi="${item.idavs_regi}">
-                            <td class="px-1 py-1 text-center"><input type="checkbox" class="modal-item-checkbox rounded border-gray-300 h-4 w-4 focus:ring-indigo-500"></td>
-                            <td class="px-2 py-1">${item.pd_nome} (${item.unidade})</td>
-                            <td class="px-1 py-1 text-center text-gray-500">${item.item_filial_codigo || '?'}</td>
-                            <td class="px-1 py-1 text-center font-semibold text-blue-600">${item.quantidade_saldo}</td>
-                            <td class="px-2 py-1 text-center">
-                                <input type="number" class="modal-item-qty w-16 text-center rounded border-gray-300 shadow-sm text-xs p-1 focus:border-indigo-500 focus:ring-indigo-500" value="0" min="0" max="${item.quantidade_saldo}">
-                            </td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        </div>
-    `).join('');
-}
-
-function handleModalFilialFilterChange() {
-    const selectedFilial = document.getElementById('modal-item-filial-filter').value;
-    // Re-renderiza a lista usando os dados já carregados (itemsForModal) e o filtro
-    renderItemsInModal(itemsForModal, selectedFilial);
-}
-
-function handleModalMasterCheckboxClick(event) {
-    const masterCheckbox = event.target.closest('.modal-master-checkbox');
-    if (!masterCheckbox) return;
-
-    const davGroup = masterCheckbox.closest('.modal-dav-group');
-    if (!davGroup) return;
-
-    const isChecked = masterCheckbox.checked;
-    // Seleciona/desseleciona todos os checkboxes de item DENTRO deste grupo de DAV
-    davGroup.querySelectorAll('.modal-item-checkbox').forEach(itemCheckbox => {
-        itemCheckbox.checked = isChecked;
-    });
-}
-
-async function handleConfirmAddItems() {
-    const button = document.getElementById('confirm-add-items-btn');
-    if (!currentRomaneioId) {
-        alert("Erro: ID do romaneio atual não definido.");
-        return;
-    }
-
-    const itensParaAdicionarPayload = []; // Array final para a API
-    let hasInvalidQuantity = false;
-    let itemsFound = false;
-
-    // Itera sobre TODOS os grupos de DAV no modal
-    document.querySelectorAll('#modal-items-list .modal-dav-group').forEach(davGroup => {
-        const davNumero = davGroup.dataset.davNumero;
-
-        // Itera sobre as linhas de itens DENTRO de cada grupo
-        davGroup.querySelectorAll('tbody tr').forEach(row => {
-            const checkbox = row.querySelector('.modal-item-checkbox');
-            const qtyInput = row.querySelector('.modal-item-qty');
-            if (!checkbox || !qtyInput) return;
-
-            const idavsRegi = row.dataset.idavsRegi;
-            const quantidade = parseFloat(qtyInput.value);
-            const saldoMax = parseFloat(qtyInput.max);
-
-            if (checkbox.checked && quantidade > 0) {
-                itemsFound = true;
-                if (quantidade > saldoMax) {
-                    alert(`Quantidade para o item ${idavsRegi} (DAV ${davNumero}) excede o saldo (${saldoMax}). Ajuste antes de continuar.`);
-                    qtyInput.style.borderColor = 'red';
-                    qtyInput.focus();
-                    hasInvalidQuantity = true;
-                    return; // Para forEach da linha
-                } else {
-                    qtyInput.style.borderColor = '';
-                }
-                itensParaAdicionarPayload.push({
-                    dav_numero: davNumero,
-                    idavs_regi: idavsRegi,
-                    quantidade_a_entregar: quantidade
-                });
-            } else if (checkbox.checked && quantidade <= 0) {
-                 alert(`A quantidade para o item ${idavsRegi} (DAV ${davNumero}) deve ser maior que zero se selecionado.`);
-                 qtyInput.style.borderColor = 'red';
-                 qtyInput.focus();
-                 hasInvalidQuantity = true;
-                 return;
-            } else {
-                 qtyInput.style.borderColor = '';
-            }
-        });
-        if (hasInvalidQuantity) return; // Para forEach do grupo
-    });
-
-    if (hasInvalidQuantity) return;
-
-    if (!itemsFound) {
-        alert("Nenhum item selecionado com quantidade maior que zero para adicionar.");
-        return;
-    }
-
-    showLoader();
-    button.disabled = true;
-    document.getElementById('cancel-add-items-btn').disabled = true; // Desabilita cancelar também
-
-    try {
-        // Usa a mesma rota POST /romaneios/:id/itens
-        const response = await fetch(`${apiUrlBase}/entregas/romaneios/${currentRomaneioId}/itens`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${getToken()}`
-            },
-            body: JSON.stringify(itensParaAdicionarPayload)
-        });
-
-        const result = await response.json();
-        if (!response.ok) {
-            throw new Error(result.error || 'Falha ao adicionar itens.');
-        }
-
-        alert(result.message);
-        // Fecha o modal
-        document.getElementById('add-items-to-romaneio-modal').classList.add('hidden');
-        // Recarrega a view detalhada para atualizar a lista de itens atuais
-        await showRomaneioDetailView(currentRomaneioId);
-        // Limpa a lista de DAVs elegíveis para forçar nova busca se necessário
-        document.getElementById('eligible-davs-list').innerHTML = '<p class="text-center text-gray-500 p-4">Use os filtros acima para buscar pedidos.</p>';
-
-    } catch (error) {
-        alert(`Erro: ${error.message}`);
-    } finally {
-        hideLoader();
-        button.disabled = false;
-        document.getElementById('cancel-add-items-btn').disabled = false;
-    }
-}
+// --- Lógica do MODAL de Adição de Itens ---
 
 async function handleOpenAddItemsModal() {
     const modal = document.getElementById('add-items-to-romaneio-modal');
-    const modalItemsList = document.getElementById('eligible-davs-list'); // Corrigido na última interação
+    const modalItemsList = document.getElementById('eligible-davs-list');
     const modalRomaneioIdSpan = document.getElementById('modal-romaneio-id');
     const filialFilterSelect = document.getElementById('modal-item-filial-filter');
 
@@ -1321,10 +836,10 @@ async function handleOpenAddItemsModal() {
     itemsForModal = []; // Limpa dados de itens anteriores
     currentEligibleDavs = []; // Limpa dados de DAVs anteriores
 
-    // Reseta os filtros do modal para os padrões solicitados
+    // Reseta os filtros do modal para os padrões
     document.getElementById('romaneio-filter-data').value = new Date().toISOString().split('T')[0];
-    document.getElementById('radio-data-entrega').checked = true; // Padrão "Entrega"
-    document.getElementById('romaneio-filter-entrega-marcada').checked = true; // Padrão "Marcado"
+    document.getElementById('radio-data-entrega').checked = true;
+    document.getElementById('romaneio-filter-entrega-marcada').checked = true;
     document.getElementById('romaneio-filter-bairro').value = '';
     document.getElementById('romaneio-filter-cidade').value = '';
     document.getElementById('romaneio-filter-dav').value = '';
@@ -1336,52 +851,46 @@ async function handleOpenAddItemsModal() {
 
     modal.classList.remove('hidden');
     
-    // Dispara a busca inicial com os filtros padrão dentro do modal
+    // Dispara a busca inicial com os filtros padrão
     await applyDavFiltersAndLoad(); 
 }
 
-/**
- * NOVA FUNÇÃO (Versão anterior): Limpa os filtros DENTRO DO MODAL.
- */
 function clearDavFilters() {
-    // Reseta filtros secundários (selects)
+    // Reseta filtros de texto
     document.getElementById('romaneio-filter-bairro').value = '';
     document.getElementById('romaneio-filter-cidade').value = '';
     document.getElementById('romaneio-filter-dav').value = '';
     
-    // Reseta filtros primários para os padrões
+    // Reseta para os padrões
     document.getElementById('romaneio-filter-entrega-marcada').checked = true;
     document.getElementById('radio-data-entrega').checked = true;
     document.getElementById('romaneio-filter-data').value = new Date().toISOString().split('T')[0];
     
-    // Dispara a busca com os filtros padrão resetados
     applyDavFiltersAndLoad();
 }
 
-/**
- * NOVA FUNÇÃO (Versão anterior): Busca DAVs elegíveis com base nos filtros DO MODAL.
- */
 async function applyDavFiltersAndLoad() {
     const listContainer = document.getElementById('eligible-davs-list');
     listContainer.innerHTML = '<p class="text-center text-gray-500 p-4">Buscando pedidos...</p>';
     showLoader();
-    currentEligibleDavs = []; // Limpa a lista anterior
-    itemsForModal = []; // Limpa os itens de modais anteriores
+    currentEligibleDavs = []; 
+    itemsForModal = [];
     populateModalFilialFilter(); // Limpa o filtro de filial de item
 
-    // Limpa filtros dinâmicos antigos antes de buscar novos dados
+    // Limpa filtros dinâmicos antigos
     populateDynamicFilters([], 'bairro');
     populateDynamicFilters([], 'cidade');
     populateDynamicFilters([], 'dav');
 
     const params = new URLSearchParams();
 
-    // Lê os valores dos filtros PRIMÁRIOS
+    // Lê os valores de TODOS os filtros do modal
     const data = document.getElementById('romaneio-filter-data').value;
     const apenasEntregaMarcada = document.getElementById('romaneio-filter-entrega-marcada').checked;
     const tipoData = document.querySelector('input[name="tipo-data-filter"]:checked').value;
-    
-    // Ignora Bairro, Cidade, DAV (serão usados localmente)
+    const bairro = document.getElementById('romaneio-filter-bairro').value;
+    const cidade = document.getElementById('romaneio-filter-cidade').value;
+    const davNumero = document.getElementById('romaneio-filter-dav').value;
 
     if (!data || !tipoData) {
         alert('Data e Tipo de Data são obrigatórios.');
@@ -1392,9 +901,11 @@ async function applyDavFiltersAndLoad() {
     params.append('data', data);
     params.append('tipoData', tipoData);
     if (apenasEntregaMarcada) params.append('apenasEntregaMarcada', 'true');
+    if (bairro) params.append('bairro', bairro);
+    if (cidade) params.append('cidade', cidade);
+    if (davNumero) params.append('davNumero', davNumero);
 
     try {
-        // Faz a requisição à API com os filtros primários
         const response = await fetch(`${apiUrlBase}/entregas/eligible-davs?${params.toString()}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
@@ -1403,14 +914,14 @@ async function applyDavFiltersAndLoad() {
              throw new Error(errorData.error || 'Falha ao buscar pedidos elegíveis.');
         }
 
-        currentEligibleDavs = await response.json(); // Armazena a lista completa retornada
+        currentEligibleDavs = await response.json(); 
 
         // Popula os <select> de Bairro, Cidade e DAV com base nos resultados
         populateDynamicFilters(currentEligibleDavs, 'bairro');
         populateDynamicFilters(currentEligibleDavs, 'cidade');
         populateDynamicFilters(currentEligibleDavs, 'dav');
 
-        // Renderiza a lista completa inicialmente
+        // Renderiza a lista de DAVs
         renderEligibleDavs(currentEligibleDavs);
 
     } catch (error) {
@@ -1420,9 +931,62 @@ async function applyDavFiltersAndLoad() {
     }
 }
 
-/**
- * NOVA FUNÇÃO (Versão anterior): Renderiza a lista de DAVs com checkboxes DENTRO DO MODAL.
- */
+function populateDynamicFilters(davs, filterType) {
+    let selectElement;
+    let dataKey;
+    let placeholder;
+
+    if (filterType === 'bairro') {
+        selectElement = document.getElementById('romaneio-filter-bairro');
+        dataKey = 'cr_ebai';
+        placeholder = 'Todos os Bairros';
+    } else if (filterType === 'cidade') {
+        selectElement = document.getElementById('romaneio-filter-cidade');
+        dataKey = 'cr_ecid';
+        placeholder = 'Todas as Cidades';
+    } else if (filterType === 'dav') {
+        selectElement = document.getElementById('romaneio-filter-dav');
+        dataKey = 'cr_ndav';
+        placeholder = 'Todos os DAVs';
+    } else {
+        return;
+    }
+
+    if (!selectElement) return;
+
+    const currentValue = selectElement.value;
+    const uniqueValues = [...new Set(davs.map(dav => dav[dataKey]))]
+                         .filter(value => value != null && value !== '')
+                         .sort((a, b) => String(a).localeCompare(String(b)));
+
+    selectElement.innerHTML = `<option value="">${placeholder}</option>`;
+    uniqueValues.forEach(value => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        selectElement.appendChild(option);
+    });
+
+    if (uniqueValues.includes(currentValue)) {
+        selectElement.value = currentValue;
+    }
+}
+
+function filterDisplayedDavs() {
+    const bairroFilter = document.getElementById('romaneio-filter-bairro').value;
+    const cidadeFilter = document.getElementById('romaneio-filter-cidade').value;
+    const davFilter = document.getElementById('romaneio-filter-dav').value;
+
+    const filteredDavs = currentEligibleDavs.filter(dav => {
+        const matchBairro = !bairroFilter || dav.cr_ebai === bairroFilter;
+        const matchCidade = !cidadeFilter || dav.cr_ecid === cidadeFilter;
+        const matchDav = !davFilter || dav.cr_ndav == davFilter;
+        return matchBairro && matchCidade && matchDav;
+    });
+
+    renderEligibleDavs(filteredDavs);
+}
+
 function renderEligibleDavs(davs) {
     const listContainer = document.getElementById('eligible-davs-list');
     if (!davs || davs.length === 0) {
@@ -1430,7 +994,6 @@ function renderEligibleDavs(davs) {
         return;
     }
 
-    // Gera o HTML para cada DAV na lista
     listContainer.innerHTML = davs.map(dav => `
         <div class="border rounded-md p-3 bg-gray-50/80 dav-container-eligible" data-dav-numero="${dav.cr_ndav}">
             <div class="flex justify-between items-center">
@@ -1446,15 +1009,13 @@ function renderEligibleDavs(davs) {
                 </button>
             </div>
             <div class="dav-items-container mt-3 pt-3 border-t border-gray-200 hidden">
+                {/* O conteúdo é carregado ao clicar em "Ver Itens" */}
             </div>
         </div>
     `).join('');
-    feather.replace(); // Garante que os ícones (chevron-down) sejam renderizados
+    feather.replace();
 }
 
-/**
- * NOVA FUNÇÃO (Versão anterior): Expande/recolhe um DAV DENTRO DO MODAL para mostrar seus itens.
- */
 async function handleToggleDavItems(event) {
     const button = event.target.closest('.toggle-items-btn');
     if (!button) return;
@@ -1466,7 +1027,6 @@ async function handleToggleDavItems(event) {
     const isHidden = itemsContainer.classList.contains('hidden');
 
     if (isHidden) {
-        // Expandir: Buscar e mostrar itens
         button.innerHTML = '<span data-feather="chevron-up" class="w-4 h-4"></span> Ocultar Itens';
         itemsContainer.classList.remove('hidden');
         itemsContainer.innerHTML = '<p class="text-center text-xs text-gray-400">Carregando itens...</p>';
@@ -1474,7 +1034,6 @@ async function handleToggleDavItems(event) {
         showLoader();
 
         try {
-            // Reutiliza a rota GET /dav/:numero
             const response = await fetch(`${apiUrlBase}/entregas/dav/${davNumero}`, {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
@@ -1484,18 +1043,17 @@ async function handleToggleDavItems(event) {
             }
             const davData = await response.json();
 
-            // Adiciona/atualiza os itens na variável global para o filtro de filial
             const itemsComSaldo = davData.itens.filter(item => item.quantidade_saldo > 0);
+            
             updateItemsForModal(itemsComSaldo.map(item => ({
                 ...item,
-                dav_numero: davData.dav_numero, // Garante que a info do DAV está no item
+                dav_numero: davData.dav_numero,
                 cliente_nome: davData.cliente.nome
             })));
 
             if (itemsComSaldo.length === 0) {
                 itemsContainer.innerHTML = '<p class="text-center text-xs text-orange-500">Nenhum item com saldo disponível neste pedido.</p>';
             } else {
-                // Renderiza a tabela de itens
                 itemsContainer.innerHTML = `
                     <table class="min-w-full text-xs mb-2">
                         <thead class="bg-gray-100">
@@ -1524,8 +1082,8 @@ async function handleToggleDavItems(event) {
                         </tbody>
                     </table>`;
             }
-            // Atualiza o filtro de filial do modal
             populateModalFilialFilter();
+            handleModalFilialFilterChange(); // Aplica o filtro
 
         } catch (error) {
             itemsContainer.innerHTML = `<p class="text-center text-xs text-red-500">${error.message}</p>`;
@@ -1534,49 +1092,39 @@ async function handleToggleDavItems(event) {
         }
 
     } else {
-        // Recolher: Esconder itens e remover da lista global
+        // Recolher
         button.innerHTML = '<span data-feather="chevron-down" class="w-4 h-4"></span> Ver Itens';
         itemsContainer.classList.add('hidden');
         itemsContainer.innerHTML = ''; // Limpa para forçar recarga
         feather.replace();
-        // Remove os itens deste DAV da lista global e atualiza o filtro
+        
         itemsForModal = itemsForModal.filter(item => item.dav_numero != davNumero);
         populateModalFilialFilter();
     }
 }
 
-/**
- * NOVA FUNÇÃO: Helper para adicionar/remover itens da lista global do modal.
- */
 function updateItemsForModal(newItems) {
-    // Remove itens antigos deste(s) DAV(s) para evitar duplicatas
     const davNumbers = [...new Set(newItems.map(i => i.dav_numero))];
     itemsForModal = itemsForModal.filter(item => !davNumbers.includes(item.dav_numero));
-    // Adiciona os novos itens
     itemsForModal.push(...newItems);
 }
 
-/**
- * NOVA FUNÇÃO: Popula o <select> de filial DENTRO DO MODAL com base nos itens carregados.
- */
 function populateModalFilialFilter() {
     const filialFilterSelect = document.getElementById('modal-item-filial-filter');
-    const currentValue = filialFilterSelect.value; // Salva o valor atual
+    const currentValue = filialFilterSelect.value; 
 
-    // Extrai filiais únicas dos itens ATUALMENTE carregados no modal
     const uniqueFiliais = [...new Set(itemsForModal.map(item => item.item_filial_codigo))]
-                          .filter(Boolean) // Remove nulos/undefined
+                          .filter(Boolean)
                           .sort();
 
-    filialFilterSelect.innerHTML = '<option value="">Todas as Filiais</option>'; // Reseta
+    filialFilterSelect.innerHTML = '<option value="">Todas as Filiais</option>';
     uniqueFiliais.forEach(filialCode => {
         const option = document.createElement('option');
         option.value = filialCode;
-        option.textContent = filialCode; // TODO: Mapear código para nome se desejar
+        option.textContent = filialCode;
         filialFilterSelect.appendChild(option);
     });
     
-    // Restaura o valor se ainda existir na nova lista
     if (uniqueFiliais.includes(currentValue)) {
         filialFilterSelect.value = currentValue;
     } else {
@@ -1584,27 +1132,19 @@ function populateModalFilialFilter() {
     }
 }
 
-/**
- * NOVA FUNÇÃO: Filtra os itens visíveis DENTRO DO MODAL pelo <select> de filial.
- */
 function handleModalFilialFilterChange() {
     const selectedFilial = document.getElementById('modal-item-filial-filter').value;
     
-    // Itera sobre todos os itens visíveis no modal
     document.querySelectorAll('#eligible-davs-list .dav-items-container:not(.hidden) tbody tr').forEach(row => {
         const itemFilial = row.dataset.itemFilialCodigo;
-        // Se um filtro está aplicado E o item não bate com o filtro, esconde
         if (selectedFilial && itemFilial !== selectedFilial) {
             row.style.display = 'none';
         } else {
-            row.style.display = 'table-row'; // Mostra (se filtro vazio ou se bate)
+            row.style.display = 'table-row';
         }
     });
 }
 
-/**
- * NOVA FUNÇÃO: Controla os checkboxes mestres DENTRO DO MODAL.
- */
 function handleMasterCheckboxClick(event) {
     const masterCheckbox = event.target.closest('.dav-master-checkbox');
     if (!masterCheckbox) return;
@@ -1613,41 +1153,43 @@ function handleMasterCheckboxClick(event) {
     if (!itemsContainer) return;
 
     const isChecked = masterCheckbox.checked;
-    // Encontra todos os checkboxes de item DENTRO deste container
     itemsContainer.querySelectorAll('.eligible-item-checkbox').forEach(itemCheckbox => {
         itemCheckbox.checked = isChecked;
     });
 }
 
-/**
- * NOVA FUNÇÃO (Renomeada): Coleta itens do modal e envia para a API.
- */
 async function handleConfirmAddItems() {
-    const button = document.getElementById('confirm-add-items-btn');
+    const button = document.getElementById('add-selected-items-to-romaneio-btn');
     if (!currentRomaneioId) {
         alert("Erro: ID do romaneio atual não definido.");
         return;
     }
 
-    const itensParaAdicionarPayload = []; // Array final para a API
+    const itensParaAdicionarPayload = [];
     let hasInvalidQuantity = false;
     let itemsFound = false;
-    const filialFilter = document.getElementById('modal-item-filial-filter').value; // Pega o filtro de filial
+    const filialFilter = document.getElementById('modal-item-filial-filter').value;
 
-    // Itera sobre todos os containers de DAV que estão visíveis (expandidos)
     document.querySelectorAll('#eligible-davs-list .dav-container-eligible').forEach(davContainer => {
+        // Verifica se o DAV PAI está selecionado
+        const davMasterCheckbox = davContainer.querySelector('.eligible-dav-checkbox');
+        if (!davMasterCheckbox || !davMasterCheckbox.checked) {
+            return; // Pula este DAV se o checkbox principal não estiver marcado
+        }
+
         const itemsContainer = davContainer.querySelector('.dav-items-container:not(.hidden)');
-        if (!itemsContainer) return; // Pula se DAV não está expandido
+        // Se o DAV está marcado mas os itens não foram carregados (não clicou em "Ver Itens")
+        if (!itemsContainer) {
+            // TODO: Decidir se queremos carregar automaticamente ou alertar o usuário.
+            // Por enquanto, vamos alertar.
+            console.warn(`DAV ${davContainer.dataset.davNumero} está selecionado, mas seus itens não foram carregados. Expanda-o para selecionar itens.`);
+            return; 
+        }
 
         const davNumero = davContainer.dataset.davNumero;
 
-        // Itera sobre as linhas de itens DENTRO de cada container
         itemsContainer.querySelectorAll('tbody tr').forEach(row => {
-            // Respeita o filtro de filial aplicado
-            const itemFilial = row.dataset.itemFilialCodigo;
-            const isVisibleByFilter = !filialFilter || itemFilial === filialFilter;
-
-            // Se a linha está escondida pelo filtro, ignora
+            const isVisibleByFilter = row.style.display !== 'none';
             if (!isVisibleByFilter) return;
 
             const checkbox = row.querySelector('.eligible-item-checkbox');
@@ -1665,7 +1207,7 @@ async function handleConfirmAddItems() {
                     qtyInput.style.borderColor = 'red';
                     qtyInput.focus();
                     hasInvalidQuantity = true;
-                    return; // Para forEach da linha
+                    return; 
                 } else {
                     qtyInput.style.borderColor = '';
                 }
@@ -1684,13 +1226,13 @@ async function handleConfirmAddItems() {
                  qtyInput.style.borderColor = '';
             }
         });
-        if (hasInvalidQuantity) return; // Para forEach do container
+        if (hasInvalidQuantity) return;
     });
 
     if (hasInvalidQuantity) return;
 
     if (!itemsFound) {
-        alert(`Nenhum item selecionado com quantidade maior que zero ${filialFilter ? `para a filial ${filialFilter}` : ''}.`);
+        alert(`Nenhum item válido selecionado. Verifique se os DAVs desejados estão marcados, se os itens estão expandidos e se as quantidades são maiores que zero ${filialFilter ? `para a filial ${filialFilter}` : ''}.`);
         return;
     }
 
@@ -1715,7 +1257,6 @@ async function handleConfirmAddItems() {
 
         alert(result.message);
         document.getElementById('add-items-to-romaneio-modal').classList.add('hidden');
-        // Recarrega a view detalhada para atualizar a lista de itens atuais
         await showRomaneioDetailView(currentRomaneioId);
 
     } catch (error) {
@@ -1727,12 +1268,52 @@ async function handleConfirmAddItems() {
     }
 }
 
-/**
- * NOVA FUNÇÃO (Helper): Popula selects (usada para o filtro principal de filial).
- */
+// ==========================================================
+//               FUNÇÕES AUXILIARES GERAIS
+// ==========================================================
+
+function showLoader() {
+    const loader = document.getElementById('global-loader');
+    if (loader) loader.style.display = 'flex';
+}
+
+function hideLoader() {
+    const loader = document.getElementById('global-loader');
+    if (loader) loader.style.display = 'none';
+}
+
+function gerenciarAcessoModulos() {
+    const userData = getUserData();
+    if (!userData || !userData.permissoes) {
+        console.error("Não foi possível obter as permissões do usuário.");
+        return;
+    }
+
+    const permissoesDoUsuario = userData.permissoes;
+    const mapaModulos = {
+        'lancamentos': 'despesas.html',
+        'logistica': 'logistica.html',
+        'entregas': 'entregas.html',
+        'checklist': 'checklist.html',
+        'produtos': 'produtos.html',
+        'configuracoes': 'settings.html'
+    };
+
+    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
+        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
+        
+        if (!permissao || !permissao.permitido) {
+            const link = document.querySelector(`#sidebar a[href="${href}"]`);
+            if (link && link.parentElement) {
+                link.parentElement.style.display = 'none';
+            }
+        }
+    }
+}
+
 async function popularSelect(selectElement, codParametro, token, placeholderText) {
     if (!selectElement) {
-        console.error("Elemento select não fornecido para popularSelect");
+        console.error("Elemento select não fornecido para popularSelect:", codParametro);
         return [];
     }
     try {
@@ -1760,254 +1341,22 @@ async function popularSelect(selectElement, codParametro, token, placeholderText
     }
 }
 
-/**
- * NOVA FUNÇÃO: Popula os <select> de Bairro, Cidade ou DAV com valores únicos.
- */
-function populateDynamicFilters(davs, filterType) {
-    let selectElement;
-    let dataKey;
-    let placeholder;
-
-    if (filterType === 'bairro') {
-        selectElement = document.getElementById('romaneio-filter-bairro');
-        dataKey = 'cr_ebai';
-        placeholder = 'Todos os Bairros';
-    } else if (filterType === 'cidade') {
-        selectElement = document.getElementById('romaneio-filter-cidade');
-        dataKey = 'cr_ecid';
-        placeholder = 'Todas as Cidades';
-    } else if (filterType === 'dav') {
-        selectElement = document.getElementById('romaneio-filter-dav');
-        dataKey = 'cr_ndav';
-        placeholder = 'Todos os DAVs';
+function handleApiError(response, isExport = false) {
+    if (response.status === 401 || response.status === 403) {
+        logout();
     } else {
-        return;
-    }
-
-    if (!selectElement) return;
-
-    // Salva o valor que estava selecionado
-    const currentValue = selectElement.value;
-
-    const uniqueValues = [...new Set(davs.map(dav => dav[dataKey]))]
-                         .filter(value => value != null && value !== '')
-                         .sort((a, b) => String(a).localeCompare(String(b)));
-
-    selectElement.innerHTML = `<option value="">${placeholder}</option>`;
-
-    uniqueValues.forEach(value => {
-        const option = document.createElement('option');
-        option.value = value;
-        option.textContent = value;
-        selectElement.appendChild(option);
-    });
-
-    // Tenta restaurar o valor anterior, se ele ainda existir
-    if (uniqueValues.includes(currentValue)) {
-        selectElement.value = currentValue;
-    }
-}
-
-/**
- * NOVA FUNÇÃO: Filtra a lista de DAVs JÁ EXIBIDA com base nos filtros secundários.
- */
-function filterDisplayedDavs() {
-    const bairroFilter = document.getElementById('romaneio-filter-bairro').value;
-    const cidadeFilter = document.getElementById('romaneio-filter-cidade').value;
-    const davFilter = document.getElementById('romaneio-filter-dav').value;
-
-    // Filtra a lista original (currentEligibleDavs) que foi retornada pela API
-    const filteredDavs = currentEligibleDavs.filter(dav => {
-        const matchBairro = !bairroFilter || dav.cr_ebai === bairroFilter;
-        const matchCidade = !cidadeFilter || dav.cr_ecid === cidadeFilter;
-        const matchDav = !davFilter || dav.cr_ndav == davFilter;
-        
-        return matchBairro && matchCidade && matchDav;
-    });
-
-    // Re-renderiza a lista na tela APENAS com os DAVs que passaram no filtro local
-    renderEligibleDavs(filteredDavs);
-}
-
-/**
- * NOVA FUNÇÃO: Helper para adicionar/remover itens da lista global do modal.
- */
-function updateItemsForModal(newItems) {
-    // Remove itens antigos deste(s) DAV(s) para evitar duplicatas
-    const davNumbers = [...new Set(newItems.map(i => i.dav_numero))];
-    itemsForModal = itemsForModal.filter(item => !davNumbers.includes(item.dav_numero));
-    // Adiciona os novos itens
-    itemsForModal.push(...newItems);
-}
-
-/**
- * NOVA FUNÇÃO: Popula o <select> de filial DENTRO DO MODAL com base nos itens carregados.
- */
-function populateModalFilialFilter() {
-    const filialFilterSelect = document.getElementById('modal-item-filial-filter');
-    const currentValue = filialFilterSelect.value; // Salva o valor atual
-
-    // Extrai filiais únicas dos itens ATUALMENTE carregados no modal
-    const uniqueFiliais = [...new Set(itemsForModal.map(item => item.item_filial_codigo))]
-                          .filter(Boolean) // Remove nulos/undefined
-                          .sort();
-
-    filialFilterSelect.innerHTML = '<option value="">Todas as Filiais</option>'; // Reseta
-    uniqueFiliais.forEach(filialCode => {
-        const option = document.createElement('option');
-        option.value = filialCode;
-        option.textContent = filialCode; // TODO: Mapear código para nome se desejar
-        filialFilterSelect.appendChild(option);
-    });
-    
-    // Restaura o valor se ainda existir na nova lista
-    if (uniqueFiliais.includes(currentValue)) {
-        filialFilterSelect.value = currentValue;
-    } else {
-        filialFilterSelect.value = "";
-    }
-}
-
-/**
- * NOVA FUNÇÃO: Filtra os itens visíveis DENTRO DO MODAL pelo <select> de filial.
- */
-function handleModalFilialFilterChange() {
-    const selectedFilial = document.getElementById('modal-item-filial-filter').value;
-    
-    // Itera sobre todos os itens visíveis no modal
-    document.querySelectorAll('#eligible-davs-list .dav-items-container:not(.hidden) tbody tr').forEach(row => {
-        const itemFilial = row.dataset.itemFilialCodigo;
-        // Se um filtro está aplicado E o item não bate com o filtro, esconde
-        if (selectedFilial && itemFilial !== selectedFilial) {
-            row.style.display = 'none';
-        } else {
-            row.style.display = 'table-row'; // Mostra (se filtro vazio ou se bate)
-        }
-    });
-}
-
-/**
- * NOVA FUNÇÃO: Controla os checkboxes mestres DENTRO DO MODAL.
- */
-function handleMasterCheckboxClick(event) {
-    const masterCheckbox = event.target.closest('.dav-master-checkbox');
-    if (!masterCheckbox) return;
-
-    const itemsContainer = masterCheckbox.closest('.dav-items-container');
-    if (!itemsContainer) return;
-
-    const isChecked = masterCheckbox.checked;
-    // Encontra todos os checkboxes de item DENTRO deste container
-    itemsContainer.querySelectorAll('.eligible-item-checkbox').forEach(itemCheckbox => {
-        itemCheckbox.checked = isChecked;
-    });
-}
-
-/**
- * NOVA FUNÇÃO: Coleta itens do modal e envia para a API.
- */
-async function handleConfirmAddItems() {
-    const button = document.getElementById('add-selected-items-to-romaneio-btn');
-    if (!currentRomaneioId) {
-        alert("Erro: ID do romaneio atual não definido.");
-        return;
-    }
-
-    const itensParaAdicionarPayload = []; // Array final para a API
-    let hasInvalidQuantity = false;
-    let itemsFound = false;
-    const filialFilter = document.getElementById('modal-item-filial-filter').value; // Pega o filtro de filial
-
-    // Itera sobre todos os containers de DAV que estão visíveis (expandidos)
-    document.querySelectorAll('#eligible-davs-list .dav-container-eligible').forEach(davContainer => {
-        const itemsContainer = davContainer.querySelector('.dav-items-container:not(.hidden)');
-        if (!itemsContainer) return; // Pula se DAV não está expandido
-
-        const davNumero = davContainer.dataset.davNumero;
-
-        // Itera sobre as linhas de itens DENTRO de cada container
-        itemsContainer.querySelectorAll('tbody tr').forEach(row => {
-            // Respeita o filtro de filial aplicado
-            const itemFilial = row.dataset.itemFilialCodigo;
-            // A linha só é processada se estiver visível (display != 'none')
-            const isVisibleByFilter = row.style.display !== 'none';
-
-            // Se a linha está escondida pelo filtro, ignora
-            if (!isVisibleByFilter) return;
-
-            const checkbox = row.querySelector('.eligible-item-checkbox');
-            const qtyInput = row.querySelector('.eligible-item-qty');
-            if (!checkbox || !qtyInput) return;
-
-            const idavsRegi = row.dataset.idavsRegi;
-            const quantidade = parseFloat(qtyInput.value);
-            const saldoMax = parseFloat(qtyInput.max);
-
-            if (checkbox.checked && quantidade > 0) {
-                itemsFound = true;
-                if (quantidade > saldoMax) {
-                    alert(`Quantidade para o item ${idavsRegi} (DAV ${davNumero}) excede o saldo (${saldoMax}). Ajuste antes de continuar.`);
-                    qtyInput.style.borderColor = 'red';
-                    qtyInput.focus();
-                    hasInvalidQuantity = true;
-                    return; // Para forEach da linha
-                } else {
-                    qtyInput.style.borderColor = '';
-                }
-                itensParaAdicionarPayload.push({
-                    dav_numero: davNumero,
-                    idavs_regi: idavsRegi,
-                    quantidade_a_entregar: quantidade
-                });
-            } else if (checkbox.checked && quantidade <= 0) {
-                 alert(`A quantidade para o item ${idavsRegi} (DAV ${davNumero}) deve ser maior que zero se selecionado.`);
-                 qtyInput.style.borderColor = 'red';
-                 qtyInput.focus();
-                 hasInvalidQuantity = true;
-                 return;
+        response.json().then(errorData => {
+            const message = `Erro na API: ${errorData.error || response.statusText}`;
+            if (!isExport) {
+                 const resultsContainer = document.getElementById('dav-results-container');
+                 if (resultsContainer) {
+                    resultsContainer.innerHTML = `<p class="text-center p-8 text-red-500">${message}</p>`;
+                 }
             } else {
-                 qtyInput.style.borderColor = '';
+                alert(message);
             }
+        }).catch(() => {
+            alert('Ocorreu um erro inesperado na API.');
         });
-        if (hasInvalidQuantity) return; // Para forEach do container
-    });
-
-    if (hasInvalidQuantity) return;
-
-    if (!itemsFound) {
-        alert(`Nenhum item selecionado com quantidade maior que zero ${filialFilter ? `para a filial ${filialFilter}` : ''}.`);
-        return;
-    }
-
-    showLoader();
-    button.disabled = true;
-    document.getElementById('cancel-add-items-btn').disabled = true;
-
-    try {
-        const response = await fetch(`${apiUrlBase}/entregas/romaneios/${currentRomaneioId}/itens`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${getToken()}`
-            },
-            body: JSON.stringify(itensParaAdicionarPayload)
-        });
-
-        const result = await response.json();
-        if (!response.ok) {
-            throw new Error(result.error || 'Falha ao adicionar itens.');
-        }
-
-        alert(result.message);
-        document.getElementById('add-items-to-romaneio-modal').classList.add('hidden');
-        // Recarrega a view detalhada para atualizar a lista de itens atuais
-        await showRomaneioDetailView(currentRomaneioId);
-
-    } catch (error) {
-        alert(`Erro: ${error.message}`);
-    } finally {
-        hideLoader();
-        button.disabled = false;
-        document.getElementById('cancel-add-items-btn').disabled = false;
     }
 }

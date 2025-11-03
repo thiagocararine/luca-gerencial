@@ -33,7 +33,7 @@
         .history-row { display: none; }
         .history-row.expanded { display: table-row; }
         
-        /* Removemos as regras .tab-content e .tab-content.active daqui */
+        /* Regras CSS conflitantes .tab-content foram REMOVIDAS daqui */
     </style>
 </head>
 <body class="h-full">
@@ -125,7 +125,7 @@
                                         </select>
                                 </div>
                                 <button id="romaneio-main-filter-btn" class="action-btn bg-blue-600 hover:bg-blue-700 w-full sm:w-auto flex items-center justify-center gap-1">
-                                    <span data-feather="search" class="w-4 h-4"></span>Buscar
+                                    <span data-feather="search" class="w-4 h-4"></span>Filtrar
                                 </button>
                             </div>
                         </div>
@@ -174,7 +174,7 @@
                             <h4 class="font-semibold text-gray-800">Itens Atuais no Romaneio</h4>
                             <div id="current-romaneio-items-container" class="space-y-4">
                                  <p class="text-center text-gray-500 p-4">Nenhum item adicionado a este romaneio ainda.</p>
-                            </div>
+                                 </div>
                         </div>
                     </div>
                 </div>
@@ -267,7 +267,7 @@
                 <label for="modal-item-filial-filter" class="block text-sm font-medium text-gray-700">Filtrar Itens por Filial de Origem:</label>
                 <select id="modal-item-filial-filter" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
                     <option value="">Todas as Filiais</option>
-                </select>
+                    </select>
             </div>
             
             <div id="eligible-davs-list" class="space-y-3 max-h-64 overflow-y-auto border rounded-md p-2 bg-gray-50/50">
@@ -282,8 +282,9 @@
     </div>
 </div>
 
+
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script src="entregas.js?v=1.4" defer></script>
+<script src="entregas.js?v=1.5" defer></script>
 <script>
     // Script da Sidebar (para colapsar/expandir e menu mobile)
     document.addEventListener('DOMContentLoaded', () => {

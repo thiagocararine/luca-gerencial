@@ -13,10 +13,14 @@ const dbConfigSei = {
     charset: 'utf8mb4'
 };
 
-// --- OTIMIZAÇÃO: Criação de Pools de Conexão ---
+// --- Pools de Conexão ---
 const seiPool = mysql.createPool(dbConfigSei);
 const gerencialPool = mysql.createPool(dbConfig);
 
+
+// ==========================================================
+//               FUNÇÕES AUXILIARES
+// ==========================================================
 
 /**
  * Função para extrair o usuário do campo it_entr.
@@ -32,7 +36,7 @@ function parseUsuarioLiberacao(it_entr) {
 }
 
 /**
- * Função para ler o campo de texto it_reti e somar as quantidades retiradas.
+ * Função para ler o campo de texto it_reti e somar as quantidades retiradas (LEGADO).
  */
 function parseRetiradasAnteriores(it_reti) {
     if (!it_reti || typeof it_reti !== 'string') {
@@ -49,35 +53,54 @@ function parseRetiradasAnteriores(it_reti) {
 }
 
 
+/**
+ * FUNÇÃO DE CÁLCULO DE SALDO - VERSÃO FINAL CORRETA
+ * Calcula o saldo disponível de um item.
+ */
 function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem) {
     const quantidadeTotalPedido = parseFloat(itemErp.it_quan) || 0;
     const totalEntregueBruto = parseFloat(itemErp.it_qent) || 0; // Total que já saiu
     const totalDevolvido = parseFloat(itemErp.it_qtdv) || 0;    // Total que já voltou
 
-    // LÓGICA FINAL E SIMPLIFICADA:
     // 1. Calcula o que está efetivamente com o cliente (Entregue Líquido).
+    // Fórmula: (Total que Saiu) - (Total que Voltou)
     const entregueLiquido = totalEntregueBruto - totalDevolvido;
 
-    // Soma qualquer quantidade que esteja em rota de entrega pelo nosso app.
+    // 2. Soma qualquer quantidade que esteja alocada em *outros* romaneios no nosso app
     const totalEmRomaneioApp = parseFloat(entregaRomaneioDoItem?.total) || 0;
-
-    // O total indisponível é a soma do que está com o cliente mais o que está em rota.
-    const totalIndisponivel = entregueLiquido + totalEmRomaneioApp;
     
-    // 2. O saldo a retirar é o total do pedido menos o que está indisponível.
+    // 3. Soma retiradas manuais do nosso app (caso não reflitam em it_qent imediatamente)
+    // NOTA: Se a retirada manual JÁ atualiza it_qent, esta linha pode ser redundante, mas
+    // a mantemos para consistência com a busca original.
+    const totalRetiradaManualApp = parseFloat(retiradaManualDoItem?.total) || 0;
+
+
+    // 4. O total indisponível é a soma do que está com o cliente + o que está em rota + o que foi retirado manualmente.
+    // Ajuste: Se a retirada manual já atualiza o it_qent, o totalIndisponivel deve ser apenas (entregueLiquido + totalEmRomaneioApp)
+    // Vamos usar a lógica mais segura que reflete a subtração da devolução:
+    const totalIndisponivel = entregueLiquido + totalEmRomaneioApp + totalRetiradaManualApp;
+    
+    // 5. O saldo a retirar é o total do pedido menos o que está indisponível.
     const saldo = quantidadeTotalPedido - totalIndisponivel;
 
     return {
         saldo: Math.max(0, saldo), 
-        entregue: Math.max(0, totalIndisponivel) // Garante que o valor exibido não seja negativo
+        entregue: Math.max(0, entregueLiquido + totalEmRomaneioApp + totalRetiradaManualApp) // Garante que o valor exibido não seja negativo
     };
 }
 
-// Rota principal para buscar dados de um DAV (REATORADA PARA PERFORMANCE E ROBUSTEZ)
+// ==========================================================
+//               ROTAS DE RETIRADA RÁPIDA (BALCÃO)
+// ==========================================================
+
+/**
+ * Rota GET /dav/:numero
+ * Busca dados de um DAV, aplicando filtro de filial e incluindo 'it_inde' nos itens.
+ */
 router.get('/dav/:numero', authenticateToken, async (req, res) => {
     const davNumberStr = req.params.numero;
     const davNumber = parseInt(davNumberStr, 10);
-    const { unidade: filialUsuario } = req.user; // Pega a filial do usuário logado
+    const { unidade: filialUsuario } = req.user;
 
     if (isNaN(davNumber)) {
         return res.status(400).json({ error: 'Número do DAV inválido.' });
@@ -90,15 +113,13 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             'Piabetá': 'VMNAF',
             'Parada Angélica': 'TNASC',
             'Nova Campinas': 'LCMAT'
-            // Adicione outras filiais aqui se necessário
         };
 
-        // Lógica de permissão de filial (Robusta)
         const adminFiliais = ['escritorio', 'escritório (lojas)'];
         const filialUsuarioNormalizada = filialUsuario ? filialUsuario.trim().toLowerCase() : '';
         const needsFilialFilter = !adminFiliais.includes(filialUsuarioNormalizada);
 
-        // Busca dados do cabeçalho do DAV
+        // 1. Busca dados do cabeçalho do DAV (cdavs)
         let davQuery = `
             SELECT 
                 c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, 
@@ -117,16 +138,16 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         if (needsFilialFilter) {
             const filialCode = filialMap[filialUsuario];
             if (!filialCode) {
-                console.warn(`[SECURITY] Usuário da filial "${filialUsuario}" (não mapeada ou sem permissão total) tentou acesso. Acesso negado.`);
+                console.warn(`[SECURITY] Usuário da filial "${filialUsuario}" (não mapeada) tentou acesso. Acesso negado.`);
                 return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado ou acesso não permitido para sua filial.` });
             }
             davQuery += ' AND c.cr_inde = ?';
             queryParams.push(filialCode);
         } else {
-             console.log(`[LOG] Usuário da filial "${filialUsuario}" tem acesso irrestrito. Nenhum filtro de filial aplicado.`);
+             console.log(`[LOG] Usuário da filial "${filialUsuario}" tem acesso irrestrito.`);
         }
 
-        console.log('[LOG] Passo 1: Buscando dados do DAV na tabela cdavs...');
+        console.log('[LOG] Passo 1: Buscando dados do DAV (cdavs)...');
         const [davs] = await seiPool.execute(davQuery, queryParams);
 
         if (davs.length === 0) {
@@ -134,13 +155,12 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         }
         const davData = davs[0];
 
-        // Verificação de orçamento
+        // Verificação de Orçamento
         if (davData.cr_tipo != 1) {
             return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
         }
-        // Verificação de status 'recebido' foi removida daqui intencionalmente
+        // (Verificação de 'cr_reca' removida daqui para permitir busca pelo modal)
 
-        // Funções helper de formatação
         const combineDateTime = (date, time) => {
             if (!date || (typeof date === 'string' && date.startsWith('0000-00-00'))) return null;
             const dateObject = new Date(date);
@@ -150,6 +170,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             return new Date(`${datePart}T${validTime}`);
         };
 
+        // 2. Monta o objeto de resposta principal
         const nfemParts = (davData.cr_nfem || '').split(' ');
         const fiscalInfo = {
             data_emissao: nfemParts[0] && nfemParts[1] ? combineDateTime(nfemParts[0], nfemParts[1]) : null,
@@ -165,7 +186,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             usuario: davData.cr_usac
         };
 
-        // Monta o objeto de resposta principal
         const responseData = {
             dav_numero: davData.cr_ndav,
             data_hora_pedido: combineDateTime(davData.cr_edav, davData.cr_hdav),
@@ -191,13 +211,13 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             itens: []
         };
 
-        // Se o pedido não estiver "Recebido", não adianta buscar itens para retirada/romaneio
+        // 3. Se o pedido não estiver "Recebido", não busca itens
         if (davData.cr_reca !== '1') {
             console.log(`[LOG] Pedido ${davNumber} com status '${davData.cr_reca}'. Não buscará itens.`);
             return res.json(responseData);
         }
         
-        console.log(`[LOG] Pedido ${davNumber} recebido. Buscando itens...`);
+        console.log(`[LOG] Pedido ${davNumber} recebido. Buscando itens (idavs)...`);
         
         const historicoQuery = `
             (SELECT e.idavs_regi, e.data_retirada as data, e.quantidade_retirada as quantidade, u.nome_user COLLATE utf8mb4_unicode_ci as responsavel, 'Retirada no Balcão' as tipo
@@ -211,10 +231,9 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
              WHERE ri.dav_numero = ?)
              ORDER BY data DESC`;
 
-        // Busca dados dos itens e históricos em paralelo
+        // 4. Busca dados dos itens e históricos
         const allResults = await Promise.all([
             seiPool.execute(
-                // --- ALTERAÇÃO AQUI: Adicionado it_inde ---
                 `SELECT it_regist, it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti, it_inde 
                  FROM idavs 
                  WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`,
@@ -231,16 +250,13 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             gerencialPool.execute(historicoQuery, [davNumber, davNumber])
         ]);
 
-        const itensDav = allResults[0][0];
-        const retiradasManuais = allResults[1][0];
-        const entregasRomaneio = allResults[2][0];
-        const historicoCompleto = allResults[3][0];
+        const [itensDav, retiradasManuais, entregasRomaneio, historicoCompleto] = [allResults[0][0], allResults[1][0], allResults[2][0], allResults[3][0]];
 
         if (itensDav.length === 0) {
             return res.status(404).json({ error: 'Nenhum item válido encontrado para este pedido.' });
         }
         
-        // Processa cada item para calcular saldos
+        // 5. Processa cada item e calcula saldos
         const itensComSaldo = [];
         for (const item of itensDav) {
             const idavsRegi = item.it_regist;
@@ -249,7 +265,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             const { saldo, entregue } = calcularSaldosItem(item, retiradaManualDoItem, entregaRomaneioDoItem);
             const historicoDoItem = historicoCompleto.filter(h => h.idavs_regi == idavsRegi);
 
-            // --- ALTERAÇÃO AQUI: Adicionado item_filial_codigo ---
             itensComSaldo.push({
                 idavs_regi: idavsRegi,
                 pd_codi: item.it_codi,
@@ -260,7 +275,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 quantidade_saldo: saldo,
                 quantidade_devolvida: parseFloat(item.it_qtdv) || 0,
                 quantidade_entregue_bruta: parseFloat(item.it_qent) || 0,
-                item_filial_codigo: item.it_inde, // <-- CAMPO ADICIONADO
+                item_filial_codigo: item.it_inde, // <-- Campo da filial do item
                 responsavel_caixa: parseUsuarioLiberacao(item.it_entr),
                 historico: historicoDoItem
             });
@@ -280,7 +295,11 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
     }
 });
 
-// Rota para registrar uma retirada manual de produtos
+
+/**
+ * Rota POST /retirada-manual
+ * Registra uma retirada rápida no balcão, com transações.
+ */
 router.post('/retirada-manual', authenticateToken, async (req, res) => {
     const { dav_numero: davNumeroStr, itens } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
@@ -301,8 +320,14 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
 
         for (const item of itens) {
             const idavsRegiNum = parseInt(item.idavs_regi, 10);
+            const quantidadeRetiradaNum = parseFloat(item.quantidade_retirada);
 
-            const [itemErpParaSaldoRows] = await seiPool.execute(`SELECT * FROM idavs WHERE it_regist = ?`, [idavsRegiNum]);
+            if (isNaN(idavsRegiNum) || isNaN(quantidadeRetiradaNum) || quantidadeRetiradaNum <= 0) {
+                throw new Error(`Dados inválidos para o item ${item.pd_nome}.`);
+            }
+
+            // --- Validação de Saldo (Repetida aqui por segurança) ---
+            const [itemErpParaSaldoRows] = await seiPool.execute(`SELECT it_regist, it_quan, it_qent, it_qtdv, it_nome FROM idavs WHERE it_regist = ? FOR UPDATE`, [idavsRegiNum]);
             if(itemErpParaSaldoRows.length === 0) {
                 throw new Error(`Item ${item.pd_nome} (ID: ${idavsRegiNum}) não encontrado no ERP.`);
             }
@@ -317,24 +342,28 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
                 entregaRomaneioParaSaldo[0]
             );
 
-            if (item.quantidade_retirada > saldo) {
-                throw new Error(`Saldo insuficiente para o item ${item.pd_nome}. Saldo disponível: ${saldo}.`);
+            if (quantidadeRetiradaNum > saldo) {
+                throw new Error(`Saldo insuficiente para o item ${itemErpParaSaldo.it_nome}. Saldo disponível: ${saldo}, Tentando retirar: ${quantidadeRetiradaNum}.`);
             }
+            // --- Fim Validação de Saldo ---
 
+            // 1. Insere log no banco Gerencial
             const [logResult] = await gerencialConnection.execute(
                 `INSERT INTO entregas_manuais_log (dav_numero, idavs_regi, quantidade_retirada, id_usuario_conferencia) VALUES (?, ?, ?, ?)`,
-                [dav_numero, idavsRegiNum, item.quantidade_retirada, userId]
+                [dav_numero, idavsRegiNum, quantidadeRetiradaNum, userId]
             );
             const newLogId = logResult.insertId;
             logsCriados.push(newLogId);
             
+            // 2. Atualiza o campo numérico 'it_qent' no ERP
             await seiConnection.execute(
                 `UPDATE idavs SET it_qent = it_qent + ? WHERE it_regist = ?`,
-                [item.quantidade_retirada, idavsRegiNum]
+                [quantidadeRetiradaNum, idavsRegiNum]
             );
 
+            // 3. Atualiza o campo de log de texto 'it_reti' no ERP
             const [itemErpRows] = await seiConnection.execute(
-                `SELECT it_reti, it_codi, it_nome, it_unid, it_quan FROM idavs WHERE it_regist = ? FOR UPDATE`,
+                `SELECT it_reti, it_codi, it_nome, it_unid, it_quan FROM idavs WHERE it_regist = ?`,
                 [idavsRegiNum]
             );
             
@@ -348,9 +377,9 @@ Codigo....: ${itemErp.it_codi}
 Descrição.: ${itemErp.it_nome}
 Quantidade: ${parseFloat(itemErp.it_quan)}
 Unidade...: ${itemErp.it_unid}
-QT Entrega: ${item.quantidade_retirada}
+QT Entrega: ${quantidadeRetiradaNum}
 Saldo.....: Baixa via App Gerencial
-Retirada..: ${item.quantidade_retirada}
+Retirada..: ${quantidadeRetiradaNum}
 Lançamento: App Gerencial ID ${newLogId}
 Portador..: App
 Retirado..: Retirada no Balcão via App`;
@@ -362,21 +391,25 @@ Retirado..: Retirada no Balcão via App`;
                 [textoFinal, idavsRegiNum]
             );
 
+            // 4. Marca o log no Gerencial como sucesso
             await gerencialConnection.execute(
                 `UPDATE entregas_manuais_log SET erp_writeback_status = 'Sucesso' WHERE id = ?`,
                 [newLogId]
             );
         }
 
+        // Se tudo deu certo, commita as transações
         await gerencialConnection.commit();
         await seiConnection.commit();
 
         res.status(201).json({ message: 'Retirada registrada e atualizada no ERP com sucesso!' });
 
     } catch (error) {
+        // Se algo deu errado, faz rollback
         await gerencialConnection.rollback();
         await seiConnection.rollback();
         
+        // Marca os logs que tentaram ser criados como 'Falha'
         if (logsCriados.length > 0) {
             const updatePromises = logsCriados.map(logId => 
                 gerencialPool.execute(`UPDATE entregas_manuais_log SET erp_writeback_status = 'Falha' WHERE id = ?`, [logId])
@@ -385,14 +418,20 @@ Retirado..: Retirada no Balcão via App`;
         }
 
         console.error("Erro ao registrar retirada manual:", error);
-        res.status(500).json({ error: error.message || 'Erro interno ao salvar a retirada.' });
+        res.status(error.message.includes('Saldo insuficiente') ? 400 : 500).json({ error: error.message || 'Erro interno ao salvar a retirada.' });
     } finally {
         gerencialConnection.release();
         seiConnection.release();
     }
 });
 
-// --- ENDPOINTS DE ROMANEIO ---
+// ==========================================================
+//               ROTAS DE GESTÃO DE ROMANEIOS
+// ==========================================================
+
+/**
+ * Rota GET /veiculos-disponiveis
+ */
 router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
     try {
         const [veiculos] = await gerencialPool.execute(
@@ -405,10 +444,12 @@ router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
     }
 });
 
+/**
+ * Rota GET /romaneios (ATUALIZADA)
+ * Lista os romaneios, aplicando o filtro principal de filial.
+ */
 router.get('/romaneios', authenticateToken, async (req, res) => {
-    // Adiciona 'filial' aos parâmetros de query
-    const { status, filial } = req.query;
-    // Pega a filial do usuário logado
+    const { status, filial } = req.query; // 'filial' é o novo parâmetro
     const { unidade: filialUsuario } = req.user;
 
     try {
@@ -421,31 +462,25 @@ router.get('/romaneios', authenticateToken, async (req, res) => {
         const params = [];
         const conditions = [];
 
-        // 1. Adiciona filtro de status (ex: "Em montagem")
         if (status) {
             conditions.push('r.status = ?');
             params.push(status);
         }
 
-        // 2. Lógica de filtro de filial (ATUALIZADA)
         const adminFiliais = ['escritorio', 'escritório (lojas)'];
         const filialUsuarioNormalizada = filialUsuario ? filialUsuario.trim().toLowerCase() : '';
         const isUsuarioAdmin = adminFiliais.includes(filialUsuarioNormalizada);
 
         if (isUsuarioAdmin) {
-            // Usuário admin: se ele enviou um filtro de filial, usa-o
             if (filial) {
                 conditions.push('r.filial_origem = ?');
                 params.push(filial);
             }
-            // Se ele não enviou filtro (filial = ""), não faz nada (vê todas)
         } else {
-            // Usuário comum: força o filtro para a própria filial
             conditions.push('r.filial_origem = ?');
-            params.push(filialUsuario); // Usa o nome da filial do token (ex: "Santa Cruz da Serra")
+            params.push(filialUsuario); 
         }
 
-        // Monta a cláusula WHERE
         if (conditions.length > 0) {
             query += ' WHERE ' + conditions.join(' AND ');
         }
@@ -460,17 +495,21 @@ router.get('/romaneios', authenticateToken, async (req, res) => {
     }
 });
 
+/**
+ * Rota POST /romaneios (ATUALIZADA)
+ * Cria um novo romaneio, salvando a 'filial_origem'.
+ */
 router.post('/romaneios', authenticateToken, async (req, res) => {
     const { id_veiculo, nome_motorista } = req.body;
-    const { userId } = req.user;
+    const { userId, unidade: filialUsuario } = req.user; // Pega o ID e a FILIAL do token
 
     if (!id_veiculo || !nome_motorista) {
         return res.status(400).json({ error: 'Veículo e nome do motorista são obrigatórios.' });
     }
     try {
         const [result] = await gerencialPool.execute(
-            'INSERT INTO romaneios (id_veiculo, nome_motorista, id_usuario_criacao) VALUES (?, ?, ?)',
-            [id_veiculo, nome_motorista, userId]
+            'INSERT INTO romaneios (id_veiculo, nome_motorista, id_usuario_criacao, filial_origem) VALUES (?, ?, ?, ?)',
+            [id_veiculo, nome_motorista, userId, filialUsuario]
         );
         res.status(201).json({ message: "Romaneio criado com sucesso!", romaneioId: result.insertId });
     } catch (error) {
@@ -479,94 +518,197 @@ router.post('/romaneios', authenticateToken, async (req, res) => {
     }
 });
 
+/**
+ * Rota GET /eligible-davs (ATUALIZADA)
+ * Busca DAVs elegíveis para o modal, com todos os filtros.
+ */
+router.get('/eligible-davs', authenticateToken, async (req, res) => {
+    const { data, tipoData, apenasEntregaMarcada, bairro, cidade, davNumero } = req.query;
+    const { unidade: filialUsuario } = req.user;
+
+    if (!data || !tipoData) {
+        return res.status(400).json({ error: "Os filtros de data e tipo de data são obrigatórios." });
+    }
+    if (tipoData !== 'recebimento' && tipoData !== 'entrega') {
+        return res.status(400).json({ error: "O tipo de data deve ser 'recebimento' ou 'entrega'." });
+    }
+
+    try {
+        const filialMap = {
+            'Santa Cruz da Serra': 'LUCAM',
+            'Piabetá': 'VMNAF',
+            'Parada Angélica': 'TNASC',
+            'Nova Campinas': 'LCMAT'
+        };
+        const adminFiliais = ['escritorio', 'escritório (lojas)'];
+        const filialUsuarioNormalizada = filialUsuario ? filialUsuario.trim().toLowerCase() : '';
+        const needsFilialFilter = !adminFiliais.includes(filialUsuarioNormalizada);
+
+        const dateColumn = tipoData === 'entrega' ? 'c.cr_entr' : 'c.cr_erec';
+
+        let query = `
+            SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde
+            FROM cdavs c
+            JOIN idavs i ON c.cr_ndav = i.it_ndav
+            WHERE c.cr_reca = '1'               -- Status Recebido
+              AND DATE(${dateColumn}) = ?       -- Filtro pela data e coluna escolhida
+              AND (i.it_quan - (i.it_qent - i.it_qtdv)) > 0 -- Garante saldo em algum item
+        `;
+        const params = [data];
+
+        if (apenasEntregaMarcada === 'true') {
+            query += ` AND c.cr_entr != '0000-00-00'`;
+        }
+
+        if (bairro) { query += ' AND c.cr_ebai LIKE ?'; params.push(`%${bairro}%`); }
+        if (cidade) { query += ' AND c.cr_ecid LIKE ?'; params.push(`%${cidade}%`); }
+        if (davNumero) { query += ' AND CAST(c.cr_ndav AS UNSIGNED) = ?'; params.push(parseInt(davNumero, 10)); }
+
+        if (needsFilialFilter) {
+            const filialCode = filialMap[filialUsuario];
+            if (!filialCode) {
+                console.warn(`[ELIGIBLE DAVs] Usuário da filial "${filialUsuario}" não mapeada.`);
+                return res.json([]);
+            }
+            query += ' AND c.cr_inde = ?';
+            params.push(filialCode);
+        }
+
+        query += ' ORDER BY c.cr_ebai, c.cr_nmcl';
+
+        console.log(`[ELIGIBLE DAVs] Executing query: ${query.replace(/\s+/g, ' ')} with params: ${JSON.stringify(params)}`);
+        const [davs] = await seiPool.execute(query, params);
+        res.json(davs);
+
+    } catch (error) {
+        console.error("Erro ao buscar DAVs elegíveis:", error);
+        res.status(500).json({ error: 'Erro interno ao buscar DAVs.' });
+    }
+});
 
 /**
- * Rota para adicionar itens de um DAV a um romaneio existente.
- * Body esperado: { dav_numero: "12345", itens: [{ idavs_regi: 1, quantidade_a_entregar: 2 }, ...] }
+ * Rota GET /romaneios/:id (ATUALIZADA)
+ * Busca detalhes de um romaneio, incluindo itens com nome do cliente.
+ */
+router.get('/romaneios/:id', authenticateToken, async (req, res) => {
+    const romaneioId = parseInt(req.params.id, 10);
+    if (isNaN(romaneioId)) {
+        return res.status(400).json({ error: 'ID do Romaneio inválido.' });
+    }
+
+    try {
+        const [romaneioDetails] = await gerencialPool.execute(
+            `SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, r.status,
+                    v.modelo as modelo_veiculo, v.placa as placa_veiculo
+             FROM romaneios r
+             JOIN veiculos v ON r.id_veiculo = v.id
+             WHERE r.id = ?`,
+            [romaneioId]
+        );
+
+        if (romaneioDetails.length === 0) {
+            return res.status(404).json({ error: 'Romaneio não encontrado.' });
+        }
+        const romaneioData = romaneioDetails[0];
+
+        const [items] = await gerencialPool.execute(
+            `SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar,
+                    idavs_sei.it_nome as produto_nome, idavs_sei.it_unid as produto_unidade,
+                    cdavs_sei.cr_nmcl as cliente_nome
+             FROM romaneio_itens ri
+             LEFT JOIN ${dbConfigSei.database}.idavs idavs_sei ON ri.idavs_regi = idavs_sei.it_regist
+             LEFT JOIN ${dbConfigSei.database}.cdavs cdavs_sei ON ri.dav_numero = cdavs_sei.cr_ndav
+             WHERE ri.id_romaneio = ?
+             ORDER BY ri.dav_numero ASC, idavs_sei.it_nome ASC`,
+            [romaneioId]
+        );
+
+        res.json({ ...romaneioData, itens: items });
+
+    } catch (error) {
+        console.error(`Erro ao buscar detalhes do romaneio ${romaneioId}:`, error);
+        res.status(500).json({ error: 'Erro interno ao buscar detalhes do romaneio.' });
+    }
+});
+
+/**
+ * Rota POST /romaneios/:id/itens (ATUALIZADA)
+ * Adiciona um array de itens ao romaneio, com validação de saldo.
  */
 router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => {
     const romaneioId = parseInt(req.params.id, 10);
-    const itensParaAdicionar = req.body; // Recebe o array de itens diretamente
+    const itensParaAdicionar = req.body; 
 
     if (isNaN(romaneioId) || !Array.isArray(itensParaAdicionar) || itensParaAdicionar.length === 0) {
-        return res.status(400).json({ error: 'Dados inválidos para adicionar itens ao romaneio. É esperado um array de itens.' });
+        return res.status(400).json({ error: 'Dados inválidos. É esperado um array de itens.' });
     }
 
     const gerencialConnection = await gerencialPool.getConnection();
     try {
         await gerencialConnection.beginTransaction();
 
-        // Verifica se o romaneio existe e está 'Em montagem'
         const [romaneioStatusRows] = await gerencialConnection.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [romaneioId]);
         if (romaneioStatusRows.length === 0 || romaneioStatusRows[0].status !== 'Em montagem') {
-            await gerencialConnection.rollback(); // Libera o lock
+            await gerencialConnection.rollback();
             return res.status(400).json({ error: 'Romaneio não encontrado ou não está mais em montagem.' });
         }
 
-        // Mapeia todos os IDs de itens únicos para buscar dados do ERP de forma eficiente
         const allIdavsRegi = [...new Set(itensParaAdicionar.map(item => parseInt(item.idavs_regi, 10)))].filter(id => !isNaN(id));
         if (allIdavsRegi.length === 0) {
-             throw new Error("Nenhum ID de item válido encontrado nos dados enviados.");
+             throw new Error("Nenhum ID de item válido encontrado.");
         }
 
-        // Busca dados dos itens do ERP
         const [itemErpRows] = await seiPool.execute(`SELECT it_regist, it_nome, it_quan, it_qent, it_qtdv FROM idavs WHERE it_regist IN (?)`, [allIdavsRegi]);
         const itemErpMap = new Map(itemErpRows.map(i => [i.it_regist, i]));
 
-        // Busca quantidades já alocadas em OUTROS romaneios para esses itens
         const [alocadoEmRomaneiosRows] = await gerencialPool.execute(
             'SELECT idavs_regi, SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE idavs_regi IN (?) AND id_romaneio != ? GROUP BY idavs_regi',
             [allIdavsRegi, romaneioId]
         );
         const alocadoMap = new Map(alocadoEmRomaneiosRows.map(i => [i.idavs_regi, i.total]));
 
-        // Itera sobre os itens enviados pelo front-end para validação e inserção
         for (const item of itensParaAdicionar) {
             const idavsRegi = parseInt(item.idavs_regi, 10);
             const quantidadeAEntregar = parseFloat(item.quantidade_a_entregar);
             const davNumero = parseInt(item.dav_numero, 10);
 
-            // Validação básica dos dados recebidos
             if (isNaN(idavsRegi) || isNaN(quantidadeAEntregar) || quantidadeAEntregar <= 0 || isNaN(davNumero)) {
-                throw new Error(`Dados inválidos para o item ID ${item.idavs_regi} do DAV ${item.dav_numero}. Verifique os valores.`);
+                throw new Error(`Dados inválidos para o item ID ${item.idavs_regi} do DAV ${item.dav_numero}.`);
             }
 
-            // Validação de Saldo
             const itemErp = itemErpMap.get(idavsRegi);
             if (!itemErp) { throw new Error(`Item ${idavsRegi} não encontrado no ERP.`); }
 
             const alocadoEmOutros = alocadoMap.get(idavsRegi) || 0;
-            // Usa a função calcularSaldosItem para obter o saldo real disponível
             const { saldo: saldoDisponivel } = calcularSaldosItem(itemErp, null, { total: alocadoEmOutros });
 
             if (quantidadeAEntregar > saldoDisponivel) {
                  throw new Error(`Saldo insuficiente para ${itemErp.it_nome || `item ID ${idavsRegi}`} (DAV ${davNumero}). Saldo: ${saldoDisponivel}, Tentando: ${quantidadeAEntregar}.`);
             }
 
-            // Insere o item na tabela romaneio_itens
             await gerencialConnection.execute(
                 `INSERT INTO romaneio_itens (id_romaneio, dav_numero, idavs_regi, quantidade_a_entregar) VALUES (?, ?, ?, ?)`,
                 [romaneioId, davNumero, idavsRegi, quantidadeAEntregar]
             );
-            console.log(`[LOG] Item ${idavsRegi} (DAV: ${davNumero}, Qtd: ${quantidadeAEntregar}) adicionado ao Romaneio ${romaneioId}`);
         }
 
         await gerencialConnection.commit();
         res.status(201).json({ message: 'Itens adicionados ao romaneio com sucesso!' });
 
     } catch (error) {
-        await gerencialConnection.rollback(); // Garante rollback em caso de erro
+        await gerencialConnection.rollback();
         console.error(`Erro ao adicionar itens ao romaneio ${romaneioId}:`, error);
-        // Retorna a mensagem de erro específica (ex: saldo insuficiente) ou uma genérica
-        res.status(error.message.includes('Saldo insuficiente') || error.message.includes('inválidos') || error.message.includes('não encontrado') ? 400 : 500)
+        res.status(error.message.includes('Saldo') || error.message.includes('inválidos') || error.message.includes('encontrado') ? 400 : 500)
            .json({ error: error.message || 'Erro interno ao adicionar itens.' });
     } finally {
-        gerencialConnection.release(); // Libera a conexão de volta para o pool
+        gerencialConnection.release();
     }
 });
 
-
-// Rota para remover um item de um romaneio (implementação básica)
+/**
+ * Rota DELETE /romaneios/:id/itens/:itemId
+ * Remove um item específico do romaneio.
+ */
 router.delete('/romaneios/:id/itens/:itemId', authenticateToken, async (req, res) => {
     const romaneioId = parseInt(req.params.id, 10);
     const romaneioItemId = parseInt(req.params.itemId, 10); // ID da linha em romaneio_itens
@@ -579,13 +721,11 @@ router.delete('/romaneios/:id/itens/:itemId', authenticateToken, async (req, res
     try {
         await gerencialConnection.beginTransaction();
 
-        // Verifica se o romaneio está 'Em montagem' antes de permitir a remoção
         const [romaneioStatusRows] = await gerencialConnection.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [romaneioId]);
          if (romaneioStatusRows.length === 0 || romaneioStatusRows[0].status !== 'Em montagem') {
             throw new Error('Romaneio não encontrado ou não está mais em montagem.');
         }
 
-        // Deleta o item específico
         const [deleteResult] = await gerencialConnection.execute(
             'DELETE FROM romaneio_itens WHERE id = ? AND id_romaneio = ?',
             [romaneioItemId, romaneioId]
@@ -607,121 +747,5 @@ router.delete('/romaneios/:id/itens/:itemId', authenticateToken, async (req, res
     }
 });
 
-/** Busca DAVs elegíveis para adicionar a um romaneio, com filtros.
- * Query Params: data (YYYY-MM-DD, obrigatório), bairro?, cidade?, davNumero?
- */
-router.get('/eligible-davs', authenticateToken, async (req, res) => {
-    // Novos query params: tipoData, apenasEntregaMarcada
-    const { data, tipoData, apenasEntregaMarcada, bairro, cidade, davNumero } = req.query;
-    const { unidade: filialUsuario } = req.user;
-
-    // Validação dos parâmetros obrigatórios
-    if (!data || !tipoData) {
-        return res.status(400).json({ error: "Os filtros de data e tipo de data são obrigatórios." });
-    }
-    if (tipoData !== 'recebimento' && tipoData !== 'entrega') {
-        return res.status(400).json({ error: "O tipo de data deve ser 'recebimento' ou 'entrega'." });
-    }
-
-    try {
-        const filialMap = { /* ... seu filialMap ... */ };
-        const adminFiliais = ['escritorio', 'Escritório (Lojas)'];
-        const needsFilialFilter = !adminFiliais.includes(filialUsuario);
-
-        // Define qual coluna de data será usada no filtro principal
-        const dateColumn = tipoData === 'entrega' ? 'c.cr_entr' : 'c.cr_erec';
-
-        // Base da query
-        let query = `
-            SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde
-            FROM cdavs c
-            JOIN idavs i ON c.cr_ndav = i.it_ndav
-            WHERE c.cr_reca = '1'               -- Status Recebido
-              AND DATE(${dateColumn}) = ?       -- Filtro pela data e coluna escolhida
-              AND (i.it_quan - (i.it_qent - i.it_qtdv)) > 0 -- Garante saldo em algum item
-        `;
-        const params = [data];
-
-        // Adiciona filtro para "Apenas Entrega Marcada" se solicitado
-        if (apenasEntregaMarcada === 'true') {
-            query += ` AND c.cr_entr != '0000-00-00'`;
-        }
-
-        // Adiciona filtros opcionais
-        if (bairro) { query += ' AND c.cr_ebai LIKE ?'; params.push(`%${bairro}%`); }
-        if (cidade) { query += ' AND c.cr_ecid LIKE ?'; params.push(`%${cidade}%`); }
-        if (davNumero) { query += ' AND CAST(c.cr_ndav AS UNSIGNED) = ?'; params.push(parseInt(davNumero, 10)); }
-
-        // Aplica filtro de filial para não-admins
-        if (needsFilialFilter) {
-            const filialCode = filialMap[filialUsuario];
-            if (!filialCode) {
-                console.warn(`[ELIGIBLE DAVs] Usuário da filial "${filialUsuario}" não mapeada.`);
-                return res.json([]);
-            }
-            query += ' AND c.cr_inde = ?';
-            params.push(filialCode);
-        }
-
-        query += ' ORDER BY c.cr_ebai, c.cr_nmcl'; // Ordena
-
-        console.log(`[ELIGIBLE DAVs] Executing query: ${query.replace(/\s+/g, ' ')} with params: ${JSON.stringify(params)}`);
-        const [davs] = await seiPool.execute(query, params);
-        res.json(davs);
-
-    } catch (error) {
-        console.error("Erro ao buscar DAVs elegíveis:", error);
-        res.status(500).json({ error: 'Erro interno ao buscar DAVs.' });
-    }
-});
-
-/**
- * Rota GET /romaneios/:id (MODIFICADA para ordenar itens por DAV e incluir nome do cliente)
- * Busca os detalhes de um romaneio específico, incluindo os itens já adicionados,
- * ordenados para exibição agrupada.
- */
-router.get('/romaneios/:id', authenticateToken, async (req, res) => {
-    const romaneioId = parseInt(req.params.id, 10);
-    if (isNaN(romaneioId)) {
-        return res.status(400).json({ error: 'ID do Romaneio inválido.' });
-    }
-
-    try {
-        // Busca os dados básicos do romaneio
-        const [romaneioDetails] = await gerencialPool.execute(
-            `SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, r.status,
-                    v.modelo as modelo_veiculo, v.placa as placa_veiculo
-             FROM romaneios r
-             JOIN veiculos v ON r.id_veiculo = v.id
-             WHERE r.id = ?`,
-            [romaneioId]
-        );
-
-        if (romaneioDetails.length === 0) {
-            return res.status(404).json({ error: 'Romaneio não encontrado.' });
-        }
-        const romaneioData = romaneioDetails[0];
-
-        // Busca os itens JÁ ADICIONADOS, ordenando por DAV e depois por nome do produto.
-        // Adicionamos LEFT JOIN com cdavs para obter o nome do cliente.
-        const [items] = await gerencialPool.execute(
-            `SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar,
-                    idavs_sei.it_nome as produto_nome, idavs_sei.it_unid as produto_unidade,
-                    cdavs_sei.cr_nmcl as cliente_nome -- Adiciona nome do cliente para exibição
-             FROM romaneio_itens ri
-             LEFT JOIN ${dbConfigSei.database}.idavs idavs_sei ON ri.idavs_regi = idavs_sei.it_regist
-             LEFT JOIN ${dbConfigSei.database}.cdavs cdavs_sei ON ri.dav_numero = cdavs_sei.cr_ndav -- Junta com cdavs
-             WHERE ri.id_romaneio = ?
-             ORDER BY ri.dav_numero ASC, idavs_sei.it_nome ASC`, // Ordena aqui
-            [romaneioId]
-        );
-
-        res.json({ ...romaneioData, itens: items }); // Envia os itens ordenados
-
-    } catch (error) {
-        console.error(`Erro ao buscar detalhes do romaneio ${romaneioId}:`, error);
-        res.status(500).json({ error: 'Erro interno ao buscar detalhes do romaneio.' });
-    }
-});
 
 module.exports = router;
