@@ -1360,3 +1360,52 @@ function handleApiError(response, isExport = false) {
         });
     }
 }
+// ==========================================================
+//               FUNÇÕES AUXILIARES DE AUTH/UTIL
+// ==========================================================
+
+/**
+ * Retorna o token JWT do localStorage.
+ */
+function getToken() { 
+    return localStorage.getItem('lucaUserToken'); 
+}
+
+/**
+ * Decodifica o token JWT e retorna os dados do usuário.
+ */
+function getUserData() { 
+    const token = getToken(); 
+    if (!token) return null; 
+    try { 
+        return JSON.parse(atob(token.split('.')[1])); 
+    } catch (e) { 
+        console.error("Erro ao decodificar token:", e);
+        return null; 
+    } 
+}
+
+/**
+ * Retorna o nome do usuário do token.
+ */
+function getUserName() {
+    const userData = getUserData();
+    return userData?.nome || 'Utilizador';
+}
+
+/**
+ * Retorna a filial (unidade) do usuário do token.
+ */
+function getUserFilial() {
+    const userData = getUserData();
+    return userData?.unidade || null;
+}
+
+/**
+ * Limpa o token e redireciona para a página de login.
+ */
+function logout() { 
+    localStorage.removeItem('lucaUserToken'); 
+    localStorage.removeItem('company_logo');
+    window.location.href = 'login.html'; 
+}
