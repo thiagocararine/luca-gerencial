@@ -108,13 +108,20 @@ function setupEventListeners() {
     // --- Listeners dos Filtros (Dentro do Modal) ---
     document.getElementById('apply-dav-filters-btn')?.addEventListener('click', applyDavFiltersAndLoad);
     document.getElementById('clear-dav-filters-btn')?.addEventListener('click', clearDavFilters);
-    // Dispara busca ao mudar filtros primários
     document.getElementById('romaneio-filter-data')?.addEventListener('change', applyDavFiltersAndLoad);
     document.querySelectorAll('input[name="tipo-data-filter"]').forEach(radio => radio.addEventListener('change', applyDavFiltersAndLoad));
     document.getElementById('romaneio-filter-entrega-marcada')?.addEventListener('change', applyDavFiltersAndLoad);
 
-    // Filtro de Item (local, dentro do modal)
-    document.getElementById('modal-item-filial-filter')?.addEventListener('change', handleModalFilialFilterChange);
+    // Filtros Secundários (filtram localmente)
+    document.getElementById('romaneio-filter-bairro')?.addEventListener('change', filterDisplayedDavs);
+    document.getElementById('romaneio-filter-cidade')?.addEventListener('change', filterDisplayedDavs);
+    document.getElementById('romaneio-filter-dav')?.addEventListener('change', filterDisplayedDavs);
+
+    // --- CORREÇÃO AQUI ---
+    // Filtro de Filial (local, dentro do modal)
+    // O ID correto é 'romaneio-filter-filial'
+    document.getElementById('romaneio-filter-filial')?.addEventListener('change', handleModalFilialFilterChange);
+    // --- FIM DA CORREÇÃO ---
 
     // Lista de DAVs Elegíveis (Expandir e Checkbox Mestre)
     document.getElementById('eligible-davs-list')?.addEventListener('click', (event) => {
@@ -824,8 +831,8 @@ async function handleOpenAddItemsModal() {
     const modalRomaneioIdSpan = document.getElementById('modal-romaneio-id');
     
     // --- CORREÇÃO AQUI ---
-    // O ID correto do filtro de filial no HTML é 'romaneio-filter-filial'
-    const filialFilterSelect = document.getElementById('romaneio-filter-filial'); 
+    // O ID correto é 'romaneio-filter-filial'
+    const filialFilterSelect = document.getElementById('romaneio-filter-filial');
     // --- FIM DA CORREÇÃO ---
 
     if (!currentRomaneioId) {
@@ -835,17 +842,15 @@ async function handleOpenAddItemsModal() {
 
     // Reseta o estado do modal
     modalRomaneioIdSpan.textContent = currentRomaneioId;
-    
-    // Esta linha agora deve funcionar
     modalItemsList.innerHTML = '<p class="text-center text-gray-500 p-4">Use os filtros acima para buscar pedidos.</p>';
     
-    // E esta linha também
-    if (filialFilterSelect) { // Adiciona uma verificação de segurança
+    // Adicionada verificação de 'null'
+    if (filialFilterSelect) {
         filialFilterSelect.innerHTML = '<option value="">Todas as Filiais</option>';
     }
     
-    itemsForModal = []; // Limpa dados de itens anteriores
-    currentEligibleDavs = []; // Limpa dados de DAVs anteriores
+    itemsForModal = [];
+    currentEligibleDavs = [];
 
     // Reseta os filtros do modal para os padrões
     document.getElementById('romaneio-filter-data').value = new Date().toISOString().split('T')[0];
@@ -860,17 +865,15 @@ async function handleOpenAddItemsModal() {
     populateDynamicFilters([], 'cidade');
     populateDynamicFilters([], 'dav');
     
-    // Popula o filtro de filial (que agora é o do DAV, não do item)
-    // Precisamos mostrar este filtro se o usuário for admin
+    // Popula o filtro de filial (que agora é o do DAV)
     const adminFiliais = ['escritorio', 'escritório (lojas)'];
     const userData = getUserData();
     const filialUsuarioNormalizada = (userData && userData.unidade) ? userData.unidade.trim().toLowerCase() : '';
     const isAdminFilial = adminFiliais.includes(filialUsuarioNormalizada);
     
     const modalFilialContainer = document.getElementById('modal-filial-filter-container');
-    if (isAdminFilial && modalFilialContainer) {
+    if (isAdminFilial && modalFilialContainer && filialFilterSelect) {
         modalFilialContainer.classList.remove('hidden');
-        // Popula o filtro de filial do pedido
         await popularSelect(filialFilterSelect, 'Unidades', getToken(), 'Todas as Filiais');
     } else if (modalFilialContainer) {
         modalFilialContainer.classList.add('hidden');
@@ -878,7 +881,6 @@ async function handleOpenAddItemsModal() {
 
     modal.classList.remove('hidden');
     
-    // Dispara a busca inicial com os filtros padrão
     await applyDavFiltersAndLoad(); 
 }
 
@@ -1136,42 +1138,6 @@ function updateItemsForModal(newItems) {
     itemsForModal.push(...newItems);
 }
 
-function populateModalFilialFilter() {
-    const filialFilterSelect = document.getElementById('modal-item-filial-filter');
-    const currentValue = filialFilterSelect.value; 
-
-    const uniqueFiliais = [...new Set(itemsForModal.map(item => item.item_filial_codigo))]
-                          .filter(Boolean)
-                          .sort();
-
-    filialFilterSelect.innerHTML = '<option value="">Todas as Filiais</option>';
-    uniqueFiliais.forEach(filialCode => {
-        const option = document.createElement('option');
-        option.value = filialCode;
-        option.textContent = filialCode;
-        filialFilterSelect.appendChild(option);
-    });
-    
-    if (uniqueFiliais.includes(currentValue)) {
-        filialFilterSelect.value = currentValue;
-    } else {
-        filialFilterSelect.value = "";
-    }
-}
-
-function handleModalFilialFilterChange() {
-    const selectedFilial = document.getElementById('modal-item-filial-filter').value;
-    
-    document.querySelectorAll('#eligible-davs-list .dav-items-container:not(.hidden) tbody tr').forEach(row => {
-        const itemFilial = row.dataset.itemFilialCodigo;
-        if (selectedFilial && itemFilial !== selectedFilial) {
-            row.style.display = 'none';
-        } else {
-            row.style.display = 'table-row';
-        }
-    });
-}
-
 function handleMasterCheckboxClick(event) {
     const masterCheckbox = event.target.closest('.dav-master-checkbox');
     if (!masterCheckbox) return;
@@ -1195,29 +1161,32 @@ async function handleConfirmAddItems() {
     const itensParaAdicionarPayload = [];
     let hasInvalidQuantity = false;
     let itemsFound = false;
-    const filialFilter = document.getElementById('modal-item-filial-filter').value;
+    
+    // --- CORREÇÃO AQUI ---
+    // O ID correto é 'romaneio-filter-filial'
+    const filialFilterInput = document.getElementById('romaneio-filter-filial');
+    const filialFilter = filialFilterInput ? filialFilterInput.value : ""; // Pega o valor do filtro de filial
+    // --- FIM DA CORREÇÃO ---
 
     document.querySelectorAll('#eligible-davs-list .dav-container-eligible').forEach(davContainer => {
         // Verifica se o DAV PAI está selecionado
         const davMasterCheckbox = davContainer.querySelector('.eligible-dav-checkbox');
         if (!davMasterCheckbox || !davMasterCheckbox.checked) {
-            return; // Pula este DAV se o checkbox principal não estiver marcado
+            return;
         }
 
         const itemsContainer = davContainer.querySelector('.dav-items-container:not(.hidden)');
-        // Se o DAV está marcado mas os itens não foram carregados (não clicou em "Ver Itens")
         if (!itemsContainer) {
-            // TODO: Decidir se queremos carregar automaticamente ou alertar o usuário.
-            // Por enquanto, vamos alertar.
-            console.warn(`DAV ${davContainer.dataset.davNumero} está selecionado, mas seus itens não foram carregados. Expanda-o para selecionar itens.`);
-            return; 
+             console.warn(`DAV ${davContainer.dataset.davNumero} está selecionado, mas seus itens não foram carregados. Expanda-o para selecionar itens.`);
+             return; 
         }
 
         const davNumero = davContainer.dataset.davNumero;
 
         itemsContainer.querySelectorAll('tbody tr').forEach(row => {
-            const isVisibleByFilter = row.style.display !== 'none';
-            if (!isVisibleByFilter) return;
+            // Esta lógica de filtro de item não é mais necessária, pois o filtro é no DAV
+            // const isVisibleByFilter = row.style.display !== 'none';
+            // if (!isVisibleByFilter) return;
 
             const checkbox = row.querySelector('.eligible-item-checkbox');
             const qtyInput = row.querySelector('.eligible-item-qty');
@@ -1259,7 +1228,7 @@ async function handleConfirmAddItems() {
     if (hasInvalidQuantity) return;
 
     if (!itemsFound) {
-        alert(`Nenhum item válido selecionado. Verifique se os DAVs desejados estão marcados, se os itens estão expandidos e se as quantidades são maiores que zero ${filialFilter ? `para a filial ${filialFilter}` : ''}.`);
+        alert(`Nenhum item válido selecionado. Verifique se os DAVs desejados estão marcados, se os itens estão expandidos e se as quantidades são maiores que zero.`);
         return;
     }
 
