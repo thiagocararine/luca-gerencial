@@ -230,7 +230,7 @@
                         </div>
                         <div class="flex items-center gap-x-1">
                             <input type="radio" id="radio-data-entrega" name="tipo-data-filter" value="entrega" checked class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600">
-                            <label for="radio-data-entrega" class="text-xs text-gray-600">Entrega</label>
+                            <label for="radio-data-entrega" class="text-xs text-gray-600">Entrega</g-label>
                         </div>
                     </div>
                 </div>
@@ -248,18 +248,18 @@
                 </div>
                 <div>
                     <label for="romaneio-filter-dav" class="block text-sm font-medium text-gray-700">Nº DAV Específico</label>
-                    <select id="romaneio-filter-dav" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                        <option value="">Todos os DAVs</option>
-                        </select>
+                    <input type="number" id="romaneio-filter-dav" placeholder="Buscar DAV" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
                 </div>
+                
                 <div class="flex items-end pb-2">
                     <div class="flex items-center h-full">
                          <input type="checkbox" id="romaneio-filter-entrega-marcada" checked class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
                          <label for="romaneio-filter-entrega-marcada" class="ml-2 block text-sm text-gray-700">Apenas Pedidos com Entrega Marcada</label>
                     </div>
                 </div>
+
                 <div id="modal-filial-filter-container" class="hidden">
-                    <label for="romaneio-filter-filial" class="block text-sm font-medium text-gray-700">Filtrar por Filial</label>
+                    <label for="romaneio-filter-filial" class="block text-sm font-medium text-gray-700">Filtrar por Filial (Pedido)</label>
                     <select id="romaneio-filter-filial" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
                         <option value="">Todas as Filiais</option>
                         </select>
@@ -274,6 +274,13 @@
             </div>
 
             <h4 class="font-semibold text-gray-800">2. Selecionar Itens</h4>
+            <div>
+                <label for="modal-item-filial-filter" class="block text-sm font-medium text-gray-700">Filtrar Itens (na lista abaixo) por Filial de Origem:</label>
+                <select id="modal-item-filial-filter" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="">Todas as Filiais</Coption>
+                    </select>
+            </div>
+            
             <div id="eligible-davs-list" class="space-y-3 max-h-64 overflow-y-auto border rounded-md p-2 bg-gray-50/50">
                  <p class="text-center text-gray-500 p-4 text-sm">Use os filtros acima para buscar pedidos.</p>
                  </div>
@@ -287,8 +294,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script src="entregas.js?v=1.6" defer></script>
-<script>
+<script src="entregas.js?v=1.7" defer></script> <script>
     // Script da Sidebar (para colapsar/expandir e menu mobile)
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();

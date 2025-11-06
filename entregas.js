@@ -13,6 +13,37 @@ let itemsForModal = [];     // Armazena os itens detalhados (com saldo) carregad
 //               INICIALIZAÇÃO E AUTENTICAÇÃO
 // ==========================================================
 
+function getToken() { 
+    return localStorage.getItem('lucaUserToken'); 
+}
+
+function getUserData() { 
+    const token = getToken(); 
+    if (!token) return null;
+    try { 
+        return JSON.parse(atob(token.split('.')[1])); 
+    } catch (e) { 
+        console.error("Erro ao decodificar token:", e);
+        return null; 
+    } 
+}
+
+function getUserName() {
+    const userData = getUserData();
+    return userData?.nome || 'Utilizador';
+}
+
+function getUserFilial() {
+    const userData = getUserData();
+    return userData?.unidade || null;
+}
+
+function logout() { 
+    localStorage.removeItem('lucaUserToken'); 
+    localStorage.removeItem('company_logo');
+    window.location.href = 'login.html'; 
+}
+
 function initEntregasPage() {
     const token = getToken();
     if (!token) {
@@ -106,24 +137,24 @@ function setupEventListeners() {
     document.getElementById('confirm-add-items-btn')?.addEventListener('click', handleConfirmAddItems); // Botão final
     
     // --- Listeners dos Filtros (Dentro do Modal) ---
+    // Filtros Primários (disparam busca na API)
     document.getElementById('apply-dav-filters-btn')?.addEventListener('click', applyDavFiltersAndLoad);
     document.getElementById('clear-dav-filters-btn')?.addEventListener('click', clearDavFilters);
-    // Dispara busca ao mudar filtros primários
-    document.getElementById('romaneio-filter-data')?.addEventListener('change', applyDavFiltersAndLoad);
-    document.querySelectorAll('input[name="tipo-data-filter"]').forEach(radio => radio.addEventListener('change', applyDavFiltersAndLoad));
-    document.getElementById('romaneio-filter-entrega-marcada')?.addEventListener('change', applyDavFiltersAndLoad);
-    // Filtro de Filial (do DAV) também dispara a busca principal
-    document.getElementById('romaneio-filter-filial')?.addEventListener('change', applyDavFiltersAndLoad);
+    // (Listeners de 'change' removidos para evitar buscas excessivas)
 
     // Filtros Secundários (filtram localmente)
     document.getElementById('romaneio-filter-bairro')?.addEventListener('change', filterDisplayedDavs);
     document.getElementById('romaneio-filter-cidade')?.addEventListener('change', filterDisplayedDavs);
-    document.getElementById('romaneio-filter-dav')?.addEventListener('change', filterDisplayedDavs);
+    // (Filtro de DAV agora é primário, de input)
 
-    // Lista de DAVs Elegíveis (Expandir e Checkbox Mestre)
+    // Filtro de Item (local)
+    document.getElementById('modal-item-filial-filter')?.addEventListener('change', handleModalFilialFilterChange);
+
+    // Lista de DAVs Elegíveis (Expandir, Checkbox Mestre do DAV, Checkbox Mestre do Item)
     document.getElementById('eligible-davs-list')?.addEventListener('click', (event) => {
-        handleToggleDavItems(event);
-        handleMasterCheckboxClick(event);
+        handleToggleDavItems(event); // Clicar em "Ver Itens"
+        handleMasterCheckboxClick(event); // Clicar no Checkbox Mestre *dos Itens*
+        handleDavCheckboxClick(event); // Clicar no Checkbox Mestre *do DAV*
     });
     
     // Define a data padrão no filtro do MODAL
@@ -142,7 +173,6 @@ function handleTabSwitch(event) {
     const button = event.target.closest('.tab-button');
     if (!button) return;
 
-    // Lógica de estilo dos botões
     document.querySelectorAll('#delivery-tabs .tab-button').forEach(btn => {
         btn.classList.remove('active', 'text-indigo-600', 'border-indigo-500');
         btn.classList.add('text-gray-500', 'border-transparent');
@@ -150,7 +180,6 @@ function handleTabSwitch(event) {
     button.classList.add('active', 'text-indigo-600', 'border-indigo-500');
     button.classList.remove('text-gray-500', 'border-transparent');
 
-    // Lógica de visibilidade do conteúdo
     document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.add('hidden');
     });
@@ -159,9 +188,8 @@ function handleTabSwitch(event) {
          targetContent.classList.remove('hidden');
     }
 
-    // Se trocou para a aba de romaneios, recarrega a lista
     if (button.dataset.tab === 'romaneios') {
-        showRomaneioListView(false); // Garante que a visão de lista esteja ativa
+        showRomaneioListView(false); 
         loadRomaneiosEmMontagem();
     }
 }
@@ -185,10 +213,7 @@ function showRomaneioListView(reloadList = true) {
     
     document.getElementById('create-romaneio-btn').style.display = 'flex';
     
-    // Esconde a tela de detalhe
     document.getElementById('romaneio-detail-view').classList.add('hidden');
-    
-    // Garante que o modal de adição de itens também esteja fechado
     document.getElementById('add-items-to-romaneio-modal').classList.add('hidden');
 
     // Limpa estado global
@@ -504,18 +529,17 @@ async function handleConfirmRetirada(davNumber) {
         }
 
         alert(result.message);
-        // Recarrega os dados do DAV após a retirada
         const davSearchInput = document.getElementById('dav-search-input');
         if (davSearchInput) {
-            davSearchInput.value = davNumber; // Garante que o número esteja no input
-            handleSearchDav(); // Chama a função de busca
+            davSearchInput.value = davNumber;
+            handleSearchDav(); 
         }
 
     } catch (error) {
         alert(`Erro: ${error.message}`);
     } finally {
         hideLoader();
-        // O botão será re-renderizado e re-habilitado pelo renderDavResults
+        // O botão será re-renderizado pelo handleSearchDav
     }
 }
 
@@ -588,7 +612,7 @@ async function handleCreateRomaneioSubmit(event) {
 
         alert('Romaneio criado com sucesso! Agora você pode adicionar os pedidos a ele.');
         document.getElementById('create-romaneio-modal').classList.add('hidden');
-        await loadRomaneiosEmMontagem(); // Recarrega a lista
+        await loadRomaneiosEmMontagem();
 
     } catch (error) {
         alert(`Erro: ${error.message}`);
@@ -603,9 +627,8 @@ async function loadRomaneiosEmMontagem() {
     if (!container) return;
     container.innerHTML = '<p class="text-center text-gray-500 p-4">Buscando romaneios...</p>';
     
-    // Lê o valor do novo filtro principal de filial
     const filialFiltradaInput = document.getElementById('romaneio-main-filial-filter');
-    const filialFiltrada = (filialFiltradaInput && filialFiltradaInput.offsetParent !== null) // Verifica se está visível
+    const filialFiltrada = (filialFiltradaInput && filialFiltradaInput.offsetParent !== null) 
                            ? filialFiltradaInput.value 
                            : "";
     
@@ -686,7 +709,7 @@ async function showRomaneioDetailView(romaneioId) {
              throw new Error(errorData.error || 'Falha ao carregar detalhes do romaneio.');
         }
         const romaneioData = await response.json();
-        currentRomaneioId = romaneioData.id; // Armazena o ID globalmente
+        currentRomaneioId = romaneioData.id; 
 
         // Popula o cabeçalho
         document.getElementById('detail-romaneio-id').textContent = romaneioData.id;
@@ -698,8 +721,8 @@ async function showRomaneioDetailView(romaneioId) {
         // Estiliza o status
         const statusSpan = document.getElementById('detail-romaneio-status');
         statusSpan.textContent = romaneioData.status || 'Desconhecido';
-        currentRomaneioStatus = romaneioData.status; // Armazena o status atual
-        let statusColorClasses = 'bg-gray-100 text-gray-800'; // Default
+        currentRomaneioStatus = romaneioData.status; 
+        let statusColorClasses = 'bg-gray-100 text-gray-800';
         if (romaneioData.status === 'Em montagem') statusColorClasses = 'bg-blue-100 text-blue-800';
         else if (romaneioData.status === 'Pronto para Sair') statusColorClasses = 'bg-yellow-100 text-yellow-800';
         else if (romaneioData.status === 'Em Rota') statusColorClasses = 'bg-purple-100 text-purple-800';
@@ -711,7 +734,6 @@ async function showRomaneioDetailView(romaneioId) {
         renderCurrentRomaneioItems(romaneioData.itens);
         feather.replace();
 
-        // Habilita/desabilita o botão de adicionar itens com base no status
         const openModalBtn = document.getElementById('open-add-items-modal-btn');
         if (currentRomaneioStatus !== 'Em montagem') {
             openModalBtn.style.display = 'none';
@@ -721,7 +743,7 @@ async function showRomaneioDetailView(romaneioId) {
 
     } catch (error) {
         alert(error.message);
-        showRomaneioListView(false); // Volta para a lista em caso de erro grave
+        showRomaneioListView(false); 
     } finally {
         hideLoader();
     }
@@ -734,7 +756,6 @@ function renderCurrentRomaneioItems(items) {
         return;
     }
 
-    // Agrupa os itens por DAV
     const itemsGroupedByDav = items.reduce((acc, item) => {
         const dav = item.dav_numero;
         if (!acc[dav]) {
@@ -747,7 +768,6 @@ function renderCurrentRomaneioItems(items) {
         return acc;
     }, {});
 
-    // Gera o HTML agrupado
     container.innerHTML = Object.entries(itemsGroupedByDav).map(([davNumero, data]) => `
         <div class="border rounded-md overflow-hidden mb-3 shadow-sm">
             <div class="bg-gray-100 p-2 border-b flex justify-between items-center">
@@ -810,7 +830,7 @@ async function handleRemoveItemClick(event) {
         }
         
         alert(result.message);
-        await showRomaneioDetailView(currentRomaneioId); // Recarrega a view
+        await showRomaneioDetailView(currentRomaneioId);
 
     } catch (error) {
          alert(`Erro: ${error.message}`);
@@ -826,9 +846,7 @@ async function handleOpenAddItemsModal() {
     const modal = document.getElementById('add-items-to-romaneio-modal');
     const modalItemsList = document.getElementById('eligible-davs-list');
     const modalRomaneioIdSpan = document.getElementById('modal-romaneio-id');
-    
-    // CORREÇÃO: Usa o ID correto do HTML
-    const filialFilterSelect = document.getElementById('romaneio-filter-filial');
+    const filialFilterSelect = document.getElementById('romaneio-filter-filial'); // Filtro de PEDIDO
 
     if (!currentRomaneioId) {
         alert("Erro: Romaneio não identificado.");
@@ -839,10 +857,14 @@ async function handleOpenAddItemsModal() {
     modalRomaneioIdSpan.textContent = currentRomaneioId;
     modalItemsList.innerHTML = '<p class="text-center text-gray-500 p-4">Use os filtros acima para buscar pedidos.</p>';
     
-    itemsForModal = [];
+    // Reseta o filtro de ITEM
+    const itemFilialFilter = document.getElementById('modal-item-filial-filter');
+    if (itemFilialFilter) itemFilialFilter.innerHTML = '<option value="">Todas as Filiais</option>';
+
+    itemsForModal = []; 
     currentEligibleDavs = [];
 
-    // Reseta os filtros do modal para os padrões
+    // Reseta os filtros de BUSCA (Seção 1)
     document.getElementById('romaneio-filter-data').value = new Date().toISOString().split('T')[0];
     document.getElementById('radio-data-entrega').checked = true;
     document.getElementById('romaneio-filter-entrega-marcada').checked = true;
@@ -853,39 +875,53 @@ async function handleOpenAddItemsModal() {
     // Reseta os selects dinâmicos
     populateDynamicFilters([], 'bairro');
     populateDynamicFilters([], 'cidade');
-    populateDynamicFilters([], 'dav');
     
-    // Popula o filtro de filial (que agora é o do DAV)
+    // Configura o filtro de FILIAL DO PEDIDO (Seção 1)
     const adminFiliais = ['escritorio', 'escritório (lojas)'];
     const userData = getUserData();
-    const filialUsuarioNormalizada = (userData && userData.unidade) ? userData.unidade.trim().toLowerCase() : '';
+    const filialUsuario = userData.unidade;
+    const filialUsuarioNormalizada = filialUsuario ? filialUsuario.trim().toLowerCase() : '';
     const isAdminFilial = adminFiliais.includes(filialUsuarioNormalizada);
     
     const modalFilialContainer = document.getElementById('modal-filial-filter-container');
     if (isAdminFilial && modalFilialContainer && filialFilterSelect) {
         modalFilialContainer.classList.remove('hidden');
-        // Popula o filtro de filial do pedido
-        await popularSelect(filialFilterSelect, 'Unidades', getToken(), 'Todas as Filiais');
-    } else if (modalFilialContainer) {
-        modalFilialContainer.classList.add('hidden');
+        filialFilterSelect.disabled = false;
+        // Popula o filtro (se ainda não estiver populado)
+        if (filialFilterSelect.options.length <= 1) {
+            await popularSelect(filialFilterSelect, 'Unidades', getToken(), 'Todas as Filiais');
+        }
+        filialFilterSelect.value = ''; // Reseta para "Todas"
+    } else if (modalFilialContainer && filialFilterSelect) {
+        // Não é admin, mostra o filtro mas travado na filial do usuário
+        modalFilialContainer.classList.remove('hidden'); 
+        // Popula apenas com a filial do usuário
+        filialFilterSelect.innerHTML = `<option value="${filialUsuario}">${filialUsuario}</option>`;
+        filialFilterSelect.value = filialUsuario;
+        filialFilterSelect.disabled = true;
     }
 
     modal.classList.remove('hidden');
     
-    // Dispara a busca inicial com os filtros padrão
     await applyDavFiltersAndLoad(); 
 }
 
 function clearDavFilters() {
-    // Reseta filtros de texto
+    // Reseta filtros de texto/selects dinâmicos
     document.getElementById('romaneio-filter-bairro').value = '';
     document.getElementById('romaneio-filter-cidade').value = '';
     document.getElementById('romaneio-filter-dav').value = '';
     
-    // Reseta para os padrões
+    // Reseta filtros primários
     document.getElementById('romaneio-filter-entrega-marcada').checked = true;
     document.getElementById('radio-data-entrega').checked = true;
     document.getElementById('romaneio-filter-data').value = new Date().toISOString().split('T')[0];
+    
+    // Reseta filtro de filial do pedido (se for admin)
+    const filialFilterSelect = document.getElementById('romaneio-filter-filial');
+    if (filialFilterSelect && !filialFilterSelect.disabled) {
+        filialFilterSelect.value = '';
+    }
     
     applyDavFiltersAndLoad();
 }
@@ -896,25 +932,21 @@ async function applyDavFiltersAndLoad() {
     showLoader();
     currentEligibleDavs = []; 
     itemsForModal = [];
-    // REMOVIDA A CHAMADA PARA populateModalFilialFilter()
+    populateModalFilialFilter(); // Limpa o filtro de filial de item
 
-    // Limpa filtros dinâmicos antigos
+    // Limpa filtros dinâmicos (Bairro/Cidade)
     populateDynamicFilters([], 'bairro');
     populateDynamicFilters([], 'cidade');
-    populateDynamicFilters([], 'dav');
+    // Não limpa o filtro de DAV pois ele é um input de busca
 
     const params = new URLSearchParams();
 
-    // Lê os valores de TODOS os filtros do modal
+    // Lê os valores de TODOS os filtros primários
     const data = document.getElementById('romaneio-filter-data').value;
     const apenasEntregaMarcada = document.getElementById('romaneio-filter-entrega-marcada').checked;
     const tipoData = document.querySelector('input[name="tipo-data-filter"]:checked').value;
-    const bairro = document.getElementById('romaneio-filter-bairro').value;
-    const cidade = document.getElementById('romaneio-filter-cidade').value;
     const davNumero = document.getElementById('romaneio-filter-dav').value;
-    // CORREÇÃO: Lê o filtro de filial do DAV
-    const filialDav = document.getElementById('romaneio-filter-filial')?.value || "";
-
+    const filialDav = document.getElementById('romaneio-filter-filial').value; // Filtro de filial do PEDIDO
 
     if (!data || !tipoData) {
         alert('Data e Tipo de Data são obrigatórios.');
@@ -925,17 +957,8 @@ async function applyDavFiltersAndLoad() {
     params.append('data', data);
     params.append('tipoData', tipoData);
     if (apenasEntregaMarcada) params.append('apenasEntregaMarcada', 'true');
-    
-    // (Bairro/Cidade/DAV não são mais enviados, são filtros locais)
-    // if (bairro) params.append('bairro', bairro);
-    // if (cidade) params.append('cidade', cidade);
-    // if (davNumero) params.append('davNumero', davNumero);
-
-    // CORREÇÃO: Adiciona o filtro de filial do DAV (se selecionado)
-    if (filialDav) {
-        params.append('filialDav', filialDav); // Envia o nome da filial para a API
-    }
-
+    if (davNumero) params.append('davNumero', davNumero);
+    if (filialDav) params.append('filialDav', filialDav); // Envia o nome da filial
 
     try {
         const response = await fetch(`${apiUrlBase}/entregas/eligible-davs?${params.toString()}`, {
@@ -948,13 +971,12 @@ async function applyDavFiltersAndLoad() {
 
         currentEligibleDavs = await response.json(); 
 
-        // Popula os <select> de Bairro, Cidade e DAV com base nos resultados
+        // Popula os <select> de Bairro e Cidade com base nos resultados
         populateDynamicFilters(currentEligibleDavs, 'bairro');
         populateDynamicFilters(currentEligibleDavs, 'cidade');
-        populateDynamicFilters(currentEligibleDavs, 'dav');
-
-        // Renderiza a lista (agora filtrada localmente)
-        filterDisplayedDavs(); // Chama o filtro local
+        
+        // Renderiza a lista de DAVs
+        renderEligibleDavs(currentEligibleDavs);
 
     } catch (error) {
         listContainer.innerHTML = `<p class="text-center text-red-500 p-4">${error.message}</p>`;
@@ -976,10 +998,6 @@ function populateDynamicFilters(davs, filterType) {
         selectElement = document.getElementById('romaneio-filter-cidade');
         dataKey = 'cr_ecid';
         placeholder = 'Todas as Cidades';
-    } else if (filterType === 'dav') {
-        selectElement = document.getElementById('romaneio-filter-dav');
-        dataKey = 'cr_ndav';
-        placeholder = 'Todos os DAVs';
     } else {
         return;
     }
@@ -1005,15 +1023,14 @@ function populateDynamicFilters(davs, filterType) {
 }
 
 function filterDisplayedDavs() {
+    // Filtros locais
     const bairroFilter = document.getElementById('romaneio-filter-bairro').value;
     const cidadeFilter = document.getElementById('romaneio-filter-cidade').value;
-    const davFilter = document.getElementById('romaneio-filter-dav').value;
 
     const filteredDavs = currentEligibleDavs.filter(dav => {
         const matchBairro = !bairroFilter || dav.cr_ebai === bairroFilter;
         const matchCidade = !cidadeFilter || dav.cr_ecid === cidadeFilter;
-        const matchDav = !davFilter || dav.cr_ndav == davFilter;
-        return matchBairro && matchCidade && matchDav;
+        return matchBairro && matchCidade;
     });
 
     renderEligibleDavs(filteredDavs);
@@ -1030,7 +1047,7 @@ function renderEligibleDavs(davs) {
         <div class="border rounded-md p-3 bg-gray-50/80 dav-container-eligible" data-dav-numero="${dav.cr_ndav}">
             <div class="flex justify-between items-center">
                 <div class="flex items-center gap-3">
-                    <input type="checkbox" value="${dav.cr_ndav}" class="eligible-dav-checkbox rounded border-gray-400 h-5 w-5 text-indigo-600 focus:ring-indigo-500" title="Marcar/Desmarcar este DAV">
+                    <input type="checkbox" value="${dav.cr_ndav}" class="eligible-dav-checkbox rounded border-gray-400 h-5 w-5 text-indigo-600 focus:ring-indigo-500" title="Selecionar este DAV">
                     <div>
                         <p class="font-semibold text-gray-800">DAV: ${dav.cr_ndav} - ${dav.cr_nmcl || 'Cliente não informado'}</p>
                         <p class="text-xs text-gray-500">${dav.cr_ebai || 'Bairro não inf.'} / ${dav.cr_ecid || 'Cidade não inf.'} (${dav.cr_inde || 'Filial?'})</p>
@@ -1041,7 +1058,6 @@ function renderEligibleDavs(davs) {
                 </button>
             </div>
             <div class="dav-items-container mt-3 pt-3 border-t border-gray-200 hidden">
-                {/* O conteúdo é carregado ao clicar em "Ver Itens" */}
             </div>
         </div>
     `).join('');
@@ -1115,7 +1131,7 @@ async function handleToggleDavItems(event) {
                     </table>`;
             }
             populateModalFilialFilter();
-            handleModalFilialFilterChange(); // Aplica o filtro
+            handleModalFilialFilterChange();
 
         } catch (error) {
             itemsContainer.innerHTML = `<p class="text-center text-xs text-red-500">${error.message}</p>`;
@@ -1127,7 +1143,7 @@ async function handleToggleDavItems(event) {
         // Recolher
         button.innerHTML = '<span data-feather="chevron-down" class="w-4 h-4"></span> Ver Itens';
         itemsContainer.classList.add('hidden');
-        itemsContainer.innerHTML = ''; // Limpa para forçar recarga
+        itemsContainer.innerHTML = ''; 
         feather.replace();
         
         itemsForModal = itemsForModal.filter(item => item.dav_numero != davNumero);
@@ -1139,6 +1155,42 @@ function updateItemsForModal(newItems) {
     const davNumbers = [...new Set(newItems.map(i => i.dav_numero))];
     itemsForModal = itemsForModal.filter(item => !davNumbers.includes(item.dav_numero));
     itemsForModal.push(...newItems);
+}
+
+function populateModalFilialFilter() {
+    const filialFilterSelect = document.getElementById('modal-item-filial-filter');
+    const currentValue = filialFilterSelect.value; 
+
+    const uniqueFiliais = [...new Set(itemsForModal.map(item => item.item_filial_codigo))]
+                          .filter(Boolean)
+                          .sort();
+
+    filialFilterSelect.innerHTML = '<option value="">Todas as Filiais</option>';
+    uniqueFiliais.forEach(filialCode => {
+        const option = document.createElement('option');
+        option.value = filialCode;
+        option.textContent = filialCode;
+        filialFilterSelect.appendChild(option);
+    });
+    
+    if (uniqueFiliais.includes(currentValue)) {
+        filialFilterSelect.value = currentValue;
+    } else {
+        filialFilterSelect.value = "";
+    }
+}
+
+function handleModalFilialFilterChange() {
+    const selectedFilial = document.getElementById('modal-item-filial-filter').value;
+    
+    document.querySelectorAll('#eligible-davs-list .dav-items-container:not(.hidden) tbody tr').forEach(row => {
+        const itemFilial = row.dataset.itemFilialCodigo;
+        if (selectedFilial && itemFilial !== selectedFilial) {
+            row.style.display = 'none';
+        } else {
+            row.style.display = 'table-row';
+        }
+    });
 }
 
 function handleMasterCheckboxClick(event) {
@@ -1154,6 +1206,39 @@ function handleMasterCheckboxClick(event) {
     });
 }
 
+async function handleDavCheckboxClick(event) {
+    const davCheckbox = event.target.closest('.eligible-dav-checkbox');
+    if (!davCheckbox) return;
+
+    const davContainer = davCheckbox.closest('.dav-container-eligible');
+    const itemsContainer = davContainer.querySelector('.dav-items-container');
+    const isChecked = davCheckbox.checked;
+    
+    // Se for para marcar, e os itens não estiverem carregados, carrega-os primeiro
+    if (isChecked && itemsContainer.classList.contains('hidden')) {
+        await handleToggleDavItems({ target: davContainer.querySelector('.toggle-items-btn') });
+    }
+
+    // Agora que os itens estão (ou já estavam) visíveis, seleciona/desseleciona tudo
+    const masterCheckbox = itemsContainer.querySelector('.dav-master-checkbox');
+    if (masterCheckbox) {
+        masterCheckbox.checked = isChecked;
+    }
+    
+    itemsContainer.querySelectorAll('tbody tr').forEach(row => {
+        row.querySelector('.eligible-item-checkbox').checked = isChecked;
+        const qtyInput = row.querySelector('.eligible-item-qty');
+        if (isChecked) {
+            // Define a quantidade para o saldo máximo
+            qtyInput.value = qtyInput.max; 
+        } else {
+            // Define a quantidade para 0
+            qtyInput.value = 0;
+        }
+    });
+}
+
+
 async function handleConfirmAddItems() {
     const button = document.getElementById('add-selected-items-to-romaneio-btn');
     if (!currentRomaneioId) {
@@ -1164,74 +1249,103 @@ async function handleConfirmAddItems() {
     const itensParaAdicionarPayload = [];
     let hasInvalidQuantity = false;
     let itemsFound = false;
-    // REMOVIDA: const filialFilter = ...
+    const filialFilter = document.getElementById('modal-item-filial-filter').value;
+    const promises = []; // Para carregar DAVs que foram selecionados mas não expandidos
 
     document.querySelectorAll('#eligible-davs-list .dav-container-eligible').forEach(davContainer => {
-        // Verifica se o DAV PAI está selecionado
         const davMasterCheckbox = davContainer.querySelector('.eligible-dav-checkbox');
         if (!davMasterCheckbox || !davMasterCheckbox.checked) {
-            return; 
+            return;
         }
 
         const itemsContainer = davContainer.querySelector('.dav-items-container:not(.hidden)');
-        if (!itemsContainer) {
-             console.warn(`DAV ${davContainer.dataset.davNumero} está selecionado, mas seus itens não foram carregados. Expanda-o para selecionar itens.`);
-             // Alerta o usuário para expandir os itens
-             alert(`Por favor, expanda os itens do DAV ${davContainer.dataset.davNumero} para confirmar as quantidades antes de adicionar.`);
-             hasInvalidQuantity = true; // Usa a flag para parar a execução
-             return; 
-        }
-
         const davNumero = davContainer.dataset.davNumero;
 
-        itemsContainer.querySelectorAll('tbody tr').forEach(row => {
-            // (Verificação de filtro local removida)
+        // CASO 1: Itens estão expandidos. Lemos os valores da tela.
+        if (itemsContainer) {
+            itemsContainer.querySelectorAll('tbody tr').forEach(row => {
+                const isVisibleByFilialFilter = row.style.display !== 'none';
+                if (!isVisibleByFilter) return;
 
-            const checkbox = row.querySelector('.eligible-item-checkbox');
-            const qtyInput = row.querySelector('.eligible-item-qty');
-            if (!checkbox || !qtyInput) return;
+                const checkbox = row.querySelector('.eligible-item-checkbox');
+                const qtyInput = row.querySelector('.eligible-item-qty');
+                if (!checkbox || !qtyInput) return;
 
-            const idavsRegi = row.dataset.idavsRegi;
-            const quantidade = parseFloat(qtyInput.value);
-            const saldoMax = parseFloat(qtyInput.max);
+                const idavsRegi = row.dataset.idavsRegi;
+                const quantidade = parseFloat(qtyInput.value);
+                const saldoMax = parseFloat(qtyInput.max);
 
-            if (checkbox.checked && quantidade > 0) {
-                itemsFound = true;
-                if (quantidade > saldoMax) {
-                    alert(`Quantidade para o item ${idavsRegi} (DAV ${davNumero}) excede o saldo (${saldoMax}). Ajuste antes de continuar.`);
-                    qtyInput.style.borderColor = 'red';
-                    qtyInput.focus();
-                    hasInvalidQuantity = true;
-                    return; 
-                } else {
-                    qtyInput.style.borderColor = '';
+                if (checkbox.checked && quantidade > 0) {
+                    itemsFound = true;
+                    if (quantidade > saldoMax) {
+                        alert(`Quantidade para o item ${idavsRegi} (DAV ${davNumero}) excede o saldo (${saldoMax}). Ajuste.`);
+                        qtyInput.style.borderColor = 'red';
+                        qtyInput.focus();
+                        hasInvalidQuantity = true;
+                        return;
+                    }
+                    itensParaAdicionarPayload.push({
+                        dav_numero: davNumero,
+                        idavs_regi: idavsRegi,
+                        quantidade_a_entregar: quantidade
+                    });
+                } else if (checkbox.checked && quantidade <= 0) {
+                     alert(`A quantidade para o item ${idavsRegi} (DAV ${davNumero}) deve ser > 0 se selecionado.`);
+                     qtyInput.style.borderColor = 'red';
+                     qtyInput.focus();
+                     hasInvalidQuantity = true;
+                     return;
                 }
-                itensParaAdicionarPayload.push({
-                    dav_numero: davNumero,
-                    idavs_regi: idavsRegi,
-                    quantidade_a_entregar: quantidade
-                });
-            } else if (checkbox.checked && quantidade <= 0) {
-                 alert(`A quantidade para o item ${idavsRegi} (DAV ${davNumero}) deve ser maior que zero se selecionado.`);
-                 qtyInput.style.borderColor = 'red';
-                 qtyInput.focus();
-                 hasInvalidQuantity = true;
-                 return;
-            } else {
-                 qtyInput.style.borderColor = '';
-            }
-        });
-        if (hasInvalidQuantity) return;
+            });
+        // CASO 2: DAV está checado, mas itens não foram expandidos ("Selecionar Todos")
+        } else {
+            itemsFound = true; // Marcamos que encontramos um DAV
+            // Adiciona uma promessa para buscar os itens deste DAV
+            promises.push(
+                fetch(`${apiUrlBase}/entregas/dav/${davNumero}`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
+                    .then(res => res.ok ? res.json() : Promise.reject(`Falha ao buscar DAV ${davNumero}`))
+            );
+        }
     });
 
     if (hasInvalidQuantity) return;
 
-    if (!itemsFound) {
-        alert(`Nenhum item válido selecionado. Verifique se os DAVs desejados estão marcados, se os itens estão expandidos e se as quantidades são maiores que zero.`);
-        return;
+    // Se houver DAVs "selecionar todos" para processar
+    if (promises.length > 0) {
+        showLoader();
+        try {
+            const results = await Promise.all(promises);
+            for (const davData of results) {
+                const itemsComSaldo = davData.itens.filter(item => item.quantidade_saldo > 0);
+                for (const item of itemsComSaldo) {
+                    // Respeita o filtro de filial de item, se estiver ativo
+                    if (filialFilter && item.item_filial_codigo !== filialFilter) {
+                        continue;
+                    }
+                    itensParaAdicionarPayload.push({
+                        dav_numero: item.dav_numero,
+                        idavs_regi: item.idavs_regi,
+                        quantidade_a_entregar: item.quantidade_saldo // Adiciona o saldo TOTAL
+                    });
+                }
+            }
+        } catch (error) {
+            alert(`Erro ao buscar itens para DAVs selecionados: ${error}`);
+            hideLoader();
+            return;
+        }
     }
 
-    showLoader();
+    if (!itemsFound && itensParaAdicionarPayload.length === 0) {
+        alert("Nenhum DAV ou item válido foi selecionado.");
+        return;
+    }
+    
+    // Remove duplicatas (caso um item tenha sido selecionado manualmente E via "select all")
+    // Usamos um Map para manter apenas a última ocorrência (que seria a manual, se expandido)
+    const uniquePayload = [...new Map(itensParaAdicionarPayload.map(item => [item.idavs_regi, item])).values()];
+
+    showLoader(); // Garante que o loader esteja visível
     button.disabled = true;
     document.getElementById('cancel-add-items-btn').disabled = true;
 
@@ -1242,7 +1356,7 @@ async function handleConfirmAddItems() {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${getToken()}`
             },
-            body: JSON.stringify(itensParaAdicionarPayload)
+            body: JSON.stringify(uniquePayload)
         });
 
         const result = await response.json();
@@ -1260,49 +1374,6 @@ async function handleConfirmAddItems() {
         hideLoader();
         button.disabled = false;
         document.getElementById('cancel-add-items-btn').disabled = false;
-    }
-}
-
-// ==========================================================
-//               FUNÇÕES AUXILIARES GERAIS
-// ==========================================================
-
-function showLoader() {
-    const loader = document.getElementById('global-loader');
-    if (loader) loader.style.display = 'flex';
-}
-
-function hideLoader() {
-    const loader = document.getElementById('global-loader');
-    if (loader) loader.style.display = 'none';
-}
-
-function gerenciarAcessoModulos() {
-    const userData = getUserData();
-    if (!userData || !userData.permissoes) {
-        console.error("Não foi possível obter as permissões do usuário.");
-        return;
-    }
-
-    const permissoesDoUsuario = userData.permissoes;
-    const mapaModulos = {
-        'lancamentos': 'despesas.html',
-        'logistica': 'logistica.html',
-        'entregas': 'entregas.html',
-        'checklist': 'checklist.html',
-        'produtos': 'produtos.html',
-        'configuracoes': 'settings.html'
-    };
-
-    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
-        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
-        
-        if (!permissao || !permissao.permitido) {
-            const link = document.querySelector(`#sidebar a[href="${href}"]`);
-            if (link && link.parentElement) {
-                link.parentElement.style.display = 'none';
-            }
-        }
     }
 }
 
@@ -1324,11 +1395,11 @@ async function popularSelect(selectElement, codParametro, token, placeholderText
         selectElement.innerHTML = `<option value="">${placeholderText}</option>`;
         data.forEach(param => {
             const option = document.createElement('option');
-            option.value = param.NOME_PARAMETRO; // Usa o NOME como valor (ex: "Santa Cruz da Serra")
+            option.value = param.NOME_PARAMETRO; 
             option.textContent = param.NOME_PARAMETRO;
             selectElement.appendChild(option);
         });
-        return data; // Retorna os dados para outras lógicas se necessário
+        return data;
     } catch (error) {
         console.error(`Erro ao popular select ${codParametro}:`, error);
         selectElement.innerHTML = `<option value="">Erro ao carregar</option>`;
@@ -1354,53 +1425,4 @@ function handleApiError(response, isExport = false) {
             alert('Ocorreu um erro inesperado na API.');
         });
     }
-}
-// ==========================================================
-//               FUNÇÕES AUXILIARES DE AUTH/UTIL
-// ==========================================================
-
-/**
- * Retorna o token JWT do localStorage.
- */
-function getToken() { 
-    return localStorage.getItem('lucaUserToken'); 
-}
-
-/**
- * Decodifica o token JWT e retorna os dados do usuário.
- */
-function getUserData() { 
-    const token = getToken(); 
-    if (!token) return null; 
-    try { 
-        return JSON.parse(atob(token.split('.')[1])); 
-    } catch (e) { 
-        console.error("Erro ao decodificar token:", e);
-        return null; 
-    } 
-}
-
-/**
- * Retorna o nome do usuário do token.
- */
-function getUserName() {
-    const userData = getUserData();
-    return userData?.nome || 'Utilizador';
-}
-
-/**
- * Retorna a filial (unidade) do usuário do token.
- */
-function getUserFilial() {
-    const userData = getUserData();
-    return userData?.unidade || null;
-}
-
-/**
- * Limpa o token e redireciona para a página de login.
- */
-function logout() { 
-    localStorage.removeItem('lucaUserToken'); 
-    localStorage.removeItem('company_logo');
-    window.location.href = 'login.html'; 
 }
