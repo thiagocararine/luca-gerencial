@@ -1426,3 +1426,95 @@ function handleApiError(response, isExport = false) {
         });
     }
 }
+
+// ==========================================================
+//               FUNÇÕES AUXILIARES GERAIS
+// ==========================================================
+
+/**
+ * Mostra o loader global.
+ */
+function showLoader() {
+    const loader = document.getElementById('global-loader');
+    if (loader) loader.style.display = 'flex';
+}
+
+/**
+ * Esconde o loader global.
+ */
+function hideLoader() {
+    const loader = document.getElementById('global-loader');
+    if (loader) loader.style.display = 'none';
+}
+
+/**
+ * Gerencia o acesso aos módulos da sidebar com base nas permissões do token.
+ */
+function gerenciarAcessoModulos() {
+    const userData = getUserData();
+    if (!userData || !userData.permissoes) {
+        console.error("Não foi possível obter as permissões do usuário.");
+        return;
+    }
+
+    const permissoesDoUsuario = userData.permissoes;
+    const mapaModulos = {
+        'lancamentos': 'despesas.html',
+        'logistica': 'logistica.html',
+        'entregas': 'entregas.html',
+        'checklist': 'checklist.html',
+        'produtos': 'produtos.html',
+        'configuracoes': 'settings.html'
+    };
+
+    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
+        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
+        
+        if (!permissao || !permissao.permitido) {
+            const link = document.querySelector(`#sidebar a[href="${href}"]`);
+            if (link && link.parentElement) {
+                link.parentElement.style.display = 'none';
+            }
+        }
+    }
+}
+
+/**
+ * Lida com erros da API, deslogando o usuário se for 401/403.
+ */
+function handleApiError(response, isExport = false) {
+    if (response.status === 401 || response.status === 403) {
+        alert("Sua sessão expirou ou você não tem permissão. Por favor, faça login novamente.");
+        logout();
+    } else {
+        response.json().then(errorData => {
+            const message = `Erro na API: ${errorData.error || response.statusText}`;
+            if (!isExport) {
+                 const resultsContainer = document.getElementById('dav-results-container');
+                 if (resultsContainer) {
+                    // Tenta exibir o erro no formato de alerta
+                    resultsContainer.innerHTML = `
+                    <div class="max-w-xl mx-auto bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg shadow-md" role="alert">
+                        <div class="flex items-center">
+                            <div class="py-1">
+                                <span data-feather="alert-triangle" class="h-6 w-6 text-red-500 mr-3"></span>
+                            </div>
+                            <div>
+                                <p class="font-bold">Erro de API!</p>
+                                <p class="text-sm">${message}</p>
+                            </div>
+                        </div>
+                    </div>
+                    `;
+                    feather.replace();
+                 } else {
+                    alert(message); // Fallback
+                 }
+            } else {
+                alert(message);
+            }
+        }).catch(() => {
+            alert('Ocorreu um erro inesperado na API.');
+        });
+    }
+}
