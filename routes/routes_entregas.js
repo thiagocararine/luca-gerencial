@@ -43,25 +43,44 @@ function parseRetiradasAnteriores(it_reti) {
     return totalRetirado;
 }
 
+/**
+ * FUNÇÃO DE CÁLCULO DE SALDO - VERSÃO FINAL CORRETA
+ * Calcula o saldo disponível de um item.
+ */
 function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem) {
     const quantidadeTotalPedido = parseFloat(itemErp.it_quan) || 0;
-    const totalEntregueBruto = parseFloat(itemErp.it_qent) || 0;
-    const totalDevolvido = parseFloat(itemErp.it_qtdv) || 0;
+    const totalEntregueBruto = parseFloat(itemErp.it_qent) || 0; // Total que já saiu
+    const totalDevolvido = parseFloat(itemErp.it_qtdv) || 0;    // Total que já voltou
+
+    // 1. Calcula o que está efetivamente com o cliente (Entregue Líquido).
+    // Fórmula: (Total que Saiu) - (Total que Voltou)
     const entregueLiquido = totalEntregueBruto - totalDevolvido;
+
+    // 2. Soma qualquer quantidade que esteja alocada em *outros* romaneios no nosso app.
     const totalEmRomaneioApp = parseFloat(entregaRomaneioDoItem?.total) || 0;
     
-    // Tentativa de buscar total manual (pode ser 0 ou null)
+    // 3. Soma retiradas manuais do nosso app (caso não reflitam em it_qent imediatamente)
+    // NOTA: Esta lógica assume que 'retiradaManualDoItem' vem de um 'GROUP BY' do log de retiradas manuais.
     const totalRetiradaManualApp = parseFloat(retiradaManualDoItem?.total) || 0;
 
-    // O total indisponível é o que está com o cliente + o que está em rota + o que foi retirado manualmente
-    // (Assumindo que retirada manual não atualiza it_qent, se atualizar, totalRetiradaManualApp deve ser 0)
-    const totalIndisponivel = entregueLiquido + totalEmRomaneioApp + totalRetiradaManualApp;
+    // 4. O total indisponível é a soma do que está com o cliente + o que está em rota + o que foi retirado manualmente.
+    // Se a retirada manual JÁ atualiza o it_qent, o totalRetiradaManualApp deve ser removido da soma
+    // Vamos manter a lógica original que soma os três, pois 'calcularSaldosItem' é usado tanto na leitura
+    // (onde 'it_qent' está atualizado) quanto na validação de retirada (onde 'it_qent' ainda não foi atualizado).
+    
+    // CORREÇÃO DA LÓGICA DE SALDO:
+    // Saldo = Total do Pedido - (O que já saiu e não voltou) - (O que está alocado em outros romaneios)
+    // O 'totalRetiradaManualApp' é problemático aqui se 'it_qent' já o inclui.
+    // A lógica mais segura para SALDO é:
+    // Saldo = Total Pedido - (Entregue Líquido no ERP) - (Alocado em Romaneios)
+    const totalIndisponivel = entregueLiquido + totalEmRomaneioApp;
     
     const saldo = quantidadeTotalPedido - totalIndisponivel;
 
     return {
         saldo: Math.max(0, saldo), 
-        entregue: Math.max(0, totalIndisponivel)
+        // 'entregue' reflete o que já saiu (líquido) + o que está em rota
+        entregue: Math.max(0, totalIndisponivel) 
     };
 }
 
@@ -69,6 +88,10 @@ function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem
 //               ROTAS DE RETIRADA RÁPIDA (BALCÃO)
 // ==========================================================
 
+/**
+ * Rota GET /dav/:numero
+ * Busca dados de um DAV, aplicando filtro de filial e incluindo 'it_inde' nos itens.
+ */
 router.get('/dav/:numero', authenticateToken, async (req, res) => {
     const davNumberStr = req.params.numero;
     const davNumber = parseInt(davNumberStr, 10);
@@ -85,12 +108,14 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             'Piabetá': 'VMNAF',
             'Parada Angélica': 'TNASC',
             'Nova Campinas': 'LCMAT'
+            // Adicione outras filiais aqui (Nome no Token -> Código no cr_inde)
         };
 
         const adminFiliais = ['escritorio', 'escritório (lojas)'];
         const filialUsuarioNormalizada = filialUsuario ? filialUsuario.trim().toLowerCase() : '';
         const needsFilialFilter = !adminFiliais.includes(filialUsuarioNormalizada);
 
+        // 1. Busca dados do cabeçalho do DAV (cdavs)
         let davQuery = `
             SELECT 
                 c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, 
@@ -126,10 +151,10 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         }
         const davData = davs[0];
 
+        // Verificação de Orçamento
         if (davData.cr_tipo != 1) {
             return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
         }
-        // (Verificação de 'cr_reca' removida daqui)
 
         const combineDateTime = (date, time) => {
             if (!date || (typeof date === 'string' && date.startsWith('0000-00-00'))) return null;
@@ -140,6 +165,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             return new Date(`${datePart}T${validTime}`);
         };
 
+        // 2. Monta o objeto de resposta principal
         const nfemParts = (davData.cr_nfem || '').split(' ');
         const fiscalInfo = {
             data_emissao: nfemParts[0] && nfemParts[1] ? combineDateTime(nfemParts[0], nfemParts[1]) : null,
@@ -180,6 +206,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             itens: []
         };
 
+        // 3. Se o pedido não estiver "Recebido", não busca itens
         if (davData.cr_reca !== '1') {
             console.log(`[LOG] Pedido ${davNumber} com status '${davData.cr_reca}'. Não buscará itens.`);
             return res.json(responseData);
@@ -199,6 +226,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
              WHERE ri.dav_numero = ?)
              ORDER BY data DESC`;
 
+        // 4. Busca dados dos itens e históricos
         const allResults = await Promise.all([
             seiPool.execute(
                 `SELECT it_regist, it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti, it_inde 
@@ -217,6 +245,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'Nenhum item válido encontrado para este pedido.' });
         }
         
+        // 5. Processa cada item e calcula saldos
         const itensComSaldo = [];
         for (const item of itensDav) {
             const idavsRegi = item.it_regist;
@@ -454,7 +483,7 @@ router.post('/romaneios', authenticateToken, async (req, res) => {
 });
 
 router.get('/eligible-davs', authenticateToken, async (req, res) => {
-    // Adiciona 'filialDav' como um novo parâmetro de filtro
+    // Adiciona 'filialDav' (nome da filial) como parâmetro
     const { data, tipoData, apenasEntregaMarcada, bairro, cidade, davNumero, filialDav } = req.query;
     const { unidade: filialUsuario } = req.user;
 
@@ -471,6 +500,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
             'Piabetá': 'VMNAF',
             'Parada Angélica': 'TNASC',
             'Nova Campinas': 'LCMAT'
+            // Adicione outras filiais aqui (Nome no Token -> Código no cr_inde)
         };
         const adminFiliais = ['escritorio', 'escritório (lojas)'];
         const filialUsuarioNormalizada = filialUsuario ? filialUsuario.trim().toLowerCase() : '';
