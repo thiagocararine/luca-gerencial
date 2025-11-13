@@ -28,6 +28,7 @@
         }
         .action-btn:disabled { background-color: #9ca3af; cursor: not-allowed; }
 
+        /* Estilo para a linha do histórico que pode ser expandida */
         .expandable-row { cursor: pointer; }
         .history-row { display: none; }
         .history-row.expanded { display: table-row; }
@@ -276,13 +277,6 @@
 
             <h4 class="font-semibold text-gray-800">2. Selecionar Itens</h4>
             
-            <div>
-                <label for="modal-item-filial-filter" class="block text-sm font-medium text-gray-700">Filtrar Itens (na lista abaixo) por Filial de Origem:</label>
-                <select id="modal-item-filial-filter" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm sm:text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                    <option value="">Todas as Filiais</option>
-                    </select>
-            </div>
-            
             <div id="eligible-davs-list" class="space-y-3 max-h-64 overflow-y-auto border rounded-md p-2 bg-gray-50/50">
                  <p class="text-center text-gray-500 p-4 text-sm">Use os filtros acima para buscar pedidos.</p>
                  </div>
@@ -296,7 +290,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script src="entregas.js?v=1.8" defer></script> <script>
+<script src="entregas.js?v=1.9" defer></script> <script>
     // Script da Sidebar (para colapsar/expandir e menu mobile)
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
