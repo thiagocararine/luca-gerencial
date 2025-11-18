@@ -4,39 +4,26 @@ document.addEventListener('DOMContentLoaded', initEntregasPage);
 //               VARIÁVEIS GLOBAIS
 // ==========================================================
 const apiUrlBase = '/api';
-let currentRomaneioId = null;     // Guarda o ID do romaneio sendo visto/editado
-let currentRomaneioStatus = null; // Guarda o status do romaneio sendo visto
-let currentEligibleDavs = []; // Armazena a lista completa de DAVs elegíveis (da API)
-let itemsForModal = [];     // Armazena os itens detalhados (com saldo) carregados no modal
+let currentRomaneioId = null;     
+let currentRomaneioStatus = null; 
+let currentEligibleDavs = []; 
+let itemsForModal = [];     
 
 // ==========================================================
 //               INICIALIZAÇÃO E AUTENTICAÇÃO
 // ==========================================================
 
-function getToken() { 
-    return localStorage.getItem('lucaUserToken'); 
-}
+function getToken() { return localStorage.getItem('lucaUserToken'); }
 
 function getUserData() { 
     const token = getToken(); 
     if (!token) return null;
-    try { 
-        return JSON.parse(atob(token.split('.')[1])); 
-    } catch (e) { 
-        console.error("Erro ao decodificar token:", e);
-        return null; 
-    } 
+    try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } 
 }
 
-function getUserName() {
-    const userData = getUserData();
-    return userData?.nome || 'Utilizador';
-}
+function getUserName() { return getUserData()?.nome || 'Utilizador'; }
 
-function getUserFilial() {
-    const userData = getUserData();
-    return userData?.unidade || null;
-}
+function getUserFilial() { return getUserData()?.unidade || null; }
 
 function logout() { 
     localStorage.removeItem('lucaUserToken'); 
@@ -58,7 +45,6 @@ function initEntregasPage() {
     loadCompanyLogo();
     setupEventListeners();
     
-    // Lógica para exibir o filtro principal de filial
     const adminFiliais = ['escritorio', 'escritório (lojas)'];
     const filialUsuarioNormalizada = (userData && userData.unidade) ? userData.unidade.trim().toLowerCase() : '';
     const isAdminFilial = adminFiliais.includes(filialUsuarioNormalizada);
@@ -66,13 +52,11 @@ function initEntregasPage() {
     const mainFilterContainer = document.getElementById('romaneio-main-filter-container');
     if (isAdminFilial && mainFilterContainer) {
         mainFilterContainer.classList.remove('hidden');
-        // Popula o filtro principal de filiais
         popularSelect(document.getElementById('romaneio-main-filial-filter'), 'Unidades', token, 'Todas as Filiais');
     } else if (mainFilterContainer) {
         mainFilterContainer.classList.add('hidden');
     }
 
-    // Garante a visão correta no carregamento
     document.getElementById('retirada-content').classList.remove('hidden');
     document.getElementById('romaneios-content').classList.add('hidden');
     
@@ -93,7 +77,6 @@ function loadCompanyLogo() {
 // ==========================================================
 
 function setupEventListeners() {
-    // --- Listeners Globais / Aba 1 (Retirada Rápida) ---
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('search-dav-btn')?.addEventListener('click', handleSearchDav);
     document.getElementById('dav-search-input')?.addEventListener('keypress', (e) => {
@@ -106,59 +89,44 @@ function setupEventListeners() {
             if (historyRow && historyRow.classList.contains('history-row')) {
                 historyRow.classList.toggle('expanded');
                 const icon = row.querySelector('.history-chevron');
-                if (icon) {
-                    icon.classList.toggle('rotate-180');
-                }
+                if (icon) icon.classList.toggle('rotate-180');
             }
         }
     });
 
-    // --- Troca de Abas ---
     document.getElementById('delivery-tabs')?.addEventListener('click', handleTabSwitch);
 
-    // --- Modal Criar Romaneio ---
     document.getElementById('create-romaneio-btn')?.addEventListener('click', openCreateRomaneioModal);
     document.getElementById('close-romaneio-modal-btn')?.addEventListener('click', () => document.getElementById('create-romaneio-modal').classList.add('hidden'));
     document.getElementById('cancel-romaneio-creation-btn')?.addEventListener('click', () => document.getElementById('create-romaneio-modal').classList.add('hidden'));
     document.getElementById('create-romaneio-form')?.addEventListener('submit', handleCreateRomaneioSubmit);
 
-    // --- Tela Principal de Romaneios (Aba 2) ---
     document.getElementById('romaneio-main-filter-btn')?.addEventListener('click', loadRomaneiosEmMontagem);
     document.getElementById('romaneios-list-container')?.addEventListener('click', handleRomaneioClick);
     
-    // --- Tela de Detalhe do Romaneio (Aba 2) ---
     document.getElementById('back-to-romaneio-list-btn')?.addEventListener('click', showRomaneioListView);
     document.getElementById('open-add-items-modal-btn')?.addEventListener('click', handleOpenAddItemsModal);
     document.getElementById('current-romaneio-items-container')?.addEventListener('click', handleRemoveItemClick);
 
-    // --- Listeners de DENTRO DO MODAL de Adicionar Itens ---
     document.getElementById('close-add-items-modal-btn')?.addEventListener('click', () => document.getElementById('add-items-to-romaneio-modal').classList.add('hidden'));
     document.getElementById('cancel-add-items-btn')?.addEventListener('click', () => document.getElementById('add-items-to-romaneio-modal').classList.add('hidden'));
-    document.getElementById('confirm-add-items-btn')?.addEventListener('click', handleConfirmAddItems); // Botão final
+    document.getElementById('add-selected-items-to-romaneio-btn')?.addEventListener('click', handleConfirmAddItems); 
     
-    // --- Listeners dos Filtros (Dentro do Modal) ---
-    // Filtros Primários (disparam busca na API)
     document.getElementById('apply-dav-filters-btn')?.addEventListener('click', applyDavFiltersAndLoad);
     document.getElementById('clear-dav-filters-btn')?.addEventListener('click', clearDavFilters);
     
-    // Filtros Secundários (filtram localmente)
     document.getElementById('romaneio-filter-bairro')?.addEventListener('change', filterDisplayedDavs);
     document.getElementById('romaneio-filter-cidade')?.addEventListener('change', filterDisplayedDavs);
-    
-    // Lista de DAVs Elegíveis (Expandir, Checkbox Mestre do DAV, Checkbox Mestre do Item, Checkbox Item Individual)
+
     document.getElementById('eligible-davs-list')?.addEventListener('click', (event) => {
-        handleToggleDavItems(event);        // Expandir/Recolher
-        handleMasterCheckboxClick(event);   // Checkbox "Todos" na tabela
-        handleDavCheckboxClick(event);      // Checkbox Principal do DAV
-        handleItemCheckboxClick(event);     // Checkbox Individual de Item (NOVO)
+        handleToggleDavItems(event);
+        handleMasterCheckboxClick(event);
+        handleDavCheckboxClick(event);
     });
     
-    // Define a data padrão no filtro do MODAL
     const today = new Date().toISOString().split('T')[0];
     const dateFilterInput = document.getElementById('romaneio-filter-data');
-    if (dateFilterInput) {
-        dateFilterInput.value = today;
-    }
+    if (dateFilterInput) dateFilterInput.value = today;
 }
 
 // ==========================================================
@@ -180,9 +148,7 @@ function handleTabSwitch(event) {
         content.classList.add('hidden');
     });
     const targetContent = document.getElementById(`${button.dataset.tab}-content`);
-    if (targetContent) {
-         targetContent.classList.remove('hidden');
-    }
+    if (targetContent) targetContent.classList.remove('hidden');
 
     if (button.dataset.tab === 'romaneios') {
         showRomaneioListView(false); 
@@ -216,9 +182,7 @@ function showRomaneioListView(reloadList = true) {
     currentEligibleDavs = [];
     itemsForModal = [];
 
-    if (reloadList) {
-        loadRomaneiosEmMontagem();
-    }
+    if (reloadList) loadRomaneiosEmMontagem();
 }
 
 // ==========================================================
@@ -265,7 +229,7 @@ async function handleSearchDav() {
 }
 
 function renderDavResults(data) {
-    const { cliente, endereco, itens, data_hora_pedido, vendedor, valor_total, status_caixa, filial_pedido_nome, filial_pedido_codigo, caixa_info, fiscal_info, cancelamento_info } = data;
+    const { cliente, itens, data_hora_pedido, vendedor, valor_total, status_caixa, filial_pedido_nome, filial_pedido_codigo, caixa_info, fiscal_info, cancelamento_info } = data;
     const resultsContainer = document.getElementById('dav-results-container');
 
     const formatDateTime = (dateString) => {
@@ -518,6 +482,7 @@ async function handleConfirmRetirada(davNumber) {
         alert(`Erro: ${error.message}`);
     } finally {
         hideLoader();
+        // O botão será re-renderizado pelo handleSearchDav
     }
 }
 
@@ -525,6 +490,8 @@ async function handleConfirmRetirada(davNumber) {
 // ==========================================================
 //               ABA 2: GESTÃO DE ROMANEIOS
 // ==========================================================
+
+// --- Tela Principal: Criar e Listar Romaneios ---
 
 async function openCreateRomaneioModal() {
     const modal = document.getElementById('create-romaneio-modal');
@@ -825,14 +792,12 @@ async function handleOpenAddItemsModal() {
         return;
     }
 
-    // Reseta o estado do modal
     modalRomaneioIdSpan.textContent = currentRomaneioId;
     modalItemsList.innerHTML = '<p class="text-center text-gray-500 p-4">Use os filtros acima para buscar pedidos.</p>';
     
     itemsForModal = []; 
     currentEligibleDavs = [];
 
-    // Reseta os filtros de BUSCA (Seção 1)
     document.getElementById('romaneio-filter-data').value = new Date().toISOString().split('T')[0];
     document.getElementById('radio-data-entrega').checked = true;
     document.getElementById('romaneio-filter-entrega-marcada').checked = true;
@@ -840,11 +805,9 @@ async function handleOpenAddItemsModal() {
     document.getElementById('romaneio-filter-cidade').value = '';
     document.getElementById('romaneio-filter-dav').value = '';
     
-    // Reseta os selects dinâmicos
     populateDynamicFilters([], 'bairro');
     populateDynamicFilters([], 'cidade');
     
-    // Configura o filtro de FILIAL DO PEDIDO (Seção 1)
     const adminFiliais = ['escritorio', 'escritório (lojas)'];
     const userData = getUserData();
     const filialUsuario = userData.unidade;
@@ -1086,7 +1049,6 @@ async function handleToggleDavItems(event) {
                         </tbody>
                     </table>`;
             }
-            // Lógica de filtro de item removida (pois o filtro foi removido)
 
         } catch (error) {
             itemsContainer.innerHTML = `<p class="text-center text-xs text-red-500">${error.message}</p>`;
@@ -1110,9 +1072,6 @@ function updateItemsForModal(newItems) {
     itemsForModal.push(...newItems);
 }
 
-// A função 'populateModalFilialFilter' foi REMOVIDA pois não é mais necessária.
-// A função 'handleModalFilialFilterChange' foi REMOVIDA pois o filtro de item foi removido.
-
 function handleMasterCheckboxClick(event) {
     const masterCheckbox = event.target.closest('.dav-master-checkbox');
     if (!masterCheckbox) return;
@@ -1121,57 +1080,10 @@ function handleMasterCheckboxClick(event) {
     if (!itemsContainer) return;
 
     const isChecked = masterCheckbox.checked;
-    // Atualiza todos os itens e os estados visuais no DAV pai
     itemsContainer.querySelectorAll('.eligible-item-checkbox').forEach(itemCheckbox => {
         itemCheckbox.checked = isChecked;
     });
-    
-    updateDavCheckboxState(itemsContainer.closest('.dav-container-eligible')); // Atualiza o pai
 }
-
-// NOVA FUNÇÃO: Atualiza o estado visual do checkbox do DAV com base nos itens
-function updateDavCheckboxState(davContainer) {
-    const davMasterCheckbox = davContainer.querySelector('.eligible-dav-checkbox');
-    const itemsContainer = davContainer.querySelector('.dav-items-container');
-    if (!davMasterCheckbox || !itemsContainer) return;
-
-    const allItemCheckboxes = Array.from(itemsContainer.querySelectorAll('.eligible-item-checkbox'));
-    // Se não houver itens carregados, não faz nada (mantém o estado atual)
-    if (allItemCheckboxes.length === 0) return;
-
-    const checkedCount = allItemCheckboxes.filter(cb => cb.checked).length;
-
-    if (checkedCount === 0) {
-        davMasterCheckbox.checked = false;
-        davMasterCheckbox.indeterminate = false;
-    } else if (checkedCount === allItemCheckboxes.length) {
-        davMasterCheckbox.checked = true;
-        davMasterCheckbox.indeterminate = false;
-    } else {
-        davMasterCheckbox.checked = false;
-        davMasterCheckbox.indeterminate = true;
-    }
-}
-
-// NOVA FUNÇÃO: Handler para clique em item individual
-function handleItemCheckboxClick(event) {
-    const itemCheckbox = event.target.closest('.eligible-item-checkbox');
-    if (!itemCheckbox) return;
-    
-    // Atualiza o checkbox mestre do container de itens e do DAV
-    const itemsContainer = itemCheckbox.closest('.dav-items-container');
-    const davContainer = itemsContainer.closest('.dav-container-eligible');
-    
-    // Atualiza master da tabela
-    const masterTableCheckbox = itemsContainer.querySelector('.dav-master-checkbox');
-    const allItems = Array.from(itemsContainer.querySelectorAll('.eligible-item-checkbox'));
-    const allChecked = allItems.every(cb => cb.checked);
-    if(masterTableCheckbox) masterTableCheckbox.checked = allChecked;
-
-    // Atualiza checkbox do DAV
-    updateDavCheckboxState(davContainer);
-}
-
 
 async function handleDavCheckboxClick(event) {
     const davCheckbox = event.target.closest('.eligible-dav-checkbox');
@@ -1181,14 +1093,14 @@ async function handleDavCheckboxClick(event) {
     const itemsContainer = davContainer.querySelector('.dav-items-container');
     const isChecked = davCheckbox.checked;
     
-    // Se for para marcar e os itens não estiverem carregados, carrega primeiro
     if (isChecked && itemsContainer.classList.contains('hidden')) {
         await handleToggleDavItems({ target: davContainer.querySelector('.toggle-items-btn') });
     }
 
-    // Marca/Desmarca todos os itens
     const masterCheckbox = itemsContainer.querySelector('.dav-master-checkbox');
-    if (masterCheckbox) masterCheckbox.checked = isChecked;
+    if (masterCheckbox) {
+        masterCheckbox.checked = isChecked;
+    }
     
     itemsContainer.querySelectorAll('tbody tr').forEach(row => {
         const itemCheckbox = row.querySelector('.eligible-item-checkbox');
@@ -1196,12 +1108,13 @@ async function handleDavCheckboxClick(event) {
         
         const qtyInput = row.querySelector('.eligible-item-qty');
         if (qtyInput) {
-            qtyInput.value = isChecked ? qtyInput.max : 0;
+            if (isChecked) {
+                qtyInput.value = qtyInput.max; 
+            } else {
+                qtyInput.value = 0;
+            }
         }
     });
-    
-    // Remove estado indeterminado se houver
-    davCheckbox.indeterminate = false;
 }
 
 
@@ -1218,17 +1131,14 @@ async function handleConfirmAddItems() {
     const promises = []; 
 
     document.querySelectorAll('#eligible-davs-list .dav-container-eligible').forEach(davContainer => {
-        // Verifica se o DAV PAI está selecionado OU Indeterminado (parcialmente selecionado)
         const davMasterCheckbox = davContainer.querySelector('.eligible-dav-checkbox');
-        // Se não estiver nem checkado nem indeterminado, pula
-        if (!davMasterCheckbox || (!davMasterCheckbox.checked && !davMasterCheckbox.indeterminate)) {
+        if (!davMasterCheckbox || !davMasterCheckbox.checked) {
             return;
         }
 
         const itemsContainer = davContainer.querySelector('.dav-items-container:not(.hidden)');
         const davNumero = davContainer.dataset.davNumero;
 
-        // CASO 1: Itens carregados e visíveis. Itera sobre eles.
         if (itemsContainer) {
             itemsContainer.querySelectorAll('tbody tr').forEach(row => {
                 const checkbox = row.querySelector('.eligible-item-checkbox');
@@ -1253,11 +1163,15 @@ async function handleConfirmAddItems() {
                         idavs_regi: idavsRegi,
                         quantidade_a_entregar: quantidade
                     });
+                } else if (checkbox.checked && quantidade <= 0) {
+                     alert(`A quantidade para o item ${idavsRegi} (DAV ${davNumero}) deve ser > 0 se selecionado.`);
+                     qtyInput.style.borderColor = 'red';
+                     qtyInput.focus();
+                     hasInvalidQuantity = true;
+                     return;
                 }
             });
-        
-        // CASO 2: DAV selecionado, mas itens NÃO carregados (Seleção em massa cega)
-        } else if (davMasterCheckbox.checked) { // Apenas se estiver totalmente checkado
+        } else {
             itemsFound = true; 
             promises.push(
                 fetch(`${apiUrlBase}/entregas/dav/${davNumero}`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
@@ -1275,11 +1189,10 @@ async function handleConfirmAddItems() {
             for (const davData of results) {
                 const itemsComSaldo = davData.itens.filter(item => item.quantidade_saldo > 0);
                 for (const item of itemsComSaldo) {
-                    // Aqui não aplicamos filtro de filial de item, pegamos tudo do DAV
                     itensParaAdicionarPayload.push({
                         dav_numero: item.dav_numero,
                         idavs_regi: item.idavs_regi,
-                        quantidade_a_entregar: item.quantidade_saldo // Adiciona o saldo TOTAL
+                        quantidade_a_entregar: item.quantidade_saldo 
                     });
                 }
             }
@@ -1291,7 +1204,7 @@ async function handleConfirmAddItems() {
     }
 
     if (!itemsFound && itensParaAdicionarPayload.length === 0) {
-        alert("Nenhum item válido selecionado.");
+        alert("Nenhum DAV ou item válido foi selecionado.");
         return;
     }
     
