@@ -45,7 +45,6 @@ function parseRetiradasAnteriores(it_reti) {
 
 /**
  * FUNÇÃO DE CÁLCULO DE SALDO - VERSÃO FINAL CORRETA
- * Calcula o saldo disponível de um item.
  */
 function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem) {
     const quantidadeTotalPedido = parseFloat(itemErp.it_quan) || 0;
@@ -53,34 +52,20 @@ function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem
     const totalDevolvido = parseFloat(itemErp.it_qtdv) || 0;    // Total que já voltou
 
     // 1. Calcula o que está efetivamente com o cliente (Entregue Líquido).
-    // Fórmula: (Total que Saiu) - (Total que Voltou)
     const entregueLiquido = totalEntregueBruto - totalDevolvido;
 
-    // 2. Soma qualquer quantidade que esteja alocada em *outros* romaneios no nosso app.
+    // 2. Soma qualquer quantidade que esteja em rota de entrega pelo nosso app.
     const totalEmRomaneioApp = parseFloat(entregaRomaneioDoItem?.total) || 0;
-    
-    // 3. Soma retiradas manuais do nosso app (caso não reflitam em it_qent imediatamente)
-    // NOTA: Esta lógica assume que 'retiradaManualDoItem' vem de um 'GROUP BY' do log de retiradas manuais.
-    const totalRetiradaManualApp = parseFloat(retiradaManualDoItem?.total) || 0;
 
-    // 4. O total indisponível é a soma do que está com o cliente + o que está em rota + o que foi retirado manualmente.
-    // Se a retirada manual JÁ atualiza o it_qent, o totalRetiradaManualApp deve ser removido da soma
-    // Vamos manter a lógica original que soma os três, pois 'calcularSaldosItem' é usado tanto na leitura
-    // (onde 'it_qent' está atualizado) quanto na validação de retirada (onde 'it_qent' ainda não foi atualizado).
-    
-    // CORREÇÃO DA LÓGICA DE SALDO:
-    // Saldo = Total do Pedido - (O que já saiu e não voltou) - (O que está alocado em outros romaneios)
-    // O 'totalRetiradaManualApp' é problemático aqui se 'it_qent' já o inclui.
-    // A lógica mais segura para SALDO é:
-    // Saldo = Total Pedido - (Entregue Líquido no ERP) - (Alocado em Romaneios)
+    // 3. O total indisponível é a soma do que está com o cliente + o que está em rota.
     const totalIndisponivel = entregueLiquido + totalEmRomaneioApp;
     
+    // 4. O saldo a retirar é o total do pedido menos o que está indisponível.
     const saldo = quantidadeTotalPedido - totalIndisponivel;
 
     return {
         saldo: Math.max(0, saldo), 
-        // 'entregue' reflete o que já saiu (líquido) + o que está em rota
-        entregue: Math.max(0, totalIndisponivel) 
+        entregue: Math.max(0, totalIndisponivel)
     };
 }
 
@@ -88,10 +73,6 @@ function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem
 //               ROTAS DE RETIRADA RÁPIDA (BALCÃO)
 // ==========================================================
 
-/**
- * Rota GET /dav/:numero
- * Busca dados de um DAV, aplicando filtro de filial e incluindo 'it_inde' nos itens.
- */
 router.get('/dav/:numero', authenticateToken, async (req, res) => {
     const davNumberStr = req.params.numero;
     const davNumber = parseInt(davNumberStr, 10);
@@ -108,7 +89,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             'Piabetá': 'VMNAF',
             'Parada Angélica': 'TNASC',
             'Nova Campinas': 'LCMAT'
-            // Adicione outras filiais aqui (Nome no Token -> Código no cr_inde)
         };
 
         const adminFiliais = ['escritorio', 'escritório (lojas)'];
@@ -151,7 +131,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         }
         const davData = davs[0];
 
-        // Verificação de Orçamento
         if (davData.cr_tipo != 1) {
             return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
         }
@@ -165,7 +144,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             return new Date(`${datePart}T${validTime}`);
         };
 
-        // 2. Monta o objeto de resposta principal
         const nfemParts = (davData.cr_nfem || '').split(' ');
         const fiscalInfo = {
             data_emissao: nfemParts[0] && nfemParts[1] ? combineDateTime(nfemParts[0], nfemParts[1]) : null,
@@ -206,7 +184,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             itens: []
         };
 
-        // 3. Se o pedido não estiver "Recebido", não busca itens
         if (davData.cr_reca !== '1') {
             console.log(`[LOG] Pedido ${davNumber} com status '${davData.cr_reca}'. Não buscará itens.`);
             return res.json(responseData);
@@ -226,7 +203,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
              WHERE ri.dav_numero = ?)
              ORDER BY data DESC`;
 
-        // 4. Busca dados dos itens e históricos
         const allResults = await Promise.all([
             seiPool.execute(
                 `SELECT it_regist, it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti, it_inde 
@@ -245,7 +221,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'Nenhum item válido encontrado para este pedido.' });
         }
         
-        // 5. Processa cada item e calcula saldos
         const itensComSaldo = [];
         for (const item of itensDav) {
             const idavsRegi = item.it_regist;
@@ -264,7 +239,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 quantidade_saldo: saldo,
                 quantidade_devolvida: parseFloat(item.it_qtdv) || 0,
                 quantidade_entregue_bruta: parseFloat(item.it_qent) || 0,
-                item_filial_codigo: item.it_inde, // <-- Campo da filial do item
+                item_filial_codigo: item.it_inde,
                 responsavel_caixa: parseUsuarioLiberacao(item.it_entr),
                 historico: historicoDoItem
             });
@@ -417,7 +392,7 @@ router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
 });
 
 router.get('/romaneios', authenticateToken, async (req, res) => {
-    const { status, filial } = req.query; // 'filial' é o novo parâmetro
+    const { status, filial } = req.query; 
     const { unidade: filialUsuario } = req.user;
 
     try {
@@ -483,7 +458,6 @@ router.post('/romaneios', authenticateToken, async (req, res) => {
 });
 
 router.get('/eligible-davs', authenticateToken, async (req, res) => {
-    // Adiciona 'filialDav' (nome da filial) como parâmetro
     const { data, tipoData, apenasEntregaMarcada, bairro, cidade, davNumero, filialDav } = req.query;
     const { unidade: filialUsuario } = req.user;
 
@@ -500,7 +474,6 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
             'Piabetá': 'VMNAF',
             'Parada Angélica': 'TNASC',
             'Nova Campinas': 'LCMAT'
-            // Adicione outras filiais aqui (Nome no Token -> Código no cr_inde)
         };
         const adminFiliais = ['escritorio', 'escritório (lojas)'];
         const filialUsuarioNormalizada = filialUsuario ? filialUsuario.trim().toLowerCase() : '';
@@ -526,11 +499,9 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
         if (cidade) { query += ' AND c.cr_ecid LIKE ?'; params.push(`%${cidade}%`); }
         if (davNumero) { query += ' AND CAST(c.cr_ndav AS UNSIGNED) = ?'; params.push(parseInt(davNumero, 10)); }
 
-        // --- LÓGICA DE FILTRO DE FILIAL ATUALIZADA ---
+        // --- LÓGICA DE FILTRO DE FILIAL ---
         if (isUsuarioAdmin) {
-            // Se for admin e enviou um filtro de filial, usa-o
             if (filialDav) {
-                // Mapeia o nome da filial (ex: "Santa Cruz da Serra") para o código (ex: "LUCAM")
                 const filialCode = filialMap[filialDav];
                 if (filialCode) {
                     query += ' AND c.cr_inde = ?';
@@ -539,9 +510,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
                     console.warn(`[ELIGIBLE DAVs] Admin filtrou por filial "${filialDav}" não mapeada.`);
                 }
             }
-            // Se for admin e não enviou filtro, não faz nada (vê todas)
         } else {
-            // Se não for admin, força o filtro para a filial do próprio usuário
             const filialCode = filialMap[filialUsuario];
             if (!filialCode) {
                 console.warn(`[ELIGIBLE DAVs] Usuário da filial "${filialUsuario}" não mapeada.`);
@@ -550,7 +519,6 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
             query += ' AND c.cr_inde = ?';
             params.push(filialCode);
         }
-        // --- FIM DA LÓGICA DE FILTRO ---
 
         query += ' ORDER BY c.cr_ebai, c.cr_nmcl';
 
@@ -628,10 +596,12 @@ router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => {
              throw new Error("Nenhum ID de item válido encontrado.");
         }
 
-        const [itemErpRows] = await seiPool.execute(`SELECT it_regist, it_nome, it_quan, it_qent, it_qtdv FROM idavs WHERE it_regist IN (?)`, [allIdavsRegi]);
+        // CORREÇÃO AQUI: Use .query para IN (?)
+        const [itemErpRows] = await seiPool.query(`SELECT it_regist, it_nome, it_quan, it_qent, it_qtdv FROM idavs WHERE it_regist IN (?)`, [allIdavsRegi]);
         const itemErpMap = new Map(itemErpRows.map(i => [i.it_regist, i]));
 
-        const [alocadoEmRomaneiosRows] = await gerencialPool.execute(
+        // CORREÇÃO AQUI: Use .query para IN (?)
+        const [alocadoEmRomaneiosRows] = await gerencialPool.query(
             'SELECT idavs_regi, SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE idavs_regi IN (?) AND id_romaneio != ? GROUP BY idavs_regi',
             [allIdavsRegi, romaneioId]
         );
@@ -712,6 +682,5 @@ router.delete('/romaneios/:id/itens/:itemId', authenticateToken, async (req, res
         gerencialConnection.release();
     }
 });
-
 
 module.exports = router;
