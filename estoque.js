@@ -4,49 +4,87 @@ const API_BASE = '/api/estoque';
 let currentEnderecoId = null;
 let debounceTimer;
 
-function getToken() { return localStorage.getItem('lucaUserToken'); }
-function showLoader() { document.getElementById('global-loader')?.classList.remove('hidden'); document.getElementById('global-loader')?.classList.add('flex'); }
-function hideLoader() { document.getElementById('global-loader')?.classList.add('hidden'); document.getElementById('global-loader')?.classList.remove('flex'); }
+// Funções Utilitárias
+function getToken() { 
+    return localStorage.getItem('lucaUserToken'); 
+}
 
+function showLoader() { 
+    const loader = document.getElementById('global-loader');
+    if (loader) {
+        loader.classList.remove('hidden'); 
+        loader.classList.add('flex'); 
+    }
+}
+
+function hideLoader() { 
+    const loader = document.getElementById('global-loader');
+    if (loader) {
+        loader.classList.add('hidden'); 
+        loader.classList.remove('flex'); 
+    }
+}
+
+// Inicialização da Página
 async function initPage() {
-    console.log("Iniciando página de estoque...");
+    console.log("Iniciando módulo de estoque...");
     
-    // Testa o Diagnóstico
+    // Verifica saúde do backend (Diagnóstico)
     checkBackendHealth();
 
+    // Configura Filiais
     const selectFilial = document.getElementById('filial-select');
     const filiais = ['Santa Cruz da Serra', 'Piabetá', 'Parada Angélica', 'Nova Campinas', 'Escritório'];
+    
     selectFilial.innerHTML = filiais.map(f => `<option value="${f}">${f}</option>`).join('');
     
+    // Seleciona filial do usuário automaticamente se possível
     const token = getToken();
     if(token) {
-        try { const p = JSON.parse(atob(token.split('.')[1])); if(filiais.includes(p.unidade)) selectFilial.value = p.unidade; } catch(e){}
+        try { 
+            const payload = JSON.parse(atob(token.split('.')[1])); 
+            if(payload.unidade && filiais.includes(payload.unidade)) {
+                selectFilial.value = payload.unidade;
+            }
+        } catch(e) {
+            console.error("Erro ao ler token:", e);
+        }
     }
 
-    // Listeners
+    // Configura Listeners de Eventos
     selectFilial.addEventListener('change', loadEnderecos);
+    
     document.getElementById('btn-novo-endereco').addEventListener('click', () => toggleModal(true));
     document.getElementById('btn-cancelar-modal').addEventListener('click', () => toggleModal(false));
     document.getElementById('form-novo-endereco').addEventListener('submit', createEndereco);
+    
     document.getElementById('search-endereco').addEventListener('input', filterEnderecosLocal);
     document.getElementById('btn-excluir-endereco').addEventListener('click', deleteEndereco);
+    
     document.getElementById('input-busca-produto').addEventListener('input', handleProductSearch);
 
+    // Carrega dados iniciais
     loadEnderecos();
 }
 
+// Diagnóstico Automático
 async function checkBackendHealth() {
     try {
-        const res = await fetch(`${API_BASE}/diagnostico`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const res = await fetch(`${API_BASE}/diagnostico`, { 
+            headers: { 'Authorization': `Bearer ${getToken()}` } 
+        });
         const data = await res.json();
-        console.table(data);
-        if (!data.tabelas || !data.tabelas.includes('estoque_enderecos')) {
-            console.error("TABELAS NÃO ENCONTRADAS!");
+        console.log("Diagnóstico do Backend:", data);
+        
+        if (!data.tabelas_sistema || !data.tabelas_sistema.includes('estoque_enderecos')) {
+            console.error("ALERTA: Tabelas de estoque não encontradas no banco de dados.");
         }
-    } catch (e) {
-        console.error("Falha no diagnóstico:", e);
+    } catch (e) { 
+        console.error("Falha ao rodar diagnóstico:", e); 
     }
 }
+
+// --- GERENCIAMENTO DE LOTES (ENDEREÇOS) ---
 
 async function loadEnderecos() {
     const filial = document.getElementById('filial-select').value;
@@ -58,21 +96,26 @@ async function loadEnderecos() {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(errText);
+        }
         
         const enderecos = await res.json();
         renderEnderecos(enderecos);
         
+        // Reseta a visualização de detalhes
         document.getElementById('detalhe-vazio').classList.remove('hidden');
         document.getElementById('detalhe-conteudo').classList.add('hidden');
         currentEnderecoId = null;
+
     } catch (err) {
         console.error(err);
         try {
             const jsonErr = JSON.parse(err.message);
             alert(`Erro: ${jsonErr.error}`);
         } catch {
-            alert('Erro ao carregar endereços.');
+            alert('Erro ao carregar lista de endereços.');
         }
     } finally {
         hideLoader();
@@ -84,7 +127,11 @@ function renderEnderecos(lista) {
     container.innerHTML = '';
 
     if (lista.length === 0) {
-        container.innerHTML = '<div class="text-center p-6 text-gray-400"><p>Nenhum lote encontrado.</p><p class="text-xs mt-1">Clique em "Novo Lote" para começar.</p></div>';
+        container.innerHTML = `
+            <div class="text-center p-6 text-gray-400">
+                <p>Nenhum lote encontrado nesta filial.</p>
+                <p class="text-xs mt-1">Clique em "Novo" para começar.</p>
+            </div>`;
         return;
     }
 
@@ -94,21 +141,28 @@ function renderEnderecos(lista) {
         div.dataset.id = end.id;
         div.dataset.codigo = end.codigo_endereco;
         
-        let badgeClass = 'bg-green-100 text-green-800';
-        if (end.qtd_produtos >= 5) badgeClass = 'bg-red-100 text-red-800';
-        else if (end.qtd_produtos > 0) badgeClass = 'bg-blue-100 text-blue-800';
+        // Cores da badge de capacidade
+        let badgeClass = 'bg-green-100 text-green-800'; // Vazio/Pouco
+        if (end.qtd_produtos >= 5) {
+            badgeClass = 'bg-red-100 text-red-800'; // Cheio
+        } else if (end.qtd_produtos > 0) {
+            badgeClass = 'bg-blue-100 text-blue-800'; // Em uso
+        }
 
         div.innerHTML = `
             <div class="flex justify-between items-start pointer-events-none">
                 <div>
                     <p class="font-bold text-gray-800 text-base group-hover:text-indigo-600">${end.codigo_endereco}</p>
-                    <p class="text-xs text-gray-500 mt-0.5">${end.descricao || 'Sem descrição'}</p>
+                    <p class="text-xs text-gray-500 mt-0.5">${end.descricao || 'Lote Padrão'}</p>
                 </div>
                 <div class="text-right">
-                    <span class="inline-block px-2 py-0.5 rounded text-xs font-bold ${badgeClass}">${end.qtd_produtos} / 5</span>
+                    <span class="inline-block px-2 py-0.5 rounded text-xs font-bold ${badgeClass}">
+                        ${end.qtd_produtos} / 5
+                    </span>
                 </div>
             </div>
         `;
+        
         div.addEventListener('click', () => selectEndereco(end));
         container.appendChild(div);
     });
@@ -118,10 +172,12 @@ function filterEnderecosLocal(e) {
     const term = e.target.value.toLowerCase();
     document.querySelectorAll('.endereco-item').forEach(el => {
         const codigo = el.dataset.codigo.toLowerCase();
+        // Filtra se o código contém o termo digitado
         el.style.display = codigo.includes(term) ? 'block' : 'none';
     });
 }
 
+// Modal Criar Lote
 function toggleModal(show) {
     const modal = document.getElementById('modal-novo-endereco');
     if (show) {
@@ -139,14 +195,12 @@ async function createEndereco(e) {
     const filial = document.getElementById('filial-select').value;
     const formData = new FormData(e.target);
     
-    // PAYLOAD SEM TIPO
+    // Monta o payload sem o campo 'tipo'
     const payload = {
         filial_codigo: filial,
         codigo_endereco: formData.get('codigo').toUpperCase(),
         descricao: formData.get('descricao')
     };
-
-    console.log("Enviando:", payload);
 
     try {
         const res = await fetch(`${API_BASE}/enderecos`, {
@@ -166,9 +220,9 @@ async function createEndereco(e) {
 
         alert("Sucesso: " + data.message);
         toggleModal(false);
-        loadEnderecos();
+        loadEnderecos(); // Recarrega a lista
     } catch (err) {
-        alert("Falha: " + err.message);
+        alert("Falha ao criar lote: " + err.message);
     }
 }
 
@@ -181,31 +235,39 @@ async function deleteEndereco() {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
+        
         if(res.ok) {
             loadEnderecos();
         } else {
-            alert('Erro ao excluir');
+            alert('Erro ao excluir lote.');
         }
     } catch(err) {
         console.error(err);
     }
 }
 
+// --- DETALHES E PRODUTOS DO LOTE ---
+
 async function selectEndereco(endereco) {
     currentEnderecoId = endereco.id;
     
+    // Atualiza estilo da seleção na lista
     document.querySelectorAll('.endereco-item').forEach(el => el.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50'));
     document.querySelector(`.endereco-item[data-id="${endereco.id}"]`)?.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50');
 
+    // Mostra painel de detalhes
     document.getElementById('detalhe-vazio').classList.add('hidden');
     document.getElementById('detalhe-conteudo').classList.remove('hidden');
     
+    // Preenche cabeçalho
     document.getElementById('lbl-codigo-endereco').textContent = endereco.codigo_endereco;
     document.getElementById('lbl-descricao-endereco').textContent = endereco.descricao || 'Lote Padrão';
     
+    // Reseta busca
     document.getElementById('input-busca-produto').value = '';
     document.getElementById('resultados-busca').classList.add('hidden');
 
+    // Carrega produtos
     loadProdutosDoEndereco();
 }
 
@@ -223,7 +285,8 @@ async function loadProdutosDoEndereco() {
         const produtos = await res.json();
         renderProdutos(produtos);
     } catch(err) {
-        container.innerHTML = '<p class="text-center text-red-400">Erro ao carregar itens.</p>';
+        container.innerHTML = '<p class="text-center text-red-400">Erro ao carregar itens do lote.</p>';
+        console.error(err);
     }
 }
 
@@ -237,8 +300,7 @@ function renderProdutos(produtos) {
                 <i data-feather="box" class="w-10 h-10 text-gray-300 mx-auto mb-2"></i>
                 <p class="text-gray-500 text-sm">Este lote está vazio.</p>
                 <p class="text-xs text-gray-400">Use a busca acima para adicionar itens.</p>
-            </div>
-        `;
+            </div>`;
         if (typeof feather !== 'undefined') feather.replace();
         return;
     }
@@ -247,16 +309,27 @@ function renderProdutos(produtos) {
         const div = document.createElement('div');
         div.className = 'bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3 transition-shadow hover:shadow-md';
         
+        // Estilo do saldo
         const saldoClass = prod.saldo > 0 ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50';
+
+        // Monta detalhes extras (Fabricante e Grupo)
+        const detalhes = [];
+        if(prod.fabricante) detalhes.push(prod.fabricante);
+        if(prod.grupo) detalhes.push(prod.grupo);
+        const detalhesTexto = detalhes.length > 0 ? detalhes.join(' • ') : '';
 
         div.innerHTML = `
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-1">
                     <span class="font-mono text-xs font-bold bg-gray-100 px-2 py-0.5 rounded text-gray-700 border border-gray-200">${prod.codigo}</span>
+                    ${detalhesTexto ? `<span class="text-xs text-gray-400 border-l pl-2 border-gray-300 truncate max-w-[200px] hidden sm:inline-block" title="${detalhesTexto}">${detalhesTexto}</span>` : ''}
                 </div>
                 <p class="font-medium text-sm text-gray-900 truncate" title="${prod.nome}">${prod.nome}</p>
+                
+                ${detalhesTexto ? `<p class="text-[10px] text-gray-400 mt-0.5 sm:hidden uppercase">${detalhesTexto}</p>` : ''}
+                
                 <div class="mt-2 flex items-center gap-2 text-xs">
-                    <span class="px-2 py-0.5 rounded font-bold ${saldoClass}">Saldo: ${prod.saldo}</span>
+                    <span class="px-2 py-0.5 rounded font-bold ${saldoClass}">Saldo em Estoque: ${prod.saldo}</span>
                 </div>
             </div>
             <button class="text-gray-400 hover:text-red-600 hover:bg-red-50 p-2 rounded transition-colors" onclick="removerProduto(${prod.id_mapa})" title="Remover do lote">
@@ -265,17 +338,17 @@ function renderProdutos(produtos) {
         `;
         container.appendChild(div);
     });
+    
     if (typeof feather !== 'undefined') feather.replace();
 }
+
+// --- BUSCA E ADIÇÃO ---
 
 function handleProductSearch(e) {
     clearTimeout(debounceTimer);
     const query = e.target.value;
     const filial = document.getElementById('filial-select').value;
     const resultsContainer = document.getElementById('resultados-busca');
-
-    // Debug no Console do Navegador
-    console.log(`[FRONT] Digitando: "${query}" | Filial: "${filial}"`);
 
     if (query.length < 3) {
         resultsContainer.classList.add('hidden');
@@ -284,17 +357,11 @@ function handleProductSearch(e) {
 
     debounceTimer = setTimeout(async () => {
         try {
-            console.log("[FRONT] Enviando requisição ao servidor...");
-            
-            const url = `${API_BASE}/produtos/busca?q=${encodeURIComponent(query)}&filial=${encodeURIComponent(filial)}`;
-            const res = await fetch(url, {
+            const res = await fetch(`${API_BASE}/produtos/busca?q=${encodeURIComponent(query)}&filial=${encodeURIComponent(filial)}`, {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
             
-            if (!res.ok) throw new Error("Erro na resposta da API");
-
             const resultados = await res.json();
-            console.log(`[FRONT] Recebido ${resultados.length} produtos:`, resultados);
             
             resultsContainer.innerHTML = '';
             
@@ -302,18 +369,23 @@ function handleProductSearch(e) {
                 resultados.forEach(prod => {
                     const div = document.createElement('div');
                     div.className = 'p-3 hover:bg-indigo-50 cursor-pointer border-b last:border-0 transition-colors group';
+                    
+                    // Detalhes na busca (usando os nomes diretos das colunas)
+                    const detalhes = [];
+                    if(prod.pd_fabr) detalhes.push(prod.pd_fabr);
+                    if(prod.pd_nmgr) detalhes.push(prod.pd_nmgr);
+                    const detalhesTexto = detalhes.join(' | ');
+
                     div.innerHTML = `
                         <div class="flex justify-between">
                             <span class="font-bold text-gray-700 text-sm group-hover:text-indigo-700">${prod.pd_codi}</span>
                             <span class="text-xs text-gray-400">Saldo: ${prod.pd_saldo}</span>
                         </div>
-                        <div class="text-gray-600 text-xs truncate mt-0.5">${prod.pd_nome}</div>
+                        <div class="text-gray-800 text-xs truncate mt-0.5">${prod.pd_nome}</div>
+                        ${detalhesTexto ? `<div class="text-gray-400 text-[10px] mt-0.5 uppercase">${detalhesTexto}</div>` : ''}
                     `;
-                    // Ao clicar, chama a função de adicionar
-                    div.addEventListener('click', () => {
-                        console.log(`[FRONT] Clicou no produto: ${prod.pd_codi}`);
-                        adicionarProduto(prod.pd_codi);
-                    });
+                    
+                    div.addEventListener('click', () => adicionarProduto(prod.pd_codi));
                     resultsContainer.appendChild(div);
                 });
                 resultsContainer.classList.remove('hidden');
@@ -322,8 +394,8 @@ function handleProductSearch(e) {
                 resultsContainer.classList.remove('hidden');
             }
         } catch (err) {
-            console.error("[FRONT] Erro na busca:", err);
-            resultsContainer.innerHTML = '<div class="p-3 text-sm text-red-500 text-center">Erro ao buscar.</div>';
+            console.error("Erro na busca:", err);
+            resultsContainer.innerHTML = '<div class="p-3 text-sm text-red-500 text-center">Erro ao buscar produtos.</div>';
             resultsContainer.classList.remove('hidden');
         }
     }, 300);
@@ -332,6 +404,7 @@ function handleProductSearch(e) {
 async function adicionarProduto(codigo) {
     if (!currentEnderecoId) return;
     
+    // Limpa a busca
     document.getElementById('resultados-busca').classList.add('hidden');
     document.getElementById('input-busca-produto').value = '';
 
@@ -351,6 +424,7 @@ async function adicionarProduto(codigo) {
             throw new Error(err.error || 'Erro ao adicionar');
         }
 
+        // Recarrega tudo para atualizar contagens
         loadProdutosDoEndereco();
         loadEnderecos(); 
 
@@ -375,7 +449,7 @@ window.removerProduto = async function(idMapa) {
             loadProdutosDoEndereco();
             loadEnderecos();
         } else {
-            alert('Erro ao remover');
+            alert('Erro ao remover produto.');
         }
     } catch(err) {
         console.error(err);
