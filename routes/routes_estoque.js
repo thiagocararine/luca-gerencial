@@ -13,7 +13,7 @@ const dbConfigSei = {
     charset: 'utf8mb4'
 };
 const seiPool = mysql.createPool(dbConfigSei);
-const gerencialPool = mysql.createPool(dbConfig); // Banco do Sistema (onde deve estar a tabela estoque_enderecos)
+const gerencialPool = mysql.createPool(dbConfig); // Banco do Sistema
 
 // Mapa de Filiais (Nome -> Código ERP)
 const MAPA_FILIAIS = {
@@ -24,7 +24,31 @@ const MAPA_FILIAIS = {
     'Escritório': 'LUCAM'
 };
 
-// --- ROTAS ---
+// --- ROTA DE DIAGNÓSTICO ---
+router.get('/diagnostico', async (req, res) => {
+    const report = {
+        status: 'Check',
+        banco_conectado: false,
+        tabelas: [],
+        erro: null
+    };
+    try {
+        const connection = await gerencialPool.getConnection();
+        report.banco_conectado = true;
+        connection.release();
+        
+        const [tables] = await gerencialPool.query(`
+            SELECT table_name FROM information_schema.tables 
+            WHERE table_schema = ? AND table_name LIKE 'estoque_%'
+        `, [dbConfig.database]);
+        report.tabelas = tables.map(t => t.TABLE_NAME || t.table_name);
+        
+        res.json(report);
+    } catch (error) {
+        report.erro = error.message;
+        res.status(500).json(report);
+    }
+});
 
 // 1. Listar Lotes
 router.get('/enderecos', authenticateToken, async (req, res) => {
@@ -32,9 +56,6 @@ router.get('/enderecos', authenticateToken, async (req, res) => {
     if (!filial) return res.status(400).json({ error: 'Selecione uma filial.' });
 
     try {
-        // Log para debug: mostra qual banco está sendo usado
-        // console.log('Consultando banco:', dbConfig.database); 
-
         const [rows] = await gerencialPool.query(`
             SELECT e.*, COUNT(m.id) as qtd_produtos 
             FROM estoque_enderecos e
@@ -50,15 +71,16 @@ router.get('/enderecos', authenticateToken, async (req, res) => {
     }
 });
 
-// 2. Criar Novo Lote (CORRIGIDO: REMOVIDO CAMPO TIPO)
+// 2. Criar Novo Lote (SIMPLIFICADO)
 router.post('/enderecos', authenticateToken, async (req, res) => {
     const { filial_codigo, codigo_endereco, descricao } = req.body;
     
-    if (!filial_codigo) return res.status(400).json({ error: 'Filial obrigatória.' });
-    if (!codigo_endereco) return res.status(400).json({ error: 'Código obrigatório.' });
+    if (!filial_codigo || !codigo_endereco) {
+        return res.status(400).json({ error: 'Dados incompletos.' });
+    }
 
     try {
-        // AQUI ESTAVA O ERRO: Removemos 'tipo' da query
+        // NÃO ENVIA O CAMPO 'TIPO'
         await gerencialPool.query(
             'INSERT INTO estoque_enderecos (filial_codigo, codigo_endereco, descricao) VALUES (?, ?, ?)',
             [filial_codigo, codigo_endereco, descricao]
@@ -66,16 +88,13 @@ router.post('/enderecos', authenticateToken, async (req, res) => {
         res.status(201).json({ message: 'Lote criado com sucesso.' });
 
     } catch (error) {
-        console.error("ERRO DETALHADO AO CRIAR:", error); // Veja isso no terminal se falhar
+        console.error("ERRO AO CRIAR LOTE:", error);
         
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ error: `O código "${codigo_endereco}" já existe nesta filial.` });
         }
-        if (error.code === 'ER_BAD_FIELD_ERROR') {
-            return res.status(500).json({ error: 'Erro de coluna no banco. Verifique se as colunas filial_codigo, codigo_endereco e descricao existem.' });
-        }
         if (error.code === 'ER_NO_SUCH_TABLE') {
-            return res.status(500).json({ error: `Tabela 'estoque_enderecos' não encontrada no banco '${dbConfig.database}'.` });
+            return res.status(500).json({ error: 'Tabela estoque_enderecos não encontrada.' });
         }
         
         res.status(500).json({ error: 'Erro interno ao criar lote.' });
@@ -93,7 +112,7 @@ router.delete('/enderecos/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// 4. Listar Produtos
+// 4. Listar Produtos do Lote
 router.get('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
     const idEndereco = req.params.id;
     const { filial } = req.query;
@@ -109,7 +128,7 @@ router.get('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
 
         const codigos = mapa.map(m => m.codigo_produto);
 
-        // Busca no ERP (ajuste 'produtos', 'pd_codi' etc conforme seu ERP real)
+        // Busca no ERP
         const queryErp = `
             SELECT pd_codi, pd_nome, pd_saldo 
             FROM produtos 

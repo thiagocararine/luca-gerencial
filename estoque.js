@@ -5,21 +5,22 @@ let currentEnderecoId = null;
 let debounceTimer;
 
 function getToken() { return localStorage.getItem('lucaUserToken'); }
-function showLoader() { document.getElementById('global-loader').classList.remove('hidden'); document.getElementById('global-loader').classList.add('flex'); }
-function hideLoader() { document.getElementById('global-loader').classList.add('hidden'); document.getElementById('global-loader').classList.remove('flex'); }
+function showLoader() { document.getElementById('global-loader')?.classList.remove('hidden'); document.getElementById('global-loader')?.classList.add('flex'); }
+function hideLoader() { document.getElementById('global-loader')?.classList.add('hidden'); document.getElementById('global-loader')?.classList.remove('flex'); }
 
 async function initPage() {
-    // Popula Filiais
+    console.log("Iniciando página de estoque...");
+    
+    // Testa o Diagnóstico
+    checkBackendHealth();
+
     const selectFilial = document.getElementById('filial-select');
     const filiais = ['Santa Cruz da Serra', 'Piabetá', 'Parada Angélica', 'Nova Campinas', 'Escritório'];
     selectFilial.innerHTML = filiais.map(f => `<option value="${f}">${f}</option>`).join('');
     
     const token = getToken();
     if(token) {
-        try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            if(payload.unidade && filiais.includes(payload.unidade)) selectFilial.value = payload.unidade;
-        } catch(e) {}
+        try { const p = JSON.parse(atob(token.split('.')[1])); if(filiais.includes(p.unidade)) selectFilial.value = p.unidade; } catch(e){}
     }
 
     // Listeners
@@ -34,6 +35,19 @@ async function initPage() {
     loadEnderecos();
 }
 
+async function checkBackendHealth() {
+    try {
+        const res = await fetch(`${API_BASE}/diagnostico`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const data = await res.json();
+        console.table(data);
+        if (!data.tabelas || !data.tabelas.includes('estoque_enderecos')) {
+            console.error("TABELAS NÃO ENCONTRADAS!");
+        }
+    } catch (e) {
+        console.error("Falha no diagnóstico:", e);
+    }
+}
+
 async function loadEnderecos() {
     const filial = document.getElementById('filial-select').value;
     if (!filial) return;
@@ -43,6 +57,9 @@ async function loadEnderecos() {
         const res = await fetch(`${API_BASE}/enderecos?filial=${encodeURIComponent(filial)}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
+        
+        if (!res.ok) throw new Error(await res.text());
+        
         const enderecos = await res.json();
         renderEnderecos(enderecos);
         
@@ -51,7 +68,12 @@ async function loadEnderecos() {
         currentEnderecoId = null;
     } catch (err) {
         console.error(err);
-        alert('Erro ao carregar lotes.');
+        try {
+            const jsonErr = JSON.parse(err.message);
+            alert(`Erro: ${jsonErr.error}`);
+        } catch {
+            alert('Erro ao carregar endereços.');
+        }
     } finally {
         hideLoader();
     }
@@ -72,16 +94,9 @@ function renderEnderecos(lista) {
         div.dataset.id = end.id;
         div.dataset.codigo = end.codigo_endereco;
         
-        // Indicador Visual de Capacidade
         let badgeClass = 'bg-green-100 text-green-800';
-        let statusText = 'Livre';
-        if (end.qtd_produtos >= 5) {
-            badgeClass = 'bg-red-100 text-red-800';
-            statusText = 'Cheio';
-        } else if (end.qtd_produtos > 0) {
-            badgeClass = 'bg-blue-100 text-blue-800';
-            statusText = 'Ocupado';
-        }
+        if (end.qtd_produtos >= 5) badgeClass = 'bg-red-100 text-red-800';
+        else if (end.qtd_produtos > 0) badgeClass = 'bg-blue-100 text-blue-800';
 
         div.innerHTML = `
             <div class="flex justify-between items-start pointer-events-none">
@@ -103,7 +118,6 @@ function filterEnderecosLocal(e) {
     const term = e.target.value.toLowerCase();
     document.querySelectorAll('.endereco-item').forEach(el => {
         const codigo = el.dataset.codigo.toLowerCase();
-        // Filtra pelo código (que contém a "Rua")
         el.style.display = codigo.includes(term) ? 'block' : 'none';
     });
 }
@@ -125,12 +139,14 @@ async function createEndereco(e) {
     const filial = document.getElementById('filial-select').value;
     const formData = new FormData(e.target);
     
-    // Envia sem "Tipo", backend assume padrão
+    // PAYLOAD SEM TIPO
     const payload = {
         filial_codigo: filial,
         codigo_endereco: formData.get('codigo').toUpperCase(),
         descricao: formData.get('descricao')
     };
+
+    console.log("Enviando:", payload);
 
     try {
         const res = await fetch(`${API_BASE}/enderecos`, {
@@ -142,15 +158,17 @@ async function createEndereco(e) {
             body: JSON.stringify(payload)
         });
         
+        const data = await res.json();
+
         if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error || 'Erro ao criar');
+            throw new Error(data.error || 'Erro desconhecido');
         }
 
+        alert("Sucesso: " + data.message);
         toggleModal(false);
         loadEnderecos();
     } catch (err) {
-        alert(err.message);
+        alert("Falha: " + err.message);
     }
 }
 
