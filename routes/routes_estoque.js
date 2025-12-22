@@ -191,25 +191,55 @@ router.delete('/produtos/:idMapa', authenticateToken, async (req, res) => {
 });
 
 // 7. Busca (Autocomplete)
+// 7. Busca (Autocomplete) com DEBUG DETALHADO
 router.get('/produtos/busca', authenticateToken, async (req, res) => {
     const { q, filial } = req.query;
-    const codigoFilialErp = MAPA_FILIAIS[filial] || 'LUCAM';
+    
+    console.log("\n--- [DEBUG BUSCA] Iniciando ---");
+    console.log(`1. Termo pesquisado: "${q}"`);
+    console.log(`2. Filial selecionada no Front: "${filial}"`);
 
-    if (!q || q.length < 3) return res.json([]);
+    // Verifica mapeamento
+    const codigoFilialErp = MAPA_FILIAIS[filial];
+    console.log(`3. Código ERP resolvido: "${codigoFilialErp}" (Se for undefined, vai dar erro ou buscar nada)`);
+    
+    // Fallback seguro se não achar a filial no mapa
+    const codigoFinal = codigoFilialErp || 'LUCAM'; 
+
+    if (!q || q.length < 3) {
+        console.log("Termo muito curto, ignorando.");
+        return res.json([]);
+    }
 
     try {
-        const [rows] = await seiPool.query(`
+        // Logando a Query exata
+        const querySQL = `
             SELECT pd_codi, pd_nome, pd_saldo 
             FROM produtos 
             WHERE (pd_codi LIKE ? OR pd_nome LIKE ?) 
             AND pd_filial = ?
             LIMIT 10
-        `, [`%${q}%`, `%${q}%`, codigoFilialErp]);
+        `;
+        const params = [`%${q}%`, `%${q}%`, codigoFinal];
         
+        console.log("4. Executando SQL no pool SEI (ERP):");
+        console.log("   SQL:", querySQL.replace(/\s+/g, ' ').trim());
+        console.log("   Params:", params);
+
+        // ATENÇÃO: Verifique se 'seiPool' está apontando para o banco certo
+        const [rows] = await seiPool.query(querySQL, params);
+        
+        console.log(`5. Resultados encontrados: ${rows.length}`);
+        if(rows.length > 0) {
+            console.log("   Exemplo do primeiro item:", rows[0]);
+        }
+
         res.json(rows);
+
     } catch (error) {
+        console.error("--- [ERRO NA BUSCA] ---");
         console.error(error);
-        res.status(500).json({ error: 'Erro na busca.' });
+        res.status(500).json({ error: 'Erro ao realizar busca no banco de dados.' });
     }
 });
 

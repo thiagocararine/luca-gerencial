@@ -274,6 +274,9 @@ function handleProductSearch(e) {
     const filial = document.getElementById('filial-select').value;
     const resultsContainer = document.getElementById('resultados-busca');
 
+    // Debug no Console do Navegador
+    console.log(`[FRONT] Digitando: "${query}" | Filial: "${filial}"`);
+
     if (query.length < 3) {
         resultsContainer.classList.add('hidden');
         return;
@@ -281,12 +284,20 @@ function handleProductSearch(e) {
 
     debounceTimer = setTimeout(async () => {
         try {
-            const res = await fetch(`${API_BASE}/produtos/busca?q=${encodeURIComponent(query)}&filial=${encodeURIComponent(filial)}`, {
+            console.log("[FRONT] Enviando requisição ao servidor...");
+            
+            const url = `${API_BASE}/produtos/busca?q=${encodeURIComponent(query)}&filial=${encodeURIComponent(filial)}`;
+            const res = await fetch(url, {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
+            
+            if (!res.ok) throw new Error("Erro na resposta da API");
+
             const resultados = await res.json();
+            console.log(`[FRONT] Recebido ${resultados.length} produtos:`, resultados);
             
             resultsContainer.innerHTML = '';
+            
             if (resultados.length > 0) {
                 resultados.forEach(prod => {
                     const div = document.createElement('div');
@@ -298,7 +309,11 @@ function handleProductSearch(e) {
                         </div>
                         <div class="text-gray-600 text-xs truncate mt-0.5">${prod.pd_nome}</div>
                     `;
-                    div.addEventListener('click', () => adicionarProduto(prod.pd_codi));
+                    // Ao clicar, chama a função de adicionar
+                    div.addEventListener('click', () => {
+                        console.log(`[FRONT] Clicou no produto: ${prod.pd_codi}`);
+                        adicionarProduto(prod.pd_codi);
+                    });
                     resultsContainer.appendChild(div);
                 });
                 resultsContainer.classList.remove('hidden');
@@ -307,7 +322,9 @@ function handleProductSearch(e) {
                 resultsContainer.classList.remove('hidden');
             }
         } catch (err) {
-            console.error(err);
+            console.error("[FRONT] Erro na busca:", err);
+            resultsContainer.innerHTML = '<div class="p-3 text-sm text-red-500 text-center">Erro ao buscar.</div>';
+            resultsContainer.classList.remove('hidden');
         }
     }, 300);
 }
