@@ -53,24 +53,39 @@
     <nav id="sidebar" class="fixed inset-y-0 left-0 bg-white/80 backdrop-blur-sm shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
         <div class="flex flex-col h-full">
             <div class="h-16 flex items-center justify-center border-b border-gray-200/50 px-4 gap-2">
-                <img id="company-logo" src="" alt="Logo da Empresa" style="display: none; max-height: 40px; max-width: 40px;">
+                <img id="company-logo" src="" alt="Logo da Empresa" style="display: none;" class="max-h-10 max-w-10">
                 <h1 class="text-xl font-bold text-indigo-600 overflow-hidden"><span class="sidebar-text">Luca Gerencial</span></h1>
             </div>
-            <div class="flex-grow p-4">
+            <div class="flex-grow p-4 overflow-y-auto">
                 <ul class="space-y-2">
                     <li><a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="home"></span><span class="sidebar-text">Início / Dashboard</span></a></li>
                     <li><a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="dollar-sign"></span><span class="sidebar-text">Lançamentos</span></a></li>
                     <li><a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="truck"></span><span class="sidebar-text">Logística</span></a></li>
-                    <li><a href="checklist.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="check-square"></span><span class="sidebar-text">Checklist Veículos</span></a></li>
-                    <li><a href="produtos.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="archive"></span><span class="sidebar-text">Estoque / Produtos</span></a></li>
-                    <li><a href="entregas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="package"></span><span class="sidebar-text">Entregas</span></a></li>
-                    <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium bg-indigo-50 text-indigo-700" aria-current="page"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
+
+                    <li>
+                        <button type="button" class="sidebar-link w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900" onclick="toggleSubmenu('submenu-expedicao')">
+                            <div class="flex items-center gap-3">
+                                <span data-feather="package"></span>
+                                <span class="sidebar-text">Expedição</span>
+                            </div>
+                            <span data-feather="chevron-down" class="w-4 h-4 transition-transform duration-200" id="icon-expedicao"></span>
+                        </button>
+                        <ul id="submenu-expedicao" class="hidden pl-9 mt-1 space-y-1">
+                            <li><a href="entregas.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Entregas</a></li>
+                            <li><a href="checklist.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Checklist Veículos</a></li>
+                            <li><a href="produtos.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Cadastro Produtos</a></li>
+                            <li><a href="estoque.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Endereçamento</a></li>
+                        </ul>
+                    </li>
+
+                    <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
                 </ul>
             </div>
+            
             <div class="p-2 border-t border-gray-200/50">
                 <button id="sidebar-toggle" class="w-full hidden md:flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none">
                     <svg id="toggle-icon-collapse" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" /></svg>
-                    <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
+                    <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
                 </button>
             </div>
         </div>
@@ -294,6 +309,20 @@
 <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
 <script src="settings.js?v=2.0.21" defer></script> 
 <script>
+    // Função global necessária para o clique no HTML (onclick="toggleSubmenu(...)")
+    window.toggleSubmenu = function(id) {
+        const submenu = document.getElementById(id);
+        const icon = document.getElementById('icon-expedicao');
+        
+        if (submenu.classList.contains('hidden')) {
+            submenu.classList.remove('hidden');
+            if(icon) icon.style.transform = 'rotate(180deg)';
+        } else {
+            submenu.classList.add('hidden');
+            if(icon) icon.style.transform = 'rotate(0deg)';
+        }
+    };
+
     document.addEventListener('DOMContentLoaded', () => {
         feather.replace();
 
@@ -304,7 +333,23 @@
             if (!desktopToggleButton) return;
             
             const setDesktopSidebarState = (collapsed) => {
-                sidebar.classList.toggle('collapsed', collapsed);
+                // Lógica Tailwind: Controla largura e visibilidade
+                sidebar.classList.toggle('w-64', !collapsed);
+                sidebar.classList.toggle('w-20', collapsed);
+                
+                document.querySelectorAll('.sidebar-text').forEach(el => el.classList.toggle('hidden', collapsed));
+                document.getElementById('company-logo')?.classList.toggle('hidden', collapsed);
+                
+                document.getElementById('toggle-icon-collapse').classList.toggle('hidden', collapsed);
+                document.getElementById('toggle-icon-expand').classList.toggle('hidden', !collapsed);
+                
+                // Ajusta ícones e esconde setas dos submenus
+                sidebar.querySelectorAll('.sidebar-link').forEach(link => {
+                    link.classList.toggle('justify-center', collapsed);
+                    const arrow = link.querySelector('[data-feather="chevron-down"]');
+                    if(arrow) arrow.style.display = collapsed ? 'none' : 'block';
+                });
+
                 localStorage.setItem('sidebar_collapsed', collapsed);
             };
 
@@ -312,7 +357,7 @@
             setDesktopSidebarState(isDesktopCollapsed);
 
             desktopToggleButton.addEventListener('click', () => {
-                const currentlyCollapsed = sidebar.classList.contains('collapsed');
+                const currentlyCollapsed = sidebar.classList.contains('w-20');
                 setDesktopSidebarState(!currentlyCollapsed);
             });
         };
@@ -343,9 +388,35 @@
             }
         };
 
+        // Lógica para manter o Submenu Aberto e Ativo
+        const setupSubmenuActiveState = () => {
+            const currentPath = window.location.pathname;
+            // Verifica se a página atual pertence ao grupo Expedição
+            if(currentPath.includes('entregas') || currentPath.includes('checklist') || currentPath.includes('produtos') || currentPath.includes('estoque')) {
+                const submenu = document.getElementById('submenu-expedicao');
+                const icon = document.getElementById('icon-expedicao');
+                
+                if(submenu) {
+                    submenu.classList.remove('hidden');
+                    if(icon) icon.style.transform = 'rotate(180deg)';
+                    
+                    // Pinta o link ativo
+                    const links = submenu.querySelectorAll('a');
+                    links.forEach(link => {
+                        const href = link.getAttribute('href');
+                        if(href && currentPath.includes(href)) {
+                            link.classList.add('text-indigo-700', 'bg-indigo-50', 'font-semibold');
+                            link.classList.remove('text-gray-500');
+                        }
+                    });
+                }
+            }
+        };
+
         loadCompanyLogo();
         setupDesktopSidebar();
         setupMobileSidebar();
+        setupSubmenuActiveState(); // Inicia a lógica do submenu
     });
 </script>
 </body>

@@ -17,13 +17,43 @@
 
     <div class="flex h-full">
         <nav id="sidebar" class="w-64 bg-white border-r border-gray-200 flex flex-col hidden md:flex">
-            <div class="h-16 flex items-center justify-center border-b px-4">
-                <h1 class="text-xl font-bold text-indigo-600">Luca Gerencial</h1>
-            </div>
-            <div class="p-4 space-y-2">
-                <a href="index.html" class="flex items-center gap-3 px-3 py-2 text-gray-600 hover:bg-gray-50 rounded-md"><i data-feather="home"></i> Dashboard</a>
-                <a href="entregas.html" class="flex items-center gap-3 px-3 py-2 text-gray-600 hover:bg-gray-50 rounded-md"><i data-feather="truck"></i> Entregas</a>
-                <a href="estoque.html" class="flex items-center gap-3 px-3 py-2 bg-indigo-50 text-indigo-700 font-medium rounded-md"><i data-feather="grid"></i> Estoque</a>
+            <div class="flex flex-col h-full">
+                <div class="h-16 flex items-center justify-center border-b border-gray-200/50 px-4 gap-2">
+                    <img id="company-logo" src="" alt="Logo da Empresa" style="display: none;" class="max-h-10 max-w-10">
+                    <h1 class="text-xl font-bold text-indigo-600 overflow-hidden"><span class="sidebar-text">Luca Gerencial</span></h1>
+                </div>
+                <div class="flex-grow p-4 overflow-y-auto">
+                    <ul class="space-y-2">
+                        <li><a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="home"></span><span class="sidebar-text">Início / Dashboard</span></a></li>
+                        <li><a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="dollar-sign"></span><span class="sidebar-text">Lançamentos</span></a></li>
+                        <li><a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="truck"></span><span class="sidebar-text">Logística</span></a></li>
+
+                        <li>
+                            <button type="button" class="sidebar-link w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900" onclick="toggleSubmenu('submenu-expedicao')">
+                                <div class="flex items-center gap-3">
+                                    <span data-feather="package"></span>
+                                    <span class="sidebar-text">Expedição</span>
+                                </div>
+                                <span data-feather="chevron-down" class="w-4 h-4 transition-transform duration-200" id="icon-expedicao"></span>
+                            </button>
+                            <ul id="submenu-expedicao" class="hidden pl-9 mt-1 space-y-1">
+                                <li><a href="entregas.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Entregas</a></li>
+                                <li><a href="checklist.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Checklist Veículos</a></li>
+                                <li><a href="produtos.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Cadastro Produtos</a></li>
+                                <li><a href="estoque.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Endereçamento</a></li>
+                            </ul>
+                        </li>
+
+                        <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
+                    </ul>
+                </div>
+                
+                <div class="p-2 border-t border-gray-200/50">
+                    <button id="sidebar-toggle" class="w-full hidden md:flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none">
+                        <svg id="toggle-icon-collapse" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" /></svg>
+                        <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
+                    </button>
+                </div>
             </div>
         </nav>
 
@@ -128,5 +158,96 @@
     </div>
 
     <script src="estoque.js"></script>
+    <script>
+    // Função global para o onclick do HTML funcionar
+    function toggleSubmenu(id) {
+        const submenu = document.getElementById(id);
+        const icon = document.getElementById('icon-expedicao');
+        
+        if (submenu.classList.contains('hidden')) {
+            submenu.classList.remove('hidden');
+            if(icon) icon.style.transform = 'rotate(180deg)';
+        } else {
+            submenu.classList.add('hidden');
+            if(icon) icon.style.transform = 'rotate(0deg)';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        feather.replace();
+
+        // --- Lógica da Sidebar (Desktop/Mobile) ---
+        const sidebar = document.getElementById('sidebar');
+        const desktopToggleButton = document.getElementById('sidebar-toggle');
+        const mobileMenuButton = document.getElementById('mobile-menu-button');
+        const overlay = document.getElementById('mobile-menu-overlay');
+
+        if (desktopToggleButton) {
+            const setDesktopSidebarState = (collapsed) => {
+                sidebar.classList.toggle('w-64', !collapsed);
+                sidebar.classList.toggle('w-20', collapsed);
+                document.querySelectorAll('.sidebar-text').forEach(el => el.classList.toggle('hidden', collapsed));
+                document.getElementById('company-logo')?.classList.toggle('hidden', collapsed);
+                document.getElementById('toggle-icon-collapse').classList.toggle('hidden', collapsed);
+                document.getElementById('toggle-icon-expand').classList.toggle('hidden', !collapsed);
+                
+                // Ajusta alinhamento dos links
+                sidebar.querySelectorAll('.sidebar-link').forEach(link => { 
+                    link.classList.toggle('justify-center', collapsed); 
+                    // Esconde a seta do submenu se estiver colapsado
+                    const arrow = link.querySelector('[data-feather="chevron-down"]');
+                    if(arrow) arrow.style.display = collapsed ? 'none' : 'block';
+                });
+                
+                localStorage.setItem('sidebar_collapsed', collapsed);
+            };
+
+            const isDesktopCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+            setDesktopSidebarState(isDesktopCollapsed);
+
+            desktopToggleButton.addEventListener('click', () => {
+                const currentlyCollapsed = sidebar.classList.contains('w-20');
+                setDesktopSidebarState(!currentlyCollapsed);
+            });
+        }
+
+        if (mobileMenuButton && overlay) {
+            mobileMenuButton.addEventListener('click', () => {
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.remove('hidden');
+            });
+            overlay.addEventListener('click', () => {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+            });
+        }
+
+        // --- Lógica para Manter o Submenu Aberto e Ativo ---
+        const currentPath = window.location.pathname;
+        // Verifica se estamos em alguma página do grupo "Expedição"
+        if(currentPath.includes('entregas') || currentPath.includes('checklist') || currentPath.includes('produtos') || currentPath.includes('estoque')) {
+            const submenu = document.getElementById('submenu-expedicao');
+            const icon = document.getElementById('icon-expedicao');
+            
+            // Abre o submenu automaticamente
+            if(submenu) {
+                submenu.classList.remove('hidden');
+                if(icon) icon.style.transform = 'rotate(180deg)';
+            }
+            
+            // Destaca visualmente o link da página atual dentro do submenu
+            if(submenu) {
+                const links = submenu.querySelectorAll('a');
+                links.forEach(link => {
+                    const href = link.getAttribute('href');
+                    if(href && currentPath.includes(href)) {
+                        link.classList.add('text-indigo-700', 'bg-indigo-50', 'font-semibold');
+                        link.classList.remove('text-gray-500');
+                    }
+                });
+            }
+        }
+    });
+</script>
 </body>
 </html>

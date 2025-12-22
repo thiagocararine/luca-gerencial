@@ -36,6 +36,7 @@ const settingsRoutes = require('./routes/routes_settings');
 const logisticaRoutes = require('./routes/routes_logistica');
 const produtosRoutes = require('./routes/routes_produtos');
 const entregasRoutes = require('./routes/routes_entregas');
+const estoqueRoutes = require('./routes/routes_estoque');
 
 // 5. Utilização das Rotas com o prefixo /api
 const apiRouter = express.Router();
@@ -46,8 +47,15 @@ apiRouter.use('/settings', settingsRoutes);
 apiRouter.use('/logistica', logisticaRoutes);
 apiRouter.use('/produtos', produtosRoutes);
 apiRouter.use('/entregas', entregasRoutes);
+apiRouter.use('/estoque', estoqueRoutes);
 
 app.use('/api', apiRouter);
+
+app.get('/estoque', (req, res) => {   // <--- NOVO
+    // Ajuste o caminho se seu arquivo não estiver na pasta 'public'
+    // Se estiver na raiz junto com index.js, use: path.join(__dirname, 'estoque.html')
+    res.sendFile(path.join(__dirname, 'public', 'estoque.html')); 
+});
 
 // 6. Iniciar o Servidor
 app.listen(port, () => {
