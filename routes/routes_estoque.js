@@ -15,23 +15,21 @@ const dbConfigSei = {
 const seiPool = mysql.createPool(dbConfigSei);
 const gerencialPool = mysql.createPool(dbConfig);
 
-// Mapeamento de Filiais (Nome -> Código ERP)
-// Ajuste conforme seu sistema real
+// Mapeamento de Filiais
 const MAPA_FILIAIS = {
     'Santa Cruz da Serra': 'LUCAM',
     'Piabetá': 'VMNAF',
     'Parada Angélica': 'TNASC',
     'Nova Campinas': 'LCMAT',
-    'Escritório': 'LUCAM' // Default fallback
+    'Escritório': 'LUCAM'
 };
 
-// 1. Listar Endereços da Filial
+// 1. Listar Lotes da Filial
 router.get('/enderecos', authenticateToken, async (req, res) => {
     const { filial } = req.query;
     if (!filial) return res.status(400).json({ error: 'Filial obrigatória' });
 
     try {
-        // Busca endereços e conta quantos produtos tem em cada um
         const [rows] = await gerencialPool.query(`
             SELECT e.*, COUNT(m.id) as qtd_produtos 
             FROM estoque_enderecos e
@@ -43,47 +41,47 @@ router.get('/enderecos', authenticateToken, async (req, res) => {
         res.json(rows);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Erro ao buscar endereços.' });
+        res.status(500).json({ error: 'Erro ao buscar lotes.' });
     }
 });
 
-// 2. Criar Novo Endereço
+// 2. Criar Novo Lote (Sem Tipo obrigatório)
 router.post('/enderecos', authenticateToken, async (req, res) => {
-    const { filial_codigo, codigo_endereco, tipo, descricao } = req.body;
+    // Recebe apenas código e descrição (tipo é fixo ou opcional)
+    const { filial_codigo, codigo_endereco, descricao } = req.body;
+    const tipoFixo = 'Lote'; 
+
     try {
         await gerencialPool.query(
             'INSERT INTO estoque_enderecos (filial_codigo, codigo_endereco, tipo, descricao) VALUES (?, ?, ?, ?)',
-            [filial_codigo, codigo_endereco, tipo, descricao]
+            [filial_codigo, codigo_endereco, tipoFixo, descricao]
         );
-        res.status(201).json({ message: 'Endereço criado com sucesso.' });
+        res.status(201).json({ message: 'Lote criado com sucesso.' });
     } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(400).json({ error: 'Este código de endereço já existe nesta filial.' });
+            return res.status(400).json({ error: 'Este código de lote já existe nesta filial.' });
         }
-        res.status(500).json({ error: 'Erro ao criar endereço.' });
+        res.status(500).json({ error: 'Erro ao criar lote.' });
     }
 });
 
-// 3. Excluir Endereço
+// 3. Excluir Lote
 router.delete('/enderecos/:id', authenticateToken, async (req, res) => {
     try {
         await gerencialPool.query('DELETE FROM estoque_enderecos WHERE id = ?', [req.params.id]);
-        res.json({ message: 'Endereço removido.' });
+        res.json({ message: 'Lote removido.' });
     } catch (error) {
-        res.status(500).json({ error: 'Erro ao remover endereço.' });
+        res.status(500).json({ error: 'Erro ao remover lote.' });
     }
 });
 
-// 4. Listar Produtos de um Endereço (Com Saldo do ERP)
+// 4. Listar Produtos de um Lote
 router.get('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
     const idEndereco = req.params.id;
-    const { filial } = req.query; // Precisamos da filial para consultar o saldo correto no ERP
-    
-    // Converte nome da filial para código do ERP (ex: 'Santa Cruz da Serra' -> 'LUCAM')
+    const { filial } = req.query;
     const codigoFilialErp = MAPA_FILIAIS[filial] || 'LUCAM'; 
 
     try {
-        // Pega os códigos vinculados neste endereço
         const [mapa] = await gerencialPool.query(
             'SELECT id, codigo_produto FROM estoque_mapa WHERE id_endereco = ?', 
             [idEndereco]
@@ -93,20 +91,15 @@ router.get('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
 
         const codigos = mapa.map(m => m.codigo_produto);
 
-        // Busca dados detalhados e saldo no ERP (SEI)
-        // IMPORTANTE: Ajuste 'produtos' e colunas conforme sua tabela real do SEI
-        // Exemplo: pd_codi, pd_nome, pd_saldo, pd_filial
+        // Consulta ao ERP
         const queryErp = `
             SELECT pd_codi, pd_nome, pd_saldo 
             FROM produtos 
             WHERE pd_codi IN (?) AND pd_filial = ?
         `;
         
-        // Se a tabela de produtos for idavs ou outra, ajuste aqui. 
-        // Estou usando 'produtos' como exemplo genérico de cadastro.
         const [produtosErp] = await seiPool.query(queryErp, [codigos, codigoFilialErp]);
 
-        // Combina os dados
         const resultado = mapa.map(item => {
             const info = produtosErp.find(p => p.pd_codi === item.codigo_produto);
             return {
@@ -120,22 +113,22 @@ router.get('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
         res.json(resultado);
 
     } catch (error) {
-        console.error("Erro ao buscar produtos do endereço:", error);
+        console.error("Erro ao buscar produtos:", error);
         res.status(500).json({ error: 'Erro ao buscar detalhes dos produtos.' });
     }
 });
 
-// 5. Adicionar Produto ao Endereço
+// 5. Adicionar Produto ao Lote
 router.post('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
     const idEndereco = req.params.id;
     const { codigo_produto } = req.body;
 
     try {
-        // Verifica limite de 5
+        // Limite de 5 itens por lote (Palet)
         const [qtd] = await gerencialPool.query('SELECT COUNT(*) as total FROM estoque_mapa WHERE id_endereco = ?', [idEndereco]);
         
         if (qtd[0].total >= 5) {
-            return res.status(400).json({ error: 'Este endereço já atingiu o limite de 5 produtos.' });
+            return res.status(400).json({ error: 'Este lote atingiu o limite de 5 produtos.' });
         }
 
         await gerencialPool.query(
@@ -146,13 +139,13 @@ router.post('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
 
     } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(400).json({ error: 'Este produto já está neste endereço.' });
+            return res.status(400).json({ error: 'Este produto já está neste lote.' });
         }
         res.status(500).json({ error: 'Erro ao vincular produto.' });
     }
 });
 
-// 6. Remover Produto do Endereço
+// 6. Remover Produto
 router.delete('/produtos/:idMapa', authenticateToken, async (req, res) => {
     try {
         await gerencialPool.query('DELETE FROM estoque_mapa WHERE id = ?', [req.params.idMapa]);
@@ -162,7 +155,7 @@ router.delete('/produtos/:idMapa', authenticateToken, async (req, res) => {
     }
 });
 
-// 7. Buscar Produtos no ERP para adicionar (Autocomplete)
+// 7. Busca Autocomplete
 router.get('/produtos/busca', authenticateToken, async (req, res) => {
     const { q, filial } = req.query;
     const codigoFilialErp = MAPA_FILIAIS[filial] || 'LUCAM';
@@ -170,7 +163,6 @@ router.get('/produtos/busca', authenticateToken, async (req, res) => {
     if (!q || q.length < 3) return res.json([]);
 
     try {
-        // Ajuste a tabela conforme seu ERP
         const [rows] = await seiPool.query(`
             SELECT pd_codi, pd_nome, pd_saldo 
             FROM produtos 

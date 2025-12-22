@@ -4,33 +4,21 @@ const API_BASE = '/api/estoque';
 let currentEnderecoId = null;
 let debounceTimer;
 
-function getToken() {
-    return localStorage.getItem('lucaUserToken');
-}
-
+function getToken() { return localStorage.getItem('lucaUserToken'); }
 function showLoader() { document.getElementById('global-loader').classList.remove('hidden'); document.getElementById('global-loader').classList.add('flex'); }
 function hideLoader() { document.getElementById('global-loader').classList.add('hidden'); document.getElementById('global-loader').classList.remove('flex'); }
 
 async function initPage() {
-    feather.replace();
-    
-    // Popula Select de Filiais (Reutilizando a API de parametros ou hardcoded se preferir)
-    // Aqui vou assumir que existe a rota de parametros, senão uso lista fixa
+    // Popula Filiais
     const selectFilial = document.getElementById('filial-select');
-    
-    // Lista fixa para garantir funcionamento imediato, ou chame sua API /settings/parametros
     const filiais = ['Santa Cruz da Serra', 'Piabetá', 'Parada Angélica', 'Nova Campinas', 'Escritório'];
-    
     selectFilial.innerHTML = filiais.map(f => `<option value="${f}">${f}</option>`).join('');
     
-    // Tenta selecionar a filial do usuário logado
     const token = getToken();
     if(token) {
         try {
             const payload = JSON.parse(atob(token.split('.')[1]));
-            if(payload.unidade && filiais.includes(payload.unidade)) {
-                selectFilial.value = payload.unidade;
-            }
+            if(payload.unidade && filiais.includes(payload.unidade)) selectFilial.value = payload.unidade;
         } catch(e) {}
     }
 
@@ -41,15 +29,10 @@ async function initPage() {
     document.getElementById('form-novo-endereco').addEventListener('submit', createEndereco);
     document.getElementById('search-endereco').addEventListener('input', filterEnderecosLocal);
     document.getElementById('btn-excluir-endereco').addEventListener('click', deleteEndereco);
-    
-    // Busca de Produtos
     document.getElementById('input-busca-produto').addEventListener('input', handleProductSearch);
 
-    // Carrega dados iniciais
     loadEnderecos();
 }
-
-// --- Gerenciamento de Endereços ---
 
 async function loadEnderecos() {
     const filial = document.getElementById('filial-select').value;
@@ -63,13 +46,12 @@ async function loadEnderecos() {
         const enderecos = await res.json();
         renderEnderecos(enderecos);
         
-        // Reseta painel direito
         document.getElementById('detalhe-vazio').classList.remove('hidden');
         document.getElementById('detalhe-conteudo').classList.add('hidden');
         currentEnderecoId = null;
     } catch (err) {
-        alert('Erro ao carregar endereços');
         console.error(err);
+        alert('Erro ao carregar lotes.');
     } finally {
         hideLoader();
     }
@@ -80,30 +62,36 @@ function renderEnderecos(lista) {
     container.innerHTML = '';
 
     if (lista.length === 0) {
-        container.innerHTML = '<p class="text-center text-gray-400 text-sm mt-4">Nenhum endereço cadastrado.</p>';
+        container.innerHTML = '<div class="text-center p-6 text-gray-400"><p>Nenhum lote encontrado.</p><p class="text-xs mt-1">Clique em "Novo Lote" para começar.</p></div>';
         return;
     }
 
     lista.forEach(end => {
         const div = document.createElement('div');
-        div.className = 'p-3 border rounded hover:bg-indigo-50 cursor-pointer transition-colors endereco-item';
+        div.className = 'p-3 bg-white border border-gray-200 rounded-md hover:border-indigo-500 hover:shadow-md cursor-pointer transition-all endereco-item group';
         div.dataset.id = end.id;
-        div.dataset.codigo = end.codigo_endereco; // Para filtro local
+        div.dataset.codigo = end.codigo_endereco;
         
-        // Indicador de lotação
-        let badgeColor = 'bg-green-100 text-green-800';
-        if (end.qtd_produtos >= 5) badgeColor = 'bg-red-100 text-red-800';
-        else if (end.qtd_produtos > 0) badgeColor = 'bg-blue-100 text-blue-800';
+        // Indicador Visual de Capacidade
+        let badgeClass = 'bg-green-100 text-green-800';
+        let statusText = 'Livre';
+        if (end.qtd_produtos >= 5) {
+            badgeClass = 'bg-red-100 text-red-800';
+            statusText = 'Cheio';
+        } else if (end.qtd_produtos > 0) {
+            badgeClass = 'bg-blue-100 text-blue-800';
+            statusText = 'Ocupado';
+        }
 
         div.innerHTML = `
-            <div class="flex justify-between items-center pointer-events-none">
+            <div class="flex justify-between items-start pointer-events-none">
                 <div>
-                    <p class="font-bold text-gray-800 text-sm">${end.codigo_endereco}</p>
-                    <p class="text-xs text-gray-500">${end.tipo} ${end.descricao ? '- ' + end.descricao : ''}</p>
+                    <p class="font-bold text-gray-800 text-base group-hover:text-indigo-600">${end.codigo_endereco}</p>
+                    <p class="text-xs text-gray-500 mt-0.5">${end.descricao || 'Sem descrição'}</p>
                 </div>
-                <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${badgeColor}">
-                    ${end.qtd_produtos} / 5
-                </span>
+                <div class="text-right">
+                    <span class="inline-block px-2 py-0.5 rounded text-xs font-bold ${badgeClass}">${end.qtd_produtos} / 5</span>
+                </div>
             </div>
         `;
         div.addEventListener('click', () => selectEndereco(end));
@@ -115,6 +103,7 @@ function filterEnderecosLocal(e) {
     const term = e.target.value.toLowerCase();
     document.querySelectorAll('.endereco-item').forEach(el => {
         const codigo = el.dataset.codigo.toLowerCase();
+        // Filtra pelo código (que contém a "Rua")
         el.style.display = codigo.includes(term) ? 'block' : 'none';
     });
 }
@@ -123,9 +112,11 @@ function toggleModal(show) {
     const modal = document.getElementById('modal-novo-endereco');
     if (show) {
         modal.classList.remove('hidden');
+        modal.classList.add('flex');
         document.getElementById('form-novo-endereco').reset();
     } else {
         modal.classList.add('hidden');
+        modal.classList.remove('flex');
     }
 }
 
@@ -134,10 +125,10 @@ async function createEndereco(e) {
     const filial = document.getElementById('filial-select').value;
     const formData = new FormData(e.target);
     
+    // Envia sem "Tipo", backend assume padrão
     const payload = {
         filial_codigo: filial,
         codigo_endereco: formData.get('codigo').toUpperCase(),
-        tipo: formData.get('tipo'),
         descricao: formData.get('descricao')
     };
 
@@ -157,7 +148,7 @@ async function createEndereco(e) {
         }
 
         toggleModal(false);
-        loadEnderecos(); // Recarrega a lista
+        loadEnderecos();
     } catch (err) {
         alert(err.message);
     }
@@ -165,7 +156,7 @@ async function createEndereco(e) {
 
 async function deleteEndereco() {
     if(!currentEnderecoId) return;
-    if(!confirm('Tem certeza? Isso desvinculará todos os produtos deste endereço.')) return;
+    if(!confirm('Tem certeza? Isso desvinculará todos os produtos deste lote.')) return;
 
     try {
         const res = await fetch(`${API_BASE}/enderecos/${currentEnderecoId}`, {
@@ -182,20 +173,17 @@ async function deleteEndereco() {
     }
 }
 
-// --- Detalhes e Produtos ---
-
 async function selectEndereco(endereco) {
     currentEnderecoId = endereco.id;
     
-    // Atualiza UI
-    document.querySelectorAll('.endereco-item').forEach(el => el.classList.remove('border-indigo-500', 'bg-indigo-50'));
-    document.querySelector(`.endereco-item[data-id="${endereco.id}"]`)?.classList.add('border-indigo-500', 'bg-indigo-50');
+    document.querySelectorAll('.endereco-item').forEach(el => el.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50'));
+    document.querySelector(`.endereco-item[data-id="${endereco.id}"]`)?.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50');
 
     document.getElementById('detalhe-vazio').classList.add('hidden');
     document.getElementById('detalhe-conteudo').classList.remove('hidden');
     
     document.getElementById('lbl-codigo-endereco').textContent = endereco.codigo_endereco;
-    document.getElementById('lbl-descricao-endereco').textContent = `${endereco.tipo} ${endereco.descricao ? '- ' + endereco.descricao : ''}`;
+    document.getElementById('lbl-descricao-endereco').textContent = endereco.descricao || 'Lote Padrão';
     
     document.getElementById('input-busca-produto').value = '';
     document.getElementById('resultados-busca').classList.add('hidden');
@@ -208,17 +196,16 @@ async function loadProdutosDoEndereco() {
     const filial = document.getElementById('filial-select').value;
     const container = document.getElementById('lista-produtos-endereco');
     
-    container.innerHTML = '<p class="text-xs text-gray-400">Carregando...</p>';
+    container.innerHTML = '<p class="text-center text-gray-400 py-4">Carregando itens...</p>';
 
     try {
         const res = await fetch(`${API_BASE}/enderecos/${currentEnderecoId}/produtos?filial=${encodeURIComponent(filial)}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         const produtos = await res.json();
-        
         renderProdutos(produtos);
     } catch(err) {
-        container.innerHTML = '<p class="text-xs text-red-400">Erro ao carregar itens.</p>';
+        container.innerHTML = '<p class="text-center text-red-400">Erro ao carregar itens.</p>';
     }
 }
 
@@ -227,35 +214,41 @@ function renderProdutos(produtos) {
     container.innerHTML = '';
 
     if (produtos.length === 0) {
-        container.innerHTML = '<div class="text-center p-4 bg-white rounded border border-dashed border-gray-300 text-gray-400 text-sm">Este endereço está vazio.</div>';
+        container.innerHTML = `
+            <div class="text-center p-8 bg-white border border-dashed border-gray-300 rounded-lg">
+                <i data-feather="box" class="w-10 h-10 text-gray-300 mx-auto mb-2"></i>
+                <p class="text-gray-500 text-sm">Este lote está vazio.</p>
+                <p class="text-xs text-gray-400">Use a busca acima para adicionar itens.</p>
+            </div>
+        `;
+        if (typeof feather !== 'undefined') feather.replace();
         return;
     }
 
     produtos.forEach(prod => {
         const div = document.createElement('div');
-        div.className = 'bg-white p-3 rounded border border-gray-200 shadow-sm flex justify-between items-center';
+        div.className = 'bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3 transition-shadow hover:shadow-md';
         
-        // Verifica saldo para colorir
-        const saldoClass = prod.saldo > 0 ? 'text-green-600' : 'text-red-600';
+        const saldoClass = prod.saldo > 0 ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50';
 
         div.innerHTML = `
-            <div class="flex-1">
-                <div class="flex items-center gap-2">
-                    <span class="font-mono text-xs bg-gray-100 px-1 rounded text-gray-600">${prod.codigo}</span>
-                    <span class="font-medium text-sm text-gray-800 truncate">${prod.nome}</span>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="font-mono text-xs font-bold bg-gray-100 px-2 py-0.5 rounded text-gray-700 border border-gray-200">${prod.codigo}</span>
                 </div>
-                <p class="text-xs text-gray-500 mt-1">Saldo em Estoque: <strong class="${saldoClass}">${prod.saldo}</strong></p>
+                <p class="font-medium text-sm text-gray-900 truncate" title="${prod.nome}">${prod.nome}</p>
+                <div class="mt-2 flex items-center gap-2 text-xs">
+                    <span class="px-2 py-0.5 rounded font-bold ${saldoClass}">Saldo: ${prod.saldo}</span>
+                </div>
             </div>
-            <button class="text-gray-400 hover:text-red-500 ml-3 p-1" onclick="removerProduto(${prod.id_mapa})">
-                <i data-feather="x-circle" class="w-5 h-5"></i>
+            <button class="text-gray-400 hover:text-red-600 hover:bg-red-50 p-2 rounded transition-colors" onclick="removerProduto(${prod.id_mapa})" title="Remover do lote">
+                <i data-feather="x" class="w-5 h-5"></i>
             </button>
         `;
         container.appendChild(div);
     });
-    feather.replace();
+    if (typeof feather !== 'undefined') feather.replace();
 }
-
-// --- Busca e Adição de Produtos ---
 
 function handleProductSearch(e) {
     clearTimeout(debounceTimer);
@@ -279,18 +272,20 @@ function handleProductSearch(e) {
             if (resultados.length > 0) {
                 resultados.forEach(prod => {
                     const div = document.createElement('div');
-                    div.className = 'p-2 hover:bg-indigo-50 cursor-pointer border-b last:border-0 text-sm';
+                    div.className = 'p-3 hover:bg-indigo-50 cursor-pointer border-b last:border-0 transition-colors group';
                     div.innerHTML = `
-                        <div class="font-bold text-gray-700">${prod.pd_codi}</div>
-                        <div class="text-gray-600 truncate">${prod.pd_nome}</div>
-                        <div class="text-xs text-gray-400">Saldo: ${prod.pd_saldo}</div>
+                        <div class="flex justify-between">
+                            <span class="font-bold text-gray-700 text-sm group-hover:text-indigo-700">${prod.pd_codi}</span>
+                            <span class="text-xs text-gray-400">Saldo: ${prod.pd_saldo}</span>
+                        </div>
+                        <div class="text-gray-600 text-xs truncate mt-0.5">${prod.pd_nome}</div>
                     `;
                     div.addEventListener('click', () => adicionarProduto(prod.pd_codi));
                     resultsContainer.appendChild(div);
                 });
                 resultsContainer.classList.remove('hidden');
             } else {
-                resultsContainer.innerHTML = '<div class="p-2 text-sm text-gray-500">Nenhum produto encontrado.</div>';
+                resultsContainer.innerHTML = '<div class="p-3 text-sm text-gray-500 text-center">Nenhum produto encontrado.</div>';
                 resultsContainer.classList.remove('hidden');
             }
         } catch (err) {
@@ -302,7 +297,6 @@ function handleProductSearch(e) {
 async function adicionarProduto(codigo) {
     if (!currentEnderecoId) return;
     
-    // Esconde resultados
     document.getElementById('resultados-busca').classList.add('hidden');
     document.getElementById('input-busca-produto').value = '';
 
@@ -322,7 +316,6 @@ async function adicionarProduto(codigo) {
             throw new Error(err.error || 'Erro ao adicionar');
         }
 
-        // Recarrega a lista de produtos E a lista de endereços (para atualizar a contagem)
         loadProdutosDoEndereco();
         loadEnderecos(); 
 
@@ -333,9 +326,8 @@ async function adicionarProduto(codigo) {
     }
 }
 
-// Tornar global para ser chamado no onclick do HTML
 window.removerProduto = async function(idMapa) {
-    if(!confirm('Desvincular produto deste endereço?')) return;
+    if(!confirm('Desvincular produto deste lote?')) return;
     
     showLoader();
     try {
@@ -346,7 +338,7 @@ window.removerProduto = async function(idMapa) {
         
         if (res.ok) {
             loadProdutosDoEndereco();
-            loadEnderecos(); // Atualiza contagem
+            loadEnderecos();
         } else {
             alert('Erro ao remover');
         }
