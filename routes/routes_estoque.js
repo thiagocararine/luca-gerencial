@@ -24,11 +24,12 @@ const MAPA_FILIAIS = {
     'Piabetá': 'VMNAF',
     'Parada Angélica': 'TNASC',
     'Nova Campinas': 'LCMAT',
-    'Escritório': 'LUCAM'
+    'Escritório': 'LUCAM' // Assume o estoque da matriz para o escritório
 };
 
-// --- FUNÇÃO AUXILIAR DE LOG (Grava na tabela estoque_ajustes_log) ---
+// --- FUNÇÃO AUXILIAR DE LOG (ADAPTADA PARA SUA TABELA) ---
 async function registrarLog(req, filialCodigo, codigoProduto, acao, qtdAnt, qtdNova, motivo) {
+    // Garante que o código da filial caiba no campo varchar(5)
     const filialDb = (filialCodigo || '').substring(0, 5);
     
     // Dados do Usuário via Token
@@ -38,7 +39,8 @@ async function registrarLog(req, filialCodigo, codigoProduto, acao, qtdAnt, qtdN
     let idProdutoRegi = 0;
 
     // Busca o ID interno do produto (pd_regi) se houver um código válido
-    if (codigoProduto && codigoProduto !== 'LOTE' && codigoProduto !== 'GERAL') {
+    // Isso é necessário porque sua tabela exige id_produto_regi
+    if (codigoProduto && codigoProduto !== 'LOTE' && codigoProduto !== 'GERAL' && codigoProduto !== '') {
         try {
             const [prodRow] = await seiPool.query('SELECT pd_regi FROM produtos WHERE pd_codi = ? LIMIT 1', [codigoProduto]);
             if (prodRow.length > 0) {
@@ -66,7 +68,7 @@ async function registrarLog(req, filialCodigo, codigoProduto, acao, qtdAnt, qtdN
             ]
         );
     } catch (error) {
-        console.error("ERRO CRÍTICO AO GRAVAR LOG:", error.message);
+        console.error("ERRO CRÍTICO AO GRAVAR LOG NA TABELA estoque_ajustes_log:", error.message);
     }
 }
 
@@ -247,6 +249,8 @@ router.delete('/enderecos/:id', authenticateToken, async (req, res) => {
 router.get('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
     const idEndereco = req.params.id;
     const { filial } = req.query;
+    
+    // Converte o nome da filial para o código usado na tabela 'estoque' (ef_idfili)
     const codigoFilialErp = MAPA_FILIAIS[filial] || 'LUCAM'; 
 
     try {
@@ -389,7 +393,6 @@ router.get('/produtos/busca', authenticateToken, async (req, res) => {
 
 // --- ROTA DE CONTAGEM E AJUSTE (ATUALIZA ERP E LOG) ---
 router.post('/ajuste-contagem', authenticateToken, async (req, res) => {
-    // Recebe: { filial, motivoGeral, itens: [{ codigo, novaQtd, qtdAnterior, lote }, ...] }
     const { filial, itens, motivoGeral } = req.body;
     const codigoFilialErp = MAPA_FILIAIS[filial] || 'LUCAM';
     
@@ -402,7 +405,7 @@ router.post('/ajuste-contagem', authenticateToken, async (req, res) => {
         await connection.beginTransaction();
 
         for (const item of itens) {
-            // 1. Bloqueia a linha no ERP e busca saldo atual
+            // 1. Busca saldo real atual e bloqueia linha
             const [rows] = await connection.query(
                 'SELECT ef_fisico FROM estoque WHERE ef_codigo = ? AND ef_idfili = ? FOR UPDATE',
                 [item.codigo, codigoFilialErp]
@@ -411,9 +414,9 @@ router.post('/ajuste-contagem', authenticateToken, async (req, res) => {
             const saldoRealErp = rows.length > 0 ? parseFloat(rows[0].ef_fisico) : 0;
             const qtdNova = parseFloat(item.novaQtd);
 
-            // Só processa se houve mudança real
+            // Se houve mudança
             if (saldoRealErp !== qtdNova) {
-                // 2. Atualiza ou Insere no ERP
+                // 2. Atualiza ERP
                 if (rows.length > 0) {
                     await connection.query(
                         'UPDATE estoque SET ef_fisico = ? WHERE ef_codigo = ? AND ef_idfili = ?',
@@ -426,14 +429,14 @@ router.post('/ajuste-contagem', authenticateToken, async (req, res) => {
                     );
                 }
 
-                // 3. Grava Log no banco Gerencial
+                // 3. Grava Log (Usando função auxiliar)
                 await registrarLog(
                     req, 
                     codigoFilialErp, 
                     item.codigo, 
                     'CONTAGEM', 
-                    saldoRealErp, // Anterior real
-                    qtdNova,      // Nova
+                    saldoRealErp, 
+                    qtdNova,      
                     `Lote ${item.lote}: ${motivoGeral}`
                 );
             }

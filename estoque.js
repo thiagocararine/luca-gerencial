@@ -11,6 +11,17 @@ function getToken() {
     return localStorage.getItem('lucaUserToken'); 
 }
 
+// Extrai dados do token (Adicionado para pegar o nome)
+function getUserData() {
+    const token = getToken();
+    if (!token) return null;
+    try {
+        return JSON.parse(atob(token.split('.')[1]));
+    } catch (e) {
+        return null;
+    }
+}
+
 function showLoader() { 
     const loader = document.getElementById('global-loader');
     if (loader) {
@@ -32,26 +43,31 @@ function hideLoader() {
 async function initPage() {
     console.log("Iniciando módulo de estoque...");
     
+    // 1. Atualiza Nome do Usuário no Header
+    const userData = getUserData();
+    if (userData && document.getElementById('user-name')) {
+        // Se o token tiver o campo 'nome', usa ele. Senão, mantém padrão.
+        document.getElementById('user-name').textContent = userData.nome || 'Utilizador';
+    }
+
+    // 2. Verifica saúde do backend
     checkBackendHealth();
 
+    // 3. Configura o Select de Filiais (Sem Escritório)
     const selectFilial = document.getElementById('filial-select');
-    // REMOVIDO: 'Escritório'
     const filiais = ['Santa Cruz da Serra', 'Piabetá', 'Parada Angélica', 'Nova Campinas'];
     
     selectFilial.innerHTML = filiais.map(f => `<option value="${f}">${f}</option>`).join('');
     
-    const token = getToken();
-    if(token) {
-        try { 
-            const payload = JSON.parse(atob(token.split('.')[1])); 
-            if(payload.unidade && filiais.includes(payload.unidade)) {
-                selectFilial.value = payload.unidade;
-            }
-        } catch(e) { console.error("Erro token:", e); }
+    // 4. Seleciona filial do usuário automaticamente
+    if(userData && userData.unidade && filiais.includes(userData.unidade)) {
+        selectFilial.value = userData.unidade;
     }
 
+    // 5. Carrega Filtros (Grupo/Fabricante)
     loadFilters();
 
+    // 6. Configura Listeners
     selectFilial.addEventListener('change', () => { loadEnderecos(); });
     document.getElementById('filter-grupo').addEventListener('change', loadEnderecos);
     document.getElementById('filter-fabricante').addEventListener('change', loadEnderecos);
@@ -63,12 +79,20 @@ async function initPage() {
     
     document.getElementById('search-endereco').addEventListener('input', filterEnderecosLocal);
     document.getElementById('btn-excluir-endereco').addEventListener('click', deleteEndereco);
+    
     document.getElementById('input-busca-produto').addEventListener('input', handleProductSearch);
 
+    // Listeners de Contagem
     document.getElementById('btn-contagem').addEventListener('click', openContagemModal);
     document.getElementById('btn-fechar-contagem').addEventListener('click', () => toggleContagemModal(false));
     document.getElementById('btn-cancelar-contagem').addEventListener('click', () => toggleContagemModal(false));
     document.getElementById('btn-salvar-contagem').addEventListener('click', saveContagem);
+
+    // Logout
+    document.getElementById('logout-btn')?.addEventListener('click', () => {
+        localStorage.removeItem('lucaUserToken');
+        window.location.href = 'login.html';
+    });
 
     loadEnderecos();
 }
@@ -284,7 +308,6 @@ async function loadProdutosDoEndereco() {
         const res = await fetch(`${API_BASE}/enderecos/${currentEnderecoId}/produtos?filial=${encodeURIComponent(filial)}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
-        // Atualiza cache global para contagem
         currentProductsList = await res.json();
         renderProdutos(currentProductsList);
     } catch(err) {
