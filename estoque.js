@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', initPage);
 
 const API_BASE = '/api/estoque';
 let currentEnderecoId = null;
+let currentProductsList = []; // Cache dos produtos do lote para o modal de contagem
 let debounceTimer;
 
 // --- FUNÇÕES UTILITÁRIAS ---
@@ -31,16 +32,12 @@ function hideLoader() {
 async function initPage() {
     console.log("Iniciando módulo de estoque...");
     
-    // 1. Verifica saúde do backend (Diagnóstico)
     checkBackendHealth();
 
-    // 2. Configura o Select de Filiais
     const selectFilial = document.getElementById('filial-select');
     const filiais = ['Santa Cruz da Serra', 'Piabetá', 'Parada Angélica', 'Nova Campinas', 'Escritório'];
-    
     selectFilial.innerHTML = filiais.map(f => `<option value="${f}">${f}</option>`).join('');
     
-    // 3. Tenta selecionar a filial do usuário automaticamente pelo Token
     const token = getToken();
     if(token) {
         try { 
@@ -48,70 +45,111 @@ async function initPage() {
             if(payload.unidade && filiais.includes(payload.unidade)) {
                 selectFilial.value = payload.unidade;
             }
-        } catch(e) {
-            console.error("Erro ao ler token:", e);
-        }
+        } catch(e) { console.error("Erro token:", e); }
     }
 
-    // 4. Configura Listeners (Eventos de clique/digitação)
-    selectFilial.addEventListener('change', loadEnderecos);
+    // Carrega Filtros (Grupos e Fabricantes)
+    loadFilters();
+
+    // Listeners Globais
+    selectFilial.addEventListener('change', () => { 
+        loadEnderecos(); 
+        // Recarrega filtros ao mudar filial (opcional, mas bom se quiser filtrar por filial no futuro)
+        // loadFilters(); 
+    });
     
+    document.getElementById('filter-grupo').addEventListener('change', loadEnderecos);
+    document.getElementById('filter-fabricante').addEventListener('change', loadEnderecos);
+    document.getElementById('btn-limpar-filtros').addEventListener('click', clearFilters);
+
     document.getElementById('btn-novo-endereco').addEventListener('click', () => toggleModal(true));
     document.getElementById('btn-cancelar-modal').addEventListener('click', () => toggleModal(false));
     document.getElementById('form-novo-endereco').addEventListener('submit', createEndereco);
     
     document.getElementById('search-endereco').addEventListener('input', filterEnderecosLocal);
     document.getElementById('btn-excluir-endereco').addEventListener('click', deleteEndereco);
-    
     document.getElementById('input-busca-produto').addEventListener('input', handleProductSearch);
 
-    // 5. Carrega os dados iniciais
+    // Listeners Contagem
+    document.getElementById('btn-contagem').addEventListener('click', openContagemModal);
+    document.getElementById('btn-fechar-contagem').addEventListener('click', () => toggleContagemModal(false));
+    document.getElementById('btn-cancelar-contagem').addEventListener('click', () => toggleContagemModal(false));
+    document.getElementById('btn-salvar-contagem').addEventListener('click', saveContagem);
+
     loadEnderecos();
 }
 
-// Diagnóstico Automático (Roda em segundo plano ao abrir a página)
 async function checkBackendHealth() {
     try {
-        const res = await fetch(`${API_BASE}/diagnostico`, { 
-            headers: { 'Authorization': `Bearer ${getToken()}` } 
-        });
+        const res = await fetch(`${API_BASE}/diagnostico`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         const data = await res.json();
-        
-        // Se quiser ver o diagnóstico no console do navegador, descomente a linha abaixo:
-        // console.log("Status do Backend:", data);
-        
         if (!data.tabelas_sistema || !data.tabelas_sistema.includes('estoque_enderecos')) {
-            console.warn("ALERTA: O backend informou que as tabelas de estoque não foram encontradas.");
+            console.warn("ALERTA: Tabelas não encontradas.");
         }
-    } catch (e) { 
-        console.error("Falha ao conectar com o servidor para diagnóstico:", e); 
-    }
+    } catch (e) { console.error("Diagnóstico falhou:", e); }
 }
 
-// --- GERENCIAMENTO DE LOTES (Lado Esquerdo) ---
+// --- FILTROS ---
+
+async function loadFilters() {
+    try {
+        const res = await fetch(`${API_BASE}/filtros`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const data = await res.json();
+        
+        const selGrupo = document.getElementById('filter-grupo');
+        const selFabr = document.getElementById('filter-fabricante');
+
+        // Limpa opções antigas (mantendo o placeholder)
+        selGrupo.innerHTML = '<option value="">Todos os Grupos</option>';
+        selFabr.innerHTML = '<option value="">Todos os Fabricantes</option>';
+
+        data.grupos.forEach(g => {
+            const opt = document.createElement('option'); opt.value = g; opt.text = g; selGrupo.appendChild(opt);
+        });
+        data.fabricantes.forEach(f => {
+            const opt = document.createElement('option'); opt.value = f; opt.text = f; selFabr.appendChild(opt);
+        });
+    } catch(e) { console.error("Erro ao carregar filtros", e); }
+}
+
+function clearFilters() {
+    document.getElementById('filter-grupo').value = "";
+    document.getElementById('filter-fabricante').value = "";
+    document.getElementById('search-endereco').value = "";
+    loadEnderecos();
+}
+
+// --- LOTES ---
 
 async function loadEnderecos() {
     const filial = document.getElementById('filial-select').value;
+    const grupo = document.getElementById('filter-grupo').value;
+    const fabricante = document.getElementById('filter-fabricante').value;
+
     if (!filial) return;
 
     showLoader();
     try {
-        const res = await fetch(`${API_BASE}/enderecos?filial=${encodeURIComponent(filial)}`, {
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
+        let url = `${API_BASE}/enderecos?filial=${encodeURIComponent(filial)}`;
+        if (grupo) url += `&grupo=${encodeURIComponent(grupo)}`;
+        if (fabricante) url += `&fabricante=${encodeURIComponent(fabricante)}`;
+
+        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         
-        if (!res.ok) {
-            const errText = await res.text();
-            throw new Error(errText);
-        }
+        if (!res.ok) throw new Error(await res.text());
         
         const enderecos = await res.json();
         renderEnderecos(enderecos);
         
-        // Reseta o painel da direita
-        document.getElementById('detalhe-vazio').classList.remove('hidden');
-        document.getElementById('detalhe-conteudo').classList.add('hidden');
-        currentEnderecoId = null;
+        // Se o lote selecionado sumiu por causa do filtro, reseta a view
+        if (currentEnderecoId) {
+            const aindaExiste = enderecos.find(e => e.id === currentEnderecoId);
+            if (!aindaExiste) {
+                document.getElementById('detalhe-vazio').classList.remove('hidden');
+                document.getElementById('detalhe-conteudo').classList.add('hidden');
+                currentEnderecoId = null;
+            }
+        }
 
     } catch (err) {
         console.error(err);
@@ -119,7 +157,7 @@ async function loadEnderecos() {
             const jsonErr = JSON.parse(err.message);
             alert(`Erro: ${jsonErr.error}`);
         } catch {
-            alert('Erro ao carregar lista de endereços. Verifique a conexão.');
+            alert('Erro ao carregar lista de endereços.');
         }
     } finally {
         hideLoader();
@@ -133,8 +171,8 @@ function renderEnderecos(lista) {
     if (lista.length === 0) {
         container.innerHTML = `
             <div class="text-center p-6 text-gray-400">
-                <p>Nenhum lote encontrado nesta filial.</p>
-                <p class="text-xs mt-1">Clique em "Novo" para criar o primeiro.</p>
+                <p>Nenhum lote encontrado.</p>
+                <p class="text-xs mt-1">Verifique os filtros ou clique em "Novo".</p>
             </div>`;
         return;
     }
@@ -145,13 +183,14 @@ function renderEnderecos(lista) {
         div.dataset.id = end.id;
         div.dataset.codigo = end.codigo_endereco;
         
-        // Lógica visual de capacidade (Cores)
-        let badgeClass = 'bg-green-100 text-green-800'; // Livre
-        if (end.qtd_produtos >= 5) {
-            badgeClass = 'bg-red-100 text-red-800'; // Cheio
-        } else if (end.qtd_produtos > 0) {
-            badgeClass = 'bg-blue-100 text-blue-800'; // Em uso
+        // Mantém seleção visual se for o atual
+        if(currentEnderecoId === end.id) {
+            div.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50');
         }
+
+        let badgeClass = 'bg-green-100 text-green-800';
+        if (end.qtd_produtos >= 5) badgeClass = 'bg-red-100 text-red-800';
+        else if (end.qtd_produtos > 0) badgeClass = 'bg-blue-100 text-blue-800';
 
         div.innerHTML = `
             <div class="flex justify-between items-start pointer-events-none">
@@ -166,7 +205,6 @@ function renderEnderecos(lista) {
                 </div>
             </div>
         `;
-        
         div.addEventListener('click', () => selectEndereco(end));
         container.appendChild(div);
     });
@@ -176,104 +214,72 @@ function filterEnderecosLocal(e) {
     const term = e.target.value.toLowerCase();
     document.querySelectorAll('.endereco-item').forEach(el => {
         const codigo = el.dataset.codigo.toLowerCase();
-        // Mostra apenas se o código contiver o termo digitado
         el.style.display = codigo.includes(term) ? 'block' : 'none';
     });
 }
 
-// --- MODAL DE CRIAÇÃO ---
-
 function toggleModal(show) {
     const modal = document.getElementById('modal-novo-endereco');
-    if (show) {
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        document.getElementById('form-novo-endereco').reset();
-    } else {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-    }
+    if (show) { modal.classList.remove('hidden'); modal.classList.add('flex'); document.getElementById('form-novo-endereco').reset(); } 
+    else { modal.classList.add('hidden'); modal.classList.remove('flex'); }
 }
 
 async function createEndereco(e) {
     e.preventDefault();
     const filial = document.getElementById('filial-select').value;
     const formData = new FormData(e.target);
-    
-    // Payload simples (Sem campo 'Tipo')
-    const payload = {
-        filial_codigo: filial,
-        codigo_endereco: formData.get('codigo').toUpperCase(),
-        descricao: formData.get('descricao')
-    };
+    const payload = { filial_codigo: filial, codigo_endereco: formData.get('codigo').toUpperCase(), descricao: formData.get('descricao') };
 
     try {
         const res = await fetch(`${API_BASE}/enderecos`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${getToken()}` 
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify(payload)
         });
-        
         const data = await res.json();
-
-        if (!res.ok) {
-            throw new Error(data.error || 'Erro desconhecido');
-        }
+        if (!res.ok) throw new Error(data.error);
 
         alert("Sucesso: " + data.message);
         toggleModal(false);
-        loadEnderecos(); // Atualiza a lista
+        loadEnderecos();
     } catch (err) {
-        alert("Falha ao criar lote: " + err.message);
+        alert("Falha: " + err.message);
     }
 }
 
 async function deleteEndereco() {
     if(!currentEnderecoId) return;
     if(!confirm('Tem certeza? Isso desvinculará todos os produtos deste lote.')) return;
-
     try {
         const res = await fetch(`${API_BASE}/enderecos/${currentEnderecoId}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
-        
         if(res.ok) {
             loadEnderecos();
         } else {
             alert('Erro ao excluir lote.');
         }
-    } catch(err) {
-        console.error(err);
-        alert("Erro de conexão ao tentar excluir.");
-    }
+    } catch(err) { console.error(err); }
 }
 
-// --- GERENCIAMENTO DE PRODUTOS (Lado Direito) ---
+// --- DETALHES DO LOTE ---
 
 async function selectEndereco(endereco) {
     currentEnderecoId = endereco.id;
     
-    // Atualiza visual da seleção (Borda azul)
     document.querySelectorAll('.endereco-item').forEach(el => el.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50'));
     document.querySelector(`.endereco-item[data-id="${endereco.id}"]`)?.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50');
 
-    // Troca a tela de "Vazio" para "Conteúdo"
     document.getElementById('detalhe-vazio').classList.add('hidden');
     document.getElementById('detalhe-conteudo').classList.remove('hidden');
     
-    // Preenche cabeçalho
     document.getElementById('lbl-codigo-endereco').textContent = endereco.codigo_endereco;
     document.getElementById('lbl-descricao-endereco').textContent = endereco.descricao || 'Lote Padrão';
     
-    // Limpa campo de busca
     document.getElementById('input-busca-produto').value = '';
     document.getElementById('resultados-busca').classList.add('hidden');
 
-    // Busca os produtos do lote
     loadProdutosDoEndereco();
 }
 
@@ -281,15 +287,15 @@ async function loadProdutosDoEndereco() {
     if(!currentEnderecoId) return;
     const filial = document.getElementById('filial-select').value;
     const container = document.getElementById('lista-produtos-endereco');
-    
     container.innerHTML = '<p class="text-center text-gray-400 py-4">Carregando itens...</p>';
 
     try {
         const res = await fetch(`${API_BASE}/enderecos/${currentEnderecoId}/produtos?filial=${encodeURIComponent(filial)}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
-        const produtos = await res.json();
-        renderProdutos(produtos);
+        // Atualiza a variável global para uso no modal de contagem
+        currentProductsList = await res.json();
+        renderProdutos(currentProductsList);
     } catch(err) {
         container.innerHTML = '<p class="text-center text-red-400">Erro ao carregar itens do lote.</p>';
         console.error(err);
@@ -317,7 +323,6 @@ function renderProdutos(produtos) {
         
         const saldoClass = prod.saldo > 0 ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50';
 
-        // Monta string de detalhes (Fabricante e Grupo)
         const detalhes = [];
         if(prod.fabricante) detalhes.push(prod.fabricante);
         if(prod.grupo) detalhes.push(prod.grupo);
@@ -327,12 +332,9 @@ function renderProdutos(produtos) {
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-1">
                     <span class="font-mono text-xs font-bold bg-gray-100 px-2 py-0.5 rounded text-gray-700 border border-gray-200">${prod.codigo}</span>
-                    ${detalhesTexto ? `<span class="text-xs text-gray-400 border-l pl-2 border-gray-300 truncate max-w-[200px] hidden sm:inline-block" title="${detalhesTexto}">${detalhesTexto}</span>` : ''}
+                    ${detalhesTexto ? `<span class="text-xs text-gray-400 border-l pl-2 border-gray-300 truncate max-w-[200px]" title="${detalhesTexto}">${detalhesTexto}</span>` : ''}
                 </div>
                 <p class="font-medium text-sm text-gray-900 truncate" title="${prod.nome}">${prod.nome}</p>
-                
-                ${detalhesTexto ? `<p class="text-[10px] text-gray-400 mt-0.5 sm:hidden uppercase">${detalhesTexto}</p>` : ''}
-                
                 <div class="mt-2 flex items-center gap-2 text-xs">
                     <span class="px-2 py-0.5 rounded font-bold ${saldoClass}">Saldo em Estoque: ${prod.saldo}</span>
                 </div>
@@ -345,6 +347,108 @@ function renderProdutos(produtos) {
     });
     
     if (typeof feather !== 'undefined') feather.replace();
+}
+
+// --- CONTAGEM (NOVO) ---
+
+function toggleContagemModal(show) {
+    const modal = document.getElementById('modal-contagem');
+    if(show) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
+    else { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+}
+
+function openContagemModal() {
+    if (!currentProductsList || currentProductsList.length === 0) {
+        alert("Este lote está vazio. Adicione produtos antes de realizar a contagem.");
+        return;
+    }
+    
+    document.getElementById('modal-contagem-lote').textContent = `Lote: ${document.getElementById('lbl-codigo-endereco').textContent}`;
+    document.getElementById('motivo-contagem').value = '';
+    
+    const tbody = document.getElementById('lista-contagem-items');
+    tbody.innerHTML = '';
+
+    currentProductsList.forEach(prod => {
+        const tr = document.createElement('tr');
+        tr.className = 'border-b hover:bg-gray-50';
+        tr.dataset.codigo = prod.codigo;
+        tr.dataset.qtdAnterior = prod.saldo;
+        
+        tr.innerHTML = `
+            <td class="px-4 py-3 font-mono text-gray-600">${prod.codigo}</td>
+            <td class="px-4 py-3 text-gray-800">${prod.nome}</td>
+            <td class="px-4 py-3 text-right font-bold text-gray-500">${prod.saldo}</td>
+            <td class="px-4 py-2 text-center">
+                <input type="number" step="0.001" value="${prod.saldo}" 
+                       class="input-nova-qtd w-24 text-center border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 font-bold text-indigo-700">
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    toggleContagemModal(true);
+}
+
+async function saveContagem() {
+    const motivo = document.getElementById('motivo-contagem').value;
+    if (!motivo.trim()) {
+        alert("Por favor, informe o motivo do ajuste (ex: Inventário, Conferência).");
+        return;
+    }
+
+    const filial = document.getElementById('filial-select').value;
+    const nomeLote = document.getElementById('lbl-codigo-endereco').textContent;
+    const inputs = document.querySelectorAll('.input-nova-qtd');
+    const itensParaAjuste = [];
+
+    inputs.forEach(input => {
+        const tr = input.closest('tr');
+        const codigo = tr.dataset.codigo;
+        const qtdAnterior = parseFloat(tr.dataset.qtdAnterior);
+        const novaQtd = parseFloat(input.value);
+
+        // Só envia se houver diferença
+        if (qtdAnterior !== novaQtd) {
+            itensParaAjuste.push({
+                codigo: codigo,
+                qtdAnterior: qtdAnterior,
+                novaQtd: novaQtd,
+                lote: nomeLote
+            });
+        }
+    });
+
+    if (itensParaAjuste.length === 0) {
+        alert("Nenhuma alteração de quantidade detectada.");
+        return;
+    }
+
+    if (!confirm(`Confirma o ajuste de saldo para ${itensParaAjuste.length} itens?`)) return;
+
+    showLoader();
+    try {
+        const res = await fetch(`${API_BASE}/ajuste-contagem`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify({
+                filial: filial,
+                motivoGeral: motivo,
+                itens: itensParaAjuste
+            })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        alert("Contagem processada com sucesso!");
+        toggleContagemModal(false);
+        loadProdutosDoEndereco(); // Recarrega saldos
+    } catch (err) {
+        alert("Erro ao processar contagem: " + err.message);
+    } finally {
+        hideLoader();
+    }
 }
 
 // --- BUSCA E ADIÇÃO (Autocomplete) ---
@@ -365,7 +469,6 @@ function handleProductSearch(e) {
             const res = await fetch(`${API_BASE}/produtos/busca?q=${encodeURIComponent(query)}&filial=${encodeURIComponent(filial)}`, {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
-            
             const resultados = await res.json();
             
             resultsContainer.innerHTML = '';
@@ -407,8 +510,6 @@ function handleProductSearch(e) {
 
 async function adicionarProduto(codigo) {
     if (!currentEnderecoId) return;
-    
-    // Limpa a busca visualmente
     document.getElementById('resultados-busca').classList.add('hidden');
     document.getElementById('input-busca-produto').value = '';
 
@@ -416,49 +517,29 @@ async function adicionarProduto(codigo) {
     try {
         const res = await fetch(`${API_BASE}/enderecos/${currentEnderecoId}/produtos`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json', 
-                'Authorization': `Bearer ${getToken()}` 
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify({ codigo_produto: codigo })
         });
-
         if (!res.ok) {
             const err = await res.json();
             throw new Error(err.error || 'Erro ao adicionar');
         }
-
-        // Recarrega tudo (lista do lote e contagem na lista lateral)
         loadProdutosDoEndereco();
         loadEnderecos(); 
-
-    } catch (err) {
-        alert(err.message);
-    } finally {
-        hideLoader();
-    }
+    } catch (err) { alert(err.message); } finally { hideLoader(); }
 }
 
-// Torna a função global para ser chamada pelo onclick do HTML gerado
 window.removerProduto = async function(idMapa) {
     if(!confirm('Desvincular produto deste lote?')) return;
-    
     showLoader();
     try {
         const res = await fetch(`${API_BASE}/produtos/${idMapa}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
-        
         if (res.ok) {
             loadProdutosDoEndereco();
             loadEnderecos();
-        } else {
-            alert('Erro ao remover produto.');
-        }
-    } catch(err) {
-        console.error(err);
-    } finally {
-        hideLoader();
-    }
+        } else { alert('Erro ao remover produto.'); }
+    } catch(err) { console.error(err); } finally { hideLoader(); }
 };
