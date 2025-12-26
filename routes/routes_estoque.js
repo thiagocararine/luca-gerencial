@@ -27,19 +27,21 @@ const MAPA_FILIAIS = {
     'Escritório': 'LUCAM'
 };
 
-// --- FUNÇÃO DE LOG ADAPTADA PARA A TABELA EXISTENTE ---
+// --- FUNÇÃO DE LOG ---
 async function registrarLog(req, filialCodigo, codigoProduto, descricaoAcao) {
+    // Garante que filialCodigo tenha no máximo 5 caracteres (tamanho da coluna no banco)
+    const filialDb = (filialCodigo || '').substring(0, 5);
+
     try {
-        // 1. Extrai dados do usuário do Token (igual ao routes_produtos.js)
-        // Se req.user não existir, usa valores padrão
+        // 1. Dados do Usuário
         const idUsuario = req.user ? req.user.userId : 0;
         const nomeUsuario = req.user ? req.user.nome : 'Sistema';
 
-        // 2. Tenta descobrir o ID_PRODUTO_REGI (obrigatório na tabela)
-        let idProdutoRegi = 0;
-        
-        // Se temos um código de produto real (não é criação de lote), buscamos o ID
-        if (codigoProduto && codigoProduto !== 'LOTE' && codigoProduto !== '') {
+        // 2. Busca o ID_PRODUTO_REGI
+        let idProdutoRegi = 0; // Tenta 0 primeiro (Padrão para "Sem Produto")
+
+        // Se for uma operação com produto real, busca o ID correto
+        if (codigoProduto && codigoProduto !== 'LOTE' && codigoProduto !== 'GERAL' && codigoProduto !== '') {
             try {
                 const [prodRow] = await seiPool.query(
                     'SELECT pd_regi FROM produtos WHERE pd_codi = ? LIMIT 1', 
@@ -49,59 +51,53 @@ async function registrarLog(req, filialCodigo, codigoProduto, descricaoAcao) {
                     idProdutoRegi = prodRow[0].pd_regi;
                 }
             } catch (err) {
-                console.warn("Não foi possível buscar pd_regi para o log:", err.message);
+                console.warn("[LOG WARN] Falha ao buscar pd_regi:", err.message);
             }
         }
 
-        // 3. Monta o motivo
-        const motivo = `Endereçamento: ${descricaoAcao}`;
-
-        // 4. Insere no banco (respeitando campos NOT NULL)
-        // Quantidades vão como 0 pois é apenas movimentação de endereço, não ajuste de saldo
-        await gerencialPool.query(
-            `INSERT INTO estoque_ajustes_log 
+        // 3. Monta Query
+        // Nota: quantidade_anterior/nova vão como 0.0000
+        const query = `
+            INSERT INTO estoque_ajustes_log 
             (id_produto_regi, codigo_produto, id_filial, quantidade_anterior, quantidade_nova, motivo, id_usuario, nome_usuario) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                idProdutoRegi,              // int(11)
-                codigoProduto || 'GERAL',   // varchar(14)
-                filialCodigo,               // varchar(5)
-                0,                          // decimal (qtd anterior)
-                0,                          // decimal (qtd nova)
-                motivo,                     // text
-                idUsuario,                  // int(11)
-                nomeUsuario                 // varchar(100)
-            ]
-        );
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        
+        const params = [
+            idProdutoRegi,              // int(11) - PODE FALHAR SE TIVER FK E FOR 0
+            codigoProduto || 'LOTE',    // varchar(14)
+            filialDb,                   // varchar(5)
+            0,                          // decimal
+            0,                          // decimal
+            `Endereçamento: ${descricaoAcao}`, // text
+            idUsuario,                  // int(11)
+            nomeUsuario                 // varchar(100)
+        ];
+
+        // console.log("[DEBUG LOG] Tentando gravar log:", params);
+
+        await gerencialPool.query(query, params);
+        console.log(`[LOG SUCESSO] ${descricaoAcao}`);
 
     } catch (error) {
-        console.error("Falha silenciosa ao gravar log de estoque:", error);
+        // AQUI ESTÁ O SEGREDO: Vamos ver o erro real no terminal
+        console.error("--- ERRO AO GRAVAR LOG ESTOQUE ---");
+        console.error("Mensagem:", error.message);
+        console.error("Código SQL:", error.code);
+        console.error("----------------------------------");
     }
 }
 
 // --- ROTA DE DIAGNÓSTICO ---
 router.get('/diagnostico', async (req, res) => {
-    const report = {
-        status: 'Iniciando diagnóstico...',
-        banco_conectado: false,
-        tabelas_sistema: [],
-        erro: null
-    };
-
+    const report = { status: 'Check', banco_conectado: false, tabelas: [], erro: null };
     try {
         const connection = await gerencialPool.getConnection();
         report.banco_conectado = true;
         connection.release();
-
-        const [tables] = await gerencialPool.query(`
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = ? AND table_name LIKE 'estoque_%'
-        `, [dbConfig.database]);
-        
-        report.tabelas_sistema = tables.map(t => t.TABLE_NAME || t.table_name);
+        const [tables] = await gerencialPool.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_name LIKE 'estoque_%'`, [dbConfig.database]);
+        report.tabelas = tables.map(t => t.TABLE_NAME || t.table_name);
         res.json(report);
-
     } catch (error) {
         report.erro = error.message;
         res.status(500).json(report);
@@ -135,7 +131,7 @@ router.get('/enderecos', authenticateToken, async (req, res) => {
 router.post('/enderecos', authenticateToken, async (req, res) => {
     const { filial_codigo, codigo_endereco, descricao } = req.body;
     
-    // Convertendo o nome da filial para código ERP (caso venha o nome) para o log ficar padronizado
+    // Resolve código da filial (Ex: 'Santa Cruz...' -> 'LUCAM')
     const codigoFilialLog = MAPA_FILIAIS[filial_codigo] || filial_codigo;
 
     if (!filial_codigo || !codigo_endereco) {
@@ -148,15 +144,14 @@ router.post('/enderecos', authenticateToken, async (req, res) => {
             [filial_codigo, codigo_endereco, descricao]
         );
 
-        // LOG
+        // Dispara LOG
         await registrarLog(req, codigoFilialLog, 'LOTE', `Criou lote ${codigo_endereco} (${descricao || ''})`);
 
         res.status(201).json({ message: 'Lote criado com sucesso.' });
 
     } catch (error) {
         console.error("ERRO AO CRIAR LOTE:", error);
-        if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: `O código "${codigo_endereco}" já existe nesta filial.` });
-        if (error.code === 'ER_NO_SUCH_TABLE') return res.status(500).json({ error: 'Tabela de estoque não encontrada.' });
+        if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: `O código "${codigo_endereco}" já existe.` });
         res.status(500).json({ error: 'Erro interno ao criar lote.' });
     }
 });
@@ -164,7 +159,6 @@ router.post('/enderecos', authenticateToken, async (req, res) => {
 // 3. Excluir Lote (COM LOG)
 router.delete('/enderecos/:id', authenticateToken, async (req, res) => {
     try {
-        // Busca info antes de deletar
         const [info] = await gerencialPool.query('SELECT filial_codigo, codigo_endereco FROM estoque_enderecos WHERE id = ?', [req.params.id]);
         
         if (info.length > 0) {
@@ -173,7 +167,6 @@ router.delete('/enderecos/:id', authenticateToken, async (req, res) => {
 
             await gerencialPool.query('DELETE FROM estoque_enderecos WHERE id = ?', [req.params.id]);
             
-            // LOG
             await registrarLog(req, codigoFilialLog, 'LOTE', `Excluiu lote ${lote.codigo_endereco}`);
             
             res.json({ message: 'Lote removido com sucesso.' });
@@ -181,7 +174,7 @@ router.delete('/enderecos/:id', authenticateToken, async (req, res) => {
             res.status(404).json({ error: 'Lote não encontrado.' });
         }
     } catch (error) {
-        console.error("Erro ao excluir lote:", error);
+        console.error("Erro ao excluir:", error);
         res.status(500).json({ error: 'Erro ao remover lote.' });
     }
 });
@@ -199,18 +192,11 @@ router.get('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
 
         const codigos = mapa.map(m => m.codigo_produto);
 
-        // Busca dados no ERP (Produtos + Estoque)
         const queryErp = `
-            SELECT 
-                p.pd_codi, 
-                p.pd_nome, 
-                p.pd_fabr, 
-                p.pd_nmgr,
-                e.ef_fisico as saldo_real
+            SELECT p.pd_codi, p.pd_nome, p.pd_fabr, p.pd_nmgr, e.ef_fisico as saldo_real
             FROM produtos p
             INNER JOIN estoque e ON p.pd_codi = e.ef_codigo
-            WHERE p.pd_codi IN (?) 
-            AND e.ef_idfili = ?
+            WHERE p.pd_codi IN (?) AND e.ef_idfili = ?
         `;
         
         const [produtosErp] = await seiPool.query(queryErp, [codigos, codigoFilialErp]);
@@ -220,32 +206,28 @@ router.get('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
             return {
                 id_mapa: item.id,
                 codigo: item.codigo_produto,
-                nome: info ? info.pd_nome : '(Produto não encontrado na filial)',
+                nome: info ? info.pd_nome : '(Produto não encontrado)',
                 saldo: info ? parseFloat(info.saldo_real) : 0,
                 fabricante: info ? info.pd_fabr : '',
                 grupo: info ? info.pd_nmgr : ''
             };
         });
-
         res.json(resultado);
-
     } catch (error) {
-        console.error("Erro ao buscar produtos do lote:", error);
-        res.status(500).json({ error: 'Erro ao carregar detalhes dos produtos.' });
+        console.error("Erro ao buscar produtos:", error);
+        res.status(500).json({ error: 'Erro ao carregar produtos.' });
     }
 });
 
-// 5. Vincular Produto ao Lote (COM LOG)
+// 5. Vincular Produto (COM LOG)
 router.post('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
     const idEndereco = req.params.id;
     const { codigo_produto } = req.body;
 
     try {
-        // Verifica limite
         const [qtd] = await gerencialPool.query('SELECT COUNT(*) as total FROM estoque_mapa WHERE id_endereco = ?', [idEndereco]);
         if (qtd[0].total >= 5) return res.status(400).json({ error: 'Limite de 5 produtos atingido.' });
 
-        // Busca info do lote para o log
         const [loteInfo] = await gerencialPool.query('SELECT filial_codigo, codigo_endereco FROM estoque_enderecos WHERE id = ?', [idEndereco]);
         
         await gerencialPool.query(
@@ -253,28 +235,23 @@ router.post('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
             [idEndereco, codigo_produto]
         );
 
-        // LOG
         if (loteInfo.length > 0) {
-            const filialNome = loteInfo[0].filial_codigo;
-            const codigoFilialLog = MAPA_FILIAIS[filialNome] || filialNome;
-            const nomeLote = loteInfo[0].codigo_endereco;
-
-            await registrarLog(req, codigoFilialLog, codigo_produto, `Vinculou ao lote ${nomeLote}`);
+            const f = loteInfo[0].filial_codigo;
+            const codFilial = MAPA_FILIAIS[f] || f;
+            await registrarLog(req, codFilial, codigo_produto, `Vinculou ao lote ${loteInfo[0].codigo_endereco}`);
         }
 
-        res.status(201).json({ message: 'Produto vinculado com sucesso.' });
-
+        res.status(201).json({ message: 'Produto vinculado.' });
     } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'Produto já está neste lote.' });
-        console.error("Erro ao vincular produto:", error);
-        res.status(500).json({ error: 'Erro ao vincular produto.' });
+        console.error("Erro ao vincular:", error);
+        res.status(500).json({ error: 'Erro ao vincular.' });
     }
 });
 
 // 6. Desvincular Produto (COM LOG)
 router.delete('/produtos/:idMapa', authenticateToken, async (req, res) => {
     try {
-        // Busca info antes de deletar para logar
         const [vinculo] = await gerencialPool.query(`
             SELECT m.codigo_produto, e.codigo_endereco, e.filial_codigo 
             FROM estoque_mapa m
@@ -284,22 +261,20 @@ router.delete('/produtos/:idMapa', authenticateToken, async (req, res) => {
 
         await gerencialPool.query('DELETE FROM estoque_mapa WHERE id = ?', [req.params.idMapa]);
         
-        // LOG
         if (vinculo.length > 0) {
             const v = vinculo[0];
-            const codigoFilialLog = MAPA_FILIAIS[v.filial_codigo] || v.filial_codigo;
-            
-            await registrarLog(req, codigoFilialLog, v.codigo_produto, `Removeu do lote ${v.codigo_endereco}`);
+            const codFilial = MAPA_FILIAIS[v.filial_codigo] || v.filial_codigo;
+            await registrarLog(req, codFilial, v.codigo_produto, `Removeu do lote ${v.codigo_endereco}`);
         }
 
-        res.json({ message: 'Produto desvinculado com sucesso.' });
+        res.json({ message: 'Desvinculado.' });
     } catch (error) {
         console.error("Erro ao desvincular:", error);
-        res.status(500).json({ error: 'Erro ao desvincular produto.' });
+        res.status(500).json({ error: 'Erro ao desvincular.' });
     }
 });
 
-// 7. Busca de Produtos (Autocomplete)
+// 7. Busca
 router.get('/produtos/busca', authenticateToken, async (req, res) => {
     const { q, filial } = req.query;
     const codigoFilialErp = MAPA_FILIAIS[filial] || 'LUCAM';
@@ -307,28 +282,18 @@ router.get('/produtos/busca', authenticateToken, async (req, res) => {
     if (!q || q.length < 3) return res.json([]);
 
     try {
-        const querySQL = `
-            SELECT 
-                p.pd_codi, 
-                p.pd_nome, 
-                p.pd_fabr,
-                p.pd_nmgr,
-                e.ef_fisico as pd_saldo
+        const [rows] = await seiPool.query(`
+            SELECT p.pd_codi, p.pd_nome, p.pd_fabr, p.pd_nmgr, e.ef_fisico as pd_saldo
             FROM produtos p
             INNER JOIN estoque e ON p.pd_codi = e.ef_codigo
-            WHERE (p.pd_codi LIKE ? OR p.pd_nome LIKE ?)
-            AND e.ef_idfili = ?
+            WHERE (p.pd_codi LIKE ? OR p.pd_nome LIKE ?) AND e.ef_idfili = ?
             LIMIT 10
-        `;
-        
-        const params = [`%${q}%`, `%${q}%`, codigoFilialErp];
-        const [rows] = await seiPool.query(querySQL, params);
+        `, [`%${q}%`, `%${q}%`, codigoFilialErp]);
         
         res.json(rows);
-
     } catch (error) {
-        console.error("[ERRO NA BUSCA]", error);
-        res.status(500).json({ error: 'Erro ao realizar busca de produtos.' });
+        console.error("Erro busca:", error);
+        res.status(500).json({ error: 'Erro na busca.' });
     }
 });
 
