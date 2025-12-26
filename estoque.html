@@ -4,46 +4,73 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Endereçamento de Estoque - Luca Gerencial</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="assets/style.css">
     <script src="https://unpkg.com/feather-icons"></script>
-</head>
-<body class="h-full font-sans text-gray-900">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <div id="global-loader" class="fixed inset-0 bg-gray-900 bg-opacity-50 z-[100] flex-col items-center justify-center hidden">
-        <div style="border-top-color: #4f46e5;" class="animate-spin rounded-full h-12 w-12 border-4 border-gray-200"></div>
-        <h2 class="text-white mt-4 font-semibold">Carregando...</h2>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .page-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
+        .abstract-background { width: 100%; height: 100%; border-radius: 0; aspect-ratio: auto; }
+        
+        /* Ajuste do scrollbar para ficar mais elegante */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #c7c7c7; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+        
+        #sidebar.w-20 .sidebar-text { display: none; }
+        #sidebar.w-20 .sidebar-link { justify-content: center; }
+        #company-logo { transition: opacity 0.3s ease-in-out; }
+        #sidebar.w-20 #company-logo { opacity: 0; max-width: 0; }
+    </style>
+</head>
+<body class="h-full text-gray-900">
+
+    <div class="page-background">
+        <div class="abstract-background">
+            <div class="tube tube-1"></div><div class="tube tube-2"></div><div class="tube tube-3"></div><div class="tube tube-4"></div>
+            <div class="tube tube-5"></div><div class="tube tube-6"></div><div class="tube tube-7"></div><div class="tube tube-8"></div>
+        </div>
     </div>
 
     <div class="flex h-full">
-        <nav id="sidebar" class="w-64 bg-white border-r border-gray-200 flex flex-col hidden md:flex">
+        <nav id="sidebar" class="w-64 bg-white/80 backdrop-blur-sm border-r border-gray-200/50 flex flex-col hidden md:flex flex-shrink-0 transition-all duration-300 ease-in-out">
             <div class="flex flex-col h-full">
                 <div class="h-16 flex items-center justify-center border-b border-gray-200/50 px-4 gap-2">
-                    <img id="company-logo" src="" alt="Logo da Empresa" style="display: none;" class="max-h-10 max-w-10">
-                    <h1 class="text-xl font-bold text-indigo-600 overflow-hidden"><span class="sidebar-text">Luca Gerencial</span></h1>
+                    <img id="company-logo" src="" alt="Logo" style="display: none;" class="max-h-10 max-w-10">
+                    <h1 class="text-xl font-bold text-indigo-600 overflow-hidden whitespace-nowrap"><span class="sidebar-text">Luca Gerencial</span></h1>
                 </div>
                 <div class="flex-grow p-4 overflow-y-auto">
                     <ul class="space-y-2">
-                        <li><a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="home"></span><span class="sidebar-text">Início / Dashboard</span></a></li>
-                        <li><a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="dollar-sign"></span><span class="sidebar-text">Lançamentos</span></a></li>
-                        <li><a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="truck"></span><span class="sidebar-text">Logística</span></a></li>
+                        <li><a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100/80 hover:text-gray-900"><span data-feather="home"></span><span class="sidebar-text">Início / Dashboard</span></a></li>
+                        <li><a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100/80 hover:text-gray-900"><span data-feather="dollar-sign"></span><span class="sidebar-text">Lançamentos</span></a></li>
+                        <li><a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100/80 hover:text-gray-900"><span data-feather="truck"></span><span class="sidebar-text">Logística</span></a></li>
+
                         <li>
-                            <button type="button" class="sidebar-link w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900" onclick="toggleSubmenu('submenu-expedicao')">
-                                <div class="flex items-center gap-3"><span data-feather="package"></span><span class="sidebar-text">Expedição</span></div>
+                            <button type="button" class="sidebar-link w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100/80 hover:text-gray-900" onclick="toggleSubmenu('submenu-expedicao')">
+                                <div class="flex items-center gap-3">
+                                    <span data-feather="package"></span>
+                                    <span class="sidebar-text">Expedição</span>
+                                </div>
                                 <span data-feather="chevron-down" class="w-4 h-4 transition-transform duration-200" id="icon-expedicao"></span>
                             </button>
                             <ul id="submenu-expedicao" class="hidden pl-9 mt-1 space-y-1">
-                                <li><a href="entregas.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Entregas</a></li>
-                                <li><a href="checklist.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Checklist Veículos</a></li>
-                                <li><a href="produtos.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Cadastro Produtos</a></li>
-                                <li><a href="estoque.html" class="block px-3 py-2 rounded-md text-sm text-indigo-700 bg-indigo-50 font-semibold hover:text-indigo-600 hover:bg-gray-50">Endereçamento</a></li>
+                                <li><a href="entregas.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50/50">Entregas</a></li>
+                                <li><a href="checklist.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50/50">Checklist Veículos</a></li>
+                                <li><a href="produtos.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50/50">Cadastro Produtos</a></li>
+                                <li><a href="estoque.html" class="block px-3 py-2 rounded-md text-sm text-indigo-700 bg-indigo-50 font-semibold hover:text-indigo-600 hover:bg-indigo-100/50">Endereçamento</a></li>
                             </ul>
                         </li>
-                        <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
+
+                        <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100/80 hover:text-gray-900"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
                     </ul>
                 </div>
+                
                 <div class="p-2 border-t border-gray-200/50">
-                    <button id="sidebar-toggle" class="w-full hidden md:flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none">
+                    <button id="sidebar-toggle" class="w-full hidden md:flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100/80 focus:outline-none">
                         <svg id="toggle-icon-collapse" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" /></svg>
                         <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
                     </button>
@@ -51,90 +78,115 @@
             </div>
         </nav>
 
-        <div class="flex-1 flex flex-col overflow-hidden">
-            <header class="bg-white border-b h-16 flex items-center justify-between px-6">
-                <h2 class="text-lg font-semibold text-gray-800">Endereçamento de Estoque</h2>
+        <div class="flex-1 flex flex-col overflow-hidden min-w-0">
+            <header class="bg-white/80 backdrop-blur-sm border-b border-gray-200/50 h-16 flex items-center justify-between px-6 shadow-sm z-20">
                 <div class="flex items-center gap-4">
-                    <select id="filial-select" class="form-select block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
-                        <option value="">Carregando Filiais...</option>
-                    </select>
-                    <button id="logout-btn" class="text-sm text-red-600 font-medium hover:text-red-800">Sair</button>
+                    <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900"><i data-feather="menu"></i></button>
+                    <h2 class="text-lg font-semibold text-gray-800">Endereçamento de Estoque</h2>
+                </div>
+                <div class="flex items-center gap-4">
+                    <span class="text-sm text-gray-700 hidden sm:block">Olá, <strong id="user-name" class="font-medium">Usuário</strong>!</span>
+                    <button id="logout-btn" class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500 transition-colors">Sair</button>
                 </div>
             </header>
 
-            <main class="flex-1 overflow-hidden p-6">
-                <div class="mb-4 flex gap-4 bg-white p-3 rounded-lg shadow-sm">
-                    <div class="flex-1">
-                        <label class="block text-xs font-medium text-gray-500 mb-1">Filtrar por Grupo</label>
-                        <select id="filter-grupo" class="w-full text-sm border-gray-300 rounded-md">
-                            <option value="">Todos os Grupos</option>
-                        </select>
-                    </div>
-                    <div class="flex-1">
-                        <label class="block text-xs font-medium text-gray-500 mb-1">Filtrar por Fabricante</label>
-                        <select id="filter-fabricante" class="w-full text-sm border-gray-300 rounded-md">
-                            <option value="">Todos os Fabricantes</option>
-                        </select>
-                    </div>
-                    <div class="flex items-end">
-                        <button id="btn-limpar-filtros" class="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded border border-gray-300">Limpar</button>
+            <main class="flex-1 flex flex-col p-4 sm:p-6 overflow-hidden">
+                
+                <div class="relative z-10 bg-white/90 backdrop-blur-sm p-4 rounded-lg shadow mb-6 space-y-4 border border-gray-100">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                        
+                        <div class="md:col-span-1">
+                            <label for="filial-select" class="block text-xs font-bold text-indigo-700 mb-1 uppercase tracking-wide">Filial (Obrigatório)</label>
+                            <select id="filial-select" class="w-full text-sm border-indigo-200 rounded-md focus:ring-indigo-500 focus:border-indigo-500 bg-indigo-50/50 font-medium text-indigo-900">
+                                <option value="">Carregando...</option>
+                            </select>
+                        </div>
+
+                        <div class="md:col-span-1">
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Filtrar por Grupo</label>
+                            <select id="filter-grupo" class="w-full text-sm border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+                                <option value="">Todos os Grupos</option>
+                            </select>
+                        </div>
+
+                        <div class="md:col-span-1">
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Filtrar por Fabricante</label>
+                            <select id="filter-fabricante" class="w-full text-sm border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+                                <option value="">Todos os Fabricantes</option>
+                            </select>
+                        </div>
+
+                        <div class="md:col-span-1 flex">
+                            <button id="btn-limpar-filtros" class="w-full px-3 py-2 text-sm text-gray-600 hover:text-indigo-600 hover:bg-gray-100 rounded border border-gray-300 transition-colors flex items-center justify-center gap-2">
+                                <i data-feather="filter" class="w-3 h-3"></i> Limpar Filtros
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <div class="flex h-[calc(100%-5rem)] gap-6">
-                    <div class="w-1/3 bg-white rounded-lg shadow flex flex-col">
-                        <div class="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
+                <div class="flex-1 flex gap-6 overflow-hidden min-h-0">
+                    
+                    <div class="w-1/3 bg-white/90 backdrop-blur-sm rounded-lg shadow flex flex-col border border-gray-100">
+                        <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-t-lg">
                             <h3 class="font-bold text-gray-700">Lotes / Endereços</h3>
-                            <button id="btn-novo-endereco" class="bg-indigo-600 text-white px-3 py-1 rounded text-xs hover:bg-indigo-700 flex items-center gap-1">
+                            <button id="btn-novo-endereco" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-indigo-700 flex items-center gap-1 shadow-sm transition-colors">
                                 <i data-feather="plus" class="w-3 h-3"></i> Novo
                             </button>
                         </div>
-                        <div class="p-2 border-b">
-                            <input type="text" id="search-endereco" placeholder="Filtrar lote na lista..." class="w-full text-sm border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+                        <div class="p-3 border-b border-gray-100">
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <i data-feather="search" class="text-gray-400 w-4 h-4"></i>
+                                </div>
+                                <input type="text" id="search-endereco" placeholder="Filtrar lote na lista..." class="pl-9 w-full text-sm border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+                            </div>
                         </div>
-                        <div id="lista-enderecos" class="flex-1 overflow-y-auto p-2 space-y-2">
-                            <p class="text-center text-gray-400 text-sm mt-4">Selecione uma filial.</p>
+                        <div id="lista-enderecos" class="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50/30">
+                            <p class="text-center text-gray-400 text-sm mt-4">Selecione uma filial acima.</p>
                         </div>
                     </div>
 
-                    <div class="w-2/3 bg-white rounded-lg shadow flex flex-col">
+                    <div class="w-2/3 bg-white/90 backdrop-blur-sm rounded-lg shadow flex flex-col border border-gray-100">
                         <div id="detalhe-vazio" class="flex-1 flex flex-col items-center justify-center text-gray-400">
-                            <i data-feather="box" class="w-12 h-12 mb-2"></i>
-                            <p>Selecione um lote para ver o conteúdo.</p>
+                            <div class="bg-gray-100 p-4 rounded-full mb-3">
+                                <i data-feather="package" class="w-8 h-8 text-gray-300"></i>
+                            </div>
+                            <p class="font-medium">Selecione um lote para ver o conteúdo.</p>
                         </div>
 
                         <div id="detalhe-conteudo" class="hidden flex flex-col h-full">
-                            <div class="p-6 border-b bg-indigo-50 rounded-t-lg">
+                            <div class="p-6 border-b border-indigo-100 bg-indigo-50/50 rounded-t-lg">
                                 <div class="flex justify-between items-start">
                                     <div>
-                                        <h2 id="lbl-codigo-endereco" class="text-2xl font-bold text-indigo-900"></h2>
-                                        <p id="lbl-descricao-endereco" class="text-sm text-indigo-600"></p>
+                                        <h2 id="lbl-codigo-endereco" class="text-2xl font-bold text-indigo-900 tracking-tight"></h2>
+                                        <p id="lbl-descricao-endereco" class="text-sm text-indigo-600 font-medium"></p>
                                     </div>
                                     <div class="flex gap-2">
-                                        <button id="btn-contagem" class="text-indigo-600 hover:text-indigo-800 text-xs flex items-center gap-1 border border-indigo-200 px-3 py-1.5 rounded bg-white shadow-sm hover:bg-indigo-50 transition-colors">
-                                            <i data-feather="check-square" class="w-3 h-3"></i> Contagem / Ajuste
+                                        <button id="btn-contagem" class="text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-50 text-xs font-medium flex items-center gap-1.5 px-3 py-1.5 rounded shadow-sm transition-all">
+                                            <i data-feather="clipboard" class="w-3 h-3"></i> Contagem
                                         </button>
-                                        <button id="btn-excluir-endereco" class="text-red-500 hover:text-red-700 text-xs flex items-center gap-1 border border-red-200 px-3 py-1.5 rounded bg-white shadow-sm hover:bg-red-50 transition-colors">
+                                        <button id="btn-excluir-endereco" class="text-red-600 bg-white border border-red-200 hover:bg-red-50 text-xs font-medium flex items-center gap-1.5 px-3 py-1.5 rounded shadow-sm transition-all">
                                             <i data-feather="trash-2" class="w-3 h-3"></i> Excluir
                                         </button>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="p-4 border-b bg-white">
-                                <label class="block text-xs font-medium text-gray-700 mb-1">Adicionar Produto (Máx 5)</label>
+                            <div class="p-4 border-b border-gray-100 bg-white">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Adicionar Produto</label>
                                 <div class="relative">
-                                    <input type="text" id="input-busca-produto" placeholder="Digite código ou nome do produto..." class="w-full border-gray-300 rounded-md pr-10 focus:ring-indigo-500 focus:border-indigo-500">
+                                    <input type="text" id="input-busca-produto" placeholder="Digite código ou nome do produto para vincular..." class="w-full border-gray-300 rounded-md pr-10 py-2 text-sm shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
                                     <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                                         <i data-feather="search" class="text-gray-400 w-4 h-4"></i>
                                     </div>
-                                    <div id="resultados-busca" class="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg mt-1 max-h-60 overflow-y-auto hidden"></div>
+                                    <div id="resultados-busca" class="absolute z-20 w-full bg-white border border-gray-200 rounded-md shadow-xl mt-1 max-h-60 overflow-y-auto hidden"></div>
                                 </div>
                             </div>
 
-                            <div class="flex-1 overflow-y-auto p-4 bg-gray-50">
-                                <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Produtos Armazenados</h4>
-                                <div id="lista-produtos-endereco" class="grid grid-cols-1 gap-3"></div>
+                            <div class="flex-1 overflow-y-auto p-4 bg-gray-50/50">
+                                <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3 pl-1">Itens no Local</h4>
+                                <div id="lista-produtos-endereco" class="grid grid-cols-1 gap-3">
+                                    </div>
                             </div>
                         </div>
                     </div>
@@ -143,46 +195,48 @@
         </div>
     </div>
 
-    <div id="modal-novo-endereco" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50 flex items-center justify-center">
-        <div class="bg-white rounded-lg shadow-xl w-96 p-6">
+    <div id="modal-novo-endereco" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-50 flex items-center justify-center transition-opacity">
+        <div class="bg-white rounded-lg shadow-2xl w-96 p-6 transform scale-100 transition-transform">
             <h3 class="text-lg font-bold text-gray-900 mb-4">Criar Novo Lote</h3>
             <form id="form-novo-endereco" class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Código (Ex: A-01-05)</label>
-                    <input type="text" name="codigo" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 uppercase">
+                    <input type="text" name="codigo" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 uppercase p-2">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Descrição (Opcional)</label>
-                    <input type="text" name="descricao" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                    <input type="text" name="descricao" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2">
                 </div>
                 <div class="flex justify-end gap-3 mt-6">
-                    <button type="button" id="btn-cancelar-modal" class="text-gray-600 hover:text-gray-800">Cancelar</button>
-                    <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">Salvar</button>
+                    <button type="button" id="btn-cancelar-modal" class="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md border border-gray-300 transition-colors">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-sm transition-colors">Salvar</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <div id="modal-contagem" class="fixed inset-0 bg-gray-800 bg-opacity-75 hidden z-50 flex items-center justify-center">
-        <div class="bg-white rounded-lg shadow-2xl w-full max-w-3xl p-6 h-[80vh] flex flex-col">
-            <div class="border-b pb-4 mb-4 flex justify-between items-center">
+    <div id="modal-contagem" class="fixed inset-0 bg-gray-900/75 backdrop-blur-sm hidden z-50 flex items-center justify-center">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl p-0 h-[85vh] flex flex-col overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                 <div>
-                    <h3 class="text-xl font-bold text-gray-900">Contagem de Estoque</h3>
-                    <p id="modal-contagem-lote" class="text-sm text-indigo-600 font-medium">Lote: --</p>
+                    <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+                        <i data-feather="clipboard" class="text-indigo-600 w-5 h-5"></i> Contagem de Estoque
+                    </h3>
+                    <p id="modal-contagem-lote" class="text-sm text-indigo-600 font-medium mt-0.5">Lote: --</p>
                 </div>
-                <button id="btn-fechar-contagem" class="text-gray-400 hover:text-gray-600">
-                    <i data-feather="x" class="w-6 h-6"></i>
+                <button id="btn-fechar-contagem" class="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-200 transition-colors">
+                    <i data-feather="x" class="w-5 h-5"></i>
                 </button>
             </div>
             
             <div class="flex-1 overflow-y-auto">
                 <table class="w-full text-sm text-left text-gray-500">
-                    <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0 z-10 shadow-sm">
                         <tr>
-                            <th class="px-4 py-3">Código</th>
-                            <th class="px-4 py-3">Produto</th>
-                            <th class="px-4 py-3 text-right">Saldo Atual (ERP)</th>
-                            <th class="px-4 py-3 text-center">Contagem Física</th>
+                            <th class="px-6 py-3 font-semibold">Código</th>
+                            <th class="px-6 py-3 font-semibold">Produto</th>
+                            <th class="px-6 py-3 text-right font-semibold">Saldo Atual (ERP)</th>
+                            <th class="px-6 py-3 text-center font-semibold bg-indigo-50/50 text-indigo-900">Contagem Física</th>
                         </tr>
                     </thead>
                     <tbody id="lista-contagem-items" class="divide-y divide-gray-100">
@@ -190,13 +244,15 @@
                 </table>
             </div>
 
-            <div class="border-t pt-4 mt-4 bg-gray-50 -mx-6 -mb-6 p-6 rounded-b-lg">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Motivo do Ajuste (Obrigatório para gravar log)</label>
-                <input type="text" id="motivo-contagem" placeholder="Ex: Inventário rotativo, Acerto de saldo..." class="w-full border-gray-300 rounded-md shadow-sm mb-4">
+            <div class="border-t border-gray-200 p-6 bg-gray-50">
+                <label class="block text-sm font-bold text-gray-700 mb-2">Motivo do Ajuste <span class="text-red-500">*</span></label>
+                <input type="text" id="motivo-contagem" placeholder="Ex: Inventário rotativo, Acerto de avaria..." class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2 mb-4">
                 
                 <div class="flex justify-end gap-3">
-                    <button id="btn-cancelar-contagem" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50">Cancelar</button>
-                    <button id="btn-salvar-contagem" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-bold shadow-sm">Processar Ajuste</button>
+                    <button id="btn-cancelar-contagem" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 font-medium transition-colors">Cancelar</button>
+                    <button id="btn-salvar-contagem" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-bold shadow-sm flex items-center gap-2 transition-colors">
+                        <i data-feather="check" class="w-4 h-4"></i> Processar Ajuste
+                    </button>
                 </div>
             </div>
         </div>
@@ -204,7 +260,7 @@
 
     <script src="estoque.js"></script>
     <script>
-        // ... (Script Sidebar Padronizado Mantido Igual ao Anterior) ...
+        // Função do Sidebar (Inalterada)
         window.toggleSubmenu = function(id) {
             const submenu = document.getElementById(id);
             const icon = document.getElementById('icon-expedicao');
@@ -216,8 +272,10 @@
                 if(icon) icon.style.transform = 'rotate(0deg)';
             }
         };
+
         document.addEventListener('DOMContentLoaded', () => {
             if (typeof feather !== 'undefined') feather.replace();
+
             const sidebar = document.getElementById('sidebar');
             const setupDesktopSidebar = () => {
                 const desktopToggleButton = document.getElementById('sidebar-toggle');

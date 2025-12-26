@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', initPage);
 
 const API_BASE = '/api/estoque';
 let currentEnderecoId = null;
-let currentProductsList = []; // Cache dos produtos do lote para o modal de contagem
+let currentProductsList = []; 
 let debounceTimer;
 
 // --- FUNÇÕES UTILITÁRIAS ---
@@ -35,7 +35,9 @@ async function initPage() {
     checkBackendHealth();
 
     const selectFilial = document.getElementById('filial-select');
-    const filiais = ['Santa Cruz da Serra', 'Piabetá', 'Parada Angélica', 'Nova Campinas', 'Escritório'];
+    // REMOVIDO: 'Escritório'
+    const filiais = ['Santa Cruz da Serra', 'Piabetá', 'Parada Angélica', 'Nova Campinas'];
+    
     selectFilial.innerHTML = filiais.map(f => `<option value="${f}">${f}</option>`).join('');
     
     const token = getToken();
@@ -48,16 +50,9 @@ async function initPage() {
         } catch(e) { console.error("Erro token:", e); }
     }
 
-    // Carrega Filtros (Grupos e Fabricantes)
     loadFilters();
 
-    // Listeners Globais
-    selectFilial.addEventListener('change', () => { 
-        loadEnderecos(); 
-        // Recarrega filtros ao mudar filial (opcional, mas bom se quiser filtrar por filial no futuro)
-        // loadFilters(); 
-    });
-    
+    selectFilial.addEventListener('change', () => { loadEnderecos(); });
     document.getElementById('filter-grupo').addEventListener('change', loadEnderecos);
     document.getElementById('filter-fabricante').addEventListener('change', loadEnderecos);
     document.getElementById('btn-limpar-filtros').addEventListener('click', clearFilters);
@@ -70,7 +65,6 @@ async function initPage() {
     document.getElementById('btn-excluir-endereco').addEventListener('click', deleteEndereco);
     document.getElementById('input-busca-produto').addEventListener('input', handleProductSearch);
 
-    // Listeners Contagem
     document.getElementById('btn-contagem').addEventListener('click', openContagemModal);
     document.getElementById('btn-fechar-contagem').addEventListener('click', () => toggleContagemModal(false));
     document.getElementById('btn-cancelar-contagem').addEventListener('click', () => toggleContagemModal(false));
@@ -99,7 +93,6 @@ async function loadFilters() {
         const selGrupo = document.getElementById('filter-grupo');
         const selFabr = document.getElementById('filter-fabricante');
 
-        // Limpa opções antigas (mantendo o placeholder)
         selGrupo.innerHTML = '<option value="">Todos os Grupos</option>';
         selFabr.innerHTML = '<option value="">Todos os Fabricantes</option>';
 
@@ -141,7 +134,6 @@ async function loadEnderecos() {
         const enderecos = await res.json();
         renderEnderecos(enderecos);
         
-        // Se o lote selecionado sumiu por causa do filtro, reseta a view
         if (currentEnderecoId) {
             const aindaExiste = enderecos.find(e => e.id === currentEnderecoId);
             if (!aindaExiste) {
@@ -183,7 +175,6 @@ function renderEnderecos(lista) {
         div.dataset.id = end.id;
         div.dataset.codigo = end.codigo_endereco;
         
-        // Mantém seleção visual se for o atual
         if(currentEnderecoId === end.id) {
             div.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50');
         }
@@ -260,7 +251,7 @@ async function deleteEndereco() {
         } else {
             alert('Erro ao excluir lote.');
         }
-    } catch(err) { console.error(err); }
+    } catch(err) { console.error(err); alert("Erro de conexão ao tentar excluir."); }
 }
 
 // --- DETALHES DO LOTE ---
@@ -293,7 +284,7 @@ async function loadProdutosDoEndereco() {
         const res = await fetch(`${API_BASE}/enderecos/${currentEnderecoId}/produtos?filial=${encodeURIComponent(filial)}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
-        // Atualiza a variável global para uso no modal de contagem
+        // Atualiza cache global para contagem
         currentProductsList = await res.json();
         renderProdutos(currentProductsList);
     } catch(err) {
@@ -332,9 +323,10 @@ function renderProdutos(produtos) {
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-1">
                     <span class="font-mono text-xs font-bold bg-gray-100 px-2 py-0.5 rounded text-gray-700 border border-gray-200">${prod.codigo}</span>
-                    ${detalhesTexto ? `<span class="text-xs text-gray-400 border-l pl-2 border-gray-300 truncate max-w-[200px]" title="${detalhesTexto}">${detalhesTexto}</span>` : ''}
+                    ${detalhesTexto ? `<span class="text-xs text-gray-400 border-l pl-2 border-gray-300 truncate max-w-[200px] hidden sm:inline-block" title="${detalhesTexto}">${detalhesTexto}</span>` : ''}
                 </div>
                 <p class="font-medium text-sm text-gray-900 truncate" title="${prod.nome}">${prod.nome}</p>
+                ${detalhesTexto ? `<p class="text-[10px] text-gray-400 mt-0.5 sm:hidden uppercase">${detalhesTexto}</p>` : ''}
                 <div class="mt-2 flex items-center gap-2 text-xs">
                     <span class="px-2 py-0.5 rounded font-bold ${saldoClass}">Saldo em Estoque: ${prod.saldo}</span>
                 </div>
@@ -348,110 +340,6 @@ function renderProdutos(produtos) {
     
     if (typeof feather !== 'undefined') feather.replace();
 }
-
-// --- CONTAGEM (NOVO) ---
-
-function toggleContagemModal(show) {
-    const modal = document.getElementById('modal-contagem');
-    if(show) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
-    else { modal.classList.add('hidden'); modal.classList.remove('flex'); }
-}
-
-function openContagemModal() {
-    if (!currentProductsList || currentProductsList.length === 0) {
-        alert("Este lote está vazio. Adicione produtos antes de realizar a contagem.");
-        return;
-    }
-    
-    document.getElementById('modal-contagem-lote').textContent = `Lote: ${document.getElementById('lbl-codigo-endereco').textContent}`;
-    document.getElementById('motivo-contagem').value = '';
-    
-    const tbody = document.getElementById('lista-contagem-items');
-    tbody.innerHTML = '';
-
-    currentProductsList.forEach(prod => {
-        const tr = document.createElement('tr');
-        tr.className = 'border-b hover:bg-gray-50';
-        tr.dataset.codigo = prod.codigo;
-        tr.dataset.qtdAnterior = prod.saldo;
-        
-        tr.innerHTML = `
-            <td class="px-4 py-3 font-mono text-gray-600">${prod.codigo}</td>
-            <td class="px-4 py-3 text-gray-800">${prod.nome}</td>
-            <td class="px-4 py-3 text-right font-bold text-gray-500">${prod.saldo}</td>
-            <td class="px-4 py-2 text-center">
-                <input type="number" step="0.001" value="${prod.saldo}" 
-                       class="input-nova-qtd w-24 text-center border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 font-bold text-indigo-700">
-            </td>
-        `;
-        tbody.appendChild(tr);
-    });
-
-    toggleContagemModal(true);
-}
-
-async function saveContagem() {
-    const motivo = document.getElementById('motivo-contagem').value;
-    if (!motivo.trim()) {
-        alert("Por favor, informe o motivo do ajuste (ex: Inventário, Conferência).");
-        return;
-    }
-
-    const filial = document.getElementById('filial-select').value;
-    const nomeLote = document.getElementById('lbl-codigo-endereco').textContent;
-    const inputs = document.querySelectorAll('.input-nova-qtd');
-    const itensParaAjuste = [];
-
-    inputs.forEach(input => {
-        const tr = input.closest('tr');
-        const codigo = tr.dataset.codigo;
-        const qtdAnterior = parseFloat(tr.dataset.qtdAnterior);
-        const novaQtd = parseFloat(input.value);
-
-        // Só envia se houver diferença
-        if (qtdAnterior !== novaQtd) {
-            itensParaAjuste.push({
-                codigo: codigo,
-                qtdAnterior: qtdAnterior,
-                novaQtd: novaQtd,
-                lote: nomeLote
-            });
-        }
-    });
-
-    if (itensParaAjuste.length === 0) {
-        alert("Nenhuma alteração de quantidade detectada.");
-        return;
-    }
-
-    if (!confirm(`Confirma o ajuste de saldo para ${itensParaAjuste.length} itens?`)) return;
-
-    showLoader();
-    try {
-        const res = await fetch(`${API_BASE}/ajuste-contagem`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-            body: JSON.stringify({
-                filial: filial,
-                motivoGeral: motivo,
-                itens: itensParaAjuste
-            })
-        });
-
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-
-        alert("Contagem processada com sucesso!");
-        toggleContagemModal(false);
-        loadProdutosDoEndereco(); // Recarrega saldos
-    } catch (err) {
-        alert("Erro ao processar contagem: " + err.message);
-    } finally {
-        hideLoader();
-    }
-}
-
-// --- BUSCA E ADIÇÃO (Autocomplete) ---
 
 function handleProductSearch(e) {
     clearTimeout(debounceTimer);
@@ -517,29 +405,148 @@ async function adicionarProduto(codigo) {
     try {
         const res = await fetch(`${API_BASE}/enderecos/${currentEnderecoId}/produtos`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            headers: { 
+                'Content-Type': 'application/json', 
+                'Authorization': `Bearer ${getToken()}` 
+            },
             body: JSON.stringify({ codigo_produto: codigo })
         });
+
         if (!res.ok) {
             const err = await res.json();
             throw new Error(err.error || 'Erro ao adicionar');
         }
+
         loadProdutosDoEndereco();
         loadEnderecos(); 
-    } catch (err) { alert(err.message); } finally { hideLoader(); }
+
+    } catch (err) {
+        alert(err.message);
+    } finally {
+        hideLoader();
+    }
 }
 
 window.removerProduto = async function(idMapa) {
     if(!confirm('Desvincular produto deste lote?')) return;
+    
     showLoader();
     try {
         const res = await fetch(`${API_BASE}/produtos/${idMapa}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
+        
         if (res.ok) {
             loadProdutosDoEndereco();
             loadEnderecos();
-        } else { alert('Erro ao remover produto.'); }
-    } catch(err) { console.error(err); } finally { hideLoader(); }
+        } else {
+            alert('Erro ao remover produto.');
+        }
+    } catch(err) {
+        console.error(err);
+    } finally {
+        hideLoader();
+    }
 };
+
+// --- NOVA LÓGICA DE CONTAGEM ---
+
+function toggleContagemModal(show) {
+    const modal = document.getElementById('modal-contagem');
+    if(show) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
+    else { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+}
+
+function openContagemModal() {
+    if (!currentProductsList || currentProductsList.length === 0) {
+        alert("Este lote está vazio. Adicione produtos antes de realizar a contagem.");
+        return;
+    }
+    
+    document.getElementById('modal-contagem-lote').textContent = `Lote: ${document.getElementById('lbl-codigo-endereco').textContent}`;
+    document.getElementById('motivo-contagem').value = '';
+    
+    const tbody = document.getElementById('lista-contagem-items');
+    tbody.innerHTML = '';
+
+    currentProductsList.forEach(prod => {
+        const tr = document.createElement('tr');
+        tr.className = 'border-b hover:bg-gray-50';
+        tr.dataset.codigo = prod.codigo;
+        tr.dataset.qtdAnterior = prod.saldo;
+        
+        tr.innerHTML = `
+            <td class="px-6 py-4 font-mono text-gray-600 font-medium">${prod.codigo}</td>
+            <td class="px-6 py-4 text-gray-800">${prod.nome}</td>
+            <td class="px-6 py-4 text-right font-bold text-gray-500">${prod.saldo}</td>
+            <td class="px-6 py-3 text-center bg-indigo-50/30">
+                <input type="number" step="0.001" value="${prod.saldo}" 
+                       class="input-nova-qtd w-32 text-center border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 font-bold text-indigo-700 text-lg">
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    toggleContagemModal(true);
+}
+
+async function saveContagem() {
+    const motivo = document.getElementById('motivo-contagem').value;
+    if (!motivo.trim()) {
+        alert("Por favor, informe o motivo do ajuste (ex: Inventário, Conferência).");
+        return;
+    }
+
+    const filial = document.getElementById('filial-select').value;
+    const nomeLote = document.getElementById('lbl-codigo-endereco').textContent;
+    const inputs = document.querySelectorAll('.input-nova-qtd');
+    const itensParaAjuste = [];
+
+    inputs.forEach(input => {
+        const tr = input.closest('tr');
+        const codigo = tr.dataset.codigo;
+        const qtdAnterior = parseFloat(tr.dataset.qtdAnterior);
+        const novaQtd = parseFloat(input.value);
+
+        if (qtdAnterior !== novaQtd) {
+            itensParaAjuste.push({
+                codigo: codigo,
+                qtdAnterior: qtdAnterior,
+                novaQtd: novaQtd,
+                lote: nomeLote
+            });
+        }
+    });
+
+    if (itensParaAjuste.length === 0) {
+        alert("Nenhuma alteração de quantidade detectada.");
+        return;
+    }
+
+    if (!confirm(`Confirma o ajuste de saldo para ${itensParaAjuste.length} itens?`)) return;
+
+    showLoader();
+    try {
+        const res = await fetch(`${API_BASE}/ajuste-contagem`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify({
+                filial: filial,
+                motivoGeral: motivo,
+                itens: itensParaAjuste
+            })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        alert("Contagem processada com sucesso!");
+        toggleContagemModal(false);
+        loadProdutosDoEndereco(); // Recarrega saldos
+    } catch (err) {
+        alert("Erro ao processar contagem: " + err.message);
+    } finally {
+        hideLoader();
+    }
+}
