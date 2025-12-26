@@ -16,38 +16,36 @@ const dbConfigSei = {
 };
 
 const seiPool = mysql.createPool(dbConfigSei);       // Pool para consultas no ERP
-const gerencialPool = mysql.createPool(dbConfig);    // Pool para o nosso sistema (endereços/mapa/logs)
+const gerencialPool = mysql.createPool(dbConfig);    // Pool para o nosso sistema
 
 // Mapa de Filiais (Nome Amigável -> Código na coluna ef_idfili do ERP)
 const MAPA_FILIAIS = {
     'Santa Cruz da Serra': 'LUCAM',
     'Piabetá': 'VMNAF',
     'Parada Angélica': 'TNASC',
-    'Nova Campinas': 'LCMAT',
-    'Escritório': 'LUCAM' // Assume o estoque da matriz para o escritório
+    'Nova Campinas': 'LCMAT'
 };
 
-// --- FUNÇÃO AUXILIAR DE LOG (ADAPTADA PARA SUA TABELA) ---
+// --- FUNÇÃO AUXILIAR DE LOG ---
+// Grava na tabela estoque_ajustes_log com dados do usuário logado e ID do produto correto
 async function registrarLog(req, filialCodigo, codigoProduto, acao, qtdAnt, qtdNova, motivo) {
-    // Garante que o código da filial caiba no campo varchar(5)
     const filialDb = (filialCodigo || '').substring(0, 5);
     
-    // Dados do Usuário via Token
+    // Pega dados do usuário injetados pelo middleware authenticateToken
     const idUsuario = req.user ? req.user.userId : 0;
     const nomeUsuario = req.user ? req.user.nome : 'Sistema';
     
     let idProdutoRegi = 0;
 
-    // Busca o ID interno do produto (pd_regi) se houver um código válido
-    // Isso é necessário porque sua tabela exige id_produto_regi
-    if (codigoProduto && codigoProduto !== 'LOTE' && codigoProduto !== 'GERAL' && codigoProduto !== '') {
+    // Se houver um código de produto válido, busca o ID interno (pd_regi) no ERP
+    if (codigoProduto && codigoProduto !== 'LOTE' && codigoProduto !== 'GERAL') {
         try {
             const [prodRow] = await seiPool.query('SELECT pd_regi FROM produtos WHERE pd_codi = ? LIMIT 1', [codigoProduto]);
             if (prodRow.length > 0) {
                 idProdutoRegi = prodRow[0].pd_regi;
             }
         } catch (err) {
-            console.warn("Aviso: Não foi possível buscar pd_regi para o log:", err.message);
+            console.warn("Log: Falha ao buscar pd_regi:", err.message);
         }
     }
 
@@ -68,11 +66,11 @@ async function registrarLog(req, filialCodigo, codigoProduto, acao, qtdAnt, qtdN
             ]
         );
     } catch (error) {
-        console.error("ERRO CRÍTICO AO GRAVAR LOG NA TABELA estoque_ajustes_log:", error.message);
+        console.error("ERRO CRÍTICO AO GRAVAR LOG:", error.message);
     }
 }
 
-// --- ROTA DE DIAGNÓSTICO ---
+// --- ROTA DE DIAGNÓSTICO DO BANCO ---
 router.get('/diagnostico', async (req, res) => {
     const report = {
         status: 'Iniciando diagnóstico...',
@@ -191,9 +189,9 @@ router.get('/enderecos', authenticateToken, async (req, res) => {
     }
 });
 
-// 2. Criar Novo Lote
+// 2. Criar Novo Lote (Com Capacidade Personalizada)
 router.post('/enderecos', authenticateToken, async (req, res) => {
-    const { filial_codigo, codigo_endereco, descricao } = req.body;
+    const { filial_codigo, codigo_endereco, descricao, capacidade } = req.body;
     const codigoFilialLog = MAPA_FILIAIS[filial_codigo] || filial_codigo;
 
     // Validação básica
@@ -201,14 +199,17 @@ router.post('/enderecos', authenticateToken, async (req, res) => {
         return res.status(400).json({ error: 'Dados incompletos: Filial e Código são obrigatórios.' });
     }
 
+    // Capacidade padrão é 5 se não for informada
+    const capFinal = capacidade ? parseInt(capacidade) : 5;
+
     try {
         await gerencialPool.query(
-            'INSERT INTO estoque_enderecos (filial_codigo, codigo_endereco, descricao) VALUES (?, ?, ?)',
-            [filial_codigo, codigo_endereco, descricao]
+            'INSERT INTO estoque_enderecos (filial_codigo, codigo_endereco, descricao, capacidade) VALUES (?, ?, ?, ?)',
+            [filial_codigo, codigo_endereco, descricao, capFinal]
         );
 
         // LOG
-        await registrarLog(req, codigoFilialLog, 'LOTE', 'CRIAR', 0, 0, `Criou lote ${codigo_endereco} (${descricao || ''})`);
+        await registrarLog(req, codigoFilialLog, 'LOTE', 'CRIAR', 0, 0, `Criou lote ${codigo_endereco} (${descricao || ''}) [Cap: ${capFinal}]`);
 
         res.status(201).json({ message: 'Lote criado com sucesso.' });
 
@@ -217,6 +218,37 @@ router.post('/enderecos', authenticateToken, async (req, res) => {
         if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: `O código "${codigo_endereco}" já existe nesta filial.` });
         if (error.code === 'ER_NO_SUCH_TABLE') return res.status(500).json({ error: 'Tabela de estoque não encontrada.' });
         res.status(500).json({ error: 'Erro interno ao criar lote.' });
+    }
+});
+
+// 2.1 Editar Lote Existente (PUT) - Novo
+router.put('/enderecos/:id', authenticateToken, async (req, res) => {
+    const { codigo_endereco, descricao, capacidade } = req.body;
+    const idLote = req.params.id;
+
+    try {
+        // Busca dados antigos para o log
+        const [old] = await gerencialPool.query('SELECT * FROM estoque_enderecos WHERE id = ?', [idLote]);
+        if (old.length === 0) return res.status(404).json({ error: 'Lote não encontrado.' });
+
+        const capFinal = capacidade ? parseInt(capacidade) : old[0].capacidade;
+        const codigoFilialLog = MAPA_FILIAIS[old[0].filial_codigo] || old[0].filial_codigo;
+
+        // Atualiza
+        await gerencialPool.query(
+            'UPDATE estoque_enderecos SET codigo_endereco = ?, descricao = ?, capacidade = ? WHERE id = ?',
+            [codigo_endereco, descricao, capFinal, idLote]
+        );
+
+        // LOG
+        await registrarLog(req, codigoFilialLog, 'LOTE', 'EDITAR', 0, 0, `Editou lote ${old[0].codigo_endereco} -> ${codigo_endereco} [Cap: ${capFinal}]`);
+
+        res.json({ message: 'Lote atualizado com sucesso.' });
+
+    } catch (error) {
+        if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'Este código de lote já existe na filial.' });
+        console.error("Erro ao editar lote:", error);
+        res.status(500).json({ error: 'Erro ao editar lote.' });
     }
 });
 
@@ -297,30 +329,36 @@ router.get('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
     }
 });
 
-// 5. Vincular Produto ao Lote
+// 5. Vincular Produto ao Lote (Com verificação de capacidade dinâmica)
 router.post('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
     const idEndereco = req.params.id;
     const { codigo_produto } = req.body;
 
     try {
-        // Verifica limite
-        const [qtd] = await gerencialPool.query('SELECT COUNT(*) as total FROM estoque_mapa WHERE id_endereco = ?', [idEndereco]);
-        if (qtd[0].total >= 5) return res.status(400).json({ error: 'Este lote atingiu o limite de 5 produtos.' });
-
-        // Busca informações do lote para o log
-        const [loteInfo] = await gerencialPool.query('SELECT filial_codigo, codigo_endereco FROM estoque_enderecos WHERE id = ?', [idEndereco]);
+        // Busca a capacidade deste lote específico
+        const [loteInfo] = await gerencialPool.query('SELECT filial_codigo, codigo_endereco, capacidade FROM estoque_enderecos WHERE id = ?', [idEndereco]);
         
+        if (loteInfo.length === 0) return res.status(404).json({ error: 'Lote não encontrado.' });
+        
+        const capacidadeMaxima = loteInfo[0].capacidade || 5;
+
+        // Verifica quantos itens já tem
+        const [qtd] = await gerencialPool.query('SELECT COUNT(*) as total FROM estoque_mapa WHERE id_endereco = ?', [idEndereco]);
+        
+        if (qtd[0].total >= capacidadeMaxima) {
+            return res.status(400).json({ error: `Este lote atingiu o limite máximo de ${capacidadeMaxima} produtos.` });
+        }
+
+        // Vincula
         await gerencialPool.query(
             'INSERT INTO estoque_mapa (id_endereco, codigo_produto) VALUES (?, ?)',
             [idEndereco, codigo_produto]
         );
 
         // LOG
-        if (loteInfo.length > 0) {
-            const f = loteInfo[0].filial_codigo;
-            const codFilial = MAPA_FILIAIS[f] || f;
-            await registrarLog(req, codFilial, codigo_produto, 'VINCULAR', 0, 0, `Vinculou ao lote ${loteInfo[0].codigo_endereco}`);
-        }
+        const f = loteInfo[0].filial_codigo;
+        const codFilial = MAPA_FILIAIS[f] || f;
+        await registrarLog(req, codFilial, codigo_produto, 'VINCULAR', 0, 0, `Vinculou ao lote ${loteInfo[0].codigo_endereco}`);
 
         res.status(201).json({ message: 'Produto vinculado com sucesso.' });
 
@@ -334,7 +372,7 @@ router.post('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
 // 6. Desvincular Produto do Lote
 router.delete('/produtos/:idMapa', authenticateToken, async (req, res) => {
     try {
-        // Busca info antes de deletar
+        // Busca info antes de deletar para logar
         const [vinculo] = await gerencialPool.query(`
             SELECT m.codigo_produto, e.codigo_endereco, e.filial_codigo 
             FROM estoque_mapa m
@@ -370,7 +408,7 @@ router.get('/produtos/busca', authenticateToken, async (req, res) => {
             SELECT 
                 p.pd_codi, 
                 p.pd_nome, 
-                p.pd_fabr,
+                p.pd_fabr, 
                 p.pd_nmgr,
                 e.ef_fisico as pd_saldo
             FROM produtos p
@@ -393,6 +431,7 @@ router.get('/produtos/busca', authenticateToken, async (req, res) => {
 
 // --- ROTA DE CONTAGEM E AJUSTE (ATUALIZA ERP E LOG) ---
 router.post('/ajuste-contagem', authenticateToken, async (req, res) => {
+    // Recebe: { filial, motivoGeral, itens: [{ codigo, novaQtd, qtdAnterior, lote }, ...] }
     const { filial, itens, motivoGeral } = req.body;
     const codigoFilialErp = MAPA_FILIAIS[filial] || 'LUCAM';
     
@@ -405,7 +444,7 @@ router.post('/ajuste-contagem', authenticateToken, async (req, res) => {
         await connection.beginTransaction();
 
         for (const item of itens) {
-            // 1. Busca saldo real atual e bloqueia linha
+            // 1. Bloqueia linha no ERP e busca saldo real atual
             const [rows] = await connection.query(
                 'SELECT ef_fisico FROM estoque WHERE ef_codigo = ? AND ef_idfili = ? FOR UPDATE',
                 [item.codigo, codigoFilialErp]
@@ -414,9 +453,9 @@ router.post('/ajuste-contagem', authenticateToken, async (req, res) => {
             const saldoRealErp = rows.length > 0 ? parseFloat(rows[0].ef_fisico) : 0;
             const qtdNova = parseFloat(item.novaQtd);
 
-            // Se houve mudança
+            // Só processa se houve mudança real
             if (saldoRealErp !== qtdNova) {
-                // 2. Atualiza ERP
+                // 2. Atualiza ou Insere no ERP
                 if (rows.length > 0) {
                     await connection.query(
                         'UPDATE estoque SET ef_fisico = ? WHERE ef_codigo = ? AND ef_idfili = ?',
@@ -429,14 +468,14 @@ router.post('/ajuste-contagem', authenticateToken, async (req, res) => {
                     );
                 }
 
-                // 3. Grava Log (Usando função auxiliar)
+                // 3. Grava Log no banco Gerencial
                 await registrarLog(
                     req, 
                     codigoFilialErp, 
                     item.codigo, 
                     'CONTAGEM', 
-                    saldoRealErp, 
-                    qtdNova,      
+                    saldoRealErp, // Anterior real
+                    qtdNova,      // Nova
                     `Lote ${item.lote}: ${motivoGeral}`
                 );
             }

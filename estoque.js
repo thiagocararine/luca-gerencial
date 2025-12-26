@@ -4,6 +4,7 @@ const API_BASE = '/api/estoque';
 let currentEnderecoId = null;
 let currentProductsList = []; 
 let debounceTimer;
+let tomSelectInstances = { grupo: null, fabricante: null };
 
 // --- FUNÇÕES UTILITÁRIAS ---
 
@@ -11,31 +12,20 @@ function getToken() {
     return localStorage.getItem('lucaUserToken'); 
 }
 
-// Extrai dados do token (Adicionado para pegar o nome)
 function getUserData() {
     const token = getToken();
     if (!token) return null;
-    try {
-        return JSON.parse(atob(token.split('.')[1]));
-    } catch (e) {
-        return null;
-    }
+    try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; }
 }
 
 function showLoader() { 
     const loader = document.getElementById('global-loader');
-    if (loader) {
-        loader.classList.remove('hidden'); 
-        loader.classList.add('flex'); 
-    }
+    if (loader) { loader.classList.remove('hidden'); loader.classList.add('flex'); }
 }
 
 function hideLoader() { 
     const loader = document.getElementById('global-loader');
-    if (loader) {
-        loader.classList.add('hidden'); 
-        loader.classList.remove('flex'); 
-    }
+    if (loader) { loader.classList.add('hidden'); loader.classList.remove('flex'); }
 }
 
 // --- INICIALIZAÇÃO DA PÁGINA ---
@@ -43,52 +33,48 @@ function hideLoader() {
 async function initPage() {
     console.log("Iniciando módulo de estoque...");
     
-    // 1. Atualiza Nome do Usuário no Header
     const userData = getUserData();
     if (userData && document.getElementById('user-name')) {
-        // Se o token tiver o campo 'nome', usa ele. Senão, mantém padrão.
         document.getElementById('user-name').textContent = userData.nome || 'Utilizador';
     }
 
-    // 2. Verifica saúde do backend
     checkBackendHealth();
 
-    // 3. Configura o Select de Filiais (Sem Escritório)
     const selectFilial = document.getElementById('filial-select');
+    // Filiais hardcoded ou vindas de uma API global
     const filiais = ['Santa Cruz da Serra', 'Piabetá', 'Parada Angélica', 'Nova Campinas'];
     
     selectFilial.innerHTML = filiais.map(f => `<option value="${f}">${f}</option>`).join('');
     
-    // 4. Seleciona filial do usuário automaticamente
     if(userData && userData.unidade && filiais.includes(userData.unidade)) {
         selectFilial.value = userData.unidade;
     }
 
-    // 5. Carrega Filtros (Grupo/Fabricante)
-    loadFilters();
+    // Inicializa Filtros (Agora com TomSelect)
+    await loadFilters();
 
-    // 6. Configura Listeners
+    // Listeners
     selectFilial.addEventListener('change', () => { loadEnderecos(); });
-    document.getElementById('filter-grupo').addEventListener('change', loadEnderecos);
-    document.getElementById('filter-fabricante').addEventListener('change', loadEnderecos);
+    // Nota: Eventos de change para TomSelect são tratados na inicialização dele
     document.getElementById('btn-limpar-filtros').addEventListener('click', clearFilters);
 
-    document.getElementById('btn-novo-endereco').addEventListener('click', () => toggleModal(true));
+    document.getElementById('btn-novo-endereco').addEventListener('click', () => toggleModal(true, null)); // Novo = null
     document.getElementById('btn-cancelar-modal').addEventListener('click', () => toggleModal(false));
-    document.getElementById('form-novo-endereco').addEventListener('submit', createEndereco);
+    document.getElementById('form-novo-endereco').addEventListener('submit', handleSaveLote); // Função unificada
     
     document.getElementById('search-endereco').addEventListener('input', filterEnderecosLocal);
     document.getElementById('btn-excluir-endereco').addEventListener('click', deleteEndereco);
     
+    // Novo listener para o botão de editar no cabeçalho dos detalhes
+    document.getElementById('btn-editar-lote').addEventListener('click', openEditCurrentLote);
+    
     document.getElementById('input-busca-produto').addEventListener('input', handleProductSearch);
 
-    // Listeners de Contagem
     document.getElementById('btn-contagem').addEventListener('click', openContagemModal);
     document.getElementById('btn-fechar-contagem').addEventListener('click', () => toggleContagemModal(false));
     document.getElementById('btn-cancelar-contagem').addEventListener('click', () => toggleContagemModal(false));
     document.getElementById('btn-salvar-contagem').addEventListener('click', saveContagem);
 
-    // Logout
     document.getElementById('logout-btn')?.addEventListener('click', () => {
         localStorage.removeItem('lucaUserToken');
         window.location.href = 'login.html';
@@ -107,31 +93,53 @@ async function checkBackendHealth() {
     } catch (e) { console.error("Diagnóstico falhou:", e); }
 }
 
-// --- FILTROS ---
+// --- FILTROS COM TOM SELECT ---
 
 async function loadFilters() {
     try {
         const res = await fetch(`${API_BASE}/filtros`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         const data = await res.json();
         
+        // Destrói instâncias anteriores se existirem (para reload)
+        if (tomSelectInstances.grupo) tomSelectInstances.grupo.destroy();
+        if (tomSelectInstances.fabricante) tomSelectInstances.fabricante.destroy();
+
+        // Popula selects
         const selGrupo = document.getElementById('filter-grupo');
         const selFabr = document.getElementById('filter-fabricante');
 
+        // Limpa e recria opções
         selGrupo.innerHTML = '<option value="">Todos os Grupos</option>';
-        selFabr.innerHTML = '<option value="">Todos os Fabricantes</option>';
-
         data.grupos.forEach(g => {
             const opt = document.createElement('option'); opt.value = g; opt.text = g; selGrupo.appendChild(opt);
         });
+
+        selFabr.innerHTML = '<option value="">Todos os Fabricantes</option>';
         data.fabricantes.forEach(f => {
             const opt = document.createElement('option'); opt.value = f; opt.text = f; selFabr.appendChild(opt);
         });
+
+        // Inicializa TomSelect
+        tomSelectInstances.grupo = new TomSelect('#filter-grupo', {
+            create: false,
+            sortField: { field: "text", direction: "asc" },
+            placeholder: "Todos os Grupos",
+            onChange: loadEnderecos
+        });
+
+        tomSelectInstances.fabricante = new TomSelect('#filter-fabricante', {
+            create: false,
+            sortField: { field: "text", direction: "asc" },
+            placeholder: "Todos os Fabricantes",
+            onChange: loadEnderecos
+        });
+
     } catch(e) { console.error("Erro ao carregar filtros", e); }
 }
 
 function clearFilters() {
-    document.getElementById('filter-grupo').value = "";
-    document.getElementById('filter-fabricante').value = "";
+    if (tomSelectInstances.grupo) tomSelectInstances.grupo.clear();
+    if (tomSelectInstances.fabricante) tomSelectInstances.fabricante.clear();
     document.getElementById('search-endereco').value = "";
     loadEnderecos();
 }
@@ -140,8 +148,10 @@ function clearFilters() {
 
 async function loadEnderecos() {
     const filial = document.getElementById('filial-select').value;
-    const grupo = document.getElementById('filter-grupo').value;
-    const fabricante = document.getElementById('filter-fabricante').value;
+    
+    // Pega valores do TomSelect ou do select nativo (fallback)
+    const grupo = tomSelectInstances.grupo ? tomSelectInstances.grupo.getValue() : document.getElementById('filter-grupo').value;
+    const fabricante = tomSelectInstances.fabricante ? tomSelectInstances.fabricante.getValue() : document.getElementById('filter-fabricante').value;
 
     if (!filial) return;
 
@@ -160,7 +170,17 @@ async function loadEnderecos() {
         
         if (currentEnderecoId) {
             const aindaExiste = enderecos.find(e => e.id === currentEnderecoId);
-            if (!aindaExiste) {
+            // Se o lote atual foi editado, atualizamos os dados na tela da direita também
+            if (aindaExiste) {
+                document.getElementById('lbl-codigo-endereco').textContent = aindaExiste.codigo_endereco;
+                document.getElementById('lbl-descricao-endereco').textContent = aindaExiste.descricao || 'Lote Padrão';
+                // Atualiza também o dataset da lista para manter consistência
+                const divLista = document.querySelector(`.endereco-item[data-id="${currentEnderecoId}"]`);
+                if(divLista) {
+                    // Atualiza visualmente se necessário
+                }
+            } else {
+                // Se sumiu (ex: filtro), limpa a tela
                 document.getElementById('detalhe-vazio').classList.remove('hidden');
                 document.getElementById('detalhe-conteudo').classList.add('hidden');
                 currentEnderecoId = null;
@@ -198,13 +218,17 @@ function renderEnderecos(lista) {
         div.className = 'p-3 bg-white border border-gray-200 rounded-md hover:border-indigo-500 hover:shadow-md cursor-pointer transition-all endereco-item group';
         div.dataset.id = end.id;
         div.dataset.codigo = end.codigo_endereco;
+        div.dataset.descricao = end.descricao; // Guarda para usar na edição
+        div.dataset.capacidade = end.capacidade || 5; // Guarda capacidade
         
         if(currentEnderecoId === end.id) {
             div.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50');
         }
 
+        // Lógica visual da capacidade
+        const cap = end.capacidade || 5;
         let badgeClass = 'bg-green-100 text-green-800';
-        if (end.qtd_produtos >= 5) badgeClass = 'bg-red-100 text-red-800';
+        if (end.qtd_produtos >= cap) badgeClass = 'bg-red-100 text-red-800';
         else if (end.qtd_produtos > 0) badgeClass = 'bg-blue-100 text-blue-800';
 
         div.innerHTML = `
@@ -215,7 +239,7 @@ function renderEnderecos(lista) {
                 </div>
                 <div class="text-right">
                     <span class="inline-block px-2 py-0.5 rounded text-xs font-bold ${badgeClass}">
-                        ${end.qtd_produtos} / 5
+                        ${end.qtd_produtos} / ${cap}
                     </span>
                 </div>
             </div>
@@ -233,49 +257,117 @@ function filterEnderecosLocal(e) {
     });
 }
 
-function toggleModal(show) {
+// --- MODAL DE CRIAÇÃO / EDIÇÃO ---
+
+function toggleModal(show, data = null) {
     const modal = document.getElementById('modal-novo-endereco');
-    if (show) { modal.classList.remove('hidden'); modal.classList.add('flex'); document.getElementById('form-novo-endereco').reset(); } 
-    else { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+    const form = document.getElementById('form-novo-endereco');
+    const titulo = document.getElementById('modal-titulo-lote');
+    
+    if (show) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        
+        if (data) {
+            // Modo Edição
+            titulo.textContent = 'Editar Lote';
+            document.getElementById('lote-id-edicao').value = data.id;
+            document.getElementById('input-codigo-lote').value = data.codigo_endereco;
+            document.getElementById('input-descricao-lote').value = data.descricao || '';
+            document.getElementById('input-capacidade-lote').value = data.capacidade || 5;
+        } else {
+            // Modo Criação
+            titulo.textContent = 'Criar Novo Lote';
+            form.reset();
+            document.getElementById('lote-id-edicao').value = ''; // Garante vazio
+            document.getElementById('input-capacidade-lote').value = 5;
+        }
+    } else {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
 }
 
-async function createEndereco(e) {
+// Abre o modal com os dados do lote atualmente selecionado
+function openEditCurrentLote() {
+    if (!currentEnderecoId) return;
+    
+    // Busca os dados do DOM da lista lateral (que tem dataset atualizado)
+    const el = document.querySelector(`.endereco-item[data-id="${currentEnderecoId}"]`);
+    if (!el) return;
+
+    const data = {
+        id: currentEnderecoId,
+        codigo_endereco: el.dataset.codigo,
+        descricao: el.dataset.descricao,
+        capacidade: el.dataset.capacidade
+    };
+    
+    toggleModal(true, data);
+}
+
+// Manipula tanto Criar quanto Editar
+async function handleSaveLote(e) {
     e.preventDefault();
+    
+    const id = document.getElementById('lote-id-edicao').value;
     const filial = document.getElementById('filial-select').value;
     const formData = new FormData(e.target);
-    const payload = { filial_codigo: filial, codigo_endereco: formData.get('codigo').toUpperCase(), descricao: formData.get('descricao') };
+    
+    const payload = {
+        filial_codigo: filial,
+        codigo_endereco: formData.get('codigo').toUpperCase(),
+        descricao: formData.get('descricao'),
+        capacidade: formData.get('capacidade')
+    };
+
+    const isEdit = !!id;
+    const url = isEdit ? `${API_BASE}/enderecos/${id}` : `${API_BASE}/enderecos`;
+    const method = isEdit ? 'PUT' : 'POST';
 
     try {
-        const res = await fetch(`${API_BASE}/enderecos`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+        const res = await fetch(url, {
+            method: method,
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getToken()}` 
+            },
             body: JSON.stringify(payload)
         });
+        
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
 
-        alert("Sucesso: " + data.message);
+        if (!res.ok) {
+            throw new Error(data.error || 'Erro desconhecido');
+        }
+
+        alert(data.message);
         toggleModal(false);
-        loadEnderecos();
+        loadEnderecos(); // Recarrega a lista
     } catch (err) {
-        alert("Falha: " + err.message);
+        alert("Falha ao salvar: " + err.message);
     }
 }
 
 async function deleteEndereco() {
     if(!currentEnderecoId) return;
     if(!confirm('Tem certeza? Isso desvinculará todos os produtos deste lote.')) return;
+
     try {
         const res = await fetch(`${API_BASE}/enderecos/${currentEnderecoId}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
+        
         if(res.ok) {
             loadEnderecos();
         } else {
             alert('Erro ao excluir lote.');
         }
-    } catch(err) { console.error(err); alert("Erro de conexão ao tentar excluir."); }
+    } catch(err) {
+        console.error(err);
+        alert("Erro de conexão ao tentar excluir.");
+    }
 }
 
 // --- DETALHES DO LOTE ---
@@ -363,6 +455,8 @@ function renderProdutos(produtos) {
     
     if (typeof feather !== 'undefined') feather.replace();
 }
+
+// --- BUSCA E ADIÇÃO (Autocomplete) ---
 
 function handleProductSearch(e) {
     clearTimeout(debounceTimer);
