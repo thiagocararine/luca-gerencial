@@ -164,6 +164,7 @@ router.get('/enderecos', authenticateToken, async (req, res) => {
         }
 
         // Monta a query principal de endereços
+        // Agora selecionamos também a coluna CAPACIDADE
         let query = `
             SELECT e.*, COUNT(m.id) as qtd_produtos 
             FROM estoque_enderecos e
@@ -199,7 +200,7 @@ router.post('/enderecos', authenticateToken, async (req, res) => {
         return res.status(400).json({ error: 'Dados incompletos: Filial e Código são obrigatórios.' });
     }
 
-    // Capacidade padrão é 5 se não for informada
+    // Define capacidade (padrão 5 se não vier nada, ou o valor digitado)
     const capFinal = capacidade ? parseInt(capacidade) : 5;
 
     try {
@@ -221,33 +222,36 @@ router.post('/enderecos', authenticateToken, async (req, res) => {
     }
 });
 
-// 2.1 Editar Lote Existente (PUT) - Novo
+// 2.1 Editar Lote (PUT) - Atualiza Nome, Descrição e Capacidade
 router.put('/enderecos/:id', authenticateToken, async (req, res) => {
     const { codigo_endereco, descricao, capacidade } = req.body;
     const idLote = req.params.id;
 
     try {
-        // Busca dados antigos para o log
+        // 1. Busca dados atuais para Log
         const [old] = await gerencialPool.query('SELECT * FROM estoque_enderecos WHERE id = ?', [idLote]);
         if (old.length === 0) return res.status(404).json({ error: 'Lote não encontrado.' });
 
-        const capFinal = capacidade ? parseInt(capacidade) : old[0].capacidade;
-        const codigoFilialLog = MAPA_FILIAIS[old[0].filial_codigo] || old[0].filial_codigo;
+        const loteAntigo = old[0];
+        const codigoFilialLog = MAPA_FILIAIS[loteAntigo.filial_codigo] || loteAntigo.filial_codigo;
+        
+        // Mantém a capacidade antiga se não for enviada uma nova
+        const capFinal = capacidade ? parseInt(capacidade) : loteAntigo.capacidade;
 
-        // Atualiza
+        // 2. Atualiza
         await gerencialPool.query(
             'UPDATE estoque_enderecos SET codigo_endereco = ?, descricao = ?, capacidade = ? WHERE id = ?',
             [codigo_endereco, descricao, capFinal, idLote]
         );
 
-        // LOG
-        await registrarLog(req, codigoFilialLog, 'LOTE', 'EDITAR', 0, 0, `Editou lote ${old[0].codigo_endereco} -> ${codigo_endereco} [Cap: ${capFinal}]`);
+        // 3. Log
+        await registrarLog(req, codigoFilialLog, 'LOTE', 'EDITAR', 0, 0, `Editou lote: ${loteAntigo.codigo_endereco} -> ${codigo_endereco} (Cap: ${capFinal})`);
 
         res.json({ message: 'Lote atualizado com sucesso.' });
 
     } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'Este código de lote já existe na filial.' });
         console.error("Erro ao editar lote:", error);
+        if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'Este código de lote já existe na filial.' });
         res.status(500).json({ error: 'Erro ao editar lote.' });
     }
 });
@@ -329,33 +333,34 @@ router.get('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
     }
 });
 
-// 5. Vincular Produto ao Lote (Com verificação de capacidade dinâmica)
+// 5. Vincular Produto ao Lote (Com verificação dinâmica de capacidade)
 router.post('/enderecos/:id/produtos', authenticateToken, async (req, res) => {
     const idEndereco = req.params.id;
     const { codigo_produto } = req.body;
 
     try {
-        // Busca a capacidade deste lote específico
+        // 1. Busca a capacidade definida para este lote
         const [loteInfo] = await gerencialPool.query('SELECT filial_codigo, codigo_endereco, capacidade FROM estoque_enderecos WHERE id = ?', [idEndereco]);
         
         if (loteInfo.length === 0) return res.status(404).json({ error: 'Lote não encontrado.' });
         
-        const capacidadeMaxima = loteInfo[0].capacidade || 5;
+        const capacidadeMaxima = loteInfo[0].capacidade || 5; // Usa 5 se for null
 
-        // Verifica quantos itens já tem
+        // 2. Verifica quantos itens já existem neste lote
         const [qtd] = await gerencialPool.query('SELECT COUNT(*) as total FROM estoque_mapa WHERE id_endereco = ?', [idEndereco]);
         
+        // 3. Aplica o bloqueio baseado na capacidade específica
         if (qtd[0].total >= capacidadeMaxima) {
             return res.status(400).json({ error: `Este lote atingiu o limite máximo de ${capacidadeMaxima} produtos.` });
         }
 
-        // Vincula
+        // 4. Vincula
         await gerencialPool.query(
             'INSERT INTO estoque_mapa (id_endereco, codigo_produto) VALUES (?, ?)',
             [idEndereco, codigo_produto]
         );
 
-        // LOG
+        // 5. Log
         const f = loteInfo[0].filial_codigo;
         const codFilial = MAPA_FILIAIS[f] || f;
         await registrarLog(req, codFilial, codigo_produto, 'VINCULAR', 0, 0, `Vinculou ao lote ${loteInfo[0].codigo_endereco}`);

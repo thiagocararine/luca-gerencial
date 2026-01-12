@@ -41,7 +41,6 @@ async function initPage() {
     checkBackendHealth();
 
     const selectFilial = document.getElementById('filial-select');
-    // Filiais hardcoded ou vindas de uma API global
     const filiais = ['Santa Cruz da Serra', 'Piabetá', 'Parada Angélica', 'Nova Campinas'];
     
     selectFilial.innerHTML = filiais.map(f => `<option value="${f}">${f}</option>`).join('');
@@ -50,22 +49,19 @@ async function initPage() {
         selectFilial.value = userData.unidade;
     }
 
-    // Inicializa Filtros (Agora com TomSelect)
+    // Inicializa Filtros
     await loadFilters();
 
-    // Listeners
+    // Listeners Globais
     selectFilial.addEventListener('change', () => { loadEnderecos(); });
-    // Nota: Eventos de change para TomSelect são tratados na inicialização dele
     document.getElementById('btn-limpar-filtros').addEventListener('click', clearFilters);
 
-    document.getElementById('btn-novo-endereco').addEventListener('click', () => toggleModal(true, null)); // Novo = null
+    document.getElementById('btn-novo-endereco').addEventListener('click', () => toggleModal(true, null));
     document.getElementById('btn-cancelar-modal').addEventListener('click', () => toggleModal(false));
-    document.getElementById('form-novo-endereco').addEventListener('submit', handleSaveLote); // Função unificada
+    document.getElementById('form-novo-endereco').addEventListener('submit', handleSaveLote);
     
     document.getElementById('search-endereco').addEventListener('input', filterEnderecosLocal);
     document.getElementById('btn-excluir-endereco').addEventListener('click', deleteEndereco);
-    
-    // Novo listener para o botão de editar no cabeçalho dos detalhes
     document.getElementById('btn-editar-lote').addEventListener('click', openEditCurrentLote);
     
     document.getElementById('input-busca-produto').addEventListener('input', handleProductSearch);
@@ -74,6 +70,12 @@ async function initPage() {
     document.getElementById('btn-fechar-contagem').addEventListener('click', () => toggleContagemModal(false));
     document.getElementById('btn-cancelar-contagem').addEventListener('click', () => toggleContagemModal(false));
     document.getElementById('btn-salvar-contagem').addEventListener('click', saveContagem);
+
+    // Botão de Ajuda do Padrão de Código
+    document.getElementById('btn-help-code').addEventListener('click', () => {
+        const infoBox = document.getElementById('info-code-format');
+        infoBox.classList.toggle('hidden');
+    });
 
     document.getElementById('logout-btn')?.addEventListener('click', () => {
         localStorage.removeItem('lucaUserToken');
@@ -100,15 +102,12 @@ async function loadFilters() {
         const res = await fetch(`${API_BASE}/filtros`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         const data = await res.json();
         
-        // Destrói instâncias anteriores se existirem (para reload)
         if (tomSelectInstances.grupo) tomSelectInstances.grupo.destroy();
         if (tomSelectInstances.fabricante) tomSelectInstances.fabricante.destroy();
 
-        // Popula selects
         const selGrupo = document.getElementById('filter-grupo');
         const selFabr = document.getElementById('filter-fabricante');
 
-        // Limpa e recria opções
         selGrupo.innerHTML = '<option value="">Todos os Grupos</option>';
         data.grupos.forEach(g => {
             const opt = document.createElement('option'); opt.value = g; opt.text = g; selGrupo.appendChild(opt);
@@ -119,7 +118,6 @@ async function loadFilters() {
             const opt = document.createElement('option'); opt.value = f; opt.text = f; selFabr.appendChild(opt);
         });
 
-        // Inicializa TomSelect
         tomSelectInstances.grupo = new TomSelect('#filter-grupo', {
             create: false,
             sortField: { field: "text", direction: "asc" },
@@ -149,7 +147,6 @@ function clearFilters() {
 async function loadEnderecos() {
     const filial = document.getElementById('filial-select').value;
     
-    // Pega valores do TomSelect ou do select nativo (fallback)
     const grupo = tomSelectInstances.grupo ? tomSelectInstances.grupo.getValue() : document.getElementById('filter-grupo').value;
     const fabricante = tomSelectInstances.fabricante ? tomSelectInstances.fabricante.getValue() : document.getElementById('filter-fabricante').value;
 
@@ -170,17 +167,10 @@ async function loadEnderecos() {
         
         if (currentEnderecoId) {
             const aindaExiste = enderecos.find(e => e.id === currentEnderecoId);
-            // Se o lote atual foi editado, atualizamos os dados na tela da direita também
             if (aindaExiste) {
                 document.getElementById('lbl-codigo-endereco').textContent = aindaExiste.codigo_endereco;
                 document.getElementById('lbl-descricao-endereco').textContent = aindaExiste.descricao || 'Lote Padrão';
-                // Atualiza também o dataset da lista para manter consistência
-                const divLista = document.querySelector(`.endereco-item[data-id="${currentEnderecoId}"]`);
-                if(divLista) {
-                    // Atualiza visualmente se necessário
-                }
             } else {
-                // Se sumiu (ex: filtro), limpa a tela
                 document.getElementById('detalhe-vazio').classList.remove('hidden');
                 document.getElementById('detalhe-conteudo').classList.add('hidden');
                 currentEnderecoId = null;
@@ -218,14 +208,13 @@ function renderEnderecos(lista) {
         div.className = 'p-3 bg-white border border-gray-200 rounded-md hover:border-indigo-500 hover:shadow-md cursor-pointer transition-all endereco-item group';
         div.dataset.id = end.id;
         div.dataset.codigo = end.codigo_endereco;
-        div.dataset.descricao = end.descricao; // Guarda para usar na edição
-        div.dataset.capacidade = end.capacidade || 5; // Guarda capacidade
+        div.dataset.descricao = end.descricao; 
+        div.dataset.capacidade = end.capacidade || 5; 
         
         if(currentEnderecoId === end.id) {
             div.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50');
         }
 
-        // Lógica visual da capacidade
         const cap = end.capacidade || 5;
         let badgeClass = 'bg-green-100 text-green-800';
         if (end.qtd_produtos >= cap) badgeClass = 'bg-red-100 text-red-800';
@@ -263,23 +252,23 @@ function toggleModal(show, data = null) {
     const modal = document.getElementById('modal-novo-endereco');
     const form = document.getElementById('form-novo-endereco');
     const titulo = document.getElementById('modal-titulo-lote');
+    const infoHelp = document.getElementById('info-code-format');
     
     if (show) {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
+        infoHelp.classList.add('hidden'); // Reseta o estado da ajuda
         
         if (data) {
-            // Modo Edição
             titulo.textContent = 'Editar Lote';
             document.getElementById('lote-id-edicao').value = data.id;
             document.getElementById('input-codigo-lote').value = data.codigo_endereco;
             document.getElementById('input-descricao-lote').value = data.descricao || '';
             document.getElementById('input-capacidade-lote').value = data.capacidade || 5;
         } else {
-            // Modo Criação
             titulo.textContent = 'Criar Novo Lote';
             form.reset();
-            document.getElementById('lote-id-edicao').value = ''; // Garante vazio
+            document.getElementById('lote-id-edicao').value = ''; 
             document.getElementById('input-capacidade-lote').value = 5;
         }
     } else {
@@ -288,11 +277,8 @@ function toggleModal(show, data = null) {
     }
 }
 
-// Abre o modal com os dados do lote atualmente selecionado
 function openEditCurrentLote() {
     if (!currentEnderecoId) return;
-    
-    // Busca os dados do DOM da lista lateral (que tem dataset atualizado)
     const el = document.querySelector(`.endereco-item[data-id="${currentEnderecoId}"]`);
     if (!el) return;
 
@@ -306,7 +292,6 @@ function openEditCurrentLote() {
     toggleModal(true, data);
 }
 
-// Manipula tanto Criar quanto Editar
 async function handleSaveLote(e) {
     e.preventDefault();
     
@@ -328,22 +313,16 @@ async function handleSaveLote(e) {
     try {
         const res = await fetch(url, {
             method: method,
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${getToken()}` 
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify(payload)
         });
         
         const data = await res.json();
-
-        if (!res.ok) {
-            throw new Error(data.error || 'Erro desconhecido');
-        }
+        if (!res.ok) throw new Error(data.error || 'Erro desconhecido');
 
         alert(data.message);
         toggleModal(false);
-        loadEnderecos(); // Recarrega a lista
+        loadEnderecos();
     } catch (err) {
         alert("Falha ao salvar: " + err.message);
     }
@@ -438,7 +417,7 @@ function renderProdutos(produtos) {
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-1">
                     <span class="font-mono text-xs font-bold bg-gray-100 px-2 py-0.5 rounded text-gray-700 border border-gray-200">${prod.codigo}</span>
-                    ${detalhesTexto ? `<span class="text-xs text-gray-400 border-l pl-2 border-gray-300 truncate max-w-[200px] hidden sm:inline-block" title="${detalhesTexto}">${detalhesTexto}</span>` : ''}
+                    ${detalhesTexto ? `<span class="text-xs text-gray-400 border-l pl-2 border-gray-300 truncate max-w-[200px]" title="${detalhesTexto}">${detalhesTexto}</span>` : ''}
                 </div>
                 <p class="font-medium text-sm text-gray-900 truncate" title="${prod.nome}">${prod.nome}</p>
                 ${detalhesTexto ? `<p class="text-[10px] text-gray-400 mt-0.5 sm:hidden uppercase">${detalhesTexto}</p>` : ''}
@@ -456,7 +435,7 @@ function renderProdutos(produtos) {
     if (typeof feather !== 'undefined') feather.replace();
 }
 
-// --- BUSCA E ADIÇÃO (Autocomplete) ---
+// --- BUSCA E ADIÇÃO ---
 
 function handleProductSearch(e) {
     clearTimeout(debounceTimer);
@@ -522,10 +501,7 @@ async function adicionarProduto(codigo) {
     try {
         const res = await fetch(`${API_BASE}/enderecos/${currentEnderecoId}/produtos`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json', 
-                'Authorization': `Bearer ${getToken()}` 
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify({ codigo_produto: codigo })
         });
 
@@ -567,7 +543,7 @@ window.removerProduto = async function(idMapa) {
     }
 };
 
-// --- NOVA LÓGICA DE CONTAGEM ---
+// --- CONTAGEM ---
 
 function toggleContagemModal(show) {
     const modal = document.getElementById('modal-contagem');
@@ -611,7 +587,7 @@ function openContagemModal() {
 async function saveContagem() {
     const motivo = document.getElementById('motivo-contagem').value;
     if (!motivo.trim()) {
-        alert("Por favor, informe o motivo do ajuste (ex: Inventário, Conferência).");
+        alert("Por favor, informe o motivo do ajuste.");
         return;
     }
 
