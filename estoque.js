@@ -41,6 +41,7 @@ async function initPage() {
     checkBackendHealth();
 
     const selectFilial = document.getElementById('filial-select');
+    // Você pode substituir por uma chamada à API de filiais se tiver
     const filiais = ['Santa Cruz da Serra', 'Piabetá', 'Parada Angélica', 'Nova Campinas'];
     
     selectFilial.innerHTML = filiais.map(f => `<option value="${f}">${f}</option>`).join('');
@@ -49,34 +50,40 @@ async function initPage() {
         selectFilial.value = userData.unidade;
     }
 
-    // Inicializa Filtros
+    // Inicializa Filtros com TomSelect
     await loadFilters();
 
     // Listeners Globais
     selectFilial.addEventListener('change', () => { loadEnderecos(); });
     document.getElementById('btn-limpar-filtros').addEventListener('click', clearFilters);
 
+    // Lotes
     document.getElementById('btn-novo-endereco').addEventListener('click', () => toggleModal(true, null));
     document.getElementById('btn-cancelar-modal').addEventListener('click', () => toggleModal(false));
     document.getElementById('form-novo-endereco').addEventListener('submit', handleSaveLote);
-    
     document.getElementById('search-endereco').addEventListener('input', filterEnderecosLocal);
     document.getElementById('btn-excluir-endereco').addEventListener('click', deleteEndereco);
     document.getElementById('btn-editar-lote').addEventListener('click', openEditCurrentLote);
     
+    // Produtos
     document.getElementById('input-busca-produto').addEventListener('input', handleProductSearch);
 
+    // Contagem
     document.getElementById('btn-contagem').addEventListener('click', openContagemModal);
     document.getElementById('btn-fechar-contagem').addEventListener('click', () => toggleContagemModal(false));
     document.getElementById('btn-cancelar-contagem').addEventListener('click', () => toggleContagemModal(false));
     document.getElementById('btn-salvar-contagem').addEventListener('click', saveContagem);
 
     // Botão de Ajuda do Padrão de Código
-    document.getElementById('btn-help-code').addEventListener('click', () => {
-        const infoBox = document.getElementById('info-code-format');
-        infoBox.classList.toggle('hidden');
-    });
+    const helpBtn = document.getElementById('btn-help-code');
+    if(helpBtn) {
+        helpBtn.addEventListener('click', () => {
+            const infoBox = document.getElementById('info-code-format');
+            if(infoBox) infoBox.classList.toggle('hidden');
+        });
+    }
 
+    // Logout
     document.getElementById('logout-btn')?.addEventListener('click', () => {
         localStorage.removeItem('lucaUserToken');
         window.location.href = 'login.html';
@@ -108,6 +115,7 @@ async function loadFilters() {
         const selGrupo = document.getElementById('filter-grupo');
         const selFabr = document.getElementById('filter-fabricante');
 
+        // Popula os selects nativos primeiro
         selGrupo.innerHTML = '<option value="">Todos os Grupos</option>';
         data.grupos.forEach(g => {
             const opt = document.createElement('option'); opt.value = g; opt.text = g; selGrupo.appendChild(opt);
@@ -118,6 +126,7 @@ async function loadFilters() {
             const opt = document.createElement('option'); opt.value = f; opt.text = f; selFabr.appendChild(opt);
         });
 
+        // Inicializa o TomSelect
         tomSelectInstances.grupo = new TomSelect('#filter-grupo', {
             create: false,
             sortField: { field: "text", direction: "asc" },
@@ -147,6 +156,7 @@ function clearFilters() {
 async function loadEnderecos() {
     const filial = document.getElementById('filial-select').value;
     
+    // Obtém valores dos filtros
     const grupo = tomSelectInstances.grupo ? tomSelectInstances.grupo.getValue() : document.getElementById('filter-grupo').value;
     const fabricante = tomSelectInstances.fabricante ? tomSelectInstances.fabricante.getValue() : document.getElementById('filter-fabricante').value;
 
@@ -165,12 +175,15 @@ async function loadEnderecos() {
         const enderecos = await res.json();
         renderEnderecos(enderecos);
         
+        // Mantém seleção se o lote ainda existir na lista filtrada
         if (currentEnderecoId) {
             const aindaExiste = enderecos.find(e => e.id === currentEnderecoId);
             if (aindaExiste) {
+                // Atualiza cabeçalho caso tenha sido editado
                 document.getElementById('lbl-codigo-endereco').textContent = aindaExiste.codigo_endereco;
                 document.getElementById('lbl-descricao-endereco').textContent = aindaExiste.descricao || 'Lote Padrão';
             } else {
+                // Se sumiu (filtro), limpa a tela da direita
                 document.getElementById('detalhe-vazio').classList.remove('hidden');
                 document.getElementById('detalhe-conteudo').classList.add('hidden');
                 currentEnderecoId = null;
@@ -208,7 +221,7 @@ function renderEnderecos(lista) {
         div.className = 'p-3 bg-white border border-gray-200 rounded-md hover:border-indigo-500 hover:shadow-md cursor-pointer transition-all endereco-item group';
         div.dataset.id = end.id;
         div.dataset.codigo = end.codigo_endereco;
-        div.dataset.descricao = end.descricao; 
+        div.dataset.descricao = end.descricao || ''; 
         div.dataset.capacidade = end.capacidade || 5; 
         
         if(currentEnderecoId === end.id) {
@@ -257,7 +270,7 @@ function toggleModal(show, data = null) {
     if (show) {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
-        infoHelp.classList.add('hidden'); // Reseta o estado da ajuda
+        if(infoHelp) infoHelp.classList.add('hidden'); // Reseta a ajuda
         
         if (data) {
             titulo.textContent = 'Editar Lote';
@@ -279,6 +292,8 @@ function toggleModal(show, data = null) {
 
 function openEditCurrentLote() {
     if (!currentEnderecoId) return;
+    
+    // Busca dados do DOM atualizado
     const el = document.querySelector(`.endereco-item[data-id="${currentEnderecoId}"]`);
     if (!el) return;
 
@@ -341,7 +356,8 @@ async function deleteEndereco() {
         if(res.ok) {
             loadEnderecos();
         } else {
-            alert('Erro ao excluir lote.');
+            const err = await res.json();
+            alert(`Erro ao excluir: ${err.error || 'Desconhecido'}`);
         }
     } catch(err) {
         console.error(err);
@@ -501,7 +517,10 @@ async function adicionarProduto(codigo) {
     try {
         const res = await fetch(`${API_BASE}/enderecos/${currentEnderecoId}/produtos`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            headers: { 
+                'Content-Type': 'application/json', 
+                'Authorization': `Bearer ${getToken()}` 
+            },
             body: JSON.stringify({ codigo_produto: codigo })
         });
 
@@ -543,7 +562,7 @@ window.removerProduto = async function(idMapa) {
     }
 };
 
-// --- CONTAGEM ---
+// --- NOVA LÓGICA DE CONTAGEM ---
 
 function toggleContagemModal(show) {
     const modal = document.getElementById('modal-contagem');
@@ -587,7 +606,7 @@ function openContagemModal() {
 async function saveContagem() {
     const motivo = document.getElementById('motivo-contagem').value;
     if (!motivo.trim()) {
-        alert("Por favor, informe o motivo do ajuste.");
+        alert("Por favor, informe o motivo do ajuste (ex: Inventário, Conferência).");
         return;
     }
 
