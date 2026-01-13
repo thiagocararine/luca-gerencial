@@ -1,4 +1,4 @@
-// settings.js (COMPLETO E ATUALIZADO COM ALTERAÇÃO DE FILIAL)
+// settings.js (COMPLETO E ATUALIZADO COM PERMISSÕES DE ESTOQUE)
 
 document.addEventListener('DOMContentLoaded', () => {
     if (document.querySelector('.tabs')) {
@@ -7,7 +7,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- Constantes e Variáveis de Estado Globais ---
-//const apiUrlBase = 'http://10.113.0.17:3000/api';
 const apiUrlBase = '/api';
 let parametrosTable, usersTable, perfisTable, itensEstoqueTable;
 let currentParamCode = null;
@@ -16,13 +15,19 @@ let todosOsPerfis = [];
 let actionToConfirm = null;
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 
+// ADICIONADAS AS PERMISSÕES GRANULARES DE ESTOQUE AQUI
 const ALL_MODULES = {
     'lancamentos': 'Lançamentos',
     'logistica': 'Logística',
     'checklist': 'Checklist',
     'produtos': 'Produtos',
     'entregas': 'Entregas',
-    'configuracoes': 'Configurações'
+    'configuracoes': 'Configurações',
+    
+    // Novas Permissões Granulares para o Estoque
+    'estoque_view': 'Estoque - Visualizar (Consultas)',
+    'estoque_oper': 'Estoque - Operacional (Criar/Vincular)',
+    'estoque_admin': 'Estoque - Gerencial (Contagem/Ajuste)'
 };
 
 /**
@@ -42,9 +47,13 @@ async function initSettingsPage() {
     setupCardEventListeners();
     setupParametrosTable(); 
     
-    if (privilegedAccessProfiles.includes(getUserProfile())) {
+    // Verifica se o usuário pode ver abas administrativas
+    // Nota: getUserProfile() precisa ser implementado ou usar a lógica existente
+    const userProfile = getUserProfile();
+    if (privilegedAccessProfiles.includes(userProfile) || userProfile === 'Administrador') { // Garante acesso admin
         document.getElementById('user-tab-btn').style.display = 'inline-block';
-        document.querySelector('button[data-tab="perfis"]').style.display = 'inline-block';
+        const perfisTabBtn = document.querySelector('button[data-tab="perfis"]');
+        if(perfisTabBtn) perfisTabBtn.style.display = 'inline-block';
         
         await preCarregarPerfisDeAcesso();
         setupUsersTable();
@@ -114,15 +123,12 @@ function setupEventListenersSettings() {
 // --- GESTÃO DE UTILIZADORES ---
 
 /**
- * NOVA FUNÇÃO: Carrega e popula o seletor de filiais (unidades).
- * @param {HTMLSelectElement} selectElement O elemento select a ser populado.
- * @param {number} valorAtual O ID da filial atual do utilizador para pré-seleção.
+ * Carrega e popula o seletor de filiais (unidades).
  */
 async function popularSelectFiliais(selectElement, valorAtual) {
     selectElement.innerHTML = '<option value="">A carregar...</option>';
     try {
-        // Usamos a rota pública de parâmetros que já existe
-        const response = await fetch(`${apiUrlBase}/auth/parametros?cod=Unidades`);
+        const response = await fetch(`${apiUrlBase}/auth/parametros?cod=Unidades`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error('Falha ao buscar filiais');
         
         const filiais = await response.json();
@@ -130,7 +136,7 @@ async function popularSelectFiliais(selectElement, valorAtual) {
         selectElement.innerHTML = '<option value="">-- Selecione uma Filial --</option>';
         filiais.forEach(filial => {
             const option = document.createElement('option');
-            option.value = filial.ID; // O valor é o ID do parâmetro
+            option.value = filial.ID;
             option.textContent = filial.NOME_PARAMETRO;
             if (filial.ID === valorAtual) {
                 option.selected = true;
@@ -143,10 +149,8 @@ async function popularSelectFiliais(selectElement, valorAtual) {
     }
 }
 
-
 /**
  * Carrega e exibe as permissões de um perfil específico.
- * @param {number} profileId O ID do perfil.
  */
 async function loadPermissionsForProfile(profileId) {
     const permissionsContainer = document.getElementById('user-modal-permissions');
@@ -159,12 +163,13 @@ async function loadPermissionsForProfile(profileId) {
         
         permissionsContainer.innerHTML = '';
         
+        // Gera os checkboxes baseado no ALL_MODULES atualizado
         for (const [moduleKey, moduleName] of Object.entries(ALL_MODULES)) {
             const permission = profilePermissions.find(p => p.nome_modulo === moduleKey);
             const isAllowed = permission ? permission.permitido : false;
             
             const checkboxWrapper = document.createElement('div');
-            checkboxWrapper.className = 'flex items-center';
+            checkboxWrapper.className = 'flex items-center mb-1';
             checkboxWrapper.innerHTML = `
                 <input id="perm-${moduleKey}" name="${moduleKey}" type="checkbox" ${isAllowed ? 'checked' : ''} class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
                 <label for="perm-${moduleKey}" class="ml-3 block text-sm text-gray-900">${moduleName}</label>
@@ -180,6 +185,10 @@ async function loadPermissionsForProfile(profileId) {
 function setupUsersTable() {
     const desktopContainer = document.getElementById('users-table-desktop');
     const mobileContainer = document.getElementById('users-table-mobile');
+    
+    // Verifica se os containers existem antes de prosseguir (evita erros se a aba não renderizou)
+    if (!desktopContainer || !mobileContainer) return;
+
     const url = `${apiUrlBase}/auth/users`;
 
     if (window.innerWidth < 768) {
@@ -215,9 +224,6 @@ function setupUsersTable() {
     }
 }
 
-/**
- * ATUALIZADO: para popular o novo seletor de filial.
- */
 async function openUserSettingsModal(userData) {
     const modal = document.getElementById('user-settings-modal');
     document.getElementById('user-modal-name').textContent = userData.nome_user;
@@ -237,7 +243,6 @@ async function openUserSettingsModal(userData) {
         perfilSelect.appendChild(option);
     });
     
-    // NOVA CHAMADA para popular o seletor de filiais
     const filialSelect = document.getElementById('user-modal-filial');
     await popularSelectFiliais(filialSelect, userData.id_filial);
     
@@ -246,20 +251,17 @@ async function openUserSettingsModal(userData) {
     modal.classList.remove('hidden');
 }
 
-/**
- * ATUALIZADO: para enviar o novo id_filial para o backend.
- */
 async function handleSaveUserSettings() {
     const userId = document.getElementById('user-modal-id').value;
     const newPassword = document.getElementById('user-modal-password').value;
     const newStatus = document.getElementById('user-modal-status').value;
     const newProfileId = document.getElementById('user-modal-perfil').value;
-    const newFilialId = document.getElementById('user-modal-filial').value; // NOVO
+    const newFilialId = document.getElementById('user-modal-filial').value;
 
     const userPayload = {
         status: newStatus,
         id_perfil: newProfileId,
-        id_filial: newFilialId, // NOVO
+        id_filial: newFilialId,
     };
 
     if (newPassword.trim() !== '') {
@@ -294,12 +296,11 @@ async function handleSaveUserSettings() {
 
         alert('Dados do utilizador e permissões do perfil atualizados com sucesso!');
         document.getElementById('user-settings-modal').classList.add('hidden');
-        usersTable.replaceData(); 
+        if(usersTable) usersTable.replaceData(); 
     } catch (error) {
         alert(`Falha ao atualizar o utilizador: ${error.message}`);
     }
 }
-
 
 // --- GESTÃO DE PERFIS ---
 
@@ -317,6 +318,9 @@ async function preCarregarPerfisDeAcesso() {
 function setupPerfisTable() {
     const desktopContainer = document.getElementById('perfis-table-desktop');
     const mobileContainer = document.getElementById('perfis-table-mobile');
+    
+    if (!desktopContainer || !mobileContainer) return;
+
     const url = `${apiUrlBase}/settings/perfis-acesso`;
 
     if (window.innerWidth < 768) {
@@ -394,7 +398,7 @@ async function handlePerfilFormSubmit(e) {
         if (response.status >= 400) return handleApiError(response);
         alert(`Perfil ${id ? 'atualizado' : 'criado'} com sucesso!`);
         resetPerfilForm();
-        perfisTable.replaceData();
+        if(perfisTable) perfisTable.replaceData();
         await preCarregarPerfisDeAcesso();
     } catch (error) {
         alert(`Falha ao salvar o perfil: ${error.message}`);
@@ -409,7 +413,7 @@ async function handleDeletePerfil(id) {
         });
         if (response.status >= 400) return handleApiError(response);
         alert(`Perfil ID ${id} apagado com sucesso!`);
-        perfisTable.replaceData();
+        if(perfisTable) perfisTable.replaceData();
         await preCarregarPerfisDeAcesso();
    } catch (error) {
        alert('Falha ao apagar o perfil.');
@@ -421,6 +425,9 @@ async function handleDeletePerfil(id) {
 function setupItensEstoqueTable() {
     const desktopContainer = document.getElementById('itens-estoque-table-desktop');
     const mobileContainer = document.getElementById('itens-estoque-table-mobile');
+    
+    if (!desktopContainer || !mobileContainer) return;
+
     const url = `${apiUrlBase}/logistica/itens-estoque`;
 
     if (window.innerWidth < 768) {
@@ -500,7 +507,7 @@ async function handleItemEstoqueFormSubmit(e) {
         }
         alert(`Item ${id ? 'atualizado' : 'criado'} com sucesso!`);
         resetItemEstoqueForm();
-        itensEstoqueTable.replaceData();
+        if(itensEstoqueTable) itensEstoqueTable.replaceData();
     } catch (error) {
         alert(`Falha ao salvar o item: ${error.message}`);
     }
@@ -514,7 +521,7 @@ async function handleDeleteItem(id) {
         });
         if (!response.ok) throw new Error('Falha ao apagar o item.');
         alert(`Item ID ${id} apagado com sucesso!`);
-        itensEstoqueTable.replaceData();
+        if(itensEstoqueTable) itensEstoqueTable.replaceData();
     } catch (error) {
         alert('Falha ao apagar o item.');
     }
@@ -531,6 +538,7 @@ async function popularSeletorDeCodigos() {
         if (response.status >= 400) return handleApiError(response);
         const codigos = await response.json();
         const select = document.getElementById('select-param-code');
+        if(!select) return;
         select.innerHTML = '<option value="">-- Selecione um Tipo para Visualizar --</option>';
         codigos.forEach(item => {
             const option = document.createElement('option');
@@ -561,10 +569,9 @@ async function loadAndPopulateVinculacao(codParametroPai) {
         
         selectVinculacao.innerHTML = '<option value="">-- Nenhum --</option>';
         currentParentList.forEach(item => {
-            // ALTERADO PARA USAR A COLUNA CORRETA (KEY_VINCULACAO)
             if (item.KEY_VINCULACAO) { 
                 const option = document.createElement('option');
-                option.value = item.KEY_VINCULACAO; // <-- Corrigido aqui
+                option.value = item.KEY_VINCULACAO;
                 option.textContent = item.NOME_PARAMETRO;
                 selectVinculacao.appendChild(option);
             }
@@ -578,6 +585,8 @@ async function loadAndPopulateVinculacao(codParametroPai) {
 function setupParametrosTable() {
     const desktopContainer = document.getElementById('parametros-table-desktop');
     const mobileContainer = document.getElementById('parametros-table-mobile');
+    
+    if (!desktopContainer || !mobileContainer) return;
 
     if (window.innerWidth < 768) {
         desktopContainer.style.display = 'none';
@@ -623,11 +632,9 @@ async function handleParamCodeChange(e) {
     currentParamCode = e.target.value;
     const paramForm = document.getElementById('param-form');
     const vinculacaoGroup = document.getElementById('vinculacao-group');
-    const desktopContainer = document.getElementById('parametros-table-desktop');
     const mobileContainer = document.getElementById('parametros-table-mobile');
     
     resetParamForm();
-    // A linha que limpava os containers foi removida para não destruir a tabela
 
     if (currentParamCode) {
         paramForm.style.display = 'grid';
@@ -651,7 +658,6 @@ async function handleParamCodeChange(e) {
                 .then(res => res.json())
                 .then(data => renderSettingsCards(data, 'parametros-table-mobile', 'parametros'));
         } else {
-            // Agora a tabela será recarregada corretamente
             if(parametrosTable) {
                 parametrosTable.setData(url, {}, { headers: { 'Authorization': `Bearer ${getToken()}` } });
             }
@@ -717,9 +723,8 @@ async function executeSaveParam(id, body) {
         alert(`Parâmetro ${id ? 'atualizado' : 'criado'} com sucesso!`);
         resetParamForm();
 
-        // LINHA CORRIGIDA: Agora a tabela recarrega com a autenticação correta
         const refreshUrl = `${apiUrlBase}/settings/parametros?cod=${encodeURIComponent(currentParamCode)}`;
-        parametrosTable.setData(refreshUrl, {}, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if(parametrosTable) parametrosTable.setData(refreshUrl, {}, { headers: { 'Authorization': `Bearer ${getToken()}` } });
 
     } catch (error) {
         alert(`Falha ao salvar o parâmetro: ${error.message}`);
@@ -734,7 +739,7 @@ async function handleDeleteParam(id) {
         });
         if (response.status >= 400) return handleApiError(response);
         alert(`Parâmetro ID ${id} apagado com sucesso!`);
-        parametrosTable.setData();
+        if(parametrosTable) parametrosTable.setData();
     } catch (error) {
         alert('Falha ao apagar o parâmetro.');
     }
@@ -826,10 +831,26 @@ function gerenciarAcessoModulos() {
         'logistica': 'logistica.html',
         'entregas': 'entregas.html',
         'checklist': 'checklist.html',
-        'produtos': 'produtos.html', // <-- LINHA ADICIONADA
+        'produtos': 'produtos.html',
+        'estoque_view': 'estoque.html', // Nova regra para estoque
         'configuracoes': 'settings.html'
     };
+    
+    // Verificação especial para o estoque granular: se tiver QUALQUER acesso de estoque, libera o link
+    const temAcessoEstoque = permissoesDoUsuario.some(p => 
+        (p.nome_modulo === 'estoque_view' || p.nome_modulo === 'estoque_oper' || p.nome_modulo === 'estoque_admin') && p.permitido
+    );
+
     for (const [moduleKey, href] of Object.entries(mapaModulos)) {
+        // Lógica especial para o estoque
+        if (moduleKey === 'estoque_view') {
+            if (!temAcessoEstoque) {
+                const link = document.querySelector(`#sidebar a[href="${href}"]`);
+                if (link && link.parentElement) link.parentElement.style.display = 'none';
+            }
+            continue;
+        }
+
         const permissao = permissoesDoUsuario.find(p => p.nome_modulo === moduleKey);
         if (!permissao || !permissao.permitido) {
             const link = document.querySelector(`#sidebar a[href="${href}"]`);
@@ -840,7 +861,6 @@ function gerenciarAcessoModulos() {
     }
 }
 
-// ADICIONE ESTA NOVA FUNÇÃO EM settings.js
 function renderSettingsCards(data, containerId, type) {
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -857,7 +877,7 @@ function renderSettingsCards(data, containerId, type) {
     data.forEach(item => {
         const card = document.createElement('div');
         card.className = 'bg-white/80 backdrop-blur-sm rounded-lg shadow p-4 space-y-2 border-l-4 border-indigo-500';
-        card.dataset.item = JSON.stringify(item); // Armazena os dados no próprio card
+        card.dataset.item = JSON.stringify(item);
 
         let title = '';
         let detailsHtml = '';
