@@ -62,20 +62,40 @@ function loadCompanyLogo() {
     }
 }
 
+// --- CONTROLE DE ACESSO (ATUALIZADO PARA O NOVO PADRÃO) ---
 function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) return;
     
     const permissoesDoUsuario = userData.permissoes;
+    
+    // Mapeamento: 'permissao_no_banco': 'arquivo_destino.html'
     const mapaModulos = {
         'lancamentos': 'despesas.html',
         'logistica': 'logistica.html',
         'entregas': 'entregas.html',
         'checklist': 'checklist.html',
         'produtos': 'produtos.html',
-        'configuracoes': 'settings.html'
+        'configuracoes': 'settings.html',
+        'estoque_view': 'estoque.html' // Nova chave para o link da sidebar
     };
+
+    // Verifica se tem QUALQUER acesso ao estoque (View, Oper ou Admin)
+    const temAcessoEstoque = permissoesDoUsuario.some(p => 
+        (p.nome_modulo === 'estoque_view' || p.nome_modulo === 'estoque_oper' || p.nome_modulo === 'estoque_admin') && p.permitido
+    );
+
     for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
+        // Lógica especial para o estoque
+        if (nomeModulo === 'estoque_view') {
+            if (!temAcessoEstoque) {
+                const link = document.querySelector(`#sidebar a[href="${href}"]`);
+                if (link && link.parentElement) link.parentElement.style.display = 'none';
+            }
+            continue;
+        }
+
+        // Lógica padrão para os outros módulos
         const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
         if (!permissao || !permissao.permitido) {
             const link = document.querySelector(`#sidebar a[href="${href}"]`);
@@ -101,7 +121,8 @@ async function initProductsPage() {
     }
     document.getElementById('logout-button')?.addEventListener('click', logout);
     
-    gerenciarAcessoModulos();
+    gerenciarAcessoModulos(); // Aplica as permissões na barra lateral
+    
     await populateFilialFilter();
     await initializeFilterSelects();
     setupEventListeners();
@@ -200,17 +221,12 @@ function setupEventListeners() {
     
     setupBarcodeScannerListeners();
 
-    // --- LÓGICA DO NOVO BOTÃO DE SCANNER DO MODAL ---
+    // Botão de scanner no modal
     document.getElementById('scan-barcode-modal-btn').addEventListener('click', () => {
-        // Abre o modal do scanner que já existe
         document.getElementById('barcode-scanner-modal').classList.remove('hidden');
-        
-        // Inicia o scanner, mas com um callback diferente
-        // para atualizar o campo do modal, e não o filtro da página.
         startScannerForDevice(videoInputDevices[currentDeviceIndex]?.deviceId, (scannedText) => {
-            // Este é o código que será executado quando um código for lido
             document.getElementById('pd-barr-input').value = scannedText;
-            stopBarcodeScanner(); // Fecha o modal do scanner
+            stopBarcodeScanner();
         });
     });
 }
@@ -286,7 +302,6 @@ async function renderProductCards() {
     }
 }
 
-// Substitua esta função inteira em produtos.js
 function initializeProductsTable() {
     if (gridInstance) {
         gridInstance.destroy();
@@ -314,8 +329,6 @@ function initializeProductsTable() {
                     return [p.pd_codi, p.pd_nome, p.pd_nmgr, p.pd_fabr, estoqueCell];
                 });
                 
-                // Ativa o Tippy depois que os dados são mapeados e prontos para renderizar.
-                // Usamos um setTimeout(0) para garantir que isso execute após o Grid.js atualizar o DOM.
                 setTimeout(() => {
                     tippy('[data-tippy-content]', {
                         allowHTML: true,
@@ -374,7 +387,6 @@ function initializeProductsTable() {
     });
 }
 
-// Substitua esta função inteira em produtos.js
 async function openEditModal(rowData) {
     const modal = document.getElementById('product-edit-modal');
     document.getElementById('product-modal-title').textContent = rowData.pd_nome;
@@ -392,7 +404,7 @@ async function openEditModal(rowData) {
         document.getElementById('product-modal-info').textContent = 
             `Filial Origem: ${data.details.pd_fili || 'N/A'} | Cód: ${data.details.pd_codi} | Barras: ${data.details.pd_barr || 'N/A'}`;
 
-        // ---- Aba "Dados Cadastrais" ----
+        // Aba Dados
         document.getElementById('pd-nome-input').value = data.details.pd_nome;
         document.getElementById('pd-barr-input').value = data.details.pd_barr || '';
         document.getElementById('pd-codi-input').value = data.details.pd_codi;
@@ -401,7 +413,7 @@ async function openEditModal(rowData) {
         document.getElementById('pd-nmgr-input').value = data.details.pd_nmgr || '';
         document.getElementById('pd-unid-input').value = data.details.pd_unid || '';
         
-        // ---- Aba "Estoque" ----
+        // Aba Estoque
         document.getElementById('pd-estm-input').value = data.details.pd_estm || 0;
         document.getElementById('pd-estx-input').value = data.details.pd_estx || 0;
         const filialFilterValue = document.getElementById('filter-filial').value;
@@ -410,7 +422,7 @@ async function openEditModal(rowData) {
         document.getElementById('ef-endere-input').value = stockInfo ? stockInfo.ef_endere : '';
         document.getElementById('ajuste-motivo-input').value = '';
 
-        // ---- Aba "Financeiro & Preços" ----
+        // Aba Financeiro
         const formatCurrency = (value, decimals = 2) => `R$ ${Number(value || 0).toFixed(decimals).replace('.', ',')}`;
         const formatPercent = (value) => `${Number(value || 0).toFixed(2).replace('.', ',')} %`;
         document.getElementById('pd-pcus-input').value = formatCurrency(data.details.pd_pcus);
@@ -426,39 +438,32 @@ async function openEditModal(rowData) {
         pricesContainer.innerHTML = pricesHtml;
         pricesContainer.classList.add('hidden');
 
-        // ---- Aba "Fiscal & Outros" ----
+        // Aba Fiscal
         document.getElementById('pd-canc-status').value = (data.details.pd_canc === '4') ? 'Cancelado' : 'Ativo';
         document.getElementById('pd-cfis-input').value = data.details.pd_cfis || 'N/A';
         document.getElementById('pd-cest-input').value = data.details.pd_cest || 'N/A';
         document.getElementById('pd-pesb-input').value = `${Number(data.details.pd_pesb || 0).toFixed(3).replace('.', ',')} kg`;
         document.getElementById('pd-pesl-input').value = `${Number(data.details.pd_pesl || 0).toFixed(3).replace('.', ',')} kg`;
 
-        // ---- Aba "Histórico" (LÓGICA 100% CORRIGIDA) ----
+        // Aba Histórico
         const historicoContainer = document.getElementById('historico-tab-content');
         const ultimasComprasRaw = data.details.pd_ulcm || '';
         
         const filialSelecionada = document.getElementById('filter-filial').value;
-
-        // 1. Separa os registros de compra por QUEBRA DE LINHA
         let todosOsRegistros = ultimasComprasRaw.split('\n').filter(item => item.trim() !== '');
-
-        // 2. Filtra os registros pela filial selecionada (se houver uma)
         let registrosFiltrados = todosOsRegistros;
         if (filialSelecionada) {
             registrosFiltrados = todosOsRegistros.filter(registro => {
                 const partes = registro.split('|');
-                // A filial está na 18ª posição (índice 17)
                 const filialDoRegistro = partes[17] ? partes[17].trim() : '';
                 return filialDoRegistro === filialSelecionada;
             });
         }
 
         const duasUltimasCompras = registrosFiltrados.slice(-2);
-
         let historicoHtml = '';
         if (duasUltimasCompras.length > 0) {
             const parseCompra = (compraString) => {
-                // 3. Separa as informações de CADA compra pelo PIPE
                 const partes = compraString.split('|');
                 return {
                     fornecedor: partes[0]?.trim() || 'N/A',
@@ -473,8 +478,6 @@ async function openEditModal(rowData) {
                     filial: partes[17]?.trim() || 'N/A',
                 };
             };
-            
-            // A ordem é invertida: a última compra é a mais recente.
             const ultima = parseCompra(duasUltimasCompras[duasUltimasCompras.length - 1]);
             const penultima = duasUltimasCompras.length > 1 ? parseCompra(duasUltimasCompras[0]) : null;
 
@@ -486,51 +489,25 @@ async function openEditModal(rowData) {
                 { label: 'Filial', key: 'filial' },
             ];
 
-            historicoHtml = `
-                <table class="w-full text-sm text-left">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-4 py-2 font-medium">Atributo</th>
-                            <th class="px-4 py-2 font-medium">${penultima ? 'Penúltima Compra' : 'Única Compra'}</th>
-                            ${penultima ? '<th class="px-4 py-2 font-medium">Última Compra</th>' : ''}
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-            `;
-
+            historicoHtml = `<table class="w-full text-sm text-left"><thead class="bg-gray-50"><tr><th class="px-4 py-2 font-medium">Atributo</th><th class="px-4 py-2 font-medium">${penultima ? 'Penúltima Compra' : 'Única Compra'}</th>${penultima ? '<th class="px-4 py-2 font-medium">Última Compra</th>' : ''}</tr></thead><tbody class="bg-white divide-y divide-gray-200">`;
             for (const attr of atributos) {
                 const valorPenultima = penultima ? (attr.key2 ? `${penultima[attr.key]} ${penultima[attr.key2]}` : penultima[attr.key]) : 'N/A';
                 const valorUltima = ultima ? (attr.key2 ? `${ultima[attr.key]} ${ultima[attr.key2]}` : ultima[attr.key]) : 'N/A';
-
-                historicoHtml += `
-                    <tr>
-                        <td class="px-4 py-2 font-semibold text-gray-800">${attr.label}</td>
-                        <td class="px-4 py-2 text-gray-600">${penultima ? valorPenultima : valorUltima}</td>
-                        ${penultima ? `<td class="px-4 py-2 text-gray-600">${valorUltima}</td>` : ''}
-                    </tr>
-                `;
+                historicoHtml += `<tr><td class="px-4 py-2 font-semibold text-gray-800">${attr.label}</td><td class="px-4 py-2 text-gray-600">${penultima ? valorPenultima : valorUltima}</td>${penultima ? `<td class="px-4 py-2 text-gray-600">${valorUltima}</td>` : ''}</tr>`;
             }
             historicoHtml += '</tbody></table>';
-
         } else {
             historicoHtml = '<p class="text-gray-500 p-4 text-center">Nenhum histórico de compra encontrado para a filial selecionada.</p>';
         }
         historicoContainer.innerHTML = historicoHtml;
         
-        // ---- Resetar e Mostrar o Modal ----
+        // Reset e Mostrar
         const allTabs = modal.querySelectorAll('.tab-button');
         const firstTab = modal.querySelector('[data-tab="dados-cadastrais"]');
-        allTabs.forEach(tab => { 
-            tab.classList.remove('text-indigo-600', 'border-indigo-500'); 
-            tab.classList.add('text-gray-500', 'border-transparent'); 
-        });
-        if (firstTab) {
-            firstTab.classList.remove('text-gray-500', 'border-transparent');
-            firstTab.classList.add('text-indigo-600', 'border-indigo-500');
-        }
+        allTabs.forEach(tab => { tab.classList.remove('text-indigo-600', 'border-indigo-500'); tab.classList.add('text-gray-500', 'border-transparent'); });
+        if (firstTab) { firstTab.classList.remove('text-gray-500', 'border-transparent'); firstTab.classList.add('text-indigo-600', 'border-indigo-500'); }
         modal.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
         document.getElementById('dados-cadastrais-tab-content').classList.remove('hidden');
-
         modal.classList.remove('hidden');
 
     } catch(error) {
@@ -624,11 +601,9 @@ function startScannerForDevice(deviceId, onScanSuccess) {
     
     activeCodeReader.decodeFromVideoDevice(deviceId, 'barcode-scanner-video', (result, err) => {
         if (result) {
-            // Se uma função de sucesso foi passada, use-a.
             if (onScanSuccess) {
                 onScanSuccess(result.text);
             } else {
-                // Senão, use o comportamento padrão (atualizar o filtro da página)
                 document.getElementById('filter-search').value = result.text;
                 stopBarcodeScanner();
                 renderContent();

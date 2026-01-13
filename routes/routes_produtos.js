@@ -13,7 +13,42 @@ const dbConfigSei = {
     charset: 'utf8mb4'
 };
 
+const dbConfigGerencial = {
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_DATABASE, // Banco Gerencial (Onde estão perfis)
+    charset: 'utf8mb4'
+};
+
 const mainDbName = process.env.DB_DATABASE || 'gerencial_lucamat';
+
+// --- Função Auxiliar de Permissão ---
+async function checkPermission(userId, requiredPerm) {
+    let conn;
+    try {
+        conn = await mysql.createConnection(dbConfigGerencial);
+        const [rows] = await conn.execute(
+            `SELECT p.modulos FROM usuarios u JOIN perfis p ON u.id_perfil = p.id WHERE u.id = ?`, 
+            [userId]
+        );
+        if (rows.length === 0) return false;
+        
+        let modulos = [];
+        try {
+            const raw = rows[0].modulos;
+            modulos = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            if(!Array.isArray(modulos)) modulos = [];
+        } catch(e) { modulos = []; }
+
+        return modulos.includes(requiredPerm) || modulos.includes('estoque_admin'); // Admin supera tudo
+    } catch(e) {
+        console.error("Erro checkPermission:", e);
+        return false;
+    } finally {
+        if(conn) await conn.end();
+    }
+}
 
 // ROTA PRINCIPAL DE BUSCA - ATUALIZADA E COMPLETA
 router.get('/', authenticateToken, async (req, res) => {
@@ -50,7 +85,6 @@ router.get('/', authenticateToken, async (req, res) => {
         let finalParams;
 
         if (filialId) {
-            // Caso 1: Uma filial específica foi selecionada
             dataQuery = `
                 SELECT p.pd_regi, p.pd_codi, p.pd_nome, p.pd_barr, p.pd_nmgr, p.pd_fabr, 
                        COALESCE(e.ef_fisico, 0) as estoque_fisico_filial
@@ -62,7 +96,6 @@ router.get('/', authenticateToken, async (req, res) => {
                 LIMIT ? OFFSET ?`;
             finalParams = [filialId, ...params, parseInt(limit), offset];
         } else {
-            // Caso 2: Nenhuma filial selecionada (soma o estoque e detalha)
             dataQuery = `
                 SELECT p.pd_regi, p.pd_codi, p.pd_nome, p.pd_barr, p.pd_nmgr, p.pd_fabr, 
                        SUM(COALESCE(e.ef_fisico, 0)) as estoque_fisico_filial,
@@ -87,7 +120,6 @@ router.get('/', authenticateToken, async (req, res) => {
     }
 });
 
-// ROTA DE GRUPOS - SIMPLIFICADA (sempre retorna todos)
 router.get('/grupos', authenticateToken, async (req, res) => {
     let connection;
     try {
@@ -104,7 +136,6 @@ router.get('/grupos', authenticateToken, async (req, res) => {
     }
 });
 
-// ROTA DE FABRICANTES - SIMPLIFICADA (sempre retorna todos)
 router.get('/fabricantes', authenticateToken, async (req, res) => {
     let connection;
     try {
@@ -176,7 +207,6 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
 router.put('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
-    // Adicionados pd_estm e pd_estx para serem salvos
     const { pd_nome, pd_barr, pd_cara, pd_refe, pd_unid, pd_fabr, pd_nmgr, pd_estm, pd_estx } = req.body;
     
     if (!pd_nome || !pd_unid) {
@@ -201,9 +231,17 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// --- ROTA DE AJUSTE (PROTEGIDA POR PERMISSÃO) ---
 router.post('/ajuste-estoque', authenticateToken, async (req, res) => {
     const { id_produto_regi, codigo_produto, filial_id, nova_quantidade, endereco, motivo } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
+
+    // VERIFICA PERMISSÃO ANTES DE TUDO
+    const podeAjustar = await checkPermission(userId, 'estoque_admin');
+    if (!podeAjustar) {
+        return res.status(403).json({ error: 'Acesso negado. Você não tem permissão para ajustar saldo de estoque (estoque_admin).' });
+    }
+
     if (!id_produto_regi || !filial_id || nova_quantidade === null || !motivo) {
         return res.status(400).json({ error: 'Todos os campos para o ajuste são obrigatórios.' });
     }
@@ -228,12 +266,7 @@ router.post('/ajuste-estoque', authenticateToken, async (req, res) => {
             );
         }
         
-        const mainDbConnection = await mysql.createConnection({
-            host: process.env.DB_HOST,
-            user: process.env.DB_USER,
-            password: process.env.DB_PASSWORD,
-            database: mainDbName
-        });
+        const mainDbConnection = await mysql.createConnection(dbConfigGerencial);
         const logSql = `
             INSERT INTO estoque_ajustes_log 
             (id_produto_regi, codigo_produto, id_filial, quantidade_anterior, quantidade_nova, motivo, id_usuario, nome_usuario)
