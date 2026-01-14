@@ -1,4 +1,4 @@
-// index.js (Servidor Principal Refatorado)
+// index.js (Servidor Principal - CORRIGIDO)
 
 // 1. Importação das bibliotecas
 const express = require('express');
@@ -28,7 +28,7 @@ app.use('/uploads', express.static(UPLOADS_BASE_PATH));
 
 // Configura pasta 'public' para servir os arquivos HTML (se seus htmls estiverem lá)
 // Se estiverem na raiz, comente a linha abaixo e use os res.sendFile individuais
-app.use(express.static(path.join(__dirname, 'public'))); 
+// app.use(express.static(path.join(__dirname, 'public'))); 
 
 // 4. Importação das Rotas
 const authRoutes = require('./routes/routes_auth');
@@ -56,19 +56,21 @@ apiRouter.use('/financeiro', financeiroRoutes);
 app.use('/api', apiRouter);
 
 // 6. Rotas para Servir Páginas HTML (Frontend)
-// Ajuste os caminhos 'path.join' conforme onde seus arquivos .html estão
+// Estas rotas permitem acessar 'seusite.com/estoque' sem escrever '.html'
+
 app.get('/estoque', (req, res) => {
-    // Se o arquivo estiver na raiz do projeto:
     res.sendFile(path.join(__dirname, 'estoque.html'));
-    // Se estiver na pasta public, use: res.sendFile(path.join(__dirname, 'public', 'estoque.html'));
 });
+
 app.get('/financeiro', (req, res) => {
     res.sendFile(path.join(__dirname, 'financeiro.html'));
 });
-// (Opcional) Rotas para as outras páginas, se não estiver usando express.static total
+
+// Outras páginas
 app.get('/entregas', (req, res) => res.sendFile(path.join(__dirname, 'entregas.html')));
 app.get('/produtos', (req, res) => res.sendFile(path.join(__dirname, 'produtos.html')));
-// ... adicione as outras se necessário
+app.get('/settings', (req, res) => res.sendFile(path.join(__dirname, 'settings.html')));
+// Adicione as demais conforme necessário (login, dashboard/index, etc.)
 
 // 7. Iniciar o Servidor
 app.listen(port, () => {
