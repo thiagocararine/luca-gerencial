@@ -16,7 +16,7 @@ const dbConfigSei = {
 const seiPool = mysql.createPool(dbConfigSei);
 const gerencialPool = mysql.createPool(dbConfig);
 
-// Middleware de Permissão (Cópia simplificada para isolamento do módulo)
+// Middleware de Permissão
 const checkPerm = (perm) => async (req, res, next) => {
     try {
         const [rows] = await gerencialPool.query(
@@ -28,19 +28,21 @@ const checkPerm = (perm) => async (req, res, next) => {
         let mods = [];
         try { mods = typeof rows[0].modulos === 'string' ? JSON.parse(rows[0].modulos) : rows[0].modulos; } catch(e) {}
         
-        // Admin financeiro ou permissão específica
         if (mods.includes('fin_pagar_admin') || mods.includes(perm)) return next();
-        
-        // Se for VIEW, quem tem OPER também pode
         if (perm === 'fin_pagar_view' && mods.includes('fin_pagar_oper')) return next();
 
         res.status(403).json({ error: 'Acesso negado.' });
-    } catch (e) { res.status(500).json({ error: 'Erro de permissão' }); }
+    } catch (e) { 
+        console.error("Erro no checkPerm:", e);
+        res.status(500).json({ error: 'Erro de permissão' }); 
+    }
 };
 
 // 1. Listar Títulos (Consolidado)
 router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (req, res) => {
-    const { dataInicio, dataFim, status } = req.query; // status do ERP (Aberto/Pago)
+    const { dataInicio, dataFim, status } = req.query;
+
+    console.log(`[FINANCEIRO] Buscando títulos de ${dataInicio} a ${dataFim}. Status: ${status}`);
 
     try {
         // 1. Busca no ERP (SEI)
@@ -52,83 +54,90 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
             FROM apagar 
             WHERE ap_dtvenc BETWEEN ? AND ?
         `;
-        const paramsSei = [dataInicio || new Date().toISOString().split('T')[0], dataFim || new Date().toISOString().split('T')[0]];
+        const paramsSei = [dataInicio, dataFim];
 
-        // Filtro opcional de status do ERP (1=Pago, ''=Aberto)
         if (status === 'aberto') querySei += ` AND (ap_status IS NULL OR ap_status = '')`;
         if (status === 'pago') querySei += ` AND ap_status = '1'`;
 
         querySei += ` ORDER BY ap_dtvenc ASC LIMIT 500`;
 
+        console.log("[FINANCEIRO] Executando query no SEI...");
         const [titulosERP] = await seiPool.query(querySei, paramsSei);
+        console.log(`[FINANCEIRO] Retornados ${titulosERP.length} registros do ERP.`);
 
         if (titulosERP.length === 0) return res.json([]);
 
-        // 2. Busca dados Extras (Gerencial) para os IDs encontrados
+        // 2. Busca dados Extras (Gerencial)
         const ids = titulosERP.map(t => t.ap_regist);
-        const [extras] = await gerencialPool.query(
-            `SELECT * FROM financeiro_titulos_extra WHERE id_titulo_erp IN (?)`, 
-            [ids]
-        );
+        
+        // Verifica se a tabela existe antes de tentar consultar (Diagnóstico)
+        try {
+            const [extras] = await gerencialPool.query(
+                `SELECT * FROM financeiro_titulos_extra WHERE id_titulo_erp IN (?)`, 
+                [ids]
+            );
+            
+            // 3. Mescla os dados
+            const resultado = titulosERP.map(t => {
+                const extra = extras.find(e => e.id_titulo_erp === t.ap_regist);
+                return {
+                    id: t.ap_regist,
+                    controle: `${t.ap_ctrlcm}-${t.ap_parcel}`,
+                    fornecedor: t.ap_nomefo,
+                    vencimento: t.ap_dtvenc,
+                    valor: t.ap_valord,
+                    status_erp: t.ap_status === '1' ? 'PAGO' : 'ABERTO',
+                    filial: t.ap_filial,
+                    modalidade: extra ? extra.modalidade : 'BOLETO',
+                    status_cheque: extra ? extra.status_cheque : 'NAO_APLICA',
+                    numero_cheque: extra ? extra.numero_cheque : '',
+                    observacao: extra ? extra.observacao : ''
+                };
+            });
 
-        // 3. Mescla os dados
-        const resultado = titulosERP.map(t => {
-            const extra = extras.find(e => e.id_titulo_erp === t.ap_regist);
-            return {
-                id: t.ap_regist,
-                controle: `${t.ap_ctrlcm}-${t.ap_parcel}`,
-                fornecedor: t.ap_nomefo,
-                vencimento: t.ap_dtvenc,
-                valor: t.ap_valord,
-                status_erp: t.ap_status === '1' ? 'PAGO' : 'ABERTO',
-                filial: t.ap_filial,
-                // Dados Extras (ou padrão se não existir)
-                modalidade: extra ? extra.modalidade : 'BOLETO',
-                status_cheque: extra ? extra.status_cheque : 'NAO_APLICA',
-                numero_cheque: extra ? extra.numero_cheque : '',
-                observacao: extra ? extra.observacao : ''
-            };
-        });
+            res.json(resultado);
 
-        res.json(resultado);
+        } catch (errExtra) {
+            console.error("ERRO CRÍTICO NO BANCO GERENCIAL:", errExtra.message);
+            if (errExtra.code === 'ER_NO_SUCH_TABLE') {
+                console.error(">>> DICA: Você esqueceu de criar a tabela 'financeiro_titulos_extra' no banco gerencial?");
+            }
+            throw errExtra; // Repassa o erro para o catch principal
+        }
 
     } catch (error) {
-        console.error("Erro ao listar títulos:", error);
-        res.status(500).json({ error: 'Erro ao buscar financeiro.' });
+        console.error("ERRO GERAL NA ROTA /TITULOS:", error);
+        // Retorna o erro exato para o frontend para ajudar no debug (apenas em dev)
+        res.status(500).json({ error: 'Erro no servidor: ' + error.message });
     }
 });
 
-// 2. Atualizar Classificação (Operacional)
+// 2. Atualizar Classificação
 router.post('/titulos/:id/classificar', authenticateToken, checkPerm('fin_pagar_oper'), async (req, res) => {
     const idTitulo = req.params.id;
     const { modalidade, status_cheque, numero_cheque, observacao } = req.body;
     const idUsuario = req.user.userId;
 
     try {
-        // Verifica se já existe registro
         const [existe] = await gerencialPool.query('SELECT id FROM financeiro_titulos_extra WHERE id_titulo_erp = ?', [idTitulo]);
 
         if (existe.length > 0) {
-            // Atualiza
             await gerencialPool.query(`
                 UPDATE financeiro_titulos_extra 
                 SET modalidade = ?, status_cheque = ?, numero_cheque = ?, observacao = ?, id_usuario_alteracao = ?
                 WHERE id_titulo_erp = ?
             `, [modalidade, status_cheque, numero_cheque, observacao, idUsuario, idTitulo]);
         } else {
-            // Cria
             await gerencialPool.query(`
                 INSERT INTO financeiro_titulos_extra 
                 (id_titulo_erp, modalidade, status_cheque, numero_cheque, observacao, id_usuario_alteracao)
                 VALUES (?, ?, ?, ?, ?, ?)
             `, [idTitulo, modalidade, status_cheque, numero_cheque, observacao, idUsuario]);
         }
-
-        res.json({ message: 'Classificação atualizada com sucesso.' });
-
+        res.json({ message: 'Salvo com sucesso.' });
     } catch (error) {
-        console.error("Erro ao classificar:", error);
-        res.status(500).json({ error: 'Erro ao salvar classificação.' });
+        console.error("Erro ao salvar classificação:", error);
+        res.status(500).json({ error: error.message });
     }
 });
 

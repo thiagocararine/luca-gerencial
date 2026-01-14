@@ -48,9 +48,23 @@ async function loadTitulos() {
         const res = await fetch(`${API_BASE}/titulos?dataInicio=${inicio}&dataFim=${fim}&status=${status}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
+        
+        // Verifica se a resposta foi OK (200)
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || `Erro HTTP ${res.status}`);
+        }
+
         const dados = await res.json();
         
         tbody.innerHTML = '';
+        
+        // Verifica se dados é realmente um array antes de usar forEach
+        if (!Array.isArray(dados)) {
+            console.error("Formato inesperado recebido:", dados);
+            throw new Error("O servidor não retornou uma lista válida.");
+        }
+
         if (dados.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6" class="text-center p-4 text-gray-500">Nenhum título encontrado no período.</td></tr>';
             return;
@@ -60,21 +74,16 @@ async function loadTitulos() {
             const tr = document.createElement('tr');
             tr.className = 'border-b hover:bg-gray-50';
             
-            // Formatação de Valores e Datas
             const valorFmt = parseFloat(t.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-            const dataFmt = new Date(t.vencimento).toLocaleDateString('pt-BR');
+            const dataFmt = new Date(t.vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'});
             
-            // Badge da Modalidade
             let badgeHtml = '';
             if (t.modalidade === 'CHEQUE') {
-                let corClass = 'status-cheque-warn'; // Amarelo (Padrão/Entregue)
+                let corClass = 'status-cheque-warn';
                 let texto = `Cheque`;
-                
                 if (t.status_cheque === 'COMPENSADO') corClass = 'status-cheque-ok';
                 else if (t.status_cheque.includes('DEVOLVIDO')) corClass = 'status-cheque-danger';
-                
                 if (t.status_cheque !== 'NAO_APLICA') texto += ` (${t.status_cheque.replace('_', ' ')})`;
-                
                 badgeHtml = `<button onclick='openEditModal(${JSON.stringify(t)})' class="status-badge ${corClass}">${texto}</button>`;
             } else {
                 badgeHtml = `<button onclick='openEditModal(${JSON.stringify(t)})' class="status-badge status-boleto">${t.modalidade}</button>`;
@@ -95,7 +104,7 @@ async function loadTitulos() {
 
     } catch (err) {
         console.error(err);
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-red-500 p-4">Erro ao carregar dados.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-red-500 p-4 font-bold">Erro: ${err.message}</td></tr>`;
     }
 }
 
