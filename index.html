@@ -86,6 +86,24 @@
                         </ul>
                     </li>
 
+                    <li>
+                        <button type="button" class="sidebar-link w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100/80 hover:text-gray-900" onclick="toggleSubmenu('submenu-financeiro')">
+                            <div class="flex items-center gap-3">
+                                <span data-feather="dollar-sign"></span>
+                                <span class="sidebar-text">Financeiro</span>
+                            </div>
+                            <span data-feather="chevron-down" class="w-4 h-4 transition-transform duration-200" id="icon-financeiro"></span>
+                        </button>
+                        <ul id="submenu-financeiro" class="hidden pl-4 mt-1 space-y-1">
+                            <li>
+                                <a href="financeiro.html" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50/50">
+                                    <i data-feather="file-text" class="w-4 h-4"></i>
+                                    <span class="sidebar-text">Contas a Pagar</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
                     <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
                 </ul>
             </div>
