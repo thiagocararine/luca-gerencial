@@ -16,36 +16,76 @@ const dbConfigSei = {
 const seiPool = mysql.createPool(dbConfigSei);
 const gerencialPool = mysql.createPool(dbConfig);
 
-// Middleware de Permissão
-const checkPerm = (perm) => async (req, res, next) => {
+/**
+ * Middleware de Permissão Ajustado para 'cad_user' e 'perfis_acesso'
+ */
+const checkPerm = (permNecessaria) => async (req, res, next) => {
     try {
-        const [rows] = await gerencialPool.query(
-            `SELECT p.modulos FROM usuarios u JOIN perfis p ON u.id_perfil = p.id WHERE u.id = ?`, 
-            [req.user.userId]
-        );
-        if (rows.length === 0) return res.status(403).json({ error: 'Perfil não encontrado' });
-        
-        let mods = [];
-        try { mods = typeof rows[0].modulos === 'string' ? JSON.parse(rows[0].modulos) : rows[0].modulos; } catch(e) {}
-        
-        if (mods.includes('fin_pagar_admin') || mods.includes(perm)) return next();
-        if (perm === 'fin_pagar_view' && mods.includes('fin_pagar_oper')) return next();
+        const userId = req.user.userId; // Certifique-se que o token JWT traz o ID do usuário neste campo
 
-        res.status(403).json({ error: 'Acesso negado.' });
+        // 1. Busca o perfil na tabela 'cad_user' (com ID maiúsculo) e 'perfis_acesso'
+        const [userRows] = await gerencialPool.query(
+            `SELECT u.id_perfil, pa.nome_perfil 
+             FROM cad_user u 
+             JOIN perfis_acesso pa ON u.id_perfil = pa.id 
+             WHERE u.ID = ?`, 
+            [userId]
+        );
+
+        if (userRows.length === 0) {
+            return res.status(403).json({ error: 'Usuário não encontrado na tabela cad_user.' });
+        }
+
+        const { id_perfil, nome_perfil } = userRows[0];
+
+        // 2. Superusuários (Admin/Financeiro) têm acesso direto
+        if (nome_perfil === 'Administrador' || nome_perfil === 'Financeiro') {
+            return next();
+        }
+
+        // 3. Verifica permissão específica na tabela 'perfil_permissoes'
+        const [permRows] = await gerencialPool.query(
+            `SELECT permitido FROM perfil_permissoes 
+             WHERE id_perfil = ? AND nome_modulo = ? AND permitido = 1`,
+            [id_perfil, permNecessaria]
+        );
+
+        // Lógica de hierarquia: Quem tem '_oper' também pode ver ('_view')
+        let temPermissao = permRows.length > 0;
+
+        if (!temPermissao && permNecessaria.includes('_view')) {
+             const permOper = permNecessaria.replace('_view', '_oper');
+             const [operRows] = await gerencialPool.query(
+                `SELECT permitido FROM perfil_permissoes 
+                 WHERE id_perfil = ? AND nome_modulo = ? AND permitido = 1`,
+                [id_perfil, permOper]
+            );
+            if (operRows.length > 0) temPermissao = true;
+        }
+
+        if (temPermissao) {
+            return next();
+        } else {
+            return res.status(403).json({ error: 'Acesso negado a este módulo.' });
+        }
+
     } catch (e) { 
         console.error("Erro no checkPerm:", e);
-        res.status(500).json({ error: 'Erro de permissão' }); 
+        // Ajuda no diagnóstico se o nome da tabela ainda estiver errado
+        if(e.code === 'ER_NO_SUCH_TABLE') {
+            console.error("ERRO DE TABELA: Verifique se 'perfis_acesso' ou 'cad_user' estão escritos corretamente.");
+        }
+        res.status(500).json({ error: 'Erro interno de permissão' }); 
     }
 };
 
-// 1. Listar Títulos (Consolidado)
+// --- ROTAS ---
+
+// 1. Listar Títulos
 router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (req, res) => {
     const { dataInicio, dataFim, status } = req.query;
 
-    console.log(`[FINANCEIRO] Buscando títulos de ${dataInicio} a ${dataFim}. Status: ${status}`);
-
     try {
-        // 1. Busca no ERP (SEI)
         let querySei = `
             SELECT 
                 ap_regist, ap_ctrlcm, ap_parcel, ap_nomefo, ap_numenf, 
@@ -61,23 +101,18 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
 
         querySei += ` ORDER BY ap_dtvenc ASC LIMIT 500`;
 
-        console.log("[FINANCEIRO] Executando query no SEI...");
         const [titulosERP] = await seiPool.query(querySei, paramsSei);
-        console.log(`[FINANCEIRO] Retornados ${titulosERP.length} registros do ERP.`);
 
         if (titulosERP.length === 0) return res.json([]);
 
-        // 2. Busca dados Extras (Gerencial)
-        const ids = titulosERP.map(t => t.ap_regist);
-        
-        // Verifica se a tabela existe antes de tentar consultar (Diagnóstico)
+        // Busca dados extras (Cheques/Modalidade)
         try {
+            const ids = titulosERP.map(t => t.ap_regist);
             const [extras] = await gerencialPool.query(
                 `SELECT * FROM financeiro_titulos_extra WHERE id_titulo_erp IN (?)`, 
                 [ids]
             );
-            
-            // 3. Mescla os dados
+
             const resultado = titulosERP.map(t => {
                 const extra = extras.find(e => e.id_titulo_erp === t.ap_regist);
                 return {
@@ -96,23 +131,35 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
             });
 
             res.json(resultado);
-
-        } catch (errExtra) {
-            console.error("ERRO CRÍTICO NO BANCO GERENCIAL:", errExtra.message);
-            if (errExtra.code === 'ER_NO_SUCH_TABLE') {
-                console.error(">>> DICA: Você esqueceu de criar a tabela 'financeiro_titulos_extra' no banco gerencial?");
+        } catch (errDb) {
+            // Auto-criação da tabela extra se não existir
+            if (errDb.code === 'ER_NO_SUCH_TABLE' && errDb.message.includes('financeiro_titulos_extra')) {
+                console.log("Criando tabela financeiro_titulos_extra...");
+                await gerencialPool.query(`
+                    CREATE TABLE IF NOT EXISTS financeiro_titulos_extra (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        id_titulo_erp INT NOT NULL,
+                        modalidade ENUM('BOLETO', 'CHEQUE', 'PIX', 'DINHEIRO', 'OUTROS') DEFAULT 'BOLETO',
+                        status_cheque ENUM('NAO_APLICA', 'EM_MAOS', 'ENTREGUE', 'COMPENSADO', 'DEVOLVIDO_1X', 'DEVOLVIDO_2X', 'RESGATADO', 'REAPRESENTADO') DEFAULT 'NAO_APLICA',
+                        numero_cheque VARCHAR(30),
+                        observacao TEXT,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        id_usuario_alteracao INT,
+                        UNIQUE KEY idx_titulo_erp (id_titulo_erp)
+                    )
+                `);
+                return res.json([]); 
             }
-            throw errExtra; // Repassa o erro para o catch principal
+            throw errDb;
         }
 
     } catch (error) {
-        console.error("ERRO GERAL NA ROTA /TITULOS:", error);
-        // Retorna o erro exato para o frontend para ajudar no debug (apenas em dev)
-        res.status(500).json({ error: 'Erro no servidor: ' + error.message });
+        console.error("Erro rota /titulos:", error);
+        res.status(500).json({ error: error.message });
     }
 });
 
-// 2. Atualizar Classificação
+// 2. Classificar Título
 router.post('/titulos/:id/classificar', authenticateToken, checkPerm('fin_pagar_oper'), async (req, res) => {
     const idTitulo = req.params.id;
     const { modalidade, status_cheque, numero_cheque, observacao } = req.body;
@@ -136,7 +183,6 @@ router.post('/titulos/:id/classificar', authenticateToken, checkPerm('fin_pagar_
         }
         res.json({ message: 'Salvo com sucesso.' });
     } catch (error) {
-        console.error("Erro ao salvar classificação:", error);
         res.status(500).json({ error: error.message });
     }
 });
