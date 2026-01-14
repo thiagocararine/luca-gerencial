@@ -24,10 +24,15 @@ const ALL_MODULES = {
     'entregas': 'Entregas',
     'configuracoes': 'Configurações',
     
-    // Novas Permissões Granulares para o Estoque
+    // Módulo Estoque (Endereçamento) ---
     'estoque_view': 'Estoque - Visualizar (Consultas)',
     'estoque_oper': 'Estoque - Operacional (Criar/Vincular)',
-    'estoque_admin': 'Estoque - Gerencial (Contagem/Ajuste)'
+    'estoque_admin': 'Estoque - Gerencial (Contagem/Ajuste)',
+
+    // Módulo Financeiro (Contas a Pagar) ---
+    'fin_pagar_view': 'Financeiro (Pagar) - Visualizar',
+    'fin_pagar_oper': 'Financeiro (Pagar) - Classificar/Editar Cheques',
+    'fin_pagar_admin': 'Financeiro (Pagar) - Gerencial (Relatórios/Auditoria)'
 };
 
 /**
