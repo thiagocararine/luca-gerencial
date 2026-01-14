@@ -38,7 +38,8 @@ const settingsRoutes = require('./routes/routes_settings');
 const logisticaRoutes = require('./routes/routes_logistica');
 const produtosRoutes = require('./routes/routes_produtos');
 const entregasRoutes = require('./routes/routes_entregas');
-const estoqueRoutes = require('./routes/routes_estoque'); // <--- NOVO
+const estoqueRoutes = require('./routes/routes_estoque');
+const financeiroRoutes = require('./routes/routes_financeiro');
 
 // 5. Utilização das Rotas da API
 const apiRouter = express.Router();
@@ -49,7 +50,8 @@ apiRouter.use('/settings', settingsRoutes);
 apiRouter.use('/logistica', logisticaRoutes);
 apiRouter.use('/produtos', produtosRoutes);
 apiRouter.use('/entregas', entregasRoutes);
-apiRouter.use('/estoque', estoqueRoutes); // <--- NOVO
+apiRouter.use('/estoque', estoqueRoutes);
+apiRouter.use('/financeiro', financeiroRoutes);
 
 app.use('/api', apiRouter);
 
@@ -60,7 +62,9 @@ app.get('/estoque', (req, res) => {
     res.sendFile(path.join(__dirname, 'estoque.html'));
     // Se estiver na pasta public, use: res.sendFile(path.join(__dirname, 'public', 'estoque.html'));
 });
-
+app.get('/financeiro', (req, res) => {
+    res.sendFile(path.join(__dirname, 'financeiro.html'));
+});
 // (Opcional) Rotas para as outras páginas, se não estiver usando express.static total
 app.get('/entregas', (req, res) => res.sendFile(path.join(__dirname, 'entregas.html')));
 app.get('/produtos', (req, res) => res.sendFile(path.join(__dirname, 'produtos.html')));
