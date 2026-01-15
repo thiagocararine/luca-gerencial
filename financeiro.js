@@ -20,7 +20,7 @@ const MAPA_TIPOS_DESPESA = {
     '12': 'Veículos'
 };
 
-// Mapeamento exato da sua imagem (Indicação de Pagamento)
+// Mapeamento da Indicação de Pagamento (Centro de Custo)
 const MAPA_IND_PAGAMENTO = {
     '1': '01 - Doc. Parada Angelica (Dentro)',
     '2': '02 - Cheque Predatado',
@@ -62,17 +62,23 @@ async function initPage() {
     const hoje = new Date();
     const passado = new Date(); passado.setDate(hoje.getDate() - 30);
     const futuro = new Date(); futuro.setDate(hoje.getDate() + 30);
-    document.getElementById('filtro-inicio').value = passado.toISOString().split('T')[0];
-    document.getElementById('filtro-fim').value = futuro.toISOString().split('T')[0];
+    
+    // Verifica se os elementos existem antes de atribuir valor (prevenção de erro)
+    const elInicio = document.getElementById('filtro-inicio');
+    const elFim = document.getElementById('filtro-fim');
+    if(elInicio) elInicio.value = passado.toISOString().split('T')[0];
+    if(elFim) elFim.value = futuro.toISOString().split('T')[0];
 
     // 3. Popula Select Tipos de Documento
     const selectTipo = document.getElementById('filtro-tipo-doc');
-    while (selectTipo.options.length > 1) { selectTipo.remove(1); }
-    for (const [id, nome] of Object.entries(MAPA_TIPOS_DESPESA)) {
-        const opt = document.createElement('option');
-        opt.value = id;
-        opt.textContent = nome;
-        selectTipo.appendChild(opt);
+    if (selectTipo) {
+        while (selectTipo.options.length > 1) { selectTipo.remove(1); }
+        for (const [id, nome] of Object.entries(MAPA_TIPOS_DESPESA)) {
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.textContent = nome;
+            selectTipo.appendChild(opt);
+        }
     }
 
     // 4. Inicializa Tabela
@@ -80,9 +86,13 @@ async function initPage() {
 
     // 5. Configura Eventos
     document.getElementById('btn-filtrar').addEventListener('click', loadTitulos);
-    document.getElementById('filtro-busca').addEventListener('keypress', (e) => { 
-        if(e.key === 'Enter') loadTitulos(); 
-    });
+    
+    const inputBusca = document.getElementById('filtro-busca');
+    if(inputBusca) {
+        inputBusca.addEventListener('keypress', (e) => { 
+            if(e.key === 'Enter') loadTitulos(); 
+        });
+    }
     
     document.getElementById('logout-btn').addEventListener('click', () => { 
         localStorage.removeItem('lucaUserToken'); 
@@ -90,11 +100,15 @@ async function initPage() {
     });
     
     // Menu Colunas
-    document.getElementById('btn-colunas').addEventListener('click', (e) => {
-        e.stopPropagation();
-        const menu = document.getElementById('menu-colunas');
-        menu.classList.toggle('hidden');
-    });
+    const btnColunas = document.getElementById('btn-colunas');
+    if(btnColunas) {
+        btnColunas.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const menu = document.getElementById('menu-colunas');
+            menu.classList.toggle('hidden');
+        });
+    }
+
     // Fecha menu ao clicar fora
     document.addEventListener('click', (e) => {
         const menu = document.getElementById('menu-colunas');
@@ -110,24 +124,24 @@ async function initPage() {
     document.getElementById('btn-cancelar-modal').addEventListener('click', () => toggleModal(false));
     document.getElementById('btn-salvar-modal').addEventListener('click', saveClassificacao);
 
-    // 6. Carrega Dados
+    // 6. Carrega Dados Iniciais
     loadTitulos();
 }
 
 // --- CONFIGURAÇÃO DA TABELA (TABULATOR) ---
 function initTable() {
     table = new Tabulator("#tabela-financeiro", {
-        layout: "fitDataFill", // Ajusta colunas ao conteúdo
-        height: "100%", // 100% da altura da div
+        layout: "fitDataFill", 
+        height: "100%", 
         placeholder: "Sem dados para exibir",
-        reactiveData: true,
+        reactiveData: true, // Reage a alterações no array de dados
         
-        // Persistência: Lembra colunas ocultas/movidas
+        // Persistência: Lembra colunas ocultas/movidas no navegador
         persistence: true, 
-        persistenceID: "financeiroConfigFinalv1", 
+        persistenceID: "financeiroConfigV7", 
         
-        movableColumns: true, // ARRASTAR E SOLTAR
-        resizableColumns: true, // REDIMENSIONAR
+        movableColumns: true, 
+        resizableColumns: true,
 
         columns: [
             { title: "ID", field: "id", visible: false },
@@ -165,12 +179,9 @@ function initTable() {
                 width: 190, 
                 visible: true,
                 formatter: (cell) => {
-                    // Converte código (1, 2) para Texto do Mapa
                     const cod = cell.getValue();
-                    // Tenta parsear int, se falhar usa string
                     let key = parseInt(cod);
                     if (isNaN(key)) key = cod;
-                    
                     let text = MAPA_IND_PAGAMENTO[key] || cod || '-';
                     return `<div class='truncate text-[10px] text-gray-500' title='${text}'>${text}</div>`;
                 }
@@ -195,7 +206,8 @@ function initTable() {
                 field: "valor_devido", 
                 formatter: moneyFormatter, 
                 hozAlign: "right", 
-                width: 110 
+                width: 110,
+                // Removemos o bottomCalc nativo para usar o rodapé customizado amarelo
             },
             { title: "Valor Pago", field: "valor_pago", formatter: moneyFormatter, hozAlign: "right", width: 110, visible: false },
             { title: "Juros", field: "juros", formatter: moneyFormatter, hozAlign: "right", width: 90, visible: false },
@@ -340,12 +352,17 @@ async function loadTitulos() {
         const dados = await res.json();
         table.setData(dados);
         
-        // Ajusta a coluna dinâmica de Data
+        // Ajusta dinamicamente a primeira coluna (Título e Campo) com base no filtro de data
         const tipoData = document.getElementById('filtro-tipo-data').value;
         const colData = table.getColumn("vencimento");
         
         if(colData) {
-            const fieldMap = { 'vencimento': 'vencimento', 'lancamento': 'lancamento', 'baixa': 'baixa', 'cancelamento': 'cancelamento' };
+            const fieldMap = { 
+                'vencimento': 'vencimento', 
+                'lancamento': 'lancamento', 
+                'baixa': 'baixa', 
+                'cancelamento': 'cancelamento' 
+            };
             colData.updateDefinition({ 
                 title: tipoData.charAt(0).toUpperCase() + tipoData.slice(1), 
                 field: fieldMap[tipoData] || 'vencimento' 
@@ -360,7 +377,7 @@ async function loadTitulos() {
 
 // --- ATUALIZAÇÃO DO RODAPÉ (TOTAIS) ---
 function atualizarTotais(dados) {
-    // Soma o 'valor_devido' dos registros visíveis/carregados
+    // Calcula soma
     const total = dados.reduce((acc, curr) => acc + (parseFloat(curr.valor_devido) || 0), 0);
     
     // Atualiza contadores no HTML
@@ -371,9 +388,9 @@ function atualizarTotais(dados) {
     if(elValor) {
         elValor.textContent = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         // Animação visual
-        elValor.classList.remove('scale-105'); // Reset
-        void elValor.offsetWidth; // Trigger reflow
-        elValor.classList.add('scale-105'); // Anima
+        elValor.classList.remove('scale-105'); 
+        void elValor.offsetWidth; 
+        elValor.classList.add('scale-105'); 
     }
 }
 
@@ -470,7 +487,7 @@ async function saveClassificacao() {
         if (!res.ok) throw new Error('Erro ao salvar');
 
         toggleModal(false);
-        table.updateData([{ id: parseInt(id), ...payload }]); // Atualiza tabela localmente
+        table.updateData([{ id: parseInt(id), ...payload }]); 
         
     } catch (err) {
         alert('Falha: ' + err.message);
