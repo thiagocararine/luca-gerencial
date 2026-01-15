@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', initPage);
 
 const API_BASE = '/api/financeiro';
-let table; // Instância global do Tabulator
+let table; // Instância global da tabela Tabulator
 
 // --- Constantes e Mapeamentos ---
 const MAPA_TIPOS_DESPESA = {
@@ -26,7 +26,7 @@ const CORES_FILIAL = {
     'LCMAT': 'bg-orange-100 text-orange-800 border-orange-200'
 };
 
-// --- Funções Auxiliares ---
+// --- Funções Auxiliares de Sessão ---
 function getToken() { return localStorage.getItem('lucaUserToken'); }
 
 function getUserName() { 
@@ -35,23 +35,25 @@ function getUserName() {
     try { return JSON.parse(atob(t.split('.')[1])).nome; } catch(e){ return 'Usuário'; } 
 }
 
-// --- Inicialização ---
+// --- Inicialização da Página ---
 async function initPage() {
     // 1. Verifica Autenticação
     if (!getToken()) { window.location.href = 'login.html'; return; }
     document.getElementById('user-name').textContent = getUserName();
     
-    // 2. Define Datas Padrão
+    // 2. Define Datas Padrão (Mês Atual)
     const hoje = new Date();
     const passado = new Date(); passado.setDate(hoje.getDate() - 30);
     const futuro = new Date(); futuro.setDate(hoje.getDate() + 30);
+    
     document.getElementById('filtro-inicio').value = passado.toISOString().split('T')[0];
     document.getElementById('filtro-fim').value = futuro.toISOString().split('T')[0];
 
-    // 3. Popula Select Tipos de Documento
+    // 3. Popula Select de Tipos de Documento
     const selectTipo = document.getElementById('filtro-tipo-doc');
-    // Remove tudo exceto "Todos"
+    // Remove opções antigas exceto "Todos"
     while (selectTipo.options.length > 1) { selectTipo.remove(1); }
+    
     for (const [id, nome] of Object.entries(MAPA_TIPOS_DESPESA)) {
         const opt = document.createElement('option');
         opt.value = id;
@@ -62,20 +64,25 @@ async function initPage() {
     // 4. Inicializa Tabela Tabulator
     initTable();
 
-    // 5. Listeners de Eventos
+    // 5. Configura Listeners (Eventos)
+    
+    // Botão Filtrar
     document.getElementById('btn-filtrar').addEventListener('click', loadTitulos);
+    
+    // Enter na busca
     document.getElementById('filtro-busca').addEventListener('keypress', (e) => { 
         if(e.key === 'Enter') loadTitulos(); 
     });
     
+    // Logout
     document.getElementById('logout-btn').addEventListener('click', () => { 
         localStorage.removeItem('lucaUserToken'); 
         window.location.href = 'login.html'; 
     });
     
-    // Menu Colunas (Toggle)
+    // Menu de Colunas (Toggle)
     document.getElementById('btn-colunas').addEventListener('click', (e) => {
-        e.stopPropagation();
+        e.stopPropagation(); // Impede que o clique feche o menu imediatamente
         const menu = document.getElementById('menu-colunas');
         menu.classList.toggle('hidden');
     });
@@ -84,40 +91,54 @@ async function initPage() {
     document.addEventListener('click', (e) => {
         const btn = document.getElementById('btn-colunas');
         const menu = document.getElementById('menu-colunas');
+        // Se clicou fora do botão E fora do menu, fecha
         if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && !btn.contains(e.target)) {
             menu.classList.add('hidden');
         }
     });
 
-    // Modal Events
+    // Modal de Edição
     document.getElementById('modal-modalidade').addEventListener('change', togglePainelCheque);
     document.getElementById('btn-fechar-modal-x').addEventListener('click', () => toggleModal(false));
     document.getElementById('btn-cancelar-modal').addEventListener('click', () => toggleModal(false));
     document.getElementById('btn-salvar-modal').addEventListener('click', saveClassificacao);
 
-    // 6. Carrega Dados Iniciais
+    // 6. Carrega os dados iniciais
     loadTitulos();
 }
 
 // --- Configuração da Tabela (Tabulator) ---
 function initTable() {
     table = new Tabulator("#tabela-financeiro", {
-        layout: "fitDataFill", // Colunas se ajustam, mas ocupam largura total
-        height: "100%", // Ocupa altura do pai
-        placeholder: "Sem dados para exibir",
-        reactiveData: true, // Reage a mudanças no array de dados
-        persistence: true, // Salva ordem/tamanho das colunas no navegador
-        persistenceID: "financeiroConfigV2", // ID único para salvar config
+        layout: "fitDataFill", // Colunas se ajustam ao conteúdo, mas ocupam a largura total se sobrar espaço
+        height: "100%", // Ocupa toda a altura da div pai
+        placeholder: "Sem dados para exibir", // Mensagem quando vazia
+        reactiveData: true, // Reage a alterações no array de dados
+        
+        // Persistência: Lembra a ordem e tamanho das colunas no navegador do usuário
+        persistence: true, 
+        persistenceID: "financeiroConfigV4", 
+        
+        movableColumns: true, // PERMITE ARRASTAR COLUNAS
+        resizableColumns: true, // PERMITE REDIMENSIONAR COLUNAS
+
         columns: [
-            { title: "ID", field: "id", visible: false },
+            { title: "ID", field: "id", visible: false }, // Oculto, chave primária
+            
+            // Grupo: Datas
             { 
                 title: "Vencimento", 
                 field: "vencimento", 
                 formatter: dateFormatter, 
                 hozAlign: "center", 
                 width: 100,
-                headerSortStartingDir: "asc" 
+                headerSortStartingDir: "asc",
+                frozen: true // Congela esta coluna na esquerda ao rolar horizontalmente
             },
+            { title: "Lançamento", field: "lancamento", formatter: dateFormatter, hozAlign: "center", width: 90, visible: false },
+            { title: "Baixa", field: "baixa", formatter: dateFormatter, hozAlign: "center", width: 90, visible: false },
+            
+            // Grupo: Identificação
             { 
                 title: "Filial", 
                 field: "filial", 
@@ -126,38 +147,56 @@ function initTable() {
                 width: 80 
             },
             { 
-                title: "Fornecedor", 
+                title: "Razão Social", 
                 field: "fornecedor", 
                 width: 220, 
                 formatter: (cell) => `<div class='truncate font-bold text-gray-700' title='${cell.getValue()}'>${cell.getValue()}</div>` 
             },
             { 
-                title: "Histórico / C. Custo", 
-                field: "centro_custo", 
-                width: 180, 
-                formatter: (cell) => {
-                    const row = cell.getRow().getData();
-                    const texto = cell.getValue() || row.historico || "";
-                    return `<div class='truncate text-[10px] text-gray-500' title='${texto}'>${texto}</div>`;
-                }
+                title: "Fantasia", 
+                field: "fantasia", 
+                width: 150, 
+                visible: false // Oculto por padrão, usuário pode ativar
             },
+            
+            // Grupo: Documento
             { title: "NF", field: "nf", hozAlign: "center", width: 80 },
             { title: "Duplicata", field: "duplicata", hozAlign: "center", width: 80, visible: false },
+            
+            // Grupo: Detalhes
             { 
-                title: "Tipo", 
+                title: "Tipo Despesa", 
                 field: "tipo_despesa_cod", 
-                width: 110,
+                width: 120,
                 formatter: (cell) => `<span class='truncate block w-full' title='${MAPA_TIPOS_DESPESA[cell.getValue()] || ""}'>${MAPA_TIPOS_DESPESA[cell.getValue()] || '-'}</span>`
             },
+            { 
+                title: "Centro de Custo", 
+                field: "centro_custo", 
+                width: 150, 
+                visible: true,
+                formatter: (cell) => `<div class='truncate text-[10px] text-gray-500' title='${cell.getValue()}'>${cell.getValue() || '-'}</div>`
+            },
+            { 
+                title: "Histórico", 
+                field: "historico", 
+                width: 200, 
+                visible: true,
+                formatter: (cell) => `<div class='truncate text-[10px] text-gray-500' title='${cell.getValue()}'>${cell.getValue() || '-'}</div>`
+            },
+            
+            // Grupo: Valores
             { 
                 title: "Valor", 
                 field: "valor_devido", 
                 formatter: moneyFormatter, 
                 hozAlign: "right", 
                 width: 110,
-                bottomCalc: "sum", // Calcula soma automaticamente se quiser, mas já fazemos manual
+                bottomCalc: "sum", // SOMA AUTOMÁTICA NO RODAPÉ
                 bottomCalcFormatter: moneyFormatter 
             },
+            
+            // Grupo: Status
             { 
                 title: "Status", 
                 field: "status_erp", 
@@ -165,6 +204,8 @@ function initTable() {
                 hozAlign: "center", 
                 width: 90 
             },
+            
+            // Grupo: Classificação (Interativo)
             { 
                 title: "Classificação", 
                 field: "modalidade", 
@@ -177,23 +218,25 @@ function initTable() {
                 title: "Observações", 
                 field: "observacao", 
                 width: 150, 
-                formatter: "textarea" 
+                formatter: "textarea",
+                visible: false 
             }
         ],
-        // Evento após carregar dados: Atualiza footer e menu colunas
+        
+        // Evento: Quando os dados terminam de carregar
         dataLoaded: function(data) {
-            atualizarTotais(data);
-            popularMenuColunas();
+            atualizarTotais(data); // Atualiza contador de registros
+            popularMenuColunas(); // Atualiza a lista de checkboxes do menu de colunas
         },
     });
 }
 
-// --- Formatters (HTML dentro da Tabela) ---
+// --- Formatters (Renderizam HTML dentro das células) ---
 
 function dateFormatter(cell) {
     const val = cell.getValue();
     if (!val) return "-";
-    // Exibe data formato BR
+    // Ajuste de timezone para evitar exibir dia anterior
     return new Date(val).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
@@ -209,13 +252,13 @@ function moneyFormatter(cell) {
 }
 
 function statusFormatter(cell) {
-    const val = cell.getValue();
+    const val = cell.getValue(); // PAGO, ABERTO, CANCELADO
     const row = cell.getRow().getData();
     
     if (val === 'PAGO') return `<span class="text-green-700 font-bold bg-green-100 px-1 rounded border border-green-200 text-[10px]">PAGO</span>`;
     if (val === 'CANCELADO') return `<span class="text-gray-400 font-bold bg-gray-50 px-1 rounded border border-gray-200 text-[10px] line-through">CANCELADO</span>`;
     
-    // Verifica Vencimento
+    // Verifica Vencimento se estiver Aberto
     if (row.vencimento && new Date(row.vencimento) < new Date() && val === 'ABERTO') {
         return `<span class="text-red-700 font-bold bg-red-100 px-1 rounded border border-red-200 text-[10px]">VENCIDO</span>`;
     }
@@ -230,20 +273,34 @@ function buttonFormatter(cell) {
     if (row.modalidade === 'CHEQUE') {
         btnClass = 'bg-yellow-100 text-yellow-800 border-yellow-300';
         
-        if (row.status_cheque === 'COMPENSADO') btnClass = 'bg-green-100 text-green-800 border-green-300';
-        else if (row.status_cheque && row.status_cheque.includes('DEVOLVIDO')) btnClass = 'bg-red-100 text-red-800 border-red-300';
+        if (row.status_cheque === 'COMPENSADO') {
+            btnClass = 'bg-green-100 text-green-800 border-green-300';
+        } else if (row.status_cheque && row.status_cheque.includes('DEVOLVIDO')) {
+            btnClass = 'bg-red-100 text-red-800 border-red-300';
+        }
         
+        // Texto do botão: "CHQ #123 (OK)"
         btnText = `CHQ ${row.numero_cheque ? '#' + row.numero_cheque : ''}`;
+        
+        if (row.status_cheque !== 'NAO_APLICA' && row.status_cheque) {
+            const statusCurto = row.status_cheque
+                .replace('DEVOLVIDO_', 'DEV ')
+                .replace('COMPENSADO', 'OK')
+                .replace('ENTREGUE', 'PRÉ')
+                .replace('EM_MAOS', 'MÃOS');
+            btnText += ` (${statusCurto})`;
+        }
     } else if (row.modalidade === 'PIX') {
         btnClass = 'bg-indigo-50 text-indigo-700 border-indigo-200';
     }
 
-    // onclick chama window.openEditModal passando o ID
+    // onclick chama a função global window.openEditModal passando o ID
     return `<button class="btn-status ${btnClass}" onclick="window.openEditModal(${row.id})">${btnText}</button>`;
 }
 
-// --- Carregamento de Dados ---
+// --- Carregamento de Dados (API) ---
 async function loadTitulos() {
+    // Coleta filtros
     const params = new URLSearchParams({
         dataInicio: document.getElementById('filtro-inicio').value,
         dataFim: document.getElementById('filtro-fim').value,
@@ -267,15 +324,14 @@ async function loadTitulos() {
 
         const dados = await res.json();
         
-        // Atualiza os dados da tabela
+        // Atualiza a tabela
         table.setData(dados);
         
-        // Ajusta dinamicamente a primeira coluna com base no tipo de data escolhido
+        // Ajusta dinamicamente a primeira coluna (Título e Campo) com base no filtro de data
         const tipoData = document.getElementById('filtro-tipo-data').value;
-        const colData = table.getColumn("vencimento"); // Pegamos pelo nome do campo original
+        const colData = table.getColumn("vencimento"); // "vencimento" é o field original da coluna 1
         
         if(colData) {
-            // Mapa para saber qual campo do JSON usar
             const fieldMap = {
                 'vencimento': 'vencimento',
                 'lancamento': 'lancamento',
@@ -283,7 +339,7 @@ async function loadTitulos() {
                 'cancelamento': 'cancelamento'
             };
             
-            // Atualiza Título e Campo
+            // Altera o título e o campo de dados que a coluna exibe
             colData.updateDefinition({ 
                 title: tipoData.charAt(0).toUpperCase() + tipoData.slice(1),
                 field: fieldMap[tipoData] || 'vencimento'
@@ -296,16 +352,17 @@ async function loadTitulos() {
     }
 }
 
+// --- Totais e Menu de Colunas ---
+
 function atualizarTotais(dados) {
-    // Tabulator retorna dados visíveis ou todos dependendo da config, aqui usamos os dados carregados
-    // Se quiser somar só o filtrado pelo tabulator: table.getData("active")
     const total = dados.reduce((acc, curr) => acc + (parseFloat(curr.valor_devido) || 0), 0);
     
     document.getElementById('total-registros').textContent = `${dados.length} registros`;
     
-    // Efeito visual simples
     const elValor = document.getElementById('total-valor');
     elValor.textContent = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    
+    // Pequena animação visual
     elValor.classList.add('scale-105');
     setTimeout(() => elValor.classList.remove('scale-105'), 200);
 }
@@ -314,30 +371,32 @@ function popularMenuColunas() {
     const lista = document.getElementById('lista-colunas');
     lista.innerHTML = ''; // Limpa menu
 
+    // Itera sobre as colunas reais da tabela
     table.getColumns().forEach(col => {
         const def = col.getDefinition();
         if (def.field === 'id') return; // Ignora ID
 
         const div = document.createElement('div');
-        div.className = 'flex items-center gap-2 px-2 py-1 hover:bg-gray-50 cursor-pointer rounded';
-        div.onclick = (e) => {
-            // Evita fechar menu ao clicar
-            e.stopPropagation();
-            col.toggle(); // Inverte visibilidade
-            check.checked = col.isVisible();
-        };
-
+        div.className = 'flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 cursor-pointer rounded select-none border-b border-gray-50 last:border-0';
+        
+        // Checkbox
         const check = document.createElement('input');
         check.type = 'checkbox';
         check.checked = col.isVisible();
-        check.className = 'rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer';
-        // Checkbox apenas reflete, o clique na div faz a ação
-        check.onclick = (e) => e.stopPropagation();
-        check.onchange = () => col.toggle();
+        check.className = 'rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer w-3.5 h-3.5';
+        
+        // Função de toggle
+        const toggle = () => {
+            col.toggle();
+            check.checked = col.isVisible();
+        };
+
+        div.onclick = (e) => { e.stopPropagation(); toggle(); };
+        check.onclick = (e) => { e.stopPropagation(); toggle(); };
 
         const label = document.createElement('span');
         label.textContent = def.title;
-        label.className = 'text-gray-700 font-medium';
+        label.className = 'text-gray-700 truncate text-[11px]';
 
         div.appendChild(check);
         div.appendChild(label);
@@ -350,13 +409,17 @@ function popularMenuColunas() {
 function togglePainelCheque() {
     const tipo = document.getElementById('modal-modalidade').value;
     const painel = document.getElementById('painel-cheque');
-    if (tipo === 'CHEQUE') painel.classList.remove('hidden');
-    else painel.classList.add('hidden');
+    if (tipo === 'CHEQUE') {
+        painel.classList.remove('hidden');
+    } else {
+        painel.classList.add('hidden');
+    }
 }
 
 function toggleModal(show) {
     const modal = document.getElementById('modal-cheque');
     const content = document.getElementById('modal-content');
+    
     if (show) {
         modal.classList.remove('opacity-0', 'pointer-events-none', 'hidden');
         setTimeout(() => content.classList.replace('scale-95', 'scale-100'), 10);
@@ -367,7 +430,7 @@ function toggleModal(show) {
     }
 }
 
-// Função Global: Aberta pelo botão HTML da tabela
+// Função Global: Aberta pelo clique no botão da tabela
 window.openEditModal = function(idTitulo) {
     const row = table.getData().find(r => r.id === idTitulo);
     if (!row) return;
@@ -385,8 +448,10 @@ window.openEditModal = function(idTitulo) {
 async function saveClassificacao() {
     const btn = document.getElementById('btn-salvar-modal');
     const originalText = btn.innerHTML;
+    
     btn.disabled = true;
-    btn.innerHTML = 'Salvando...';
+    btn.innerHTML = '<i data-feather="loader" class="animate-spin w-3 h-3"></i> Salvando...';
+    if(typeof feather !== 'undefined') feather.replace();
 
     const id = document.getElementById('modal-id-titulo').value;
     const payload = {
@@ -403,19 +468,18 @@ async function saveClassificacao() {
             body: JSON.stringify(payload)
         });
 
-        if (!res.ok) throw new Error('Erro ao salvar');
+        if (!res.ok) throw new Error('Erro ao salvar classificação');
 
         toggleModal(false);
         
-        // Atualiza a linha localmente para não precisar recarregar tudo (UX melhor)
+        // Atualiza a linha localmente na tabela (sem reload completo, melhor UX)
         table.updateData([{ id: parseInt(id), ...payload }]);
-        
-        // Se quiser forçar recarregamento completo: loadTitulos();
         
     } catch (err) {
         alert('Falha: ' + err.message);
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;
+        if(typeof feather !== 'undefined') feather.replace();
     }
 }
