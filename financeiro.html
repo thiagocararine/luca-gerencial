@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-br" class="h-full bg-gray-100">
+<html lang="pt-br" class="h-full bg-gray-50">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,266 +12,181 @@
 
     <style>
         body { font-family: 'Inter', sans-serif; }
-        .page-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
-        .abstract-background { width: 100%; height: 100%; border-radius: 0; aspect-ratio: auto; }
+        /* Fixa o fundo */
+        .page-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
+        .abstract-background { width: 100%; height: 100%; }
         
-        /* Ajuste Scrollbar */
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb { background: #c7c7c7; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
-
-        /* Sidebar Comportamento */
-        #sidebar.w-20 .sidebar-text { display: none; }
-        #sidebar.w-20 .sidebar-link { justify-content: center; }
-        #company-logo { transition: opacity 0.3s ease-in-out; }
-        #sidebar.w-20 #company-logo { opacity: 0; max-width: 0; }
-
-        /* Status Badges */
-        .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 0.70rem; font-weight: 700; text-transform: uppercase; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 4px; border: 1px solid transparent; }
-        .status-badge:hover { filter: brightness(0.95); transform: translateY(-1px); }
+        /* Tabela Compacta (Estilo Excel) */
+        .table-dense th, .table-dense td { padding: 4px 8px; white-space: nowrap; font-size: 0.75rem; }
+        .table-dense th { font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; background-color: #f3f4f6; color: #374151; border-bottom: 2px solid #e5e7eb; }
+        .table-dense tr:hover { background-color: #e0e7ff; } /* Hover azul claro na linha */
         
+        /* Scrollbar Fina e Elegante */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Badges e Botões */
+        .badge-filial { font-size: 0.65rem; padding: 1px 4px; border-radius: 3px; font-weight: 600; border: 1px solid; }
+        .btn-status { font-size: 0.7rem; padding: 1px 6px; border-radius: 3px; font-weight: 600; text-transform: uppercase; cursor: pointer; transition: 0.2s; border: 1px solid transparent; display: inline-block; text-align: center; min-width: 60px; }
+        .btn-status:hover { transform: scale(1.05); filter: brightness(0.95); }
+        
+        /* Cores de Status Específicas */
         .status-boleto { background: #f3f4f6; color: #4b5563; border-color: #d1d5db; }
         .status-cheque-ok { background: #dcfce7; color: #166534; border-color: #86efac; }
         .status-cheque-warn { background: #fef9c3; color: #854d0e; border-color: #fde047; }
         .status-cheque-danger { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
-        .status-pix { background: #e0e7ff; color: #3730a3; border-color: #a5b4fc; }
     </style>
 </head>
-<body class="h-full text-gray-900">
+<body class="h-full text-gray-900 flex flex-col">
 
-    <div class="page-background">
-        <div class="abstract-background">
-            <div class="tube tube-1"></div><div class="tube tube-2"></div><div class="tube tube-3"></div><div class="tube tube-4"></div>
-            <div class="tube tube-5"></div><div class="tube tube-6"></div><div class="tube tube-7"></div><div class="tube tube-8"></div>
+    <header class="bg-white border-b h-12 flex items-center justify-between px-4 shadow-sm z-20 shrink-0">
+        <div class="flex items-center gap-3">
+            <a href="index.html" class="text-gray-500 hover:text-indigo-600 flex items-center gap-1 font-medium text-xs transition-colors">
+                <i data-feather="arrow-left" class="w-4 h-4"></i> VOLTAR AO MENU
+            </a>
+            <div class="h-6 w-px bg-gray-300 mx-2"></div>
+            <h1 class="text-sm font-bold text-gray-800 uppercase tracking-wide flex items-center gap-2">
+                <i data-feather="dollar-sign" class="w-4 h-4 text-green-600"></i> Painel de Contas a Pagar
+            </h1>
         </div>
-    </div>
+        <div class="flex items-center gap-4">
+            <span class="text-xs text-gray-500">Usuário: <strong id="user-name" class="text-gray-700">...</strong></span>
+            <button id="logout-btn" class="text-xs font-bold text-red-600 hover:text-red-800 border border-red-200 px-3 py-1 rounded hover:bg-red-50 transition-colors">SAIR</button>
+        </div>
+    </header>
 
-    <div class="flex h-full">
-        <nav id="sidebar" class="w-64 bg-white/80 backdrop-blur-sm border-r border-gray-200/50 flex flex-col hidden md:flex flex-shrink-0 transition-all duration-300 ease-in-out">
-            <div class="flex flex-col h-full">
-                <div class="h-16 flex items-center justify-center border-b border-gray-200/50 px-4 gap-2">
-                    <img id="company-logo" src="" alt="Logo" style="display: none;" class="max-h-10 max-w-10">
-                    <h1 class="text-xl font-bold text-indigo-600 overflow-hidden whitespace-nowrap"><span class="sidebar-text">Luca Gerencial</span></h1>
-                </div>
-                <div class="flex-grow p-4 overflow-y-auto">
-                    <ul class="space-y-2">
-                        <li><a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100/80 hover:text-gray-900"><span data-feather="home"></span><span class="sidebar-text">Início / Dashboard</span></a></li>
-                        <li><a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100/80 hover:text-gray-900"><span data-feather="dollar-sign"></span><span class="sidebar-text">Lançamentos</span></a></li>
-                        <li><a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100/80 hover:text-gray-900"><span data-feather="truck"></span><span class="sidebar-text">Logística</span></a></li>
-
-                        <li>
-                            <button type="button" class="sidebar-link w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100/80 hover:text-gray-900" onclick="toggleSubmenu('submenu-expedicao')">
-                                <div class="flex items-center gap-3">
-                                    <span data-feather="package"></span>
-                                    <span class="sidebar-text">Expedição</span>
-                                </div>
-                                <span data-feather="chevron-down" class="w-4 h-4 transition-transform duration-200" id="icon-expedicao"></span>
-                            </button>
-                            <ul id="submenu-expedicao" class="hidden pl-4 mt-1 space-y-1">
-                                <li><a href="entregas.html" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50/50"><i data-feather="map" class="w-4 h-4"></i><span class="sidebar-text">Entregas</span></a></li>
-                                <li><a href="checklist.html" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50/50"><i data-feather="check-circle" class="w-4 h-4"></i><span class="sidebar-text">Checklist Veículos</span></a></li>
-                                <li><a href="produtos.html" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50/50"><i data-feather="tag" class="w-4 h-4"></i><span class="sidebar-text">Cadastro Produtos</span></a></li>
-                                <li><a href="estoque.html" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50/50"><i data-feather="grid" class="w-4 h-4"></i><span class="sidebar-text">Endereçamento</span></a></li>
-                            </ul>
-                        </li>
-
-                        <li>
-                            <button type="button" class="sidebar-link w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100/50" onclick="toggleSubmenu('submenu-financeiro')">
-                                <div class="flex items-center gap-3">
-                                    <span data-feather="briefcase"></span>
-                                    <span class="sidebar-text">Financeiro</span>
-                                </div>
-                                <span data-feather="chevron-down" class="w-4 h-4 transition-transform duration-200 rotate-180" id="icon-financeiro"></span>
-                            </button>
-                            <ul id="submenu-financeiro" class="pl-4 mt-1 space-y-1">
-                                <li>
-                                    <a href="financeiro.html" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-semibold text-indigo-700 bg-indigo-100/50 hover:text-indigo-800">
-                                        <i data-feather="file-text" class="w-4 h-4"></i>
-                                        <span class="sidebar-text">Contas a Pagar</span>
-                                    </a>
-                                </li>
-                            </ul>
-                        </li>
-
-                        <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100/80 hover:text-gray-900"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
-                    </ul>
-                </div>
-                
-                <div class="p-2 border-t border-gray-200/50">
-                    <button id="sidebar-toggle" class="w-full hidden md:flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100/80 focus:outline-none">
-                        <svg id="toggle-icon-collapse" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" /></svg>
-                        <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
-                    </button>
+    <div class="bg-gray-100 p-3 border-b border-gray-200 flex flex-wrap gap-3 items-end shrink-0 shadow-inner">
+        <div class="w-32">
+            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Vencimento De</label>
+            <input type="date" id="filtro-inicio" class="w-full h-8 border-gray-300 rounded text-xs focus:ring-indigo-500 focus:border-indigo-500 px-2 shadow-sm">
+        </div>
+        <div class="w-32">
+            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Vencimento Até</label>
+            <input type="date" id="filtro-fim" class="w-full h-8 border-gray-300 rounded text-xs focus:ring-indigo-500 focus:border-indigo-500 px-2 shadow-sm">
+        </div>
+        <div class="w-36">
+            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Filial</label>
+            <select id="filtro-filial" class="w-full h-8 border-gray-300 rounded text-xs focus:ring-indigo-500 focus:border-indigo-500 shadow-sm bg-white">
+                <option value="">Todas as Filiais</option>
+                </select>
+        </div>
+        <div class="w-28">
+            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Status (ERP)</label>
+            <select id="filtro-status" class="w-full h-8 border-gray-300 rounded text-xs focus:ring-indigo-500 focus:border-indigo-500 shadow-sm bg-white">
+                <option value="">Todos</option>
+                <option value="aberto" selected>Em Aberto</option>
+                <option value="pago">Pagos/Baixados</option>
+            </select>
+        </div>
+        <div class="flex-1 min-w-[200px]">
+            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Busca Rápida (Fornecedor, NF, Doc)</label>
+            <div class="relative">
+                <input type="text" id="filtro-busca" placeholder="Digite número da NF, nome do fornecedor..." class="w-full h-8 pl-8 border-gray-300 rounded text-xs focus:ring-indigo-500 focus:border-indigo-500 shadow-sm">
+                <div class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none text-gray-400">
+                    <i data-feather="search" class="w-3 h-3"></i>
                 </div>
             </div>
-        </nav>
+        </div>
+        <button id="btn-filtrar" class="h-8 bg-indigo-600 text-white px-4 rounded text-xs font-bold hover:bg-indigo-700 shadow-sm flex items-center gap-1 transition-all active:scale-95">
+            <i data-feather="refresh-cw" class="w-3 h-3"></i> ATUALIZAR
+        </button>
+    </div>
 
-        <div class="flex-1 flex flex-col overflow-hidden min-w-0">
-            <header class="bg-white/80 backdrop-blur-sm border-b border-gray-200/50 h-16 flex items-center justify-between px-6 shadow-sm z-20">
-                <div class="flex items-center gap-4">
-                    <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900"><i data-feather="menu"></i></button>
-                    <h2 class="text-lg font-semibold text-gray-800">Controle de Contas a Pagar</h2>
-                </div>
-                <div class="flex items-center gap-4">
-                    <span class="text-sm text-gray-700 hidden sm:block">Olá, <strong id="user-name" class="font-medium">Usuário</strong>!</span>
-                    <button id="logout-btn" class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500 transition-colors">Sair</button>
-                </div>
-            </header>
+    <div class="flex-1 overflow-auto bg-white relative">
+        <table class="w-full text-left border-collapse table-dense">
+            <thead class="sticky top-0 z-10 shadow-sm">
+                <tr>
+                    <th class="w-24 text-center">Vencimento</th>
+                    <th class="w-16 text-center">Filial</th>
+                    <th>Fornecedor / Histórico</th>
+                    <th class="w-24 text-center">NF / Doc</th>
+                    <th class="w-32">Tipo Despesa</th>
+                    <th class="w-28 text-right">Valor</th>
+                    <th class="w-24 text-center">Status</th>
+                    <th class="w-32 text-center">Classificação</th>
+                    <th class="w-40">Obs / Detalhes</th>
+                </tr>
+            </thead>
+            <tbody id="lista-titulos" class="divide-y divide-gray-100 text-gray-600">
+                </tbody>
+        </table>
+    </div>
 
-            <main class="flex-1 p-6 overflow-hidden flex flex-col">
-                <div class="bg-white/90 backdrop-blur-sm p-4 rounded-lg shadow mb-4 flex flex-wrap gap-4 items-end border border-gray-100">
-                    <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">De:</label>
-                        <input type="date" id="filtro-inicio" class="border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Até:</label>
-                        <input type="date" id="filtro-fim" class="border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Status ERP:</label>
-                        <select id="filtro-status" class="border-gray-300 rounded-md text-sm min-w-[150px] focus:ring-indigo-500 focus:border-indigo-500">
-                            <option value="">Todos</option>
-                            <option value="aberto" selected>Em Aberto</option>
-                            <option value="pago">Pagos</option>
-                        </select>
-                    </div>
-                    <button id="btn-filtrar" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 flex items-center gap-2 shadow-sm transition-colors h-[38px]">
-                        <i data-feather="search" class="w-4 h-4"></i> Buscar
-                    </button>
-                </div>
-
-                <div class="bg-white/90 backdrop-blur-sm rounded-lg shadow flex-1 overflow-hidden flex flex-col border border-gray-100">
-                    <div class="overflow-auto flex-1">
-                        <table class="w-full text-sm text-left text-gray-500">
-                            <thead class="text-xs text-gray-700 uppercase bg-gray-50/80 sticky top-0 z-10 border-b border-gray-200">
-                                <tr>
-                                    <th class="px-6 py-3 font-semibold">Vencimento</th>
-                                    <th class="px-6 py-3 font-semibold">Fornecedor</th>
-                                    <th class="px-6 py-3 text-right font-semibold">Valor</th>
-                                    <th class="px-6 py-3 text-center font-semibold">Status (ERP)</th>
-                                    <th class="px-6 py-3 text-center font-semibold">Modalidade / Cheque</th>
-                                    <th class="px-6 py-3 font-semibold">Obs</th>
-                                </tr>
-                            </thead>
-                            <tbody id="lista-titulos" class="divide-y divide-gray-100">
-                                </tbody>
-                        </table>
-                    </div>
-                </div>
-            </main>
+    <div class="bg-gray-50 border-t border-gray-200 h-10 shrink-0 px-4 flex items-center justify-between text-xs shadow-[0_-2px_4px_rgba(0,0,0,0.05)] z-20">
+        <span class="text-gray-500 font-medium flex items-center gap-2">
+            <i data-feather="list" class="w-3 h-3"></i> <span id="total-registros">0 registros</span>
+        </span>
+        <div class="flex gap-6 font-bold items-center">
+            <div class="text-gray-600 flex items-center gap-1">
+                TOTAL: <span id="total-valor" class="text-indigo-700 text-sm ml-1 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">R$ 0,00</span>
+            </div>
         </div>
     </div>
 
-    <div id="modal-cheque" class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm hidden z-50 flex items-center justify-center transition-opacity">
-        <div class="bg-white rounded-lg shadow-2xl w-96 p-6 transform scale-100 transition-transform">
-            <h3 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <i data-feather="edit-2" class="w-5 h-5 text-indigo-600"></i> Classificar Pagamento
-            </h3>
+    <div id="modal-cheque" class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm hidden z-50 flex items-center justify-center transition-opacity opacity-0 pointer-events-none" style="transition: opacity 0.2s;">
+        <div class="bg-white rounded-lg shadow-2xl w-96 p-5 transform scale-95 transition-transform duration-200" id="modal-content">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h3 class="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <i data-feather="edit-2" class="w-4 h-4 text-indigo-600"></i> Classificar Pagamento
+                </h3>
+                <button id="btn-fechar-modal-x" class="text-gray-400 hover:text-gray-600"><i data-feather="x" class="w-4 h-4"></i></button>
+            </div>
+            
             <input type="hidden" id="modal-id-titulo">
             
-            <div class="space-y-4">
+            <div class="space-y-3">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Modalidade</label>
-                    <select id="modal-modalidade" class="w-full border-gray-300 rounded-md p-2 mt-1 focus:ring-indigo-500 focus:border-indigo-500">
+                    <label class="block text-xs font-bold text-gray-500 mb-1">Forma de Pagamento</label>
+                    <select id="modal-modalidade" class="w-full border-gray-300 rounded text-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white">
                         <option value="BOLETO">Boleto Bancário</option>
                         <option value="PIX">PIX / Transferência</option>
                         <option value="CHEQUE">Cheque</option>
                         <option value="DINHEIRO">Dinheiro</option>
+                        <option value="OUTROS">Outros</option>
                     </select>
                 </div>
 
-                <div id="painel-cheque" class="hidden space-y-3 bg-yellow-50 p-3 rounded-md border border-yellow-100">
+                <div id="painel-cheque" class="hidden space-y-2 bg-yellow-50 p-3 rounded border border-yellow-200 shadow-sm">
                     <div>
-                        <label class="block text-xs font-bold text-yellow-800 uppercase">Status do Cheque</label>
-                        <select id="modal-status-cheque" class="w-full border-yellow-300 rounded-md p-2 mt-1 text-sm focus:ring-yellow-500 focus:border-yellow-500 bg-white">
+                        <label class="block text-[10px] font-bold text-yellow-800 uppercase mb-1">Status do Cheque</label>
+                        <select id="modal-status-cheque" class="w-full border-yellow-300 rounded text-xs p-1.5 bg-white focus:ring-yellow-500 focus:border-yellow-500">
                             <option value="EM_MAOS">Em Mãos (Não entregue)</option>
-                            <option value="ENTREGUE">Entregue (Aguardando compensação)</option>
+                            <option value="ENTREGUE">Entregue (Pré-datado)</option>
                             <option value="COMPENSADO">Compensado (OK)</option>
                             <option value="DEVOLVIDO_1X">Devolvido 1x (Alínea 11)</option>
                             <option value="DEVOLVIDO_2X">Devolvido 2x (Alínea 12)</option>
                             <option value="RESGATADO">Resgatado / Trocado</option>
+                            <option value="REAPRESENTADO">Reapresentado</option>
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-yellow-800 uppercase">Número do Cheque</label>
-                        <input type="text" id="modal-numero-cheque" class="w-full border-yellow-300 rounded-md p-2 mt-1 text-sm focus:ring-yellow-500 focus:border-yellow-500" placeholder="Ex: 855220">
+                        <label class="block text-[10px] font-bold text-yellow-800 uppercase mb-1">Número do Cheque</label>
+                        <input type="text" id="modal-numero-cheque" class="w-full border-yellow-300 rounded text-xs p-1.5 focus:ring-yellow-500 focus:border-yellow-500" placeholder="Ex: 855220">
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Observações</label>
-                    <textarea id="modal-obs" rows="2" class="w-full border-gray-300 rounded-md p-2 mt-1 text-sm focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">Observações / Anotações</label>
+                    <textarea id="modal-obs" rows="3" class="w-full border-gray-300 rounded text-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none" placeholder="Detalhes adicionais..."></textarea>
                 </div>
             </div>
 
-            <div class="flex justify-end gap-3 mt-6">
-                <button id="btn-fechar-modal" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md border border-gray-300 font-medium transition-colors">Cancelar</button>
-                <button id="btn-salvar-modal" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-medium shadow-sm transition-colors">Salvar</button>
+            <div class="flex justify-end gap-2 mt-5 border-t pt-3">
+                <button id="btn-cancelar-modal" class="px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded border border-gray-300 transition-colors">Cancelar</button>
+                <button id="btn-salvar-modal" class="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded hover:bg-indigo-700 shadow-sm transition-colors flex items-center gap-1">
+                    <i data-feather="save" class="w-3 h-3"></i> Salvar
+                </button>
             </div>
         </div>
     </div>
 
     <script src="financeiro.js"></script>
     <script>
-        // Função de controle do Sidebar (inline para garantir carregamento)
-        window.toggleSubmenu = function(id) {
-            const submenu = document.getElementById(id);
-            const icon = document.getElementById(id.replace('submenu', 'icon'));
-            if (submenu.classList.contains('hidden')) {
-                submenu.classList.remove('hidden');
-                if(icon) icon.style.transform = 'rotate(180deg)';
-            } else {
-                submenu.classList.add('hidden');
-                if(icon) icon.style.transform = 'rotate(0deg)';
-            }
-        };
-
+        // Inicializa ícones Feather ao carregar
         document.addEventListener('DOMContentLoaded', () => {
             if (typeof feather !== 'undefined') feather.replace();
-
-            const sidebar = document.getElementById('sidebar');
-            const setupDesktopSidebar = () => {
-                const desktopToggleButton = document.getElementById('sidebar-toggle');
-                if (!desktopToggleButton) return;
-                const setDesktopSidebarState = (collapsed) => {
-                    sidebar.classList.toggle('w-64', !collapsed);
-                    sidebar.classList.toggle('w-20', collapsed);
-                    document.querySelectorAll('.sidebar-text').forEach(el => el.classList.toggle('hidden', collapsed));
-                    document.getElementById('company-logo')?.classList.toggle('hidden', collapsed);
-                    document.getElementById('toggle-icon-collapse').classList.toggle('hidden', collapsed);
-                    document.getElementById('toggle-icon-expand').classList.toggle('hidden', !collapsed);
-                    sidebar.querySelectorAll('.sidebar-link').forEach(link => {
-                        link.classList.toggle('justify-center', collapsed);
-                        const arrow = link.querySelector('[data-feather="chevron-down"]');
-                        if(arrow) arrow.style.display = collapsed ? 'none' : 'block';
-                    });
-                    localStorage.setItem('sidebar_collapsed', collapsed);
-                };
-                const isDesktopCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
-                setDesktopSidebarState(isDesktopCollapsed);
-                desktopToggleButton.addEventListener('click', () => {
-                    setDesktopSidebarState(!sidebar.classList.contains('w-20'));
-                });
-            };
-            const setupMobileSidebar = () => {
-                const mobileMenuButton = document.getElementById('mobile-menu-button');
-                const overlay = document.getElementById('mobile-menu-overlay');
-                if (!mobileMenuButton || !overlay) return;
-                mobileMenuButton.addEventListener('click', () => { sidebar.classList.remove('-translate-x-full'); overlay.classList.remove('hidden'); });
-                overlay.addEventListener('click', () => { sidebar.classList.add('-translate-x-full'); overlay.classList.add('hidden'); });
-            };
-            const loadCompanyLogo = () => {
-                const companyLogo = document.getElementById('company-logo');
-                if (!companyLogo) return;
-                const logoBase64 = localStorage.getItem('company_logo');
-                if (logoBase64) { companyLogo.src = logoBase64; companyLogo.style.display = 'block'; }
-            };
-            
-            loadCompanyLogo();
-            setupDesktopSidebar();
-            setupMobileSidebar();
         });
     </script>
 </body>

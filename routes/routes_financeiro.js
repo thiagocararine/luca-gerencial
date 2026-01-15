@@ -4,7 +4,7 @@ const mysql = require('mysql2/promise');
 const { authenticateToken } = require('../middlewares');
 const dbConfig = require('../dbConfig');
 
-// Configuração dos Bancos
+// Configuração dos Bancos de Dados
 const dbConfigSei = {
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -17,13 +17,14 @@ const seiPool = mysql.createPool(dbConfigSei);
 const gerencialPool = mysql.createPool(dbConfig);
 
 /**
- * Middleware de Permissão Ajustado para 'cad_user' e 'perfis_acesso'
+ * Middleware de Permissão (Completo)
+ * Verifica acesso na tabela 'cad_user' e 'perfil_permissoes'
  */
 const checkPerm = (permNecessaria) => async (req, res, next) => {
     try {
-        const userId = req.user.userId; // Certifique-se que o token JWT traz o ID do usuário neste campo
+        const userId = req.user.userId; 
 
-        // 1. Busca o perfil na tabela 'cad_user' (com ID maiúsculo) e 'perfis_acesso'
+        // 1. Busca perfil do usuário
         const [userRows] = await gerencialPool.query(
             `SELECT u.id_perfil, pa.nome_perfil 
              FROM cad_user u 
@@ -33,24 +34,24 @@ const checkPerm = (permNecessaria) => async (req, res, next) => {
         );
 
         if (userRows.length === 0) {
-            return res.status(403).json({ error: 'Usuário não encontrado na tabela cad_user.' });
+            return res.status(403).json({ error: 'Perfil não encontrado.' });
         }
 
         const { id_perfil, nome_perfil } = userRows[0];
 
-        // 2. Superusuários (Admin/Financeiro) têm acesso direto
+        // 2. Superusuários
         if (nome_perfil === 'Administrador' || nome_perfil === 'Financeiro') {
             return next();
         }
 
-        // 3. Verifica permissão específica na tabela 'perfil_permissoes'
+        // 3. Verifica permissão específica
         const [permRows] = await gerencialPool.query(
             `SELECT permitido FROM perfil_permissoes 
              WHERE id_perfil = ? AND nome_modulo = ? AND permitido = 1`,
             [id_perfil, permNecessaria]
         );
 
-        // Lógica de hierarquia: Quem tem '_oper' também pode ver ('_view')
+        // Lógica de hierarquia (quem opera também visualiza)
         let temPermissao = permRows.length > 0;
 
         if (!temPermissao && permNecessaria.includes('_view')) {
@@ -66,46 +67,56 @@ const checkPerm = (permNecessaria) => async (req, res, next) => {
         if (temPermissao) {
             return next();
         } else {
-            return res.status(403).json({ error: 'Acesso negado a este módulo.' });
+            return res.status(403).json({ error: 'Acesso negado.' });
         }
 
     } catch (e) { 
         console.error("Erro no checkPerm:", e);
-        // Ajuda no diagnóstico se o nome da tabela ainda estiver errado
-        if(e.code === 'ER_NO_SUCH_TABLE') {
-            console.error("ERRO DE TABELA: Verifique se 'perfis_acesso' ou 'cad_user' estão escritos corretamente.");
-        }
         res.status(500).json({ error: 'Erro interno de permissão' }); 
     }
 };
 
 // --- ROTAS ---
 
-// 1. Listar Títulos
+// 1. Rota de Listagem de Títulos (Query Completa)
 router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (req, res) => {
-    const { dataInicio, dataFim, status } = req.query;
+    const { dataInicio, dataFim, status, filial, busca } = req.query;
 
     try {
+        // Query principal no ERP (SEI)
         let querySei = `
             SELECT 
-                ap_regist, ap_ctrlcm, ap_parcel, ap_nomefo, ap_numenf, 
+                ap_regist, ap_ctrlcm, ap_parcel, ap_nomefo, ap_fantas,
+                ap_numenf, ap_duplic, ap_filial,
                 ap_dtlanc, ap_dtvenc, ap_valord, ap_valorb, ap_status,
-                ap_filial
+                ap_pagame, ap_lanxml, ap_histor, ap_banco
             FROM apagar 
             WHERE ap_dtvenc BETWEEN ? AND ?
         `;
         const paramsSei = [dataInicio, dataFim];
 
+        // Filtros Dinâmicos
         if (status === 'aberto') querySei += ` AND (ap_status IS NULL OR ap_status = '')`;
         if (status === 'pago') querySei += ` AND ap_status = '1'`;
+        
+        if (filial) {
+            querySei += ` AND ap_filial = ?`;
+            paramsSei.push(filial);
+        }
 
-        querySei += ` ORDER BY ap_dtvenc ASC LIMIT 500`;
+        if (busca) {
+            querySei += ` AND (ap_nomefo LIKE ? OR ap_fantas LIKE ? OR ap_numenf LIKE ? OR ap_duplic LIKE ?)`;
+            const termo = `%${busca}%`;
+            paramsSei.push(termo, termo, termo, termo);
+        }
+
+        querySei += ` ORDER BY ap_dtvenc ASC LIMIT 1000`;
 
         const [titulosERP] = await seiPool.query(querySei, paramsSei);
 
         if (titulosERP.length === 0) return res.json([]);
 
-        // Busca dados extras (Cheques/Modalidade)
+        // Busca dados Extras (Tabela Gerencial)
         try {
             const ids = titulosERP.map(t => t.ap_regist);
             const [extras] = await gerencialPool.query(
@@ -113,16 +124,27 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
                 [ids]
             );
 
+            // Mesclagem dos dados
             const resultado = titulosERP.map(t => {
                 const extra = extras.find(e => e.id_titulo_erp === t.ap_regist);
                 return {
                     id: t.ap_regist,
                     controle: `${t.ap_ctrlcm}-${t.ap_parcel}`,
-                    fornecedor: t.ap_nomefo,
-                    vencimento: t.ap_dtvenc,
-                    valor: t.ap_valord,
-                    status_erp: t.ap_status === '1' ? 'PAGO' : 'ABERTO',
+                    fornecedor: t.ap_nomefo || t.ap_fantas, 
+                    nf: t.ap_numenf,
+                    duplicata: t.ap_duplic,
                     filial: t.ap_filial,
+                    vencimento: t.ap_dtvenc,
+                    valor_devido: parseFloat(t.ap_valord || 0),
+                    valor_pago: parseFloat(t.ap_valorb || 0),
+                    status_erp: t.ap_status === '1' ? 'PAGO' : 'ABERTO',
+                    
+                    // Campos de Classificação do ERP
+                    tipo_despesa_cod: t.ap_lanxml, 
+                    centro_custo: t.ap_pagame,     
+                    historico: t.ap_histor,
+                    
+                    // Dados Extras do Gerencial
                     modalidade: extra ? extra.modalidade : 'BOLETO',
                     status_cheque: extra ? extra.status_cheque : 'NAO_APLICA',
                     numero_cheque: extra ? extra.numero_cheque : '',
@@ -131,10 +153,11 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
             });
 
             res.json(resultado);
+
         } catch (errDb) {
-            // Auto-criação da tabela extra se não existir
+            // Auto-criação da tabela se não existir (Fail-safe)
             if (errDb.code === 'ER_NO_SUCH_TABLE' && errDb.message.includes('financeiro_titulos_extra')) {
-                console.log("Criando tabela financeiro_titulos_extra...");
+                console.log("Criando tabela financeiro_titulos_extra automaticamente...");
                 await gerencialPool.query(`
                     CREATE TABLE IF NOT EXISTS financeiro_titulos_extra (
                         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -150,7 +173,7 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
                 `);
                 return res.json([]); 
             }
-            throw errDb;
+            throw errDb; 
         }
 
     } catch (error) {
@@ -159,7 +182,7 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
     }
 });
 
-// 2. Classificar Título
+// 2. Rota de Classificação (Salvar Dados Extras)
 router.post('/titulos/:id/classificar', authenticateToken, checkPerm('fin_pagar_oper'), async (req, res) => {
     const idTitulo = req.params.id;
     const { modalidade, status_cheque, numero_cheque, observacao } = req.body;
@@ -183,6 +206,7 @@ router.post('/titulos/:id/classificar', authenticateToken, checkPerm('fin_pagar_
         }
         res.json({ message: 'Salvo com sucesso.' });
     } catch (error) {
+        console.error("Erro ao salvar classificação:", error);
         res.status(500).json({ error: error.message });
     }
 });
