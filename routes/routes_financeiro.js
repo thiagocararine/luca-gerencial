@@ -25,7 +25,6 @@ const checkPerm = (permNecessaria) => async (req, res, next) => {
         const userId = req.user.userId; 
 
         // 1. Busca perfil do usuário nas tabelas corretas (cad_user e perfis_acesso)
-        // Atenção: O ID do usuário no cad_user deve bater com o ID do token
         const [userRows] = await gerencialPool.query(
             `SELECT u.id_perfil, pa.nome_perfil 
              FROM cad_user u 
@@ -93,14 +92,14 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
         else if (tipoData === 'baixa') colunaData = 'ap_dtbaix';
         else if (tipoData === 'cancelamento') colunaData = 'ap_dtcanc';
 
-        // 2. Query Base no ERP (SEI) - Incluindo TODAS as colunas solicitadas
+        // 2. Query Base no ERP (SEI) - REMOVIDO 'ap_horabc'
         let querySei = `
             SELECT 
                 ap_regist, ap_ctrlcm, ap_parcel, ap_nomefo, ap_fantas, ap_rgforn,
                 ap_numenf, ap_duplic, ap_filial, ap_border,
                 ap_dtlanc, ap_hrlanc, ap_usalan,
                 ap_dtvenc, ap_valord, ap_jurosm, ap_descon,
-                ap_dtbaix, ap_horabc, ap_valorb, ap_usabix, ap_cdusbx,
+                ap_dtbaix, ap_valorb, ap_usabix, ap_cdusbx,
                 ap_status, ap_dtcanc, ap_hocanc, ap_usacan, ap_cdusca, ap_estorn,
                 ap_pagame, ap_lanxml, ap_histor, ap_hiscon, ap_hisusa,
                 ap_chcorr, ap_chbanc, ap_chagen, ap_chcont, ap_chnume, ap_fpagam
@@ -136,14 +135,14 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
                     paramsSei.push(valorBusca, valorBusca);
                 }
             } else {
-                // Filtro de Texto Padrão (Nome, Fantasia, NF, Duplicata, Histórico)
+                // Filtro de Texto Padrão
                 querySei += ` AND (ap_nomefo LIKE ? OR ap_fantas LIKE ? OR ap_numenf LIKE ? OR ap_duplic LIKE ? OR ap_histor LIKE ?)`;
                 const termo = `%${buscaTrim}%`;
                 paramsSei.push(termo, termo, termo, termo, termo);
             }
         }
 
-        // Ordenação e Limite (Aumentado para garantir retorno amplo)
+        // Ordenação e Limite
         querySei += ` ORDER BY ${colunaData} ASC LIMIT 3000`;
 
         const [titulosERP] = await seiPool.query(querySei, paramsSei);
@@ -161,7 +160,7 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
             );
             extras = rows;
         } catch (errDb) {
-            // Se a tabela ainda não existir, cria ela automaticamente (Auto-fix)
+            // Se a tabela ainda não existir, cria ela automaticamente
             if (errDb.code === 'ER_NO_SUCH_TABLE' && errDb.message.includes('financeiro_titulos_extra')) {
                 console.log("Criando tabela financeiro_titulos_extra automaticamente...");
                 await gerencialPool.query(`
@@ -177,23 +176,20 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
                         UNIQUE KEY idx_titulo_erp (id_titulo_erp)
                     )
                 `);
-                extras = []; // Continua com lista vazia na primeira execução
+                extras = []; 
             } else {
-                throw errDb; // Se for outro erro, repassa
+                throw errDb;
             }
         }
 
-        // 5. Mesclagem dos Dados (ERP + Gerencial)
+        // 5. Mesclagem dos Dados
         let resultado = titulosERP.map(t => {
             const extra = extras.find(e => e.id_titulo_erp === t.ap_regist);
             
-            // Definição inteligente da modalidade padrão
             let modalidadeItem = extra ? extra.modalidade : 'BOLETO';
-            // Se o ERP diz que é tipo '2' (Cheque), sugerimos Cheque se não houver classificação manual
             if (!extra && t.ap_lanxml == 2) modalidadeItem = 'CHEQUE';
 
             return {
-                // Chaves
                 id: t.ap_regist,
                 controle: `${t.ap_ctrlcm}-${t.ap_parcel}`,
                 
@@ -213,7 +209,7 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
                 lancamento: t.ap_dtlanc,
                 hora_lancamento: t.ap_hrlanc,
                 baixa: t.ap_dtbaix,
-                hora_baixa: t.ap_horabc,
+                // Removido hora_baixa pois a coluna ap_horabc não existe
                 cancelamento: t.ap_dtcanc,
                 hora_cancelamento: t.ap_hocanc,
                 
@@ -223,13 +219,13 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
                 juros: parseFloat(t.ap_jurosm || 0),
                 desconto: parseFloat(t.ap_descon || 0),
                 
-                // Status traduzido
+                // Status
                 status_erp: t.ap_status === '1' ? 'PAGO' : (t.ap_status === '2' ? 'CANCELADO' : 'ABERTO'),
                 estornado: t.ap_estorn === '1' ? 'SIM' : 'NÃO',
                 
                 // Classificação ERP
                 tipo_despesa_cod: t.ap_lanxml,
-                indicacao_pagamento_cod: t.ap_pagame, // Código 01-12 (Para mapa frontend)
+                indicacao_pagamento_cod: t.ap_pagame, 
                 historico: t.ap_histor,
                 historico_compras: t.ap_hiscon,
                 historico_usuario: t.ap_hisusa,
@@ -247,7 +243,7 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
                 num_cheque_erp: t.ap_chnume,
                 nome_banco_cheque: t.ap_chcorr,
 
-                // Dados Extras (Gerencial)
+                // Dados Extras
                 modalidade: modalidadeItem,
                 status_cheque: extra ? extra.status_cheque : 'NAO_APLICA',
                 numero_cheque: extra ? extra.numero_cheque : '',
@@ -268,7 +264,7 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
     }
 });
 
-// 2. Classificar Título (Salvar Modalidade/Cheque)
+// 2. Classificar Título
 router.post('/titulos/:id/classificar', authenticateToken, checkPerm('fin_pagar_oper'), async (req, res) => {
     const idTitulo = req.params.id;
     const { modalidade, status_cheque, numero_cheque, observacao } = req.body;
