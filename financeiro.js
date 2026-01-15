@@ -3,20 +3,37 @@ document.addEventListener('DOMContentLoaded', initPage);
 const API_BASE = '/api/financeiro';
 let table; // Instância global da tabela Tabulator
 
-// --- Constantes e Mapeamentos ---
+// --- MAPAS E CONSTANTES ---
+
 const MAPA_TIPOS_DESPESA = {
-    '1': 'Duplicatas',
+    '1': 'Duplicatas de Compras',
     '2': 'Cheque',
-    '3': 'Subs. Trib.',
-    '4': 'Fixas',
-    '5': 'Pessoal',
+    '3': 'Subs. Tributária',
+    '4': 'Despesas Fixas',
+    '5': 'Despesas de Pessoal',
     '6': 'Impostos',
-    '7': 'Frete/Comb',
+    '7': 'Frete e Combustível',
     '8': 'Manutenção',
-    '9': 'Admin',
-    '10': 'Financeiras',
+    '9': 'Despesas Administrativas',
+    '10': 'Despesas Financeiras',
     '11': 'IPTU',
     '12': 'Veículos'
+};
+
+// Mapeamento exato da sua imagem (Indicação de Pagamento)
+const MAPA_IND_PAGAMENTO = {
+    '1': '01 - Doc. Parada Angelica (Dentro)',
+    '2': '02 - Cheque Predatado',
+    '3': '03 - Doc. Parada Angelica (Fora)',
+    '4': '04 - Doc. Nova Campinas (Dentro)',
+    '5': '05 - Doc. Santa Cruz (Dentro)',
+    '6': '06 - Doc. Piabeta (Dentro)',
+    '7': '07 - Doc. Nova Campinas (Fora)',
+    '8': '08 - Doc. Santa Cruz (Fora)',
+    '9': '09 - Doc. Piabeta (Fora)',
+    '10': '10 - Doc. Mendes',
+    '11': '11 - Doc. 1000T',
+    '12': '12 - Doc. Luk'
 };
 
 const CORES_FILIAL = {
@@ -26,7 +43,7 @@ const CORES_FILIAL = {
     'LCMAT': 'bg-orange-100 text-orange-800 border-orange-200'
 };
 
-// --- Funções Auxiliares de Sessão ---
+// --- FUNÇÕES AUXILIARES ---
 function getToken() { return localStorage.getItem('lucaUserToken'); }
 
 function getUserName() { 
@@ -35,25 +52,22 @@ function getUserName() {
     try { return JSON.parse(atob(t.split('.')[1])).nome; } catch(e){ return 'Usuário'; } 
 }
 
-// --- Inicialização da Página ---
+// --- INICIALIZAÇÃO ---
 async function initPage() {
-    // 1. Verifica Autenticação
+    // 1. Verifica Auth
     if (!getToken()) { window.location.href = 'login.html'; return; }
     document.getElementById('user-name').textContent = getUserName();
     
-    // 2. Define Datas Padrão (Mês Atual)
+    // 2. Define Datas Padrão (Mês corrente)
     const hoje = new Date();
     const passado = new Date(); passado.setDate(hoje.getDate() - 30);
     const futuro = new Date(); futuro.setDate(hoje.getDate() + 30);
-    
     document.getElementById('filtro-inicio').value = passado.toISOString().split('T')[0];
     document.getElementById('filtro-fim').value = futuro.toISOString().split('T')[0];
 
-    // 3. Popula Select de Tipos de Documento
+    // 3. Popula Select Tipos de Documento
     const selectTipo = document.getElementById('filtro-tipo-doc');
-    // Remove opções antigas exceto "Todos"
     while (selectTipo.options.length > 1) { selectTipo.remove(1); }
-    
     for (const [id, nome] of Object.entries(MAPA_TIPOS_DESPESA)) {
         const opt = document.createElement('option');
         opt.value = id;
@@ -61,121 +75,111 @@ async function initPage() {
         selectTipo.appendChild(opt);
     }
 
-    // 4. Inicializa Tabela Tabulator
+    // 4. Inicializa Tabela
     initTable();
 
-    // 5. Configura Listeners (Eventos)
-    
-    // Botão Filtrar
+    // 5. Configura Eventos
     document.getElementById('btn-filtrar').addEventListener('click', loadTitulos);
-    
-    // Enter na busca
     document.getElementById('filtro-busca').addEventListener('keypress', (e) => { 
         if(e.key === 'Enter') loadTitulos(); 
     });
     
-    // Logout
     document.getElementById('logout-btn').addEventListener('click', () => { 
         localStorage.removeItem('lucaUserToken'); 
         window.location.href = 'login.html'; 
     });
     
-    // Menu de Colunas (Toggle)
+    // Menu Colunas
     document.getElementById('btn-colunas').addEventListener('click', (e) => {
-        e.stopPropagation(); // Impede que o clique feche o menu imediatamente
+        e.stopPropagation();
         const menu = document.getElementById('menu-colunas');
         menu.classList.toggle('hidden');
     });
-
     // Fecha menu ao clicar fora
     document.addEventListener('click', (e) => {
-        const btn = document.getElementById('btn-colunas');
         const menu = document.getElementById('menu-colunas');
-        // Se clicou fora do botão E fora do menu, fecha
+        const btn = document.getElementById('btn-colunas');
         if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && !btn.contains(e.target)) {
             menu.classList.add('hidden');
         }
     });
 
-    // Modal de Edição
+    // Modal Classificação
     document.getElementById('modal-modalidade').addEventListener('change', togglePainelCheque);
     document.getElementById('btn-fechar-modal-x').addEventListener('click', () => toggleModal(false));
     document.getElementById('btn-cancelar-modal').addEventListener('click', () => toggleModal(false));
     document.getElementById('btn-salvar-modal').addEventListener('click', saveClassificacao);
 
-    // 6. Carrega os dados iniciais
+    // 6. Carrega Dados
     loadTitulos();
 }
 
-// --- Configuração da Tabela (Tabulator) ---
+// --- CONFIGURAÇÃO DA TABELA (TABULATOR) ---
 function initTable() {
     table = new Tabulator("#tabela-financeiro", {
-        layout: "fitDataFill", // Colunas se ajustam ao conteúdo, mas ocupam a largura total se sobrar espaço
-        height: "100%", // Ocupa toda a altura da div pai
-        placeholder: "Sem dados para exibir", // Mensagem quando vazia
-        reactiveData: true, // Reage a alterações no array de dados
+        layout: "fitDataFill", // Ajusta colunas ao conteúdo
+        height: "100%", // 100% da altura da div
+        placeholder: "Sem dados para exibir",
+        reactiveData: true,
         
-        // Persistência: Lembra a ordem e tamanho das colunas no navegador do usuário
+        // Persistência: Lembra colunas ocultas/movidas
         persistence: true, 
-        persistenceID: "financeiroConfigV4", 
+        persistenceID: "financeiroConfigFinalv1", 
         
-        movableColumns: true, // PERMITE ARRASTAR COLUNAS
-        resizableColumns: true, // PERMITE REDIMENSIONAR COLUNAS
+        movableColumns: true, // ARRASTAR E SOLTAR
+        resizableColumns: true, // REDIMENSIONAR
 
         columns: [
-            { title: "ID", field: "id", visible: false }, // Oculto, chave primária
-            
-            // Grupo: Datas
+            { title: "ID", field: "id", visible: false },
+
+            // --- Coluna Fixa (Esquerda) ---
             { 
                 title: "Vencimento", 
                 field: "vencimento", 
                 formatter: dateFormatter, 
                 hozAlign: "center", 
-                width: 100,
-                headerSortStartingDir: "asc",
-                frozen: true // Congela esta coluna na esquerda ao rolar horizontalmente
+                width: 100, 
+                headerSortStartingDir: "asc", 
+                frozen: true 
             },
-            { title: "Lançamento", field: "lancamento", formatter: dateFormatter, hozAlign: "center", width: 90, visible: false },
-            { title: "Baixa", field: "baixa", formatter: dateFormatter, hozAlign: "center", width: 90, visible: false },
-            
-            // Grupo: Identificação
-            { 
-                title: "Filial", 
-                field: "filial", 
-                formatter: filialFormatter, 
-                hozAlign: "center", 
-                width: 80 
-            },
+
+            // --- Identificação ---
+            { title: "Filial", field: "filial", formatter: filialFormatter, hozAlign: "center", width: 80 },
             { 
                 title: "Razão Social", 
                 field: "fornecedor", 
                 width: 220, 
                 formatter: (cell) => `<div class='truncate font-bold text-gray-700' title='${cell.getValue()}'>${cell.getValue()}</div>` 
             },
-            { 
-                title: "Fantasia", 
-                field: "fantasia", 
-                width: 150, 
-                visible: false // Oculto por padrão, usuário pode ativar
-            },
+            { title: "Fantasia", field: "fantasia", width: 150, visible: false },
             
-            // Grupo: Documento
+            // --- Documentos ---
             { title: "NF", field: "nf", hozAlign: "center", width: 80 },
             { title: "Duplicata", field: "duplicata", hozAlign: "center", width: 80, visible: false },
-            
-            // Grupo: Detalhes
+            { title: "Borderô", field: "bordero", width: 80, visible: false },
+
+            // --- Classificação e Detalhes ---
+            { 
+                title: "Indicação Pagto (C. Custo)", 
+                field: "indicacao_pagamento_cod", 
+                width: 190, 
+                visible: true,
+                formatter: (cell) => {
+                    // Converte código (1, 2) para Texto do Mapa
+                    const cod = cell.getValue();
+                    // Tenta parsear int, se falhar usa string
+                    let key = parseInt(cod);
+                    if (isNaN(key)) key = cod;
+                    
+                    let text = MAPA_IND_PAGAMENTO[key] || cod || '-';
+                    return `<div class='truncate text-[10px] text-gray-500' title='${text}'>${text}</div>`;
+                }
+            },
             { 
                 title: "Tipo Despesa", 
                 field: "tipo_despesa_cod", 
-                width: 120,
+                width: 130, 
                 formatter: (cell) => `<span class='truncate block w-full' title='${MAPA_TIPOS_DESPESA[cell.getValue()] || ""}'>${MAPA_TIPOS_DESPESA[cell.getValue()] || '-'}</span>`
-            },
-            { 
-                title: "Centro de Custo", 
-                field: "centro_custo", 
-                width: 150, 
-                visible: true,
-                formatter: (cell) => `<div class='truncate text-[10px] text-gray-500' title='${cell.getValue()}'>${cell.getValue() || '-'}</div>`
             },
             { 
                 title: "Histórico", 
@@ -184,19 +188,20 @@ function initTable() {
                 visible: true,
                 formatter: (cell) => `<div class='truncate text-[10px] text-gray-500' title='${cell.getValue()}'>${cell.getValue() || '-'}</div>`
             },
-            
-            // Grupo: Valores
+
+            // --- Valores ---
             { 
-                title: "Valor", 
+                title: "Valor Devido", 
                 field: "valor_devido", 
                 formatter: moneyFormatter, 
                 hozAlign: "right", 
-                width: 110,
-                bottomCalc: "sum", // SOMA AUTOMÁTICA NO RODAPÉ
-                bottomCalcFormatter: moneyFormatter 
+                width: 110 
             },
-            
-            // Grupo: Status
+            { title: "Valor Pago", field: "valor_pago", formatter: moneyFormatter, hozAlign: "right", width: 110, visible: false },
+            { title: "Juros", field: "juros", formatter: moneyFormatter, hozAlign: "right", width: 90, visible: false },
+            { title: "Desconto", field: "desconto", formatter: moneyFormatter, hozAlign: "right", width: 90, visible: false },
+
+            // --- Status e Ação ---
             { 
                 title: "Status", 
                 field: "status_erp", 
@@ -204,39 +209,57 @@ function initTable() {
                 hozAlign: "center", 
                 width: 90 
             },
-            
-            // Grupo: Classificação (Interativo)
             { 
                 title: "Classificação", 
                 field: "modalidade", 
                 formatter: buttonFormatter, 
                 hozAlign: "center", 
-                width: 140,
-                headerSort: false // Não ordenar pelo botão
+                width: 140, 
+                headerSort: false 
             },
-            { 
-                title: "Observações", 
-                field: "observacao", 
-                width: 150, 
-                formatter: "textarea",
-                visible: false 
-            }
+
+            // --- Colunas Extras (Ocultas por padrão) ---
+            { title: "Data Lançamento", field: "lancamento", formatter: dateFormatter, hozAlign: "center", width: 90, visible: false },
+            { title: "Usuário Lançou", field: "usuario_lancou", width: 100, visible: false },
+            { title: "Data Baixa", field: "baixa", formatter: dateFormatter, hozAlign: "center", width: 90, visible: false },
+            { title: "Usuário Baixou", field: "usuario_baixou", width: 100, visible: false },
+            { title: "Data Cancelamento", field: "cancelamento", formatter: dateFormatter, hozAlign: "center", width: 90, visible: false },
+            { title: "Usuário Cancelou", field: "usuario_cancelou", width: 100, visible: false },
+            { title: "Estornado", field: "estornado", hozAlign: "center", width: 80, visible: false },
+            { title: "RG Fornecedor", field: "rg_fornecedor", width: 100, visible: false },
+            { title: "Forma Pagto (ERP)", field: "forma_pagto_erp", width: 100, visible: false },
+            { title: "Histórico Compras", field: "historico_compras", width: 150, visible: false },
+            
+            // Dados Cheque ERP
+            { title: "Banco (Cheque)", field: "banco_cheque", width: 80, visible: false },
+            { title: "Agência (Cheque)", field: "agencia_cheque", width: 80, visible: false },
+            { title: "Conta (Cheque)", field: "conta_cheque", width: 100, visible: false },
+            { title: "Num Cheque (ERP)", field: "num_cheque_erp", width: 100, visible: false },
+            { title: "Nome Banco", field: "nome_banco_cheque", width: 120, visible: false },
+            
+            // Dados Gerenciais
+            { title: "Obs Gerencial", field: "observacao", width: 150, formatter: "textarea", visible: false }
         ],
         
-        // Evento: Quando os dados terminam de carregar
+        // Callback IMPORTANTE: Atualiza o footer customizado e o menu
         dataLoaded: function(data) {
-            atualizarTotais(data); // Atualiza contador de registros
-            popularMenuColunas(); // Atualiza a lista de checkboxes do menu de colunas
+            atualizarTotais(data);
+            popularMenuColunas();
         },
+        
+        // Se houver filtros aplicados na tabela (ex: header filter), recalcula totais
+        dataFiltered: function(filters, rows) {
+            const dadosFiltrados = rows.map(row => row.getData());
+            atualizarTotais(dadosFiltrados);
+        }
     });
 }
 
-// --- Formatters (Renderizam HTML dentro das células) ---
+// --- FORMATTERS ---
 
 function dateFormatter(cell) {
     const val = cell.getValue();
     if (!val) return "-";
-    // Ajuste de timezone para evitar exibir dia anterior
     return new Date(val).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
@@ -252,13 +275,12 @@ function moneyFormatter(cell) {
 }
 
 function statusFormatter(cell) {
-    const val = cell.getValue(); // PAGO, ABERTO, CANCELADO
+    const val = cell.getValue(); 
     const row = cell.getRow().getData();
     
     if (val === 'PAGO') return `<span class="text-green-700 font-bold bg-green-100 px-1 rounded border border-green-200 text-[10px]">PAGO</span>`;
     if (val === 'CANCELADO') return `<span class="text-gray-400 font-bold bg-gray-50 px-1 rounded border border-gray-200 text-[10px] line-through">CANCELADO</span>`;
     
-    // Verifica Vencimento se estiver Aberto
     if (row.vencimento && new Date(row.vencimento) < new Date() && val === 'ABERTO') {
         return `<span class="text-red-700 font-bold bg-red-100 px-1 rounded border border-red-200 text-[10px]">VENCIDO</span>`;
     }
@@ -272,14 +294,9 @@ function buttonFormatter(cell) {
 
     if (row.modalidade === 'CHEQUE') {
         btnClass = 'bg-yellow-100 text-yellow-800 border-yellow-300';
+        if (row.status_cheque === 'COMPENSADO') btnClass = 'bg-green-100 text-green-800 border-green-300';
+        else if (row.status_cheque && row.status_cheque.includes('DEVOLVIDO')) btnClass = 'bg-red-100 text-red-800 border-red-300';
         
-        if (row.status_cheque === 'COMPENSADO') {
-            btnClass = 'bg-green-100 text-green-800 border-green-300';
-        } else if (row.status_cheque && row.status_cheque.includes('DEVOLVIDO')) {
-            btnClass = 'bg-red-100 text-red-800 border-red-300';
-        }
-        
-        // Texto do botão: "CHQ #123 (OK)"
         btnText = `CHQ ${row.numero_cheque ? '#' + row.numero_cheque : ''}`;
         
         if (row.status_cheque !== 'NAO_APLICA' && row.status_cheque) {
@@ -294,13 +311,11 @@ function buttonFormatter(cell) {
         btnClass = 'bg-indigo-50 text-indigo-700 border-indigo-200';
     }
 
-    // onclick chama a função global window.openEditModal passando o ID
     return `<button class="btn-status ${btnClass}" onclick="window.openEditModal(${row.id})">${btnText}</button>`;
 }
 
-// --- Carregamento de Dados (API) ---
+// --- CARREGAMENTO DE DADOS ---
 async function loadTitulos() {
-    // Coleta filtros
     const params = new URLSearchParams({
         dataInicio: document.getElementById('filtro-inicio').value,
         dataFim: document.getElementById('filtro-fim').value,
@@ -323,26 +338,17 @@ async function loadTitulos() {
         }
 
         const dados = await res.json();
-        
-        // Atualiza a tabela
         table.setData(dados);
         
-        // Ajusta dinamicamente a primeira coluna (Título e Campo) com base no filtro de data
+        // Ajusta a coluna dinâmica de Data
         const tipoData = document.getElementById('filtro-tipo-data').value;
-        const colData = table.getColumn("vencimento"); // "vencimento" é o field original da coluna 1
+        const colData = table.getColumn("vencimento");
         
         if(colData) {
-            const fieldMap = {
-                'vencimento': 'vencimento',
-                'lancamento': 'lancamento',
-                'baixa': 'baixa',
-                'cancelamento': 'cancelamento'
-            };
-            
-            // Altera o título e o campo de dados que a coluna exibe
+            const fieldMap = { 'vencimento': 'vencimento', 'lancamento': 'lancamento', 'baixa': 'baixa', 'cancelamento': 'cancelamento' };
             colData.updateDefinition({ 
-                title: tipoData.charAt(0).toUpperCase() + tipoData.slice(1),
-                field: fieldMap[tipoData] || 'vencimento'
+                title: tipoData.charAt(0).toUpperCase() + tipoData.slice(1), 
+                field: fieldMap[tipoData] || 'vencimento' 
             });
         }
 
@@ -352,44 +358,44 @@ async function loadTitulos() {
     }
 }
 
-// --- Totais e Menu de Colunas ---
-
+// --- ATUALIZAÇÃO DO RODAPÉ (TOTAIS) ---
 function atualizarTotais(dados) {
+    // Soma o 'valor_devido' dos registros visíveis/carregados
     const total = dados.reduce((acc, curr) => acc + (parseFloat(curr.valor_devido) || 0), 0);
     
-    document.getElementById('total-registros').textContent = `${dados.length} registros`;
+    // Atualiza contadores no HTML
+    const elReg = document.getElementById('total-registros');
+    if(elReg) elReg.textContent = `${dados.length} registros`;
     
     const elValor = document.getElementById('total-valor');
-    elValor.textContent = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    
-    // Pequena animação visual
-    elValor.classList.add('scale-105');
-    setTimeout(() => elValor.classList.remove('scale-105'), 200);
+    if(elValor) {
+        elValor.textContent = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        // Animação visual
+        elValor.classList.remove('scale-105'); // Reset
+        void elValor.offsetWidth; // Trigger reflow
+        elValor.classList.add('scale-105'); // Anima
+    }
 }
 
+// --- MENU COLUNAS ---
 function popularMenuColunas() {
     const lista = document.getElementById('lista-colunas');
-    lista.innerHTML = ''; // Limpa menu
+    if(!lista) return;
+    lista.innerHTML = ''; 
 
-    // Itera sobre as colunas reais da tabela
     table.getColumns().forEach(col => {
         const def = col.getDefinition();
-        if (def.field === 'id') return; // Ignora ID
+        if (def.field === 'id') return; 
 
         const div = document.createElement('div');
         div.className = 'flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 cursor-pointer rounded select-none border-b border-gray-50 last:border-0';
         
-        // Checkbox
         const check = document.createElement('input');
         check.type = 'checkbox';
         check.checked = col.isVisible();
         check.className = 'rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer w-3.5 h-3.5';
         
-        // Função de toggle
-        const toggle = () => {
-            col.toggle();
-            check.checked = col.isVisible();
-        };
+        const toggle = () => { col.toggle(); check.checked = col.isVisible(); };
 
         div.onclick = (e) => { e.stopPropagation(); toggle(); };
         check.onclick = (e) => { e.stopPropagation(); toggle(); };
@@ -404,22 +410,17 @@ function popularMenuColunas() {
     });
 }
 
-// --- Funções do Modal ---
-
+// --- MODAL ---
 function togglePainelCheque() {
     const tipo = document.getElementById('modal-modalidade').value;
     const painel = document.getElementById('painel-cheque');
-    if (tipo === 'CHEQUE') {
-        painel.classList.remove('hidden');
-    } else {
-        painel.classList.add('hidden');
-    }
+    if (tipo === 'CHEQUE') painel.classList.remove('hidden'); 
+    else painel.classList.add('hidden');
 }
 
 function toggleModal(show) {
     const modal = document.getElementById('modal-cheque');
     const content = document.getElementById('modal-content');
-    
     if (show) {
         modal.classList.remove('opacity-0', 'pointer-events-none', 'hidden');
         setTimeout(() => content.classList.replace('scale-95', 'scale-100'), 10);
@@ -430,7 +431,6 @@ function toggleModal(show) {
     }
 }
 
-// Função Global: Aberta pelo clique no botão da tabela
 window.openEditModal = function(idTitulo) {
     const row = table.getData().find(r => r.id === idTitulo);
     if (!row) return;
@@ -450,8 +450,7 @@ async function saveClassificacao() {
     const originalText = btn.innerHTML;
     
     btn.disabled = true;
-    btn.innerHTML = '<i data-feather="loader" class="animate-spin w-3 h-3"></i> Salvando...';
-    if(typeof feather !== 'undefined') feather.replace();
+    btn.innerHTML = 'Salvando...';
 
     const id = document.getElementById('modal-id-titulo').value;
     const payload = {
@@ -468,18 +467,15 @@ async function saveClassificacao() {
             body: JSON.stringify(payload)
         });
 
-        if (!res.ok) throw new Error('Erro ao salvar classificação');
+        if (!res.ok) throw new Error('Erro ao salvar');
 
         toggleModal(false);
-        
-        // Atualiza a linha localmente na tabela (sem reload completo, melhor UX)
-        table.updateData([{ id: parseInt(id), ...payload }]);
+        table.updateData([{ id: parseInt(id), ...payload }]); // Atualiza tabela localmente
         
     } catch (err) {
         alert('Falha: ' + err.message);
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;
-        if(typeof feather !== 'undefined') feather.replace();
     }
 }

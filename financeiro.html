@@ -22,7 +22,7 @@
         /* Customização do Tabulator (Estilo Excel Moderno) */
         .tabulator { border: none; background-color: white; font-size: 0.75rem; }
         
-        /* Cabeçalho */
+        /* Cabeçalho da Tabela */
         .tabulator-header { 
             border-bottom: 2px solid #e5e7eb !important; 
             background-color: #f8fafc !important; 
@@ -37,7 +37,7 @@
         }
         .tabulator-header .tabulator-col-content { padding: 8px; }
         
-        /* Linhas */
+        /* Linhas da Tabela */
         .tabulator-row { border-bottom: 1px solid #f1f5f9; min-height: 32px; }
         .tabulator-row:hover { background-color: #e0e7ff !important; transition: background 0.1s; }
         .tabulator-cell { padding: 4px 6px !important; display: flex; align-items: center; height: 100%; }
@@ -47,13 +47,13 @@
         .tabulator-calcs-holder { background: #f1f5f9 !important; border-bottom: none !important; }
         .tabulator-calcs-row { background: #f1f5f9 !important; color: #1e3a8a; font-size: 0.8rem; }
 
-        /* Scrollbar */
+        /* Scrollbar Fina */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        /* Componentes Visuais */
+        /* Componentes Visuais (Badges e Botões) */
         .badge-filial { font-size: 0.65rem; padding: 1px 5px; border-radius: 4px; font-weight: 700; border: 1px solid; display: inline-block; text-align: center; min-width: 50px; }
         
         .btn-status { 
@@ -193,6 +193,17 @@
 
     <div class="flex-1 w-full bg-white relative overflow-hidden">
         <div id="tabela-financeiro" class="w-full h-full"></div>
+    </div>
+
+    <div class="bg-gray-50 border-t border-gray-200 h-10 shrink-0 px-4 flex items-center justify-between text-xs shadow-[0_-2px_4px_rgba(0,0,0,0.05)] z-20">
+        <span class="text-gray-500 font-medium flex items-center gap-2">
+            <i data-feather="list" class="w-3 h-3"></i> <span id="total-registros">0 registros</span>
+        </span>
+        <div class="flex gap-4 font-bold items-center">
+            <div class="text-gray-600 flex items-center gap-1">
+                TOTAL: <span id="total-valor" class="text-indigo-700 text-sm ml-1 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 min-w-[100px] text-center">R$ 0,00</span>
+            </div>
+        </div>
     </div>
 
     <div id="modal-cheque" class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm hidden z-50 flex items-center justify-center transition-opacity opacity-0 pointer-events-none" style="transition: opacity 0.2s;">

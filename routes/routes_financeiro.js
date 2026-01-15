@@ -4,9 +4,7 @@ const mysql = require('mysql2/promise');
 const { authenticateToken } = require('../middlewares');
 const dbConfig = require('../dbConfig');
 
-// --- Configuração dos Bancos de Dados ---
-
-// Banco do ERP (SEI) - Apenas Leitura
+// Configuração dos Bancos de Dados
 const dbConfigSei = {
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -15,11 +13,13 @@ const dbConfigSei = {
     charset: 'utf8mb4'
 };
 
-// Banco do Sistema (Gerencial) - Leitura e Escrita
-const gerencialPool = mysql.createPool(dbConfig);
 const seiPool = mysql.createPool(dbConfigSei);
+const gerencialPool = mysql.createPool(dbConfig);
 
-// --- Middleware de Permissão (Específico para Financeiro) ---
+/**
+ * Middleware de Permissão (Específico para Financeiro)
+ * Verifica acesso na tabela 'cad_user' e 'perfis_acesso'
+ */
 const checkPerm = (permNecessaria) => async (req, res, next) => {
     try {
         const userId = req.user.userId; 
@@ -79,7 +79,7 @@ const checkPerm = (permNecessaria) => async (req, res, next) => {
 
 // --- ROTAS ---
 
-// 1. Listar Títulos (Consulta Turbinada)
+// 1. Listar Títulos (Consulta Turbinada com TODOS os campos)
 router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (req, res) => {
     const { 
         dataInicio, dataFim, status, filial, busca, 
@@ -93,14 +93,17 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
         else if (tipoData === 'baixa') colunaData = 'ap_dtbaix';
         else if (tipoData === 'cancelamento') colunaData = 'ap_dtcanc';
 
-        // 2. Query Base no ERP (SEI)
-        // Removida a coluna 'ap_banco' que causava erro
+        // 2. Query Base no ERP (SEI) - Incluindo TODAS as colunas solicitadas
         let querySei = `
             SELECT 
-                ap_regist, ap_ctrlcm, ap_parcel, ap_nomefo, ap_fantas,
-                ap_numenf, ap_duplic, ap_filial,
-                ap_dtlanc, ap_dtvenc, ap_valord, ap_valorb, ap_status, ap_dtbaix, ap_dtcanc,
-                ap_pagame, ap_lanxml, ap_histor
+                ap_regist, ap_ctrlcm, ap_parcel, ap_nomefo, ap_fantas, ap_rgforn,
+                ap_numenf, ap_duplic, ap_filial, ap_border,
+                ap_dtlanc, ap_hrlanc, ap_usalan,
+                ap_dtvenc, ap_valord, ap_jurosm, ap_descon,
+                ap_dtbaix, ap_horabc, ap_valorb, ap_usabix, ap_cdusbx,
+                ap_status, ap_dtcanc, ap_hocanc, ap_usacan, ap_cdusca, ap_estorn,
+                ap_pagame, ap_lanxml, ap_histor, ap_hiscon, ap_hisusa,
+                ap_chcorr, ap_chbanc, ap_chagen, ap_chcont, ap_chnume, ap_fpagam
             FROM apagar 
             WHERE ${colunaData} BETWEEN ? AND ?
         `;
@@ -140,8 +143,8 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
             }
         }
 
-        // Ordenação e Limite (para performance)
-        querySei += ` ORDER BY ${colunaData} ASC LIMIT 2000`;
+        // Ordenação e Limite (Aumentado para garantir retorno amplo)
+        querySei += ` ORDER BY ${colunaData} ASC LIMIT 3000`;
 
         const [titulosERP] = await seiPool.query(querySei, paramsSei);
 
@@ -190,31 +193,60 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
             if (!extra && t.ap_lanxml == 2) modalidadeItem = 'CHEQUE';
 
             return {
+                // Chaves
                 id: t.ap_regist,
                 controle: `${t.ap_ctrlcm}-${t.ap_parcel}`,
-                fornecedor: t.ap_nomefo || t.ap_fantas,
+                
+                // Identificação
+                fornecedor: t.ap_nomefo,
+                fantasia: t.ap_fantas,
+                rg_fornecedor: t.ap_rgforn,
+                filial: t.ap_filial,
+                
+                // Documentos
                 nf: t.ap_numenf,
                 duplicata: t.ap_duplic,
-                filial: t.ap_filial,
+                bordero: t.ap_border,
                 
                 // Datas
                 vencimento: t.ap_dtvenc,
                 lancamento: t.ap_dtlanc,
+                hora_lancamento: t.ap_hrlanc,
                 baixa: t.ap_dtbaix,
+                hora_baixa: t.ap_horabc,
                 cancelamento: t.ap_dtcanc,
+                hora_cancelamento: t.ap_hocanc,
                 
                 // Valores
                 valor_devido: parseFloat(t.ap_valord || 0),
                 valor_pago: parseFloat(t.ap_valorb || 0),
+                juros: parseFloat(t.ap_jurosm || 0),
+                desconto: parseFloat(t.ap_descon || 0),
                 
                 // Status traduzido
                 status_erp: t.ap_status === '1' ? 'PAGO' : (t.ap_status === '2' ? 'CANCELADO' : 'ABERTO'),
+                estornado: t.ap_estorn === '1' ? 'SIM' : 'NÃO',
                 
-                // Campos informativos
+                // Classificação ERP
                 tipo_despesa_cod: t.ap_lanxml,
-                centro_custo: t.ap_pagame,
+                indicacao_pagamento_cod: t.ap_pagame, // Código 01-12 (Para mapa frontend)
                 historico: t.ap_histor,
+                historico_compras: t.ap_hiscon,
+                historico_usuario: t.ap_hisusa,
+                forma_pagto_erp: t.ap_fpagam,
                 
+                // Usuários
+                usuario_lancou: t.ap_usalan,
+                usuario_baixou: t.ap_usabix,
+                usuario_cancelou: t.ap_usacan,
+                
+                // Dados Bancários (ERP)
+                banco_cheque: t.ap_chbanc,
+                agencia_cheque: t.ap_chagen,
+                conta_cheque: t.ap_chcont,
+                num_cheque_erp: t.ap_chnume,
+                nome_banco_cheque: t.ap_chcorr,
+
                 // Dados Extras (Gerencial)
                 modalidade: modalidadeItem,
                 status_cheque: extra ? extra.status_cheque : 'NAO_APLICA',
