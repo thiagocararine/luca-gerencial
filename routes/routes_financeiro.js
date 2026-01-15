@@ -83,13 +83,13 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
     const { dataInicio, dataFim, status, filial, busca } = req.query;
 
     try {
-        // Query principal no ERP (SEI)
+        // Query principal no ERP (SEI) - REMOVIDO 'ap_banco'
         let querySei = `
             SELECT 
                 ap_regist, ap_ctrlcm, ap_parcel, ap_nomefo, ap_fantas,
                 ap_numenf, ap_duplic, ap_filial,
                 ap_dtlanc, ap_dtvenc, ap_valord, ap_valorb, ap_status,
-                ap_pagame, ap_lanxml, ap_histor, ap_banco
+                ap_pagame, ap_lanxml, ap_histor
             FROM apagar 
             WHERE ap_dtvenc BETWEEN ? AND ?
         `;
