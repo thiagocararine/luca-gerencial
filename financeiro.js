@@ -20,7 +20,7 @@ const MAPA_TIPOS_DESPESA = {
     '12': 'Veículos'
 };
 
-// Mapeamento Fixo conforme Regra de Negócio (Indicação de Pagamento)
+// Mapeamento Fixo conforme Regra de Negócio
 const MAPA_IND_PAGAMENTO = {
     '1': '01 - Doc. Parada Angelica (Dentro)',
     '2': '02 - Cheque Predatado',
@@ -43,11 +43,9 @@ const CORES_FILIAL = {
     'LCMAT': 'bg-orange-100 text-orange-800 border-orange-200'
 };
 
-// --- 2. UTILITÁRIOS DE SISTEMA ---
+// --- 2. UTILITÁRIOS ---
 
-function getToken() { 
-    return localStorage.getItem('lucaUserToken'); 
-}
+function getToken() { return localStorage.getItem('lucaUserToken'); }
 
 function getUserName() { 
     const t = getToken(); 
@@ -55,17 +53,15 @@ function getUserName() {
     try { return JSON.parse(atob(t.split('.')[1])).nome; } catch(e){ return 'Usuário'; } 
 }
 
-// --- 3. INICIALIZAÇÃO DA PÁGINA ---
+// --- 3. INICIALIZAÇÃO ---
 
 async function initPage() {
-    // Verificação de Segurança
     if (!getToken()) { window.location.href = 'login.html'; return; }
     
-    // UI: Nome do Usuário
     const elUser = document.getElementById('user-name');
     if (elUser) elUser.textContent = getUserName();
     
-    // Configuração de Datas (Padrão: -30 dias a +30 dias)
+    // Configura Datas
     const hoje = new Date();
     const passado = new Date(); passado.setDate(hoje.getDate() - 30);
     const futuro = new Date(); futuro.setDate(hoje.getDate() + 30);
@@ -75,7 +71,7 @@ async function initPage() {
     if(elInicio) elInicio.value = passado.toISOString().split('T')[0];
     if(elFim) elFim.value = futuro.toISOString().split('T')[0];
 
-    // Popula Select de Tipos de Documento
+    // Popula Select
     const selectTipo = document.getElementById('filtro-tipo-doc');
     if (selectTipo) {
         while (selectTipo.options.length > 1) { selectTipo.remove(1); }
@@ -87,19 +83,14 @@ async function initPage() {
         }
     }
 
-    // Inicializa Componentes
     initTable();
     setupEventListeners();
-    
-    // Carregamento Inicial
     loadTitulos();
 }
 
 function setupEventListeners() {
-    // Botão de Filtro
     document.getElementById('btn-filtrar').addEventListener('click', loadTitulos);
     
-    // Busca Rápida (Enter)
     const inputBusca = document.getElementById('filtro-busca');
     if(inputBusca) {
         inputBusca.addEventListener('keypress', (e) => { 
@@ -107,13 +98,12 @@ function setupEventListeners() {
         });
     }
     
-    // Logout
     document.getElementById('logout-btn').addEventListener('click', () => { 
         localStorage.removeItem('lucaUserToken'); 
         window.location.href = 'login.html'; 
     });
     
-    // Menu de Colunas (Toggle)
+    // Menu Colunas
     const btnColunas = document.getElementById('btn-colunas');
     if(btnColunas) {
         btnColunas.addEventListener('click', (e) => {
@@ -123,7 +113,6 @@ function setupEventListeners() {
         });
     }
 
-    // Fechar Menu ao clicar fora
     document.addEventListener('click', (e) => {
         const menu = document.getElementById('menu-colunas');
         const btn = document.getElementById('btn-colunas');
@@ -132,7 +121,6 @@ function setupEventListeners() {
         }
     });
 
-    // Modal de Edição
     const elModalMod = document.getElementById('modal-modalidade');
     if(elModalMod) elModalMod.addEventListener('change', togglePainelCheque);
     
@@ -151,16 +139,17 @@ function initTable() {
         reactiveData: true,    
         
         persistence: true, 
-        persistenceID: "financeiroConfigV10", 
+        persistenceID: "financeiroConfigV11", // ID Atualizado para limpar cache antigo
         
-        // --- CORREÇÃO DO ERRO DE TRAVAMENTO ---
-        resizableColumns: false, // OBRIGATÓRIO: False para não conflitar com ícones
+        // --- MUDANÇA CRÍTICA AQUI ---
+        // Desativa o redimensionamento para evitar o erro "e.element.after is not a function"
+        resizableColumns: false, 
         movableColumns: true,    
 
         columns: [
             { title: "ID", field: "id", visible: false },
 
-            // --- Colunas Congeladas (Esquerda) ---
+            // Fixa
             { 
                 title: "Vencimento", 
                 field: "vencimento", 
@@ -171,7 +160,7 @@ function initTable() {
                 frozen: true 
             },
 
-            // --- Identificação ---
+            // Identificação
             { title: "Filial", field: "filial", formatter: filialFormatter, hozAlign: "center", width: 80 },
             { 
                 title: "Razão Social", 
@@ -181,23 +170,21 @@ function initTable() {
             },
             { title: "Nome Fantasia", field: "fantasia", width: 180, visible: false },
             
-            // --- Documentos ---
+            // Documentos
             { title: "NF", field: "nf", hozAlign: "center", width: 90 },
             { title: "Duplicata", field: "duplicata", hozAlign: "center", width: 80, visible: false },
             { title: "Borderô", field: "bordero", width: 80, visible: false },
 
-            // --- Classificação e Detalhes ---
+            // Classificação
             { 
                 title: "Indicação Pagto (C. Custo)", 
                 field: "indicacao_pagamento_cod", 
                 width: 200, 
                 visible: true,
                 formatter: (cell) => {
-                    // Trata números ou strings
                     const val = cell.getValue();
                     let key = parseInt(val);
                     if (isNaN(key)) key = val;
-                    
                     let text = MAPA_IND_PAGAMENTO[key] || MAPA_IND_PAGAMENTO[val] || val || '-';
                     return `<div class='truncate text-[10px] text-gray-500 font-medium' title='${text}'>${text}</div>`;
                 }
@@ -216,7 +203,7 @@ function initTable() {
                 formatter: (cell) => `<div class='truncate text-[10px] text-gray-500' title='${cell.getValue()}'>${cell.getValue() || '-'}</div>`
             },
 
-            // --- Financeiro ---
+            // Valores
             { 
                 title: "Valor Devido", 
                 field: "valor_devido", 
@@ -224,12 +211,11 @@ function initTable() {
                 hozAlign: "right", 
                 width: 120 
             },
-            // Colunas de valores extras (Ocultas por padrão)
             { title: "Valor Pago", field: "valor_pago", formatter: moneyFormatter, hozAlign: "right", width: 110, visible: false },
             { title: "Juros", field: "juros", formatter: moneyFormatter, hozAlign: "right", width: 90, visible: false },
             { title: "Desconto", field: "desconto", formatter: moneyFormatter, hozAlign: "right", width: 90, visible: false },
 
-            // --- Status e Ação ---
+            // Status e Ação
             { 
                 title: "Status", 
                 field: "status_erp", 
@@ -246,54 +232,42 @@ function initTable() {
                 headerSort: false 
             },
 
-            // --- Metadados e Auditoria (Ocultos por padrão) ---
+            // Ocultas
             { title: "Data Lançamento", field: "lancamento", formatter: dateFormatter, hozAlign: "center", width: 100, visible: false },
             { title: "Usuário Lançou", field: "usuario_lancou", width: 120, visible: false },
-            
             { title: "Data Baixa", field: "baixa", formatter: dateFormatter, hozAlign: "center", width: 100, visible: false },
             { title: "Usuário Baixou", field: "usuario_baixou", width: 120, visible: false },
-            
             { title: "Data Cancelamento", field: "cancelamento", formatter: dateFormatter, hozAlign: "center", width: 100, visible: false },
             { title: "Usuário Cancelou", field: "usuario_cancelou", width: 120, visible: false },
-            
             { title: "Estornado", field: "estornado", hozAlign: "center", width: 80, visible: false },
             { title: "RG Fornecedor", field: "rg_fornecedor", width: 100, visible: false },
             { title: "Forma Pagto (ERP)", field: "forma_pagto_erp", width: 120, visible: false },
             { title: "Histórico Compras", field: "historico_compras", width: 150, visible: false },
-            
-            // Dados Cheque ERP
             { title: "Banco (Cheque)", field: "banco_cheque", width: 80, visible: false },
             { title: "Agência (Cheque)", field: "agencia_cheque", width: 80, visible: false },
             { title: "Conta (Cheque)", field: "conta_cheque", width: 100, visible: false },
             { title: "Num Cheque (ERP)", field: "num_cheque_erp", width: 100, visible: false },
             { title: "Nome Banco", field: "nome_banco_cheque", width: 120, visible: false },
-            
-            // Obs Gerencial
             { title: "Obs Gerencial", field: "observacao", width: 200, formatter: "textarea", visible: false }
         ],
         
-        // --- Callbacks de Eventos ---
-        
-        // 1. Carregou dados iniciais: Atualiza Rodapé e Menu
+        // CALLBACKS CRÍTICOS PARA O RODAPÉ
         dataLoaded: function(data) {
-            atualizarRodapeTotais(data);
+            atualizarTotais(data);
             popularMenuColunas();
         },
-        
-        // 2. Filtrou dados na tabela: Recalcula Rodapé com base no que sobrou
         dataFiltered: function(filters, rows) {
             const dadosVisiveis = rows.map(row => row.getData());
-            atualizarRodapeTotais(dadosVisiveis);
+            atualizarTotais(dadosVisiveis);
         }
     });
 }
 
-// --- 5. FORMATADORES VISUAIS (CELL FORMATTERS) ---
+// --- 5. FORMATADORES ---
 
 function dateFormatter(cell) {
     const val = cell.getValue();
     if (!val) return "-";
-    // Ajuste de fuso horário UTC para exibir a data correta no Brasil
     return new Date(val).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
@@ -305,18 +279,14 @@ function filialFormatter(cell) {
 
 function moneyFormatter(cell) {
     const val = parseFloat(cell.getValue() || 0);
-    // Formatação BRL: R$ 1.234,56
     return `<span class="font-bold text-gray-700">${val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>`;
 }
 
 function statusFormatter(cell) {
     const val = cell.getValue(); 
     const row = cell.getRow().getData();
-    
     if (val === 'PAGO') return `<span class="text-green-700 font-bold bg-green-100 px-2 py-0.5 rounded border border-green-200 text-[10px]">PAGO</span>`;
     if (val === 'CANCELADO') return `<span class="text-gray-400 font-bold bg-gray-50 px-2 py-0.5 rounded border border-gray-200 text-[10px] line-through">CANCELADO</span>`;
-    
-    // Lógica de Vencimento
     if (row.vencimento && new Date(row.vencimento) < new Date() && val === 'ABERTO') {
         return `<span class="text-red-700 font-bold bg-red-100 px-2 py-0.5 rounded border border-red-200 text-[10px]">VENCIDO</span>`;
     }
@@ -330,37 +300,23 @@ function buttonFormatter(cell) {
 
     if (row.modalidade === 'CHEQUE') {
         btnClass = 'bg-yellow-50 text-yellow-800 border-yellow-300 hover:bg-yellow-100';
-        
-        // Lógica de Cores para Status do Cheque
-        if (row.status_cheque === 'COMPENSADO') {
-            btnClass = 'bg-green-50 text-green-800 border-green-300 hover:bg-green-100';
-        } else if (row.status_cheque && row.status_cheque.includes('DEVOLVIDO')) {
-            btnClass = 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100';
-        }
+        if (row.status_cheque === 'COMPENSADO') btnClass = 'bg-green-50 text-green-800 border-green-300 hover:bg-green-100';
+        else if (row.status_cheque && row.status_cheque.includes('DEVOLVIDO')) btnClass = 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100';
         
         btnText = `CHQ ${row.numero_cheque ? '#' + row.numero_cheque : ''}`;
-        
-        // Abreviações inteligentes para caber no botão
         if (row.status_cheque !== 'NAO_APLICA' && row.status_cheque) {
-            const statusCurto = row.status_cheque
-                .replace('DEVOLVIDO_', 'DEV ')
-                .replace('COMPENSADO', 'OK')
-                .replace('ENTREGUE', 'PRÉ')
-                .replace('EM_MAOS', 'MÃOS');
+            const statusCurto = row.status_cheque.replace('DEVOLVIDO_', 'DEV ').replace('COMPENSADO', 'OK').replace('ENTREGUE', 'PRÉ').replace('EM_MAOS', 'MÃOS');
             btnText += ` (${statusCurto})`;
         }
     } else if (row.modalidade === 'PIX') {
         btnClass = 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100';
     }
-
-    // Botão que abre o modal
     return `<button class="btn-status ${btnClass}" onclick="window.openEditModal(${row.id})">${btnText}</button>`;
 }
 
-// --- 6. COMUNICAÇÃO COM API (DATA LOADING) ---
+// --- 6. CARREGAMENTO ---
 
 async function loadTitulos() {
-    // 1. Coleta Parâmetros da UI
     const params = new URLSearchParams({
         dataInicio: document.getElementById('filtro-inicio').value,
         dataFim: document.getElementById('filtro-fim').value,
@@ -383,89 +339,68 @@ async function loadTitulos() {
         }
 
         const dados = await res.json();
-        
-        // 3. Atualiza Tabela
         table.setData(dados);
         
-        // 4. Ajusta Coluna de Data Dinamicamente (UX)
         const tipoData = document.getElementById('filtro-tipo-data').value;
         const colData = table.getColumn("vencimento");
-        
         if(colData) {
-            const fieldMap = { 
-                'vencimento': 'vencimento', 
-                'lancamento': 'lancamento', 
-                'baixa': 'baixa', 
-                'cancelamento': 'cancelamento' 
-            };
-            
+            const fieldMap = { 'vencimento': 'vencimento', 'lancamento': 'lancamento', 'baixa': 'baixa', 'cancelamento': 'cancelamento' };
             colData.updateDefinition({ 
                 title: tipoData.charAt(0).toUpperCase() + tipoData.slice(1), 
                 field: fieldMap[tipoData] || 'vencimento' 
             });
         }
-
     } catch (err) {
         console.error(err);
         alert("Erro ao carregar dados: " + err.message);
     }
 }
 
-// --- 7. ATUALIZAÇÃO DE TOTAIS (RODAPÉ) ---
+// --- 7. TOTAIS DO RODAPÉ (Lógica de Renderização) ---
 
-function atualizarRodapeTotais(dados) {
-    // 1. Calcula Soma
-    const totalValor = dados.reduce((acc, curr) => acc + (parseFloat(curr.valor_devido) || 0), 0);
+function atualizarTotais(dados) {
+    // Reduz os dados para calcular a soma
+    const total = dados.reduce((acc, curr) => acc + (parseFloat(curr.valor_devido) || 0), 0);
     
-    // 2. Atualiza DOM
     const elReg = document.getElementById('total-registros');
     if(elReg) elReg.textContent = `${dados.length} registros`;
     
     const elValor = document.getElementById('total-valor');
     if(elValor) {
-        elValor.textContent = totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        
-        // 3. Animação Visual (Pulse)
+        elValor.textContent = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         elValor.classList.remove('scale-105'); 
-        void elValor.offsetWidth; // Força Reflow do CSS
+        void elValor.offsetWidth; 
         elValor.classList.add('scale-105'); 
     }
 }
 
-// --- 8. GERENCIADOR DE COLUNAS (MENU) ---
+// --- 8. MENU COLUNAS ---
 
 function popularMenuColunas() {
     const lista = document.getElementById('lista-colunas');
     if(!lista) return;
-    lista.innerHTML = ''; // Limpa menu anterior
+    lista.innerHTML = ''; 
 
-    // Itera sobre as colunas reais da tabela
     table.getColumns().forEach(col => {
         const def = col.getDefinition();
-        if (def.field === 'id') return; // Ignora ID interno
+        if (def.field === 'id') return; 
 
-        // Cria Item do Menu
         const div = document.createElement('div');
-        div.className = 'flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 cursor-pointer rounded select-none border-b border-gray-50 last:border-0 transition-colors';
+        div.className = 'flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 cursor-pointer rounded select-none border-b border-gray-50 last:border-0';
         
         const check = document.createElement('input');
         check.type = 'checkbox';
         check.checked = col.isVisible();
         check.className = 'rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer w-3.5 h-3.5';
         
-        // Toggle Logic
-        const toggle = () => { 
-            col.toggle(); 
-            check.checked = col.isVisible(); 
-        };
+        const toggle = () => { col.toggle(); check.checked = col.isVisible(); };
 
-        // Click no container ou checkbox aciona o toggle
         div.onclick = (e) => { e.stopPropagation(); toggle(); };
         check.onclick = (e) => { e.stopPropagation(); toggle(); };
 
         const label = document.createElement('span');
         label.textContent = def.title;
-        label.className = 'text-gray-700 truncate text-[11px] font-medium';
+        label.className = 'text-gray-700 truncate text-[11px]';
 
         div.appendChild(check);
         div.appendChild(label);
@@ -473,30 +408,20 @@ function popularMenuColunas() {
     });
 }
 
-// --- 9. MODAL DE EDIÇÃO ---
+// --- 9. MODAL ---
 
 function togglePainelCheque() {
-    const elTipo = document.getElementById('modal-modalidade');
+    const tipo = document.getElementById('modal-modalidade').value;
     const painel = document.getElementById('painel-cheque');
-    
-    if (elTipo && painel) {
-        if (elTipo.value === 'CHEQUE') {
-            painel.classList.remove('hidden');
-        } else {
-            painel.classList.add('hidden');
-        }
-    }
+    if (tipo === 'CHEQUE') painel.classList.remove('hidden'); 
+    else painel.classList.add('hidden');
 }
 
 function toggleModal(show) {
     const modal = document.getElementById('modal-cheque');
     const content = document.getElementById('modal-content');
-    
-    if (!modal || !content) return;
-
     if (show) {
         modal.classList.remove('opacity-0', 'pointer-events-none', 'hidden');
-        // Pequeno delay para permitir a animação CSS
         setTimeout(() => content.classList.replace('scale-95', 'scale-100'), 10);
     } else {
         content.classList.replace('scale-100', 'scale-95');
@@ -505,20 +430,17 @@ function toggleModal(show) {
     }
 }
 
-// Função Global: Exposta no window para ser chamada pelo onclick do HTML string do Tabulator
 window.openEditModal = function(idTitulo) {
-    // Busca a linha completa na tabela usando o ID
     const row = table.getData().find(r => r.id === idTitulo);
     if (!row) return;
 
-    // Preenche o Modal
     document.getElementById('modal-id-titulo').value = row.id;
     document.getElementById('modal-modalidade').value = row.modalidade || 'BOLETO';
     document.getElementById('modal-status-cheque').value = row.status_cheque || 'NAO_APLICA';
     document.getElementById('modal-numero-cheque').value = row.numero_cheque || '';
     document.getElementById('modal-obs').value = row.observacao || '';
     
-    togglePainelCheque(); // Mostra/Esconde campos de cheque
+    togglePainelCheque();
     toggleModal(true);
 };
 
@@ -526,19 +448,13 @@ async function saveClassificacao() {
     const btn = document.getElementById('btn-salvar-modal');
     const originalText = btn.innerHTML;
     
-    // Estado de Loading
     btn.disabled = true;
-    btn.innerHTML = '<i data-feather="loader" class="animate-spin w-3 h-3 inline"></i> Salvando...';
-    if(typeof feather !== 'undefined') feather.replace();
+    btn.innerHTML = 'Salvando...';
 
     const id = document.getElementById('modal-id-titulo').value;
-    
-    // Monta Payload
-    const modalidadeVal = document.getElementById('modal-modalidade').value;
     const payload = {
-        modalidade: modalidadeVal,
-        // Limpa dados de cheque se mudou para outra modalidade
-        status_cheque: modalidadeVal === 'CHEQUE' ? document.getElementById('modal-status-cheque').value : 'NAO_APLICA',
+        modalidade: document.getElementById('modal-modalidade').value,
+        status_cheque: document.getElementById('modal-modalidade').value === 'CHEQUE' ? document.getElementById('modal-status-cheque').value : 'NAO_APLICA',
         numero_cheque: document.getElementById('modal-numero-cheque').value,
         observacao: document.getElementById('modal-obs').value
     };
@@ -550,14 +466,9 @@ async function saveClassificacao() {
             body: JSON.stringify(payload)
         });
 
-        if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error || 'Erro ao salvar');
-        }
+        if (!res.ok) throw new Error('Erro ao salvar');
 
         toggleModal(false);
-        
-        // Atualiza a linha localmente para feedback instantâneo
         table.updateData([{ id: parseInt(id), ...payload }]); 
         
     } catch (err) {
@@ -565,6 +476,5 @@ async function saveClassificacao() {
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;
-        if(typeof feather !== 'undefined') feather.replace();
     }
 }
