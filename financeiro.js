@@ -139,11 +139,15 @@ function initTable() {
         reactiveData: true,    
         
         persistence: true, 
-        persistenceID: "financeiroConfigV13", // ID NOVO para limpar cache antigo do navegador
+        persistenceID: "financeiroConfigV14", // Alterei para V14 para forçar limpeza do cache do navegador
         
         // --- CORREÇÃO DO ERRO ---
-        // Desativamos o redimensionamento para evitar conflito com os ícones que travava o script
-        resizableColumns: false, 
+        // Na versão 6+, usa-se columnDefaults para desativar o resize.
+        // Isso impede que o módulo ResizeColumns tente acessar o DOM de colunas congeladas e quebre o script.
+        columnDefaults: {
+            resizable: false,
+        },
+        
         movableColumns: true,    
 
         columns: [
@@ -157,7 +161,7 @@ function initTable() {
                 hozAlign: "center", 
                 width: 100, 
                 headerSortStartingDir: "asc", 
-                frozen: true 
+                frozen: true // O erro ocorria aqui devido ao conflito de resize
             },
 
             // Identificação
@@ -185,7 +189,8 @@ function initTable() {
                     const val = cell.getValue();
                     let key = parseInt(val);
                     if (isNaN(key)) key = val;
-                    let text = MAPA_IND_PAGAMENTO[key] || MAPA_IND_PAGAMENTO[val] || val || '-';
+                    // Conversão para String para garantir match no objeto
+                    let text = MAPA_IND_PAGAMENTO[String(key)] || MAPA_IND_PAGAMENTO[val] || val || '-';
                     return `<div class='truncate text-[10px] text-gray-500 font-medium' title='${text}'>${text}</div>`;
                 }
             },
@@ -193,7 +198,12 @@ function initTable() {
                 title: "Tipo Despesa", 
                 field: "tipo_despesa_cod", 
                 width: 140, 
-                formatter: (cell) => `<span class='truncate block w-full text-xs' title='${MAPA_TIPOS_DESPESA[cell.getValue()] || ""}'>${MAPA_TIPOS_DESPESA[cell.getValue()] || '-'}</span>`
+                formatter: (cell) => {
+                     // Correção de segurança para garantir que acesse o mapa corretamente
+                     const val = String(cell.getValue());
+                     const desc = MAPA_TIPOS_DESPESA[val] || '-';
+                     return `<span class='truncate block w-full text-xs' title='${desc}'>${desc}</span>`;
+                }
             },
             { 
                 title: "Histórico", 
@@ -251,10 +261,13 @@ function initTable() {
             { title: "Obs Gerencial", field: "observacao", width: 200, formatter: "textarea", visible: false }
         ],
         
-        // CALLBACKS CRÍTICOS PARA O RODAPÉ
-        dataLoaded: function(data) {
-            atualizarTotais(data);
-            popularMenuColunas();
+        // CALLBACKS
+        // Importante: No Tabulator 6, o 'dataLoaded' as vezes dispara antes da renderização completa
+        // Adicionamos 'renderComplete' para garantir
+        renderComplete: function() {
+             const rows = this.getRows('active'); // Pega apenas as linhas filtradas/visíveis
+             const data = rows.map(row => row.getData());
+             atualizarTotais(data);
         },
         dataFiltered: function(filters, rows) {
             const dadosVisiveis = rows.map(row => row.getData());
