@@ -5,14 +5,15 @@ const { authenticateToken } = require('../middlewares');
 const dbConfig = require('../dbConfig');
 
 // --- Configuração dos Pools de Conexão ---
-// Pool SEI (ERP Legado - Apenas Leitura recomendada)
+
+// Pool SEI (ERP Legado)
 const dbConfigSei = {
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_DATABASE_SEI, 
     charset: 'utf8mb4',
-    timezone: 'local' // Importante para datas
+    timezone: 'local'
 };
 
 // Pool Gerencial (Dados da Aplicação Web)
@@ -21,7 +22,7 @@ const gerencialPool = mysql.createPool(dbConfig);
 
 /**
  * Middleware de Controle de Acesso (RBAC)
- * Verifica se o usuário tem permissão na tabela 'perfil_permissoes'
+ * Verifica permissões granulares na tabela 'perfil_permissoes'
  */
 const checkPerm = (permNecessaria) => async (req, res, next) => {
     try {
@@ -47,14 +48,14 @@ const checkPerm = (permNecessaria) => async (req, res, next) => {
             return next();
         }
 
-        // 3. Verifica permissão granular
+        // 3. Verifica permissão específica
         const [permRows] = await gerencialPool.query(
             `SELECT permitido FROM perfil_permissoes 
              WHERE id_perfil = ? AND nome_modulo = ? AND permitido = 1`,
             [id_perfil, permNecessaria]
         );
 
-        // Herança de permissão: Quem pode OPERAR (_oper) também pode VISUALIZAR (_view)
+        // Herança: Quem tem permissão de OPERAR (_oper) também pode VISUALIZAR (_view)
         let temPermissao = permRows.length > 0;
         if (!temPermissao && permNecessaria.includes('_view')) {
              const permOper = permNecessaria.replace('_view', '_oper');
@@ -90,7 +91,6 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
 
     try {
         // 1. Determina a coluna de data base para o filtro
-        // Mapeamento seguro para evitar SQL Injection via nome de coluna
         const mapaColunasData = {
             'lancamento': 'ap_dtlanc',
             'baixa': 'ap_dtbaix',
@@ -100,7 +100,7 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
         const colunaData = mapaColunasData[tipoData] || 'ap_dtvenc';
 
         // 2. Construção da Query SQL Dinâmica (ERP)
-        // Removido 'ap_horabc' para evitar erro "Unknown Column"
+        // OBS: Removido 'ap_horabc' que causava erro anteriormente
         let querySei = `
             SELECT 
                 ap_regist, ap_ctrlcm, ap_parcel, ap_nomefo, ap_fantas, ap_rgforn,
@@ -151,7 +151,7 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
         }
 
         // Limite de segurança para performance
-        querySei += ` ORDER BY ${colunaData} ASC LIMIT 2000`;
+        querySei += ` ORDER BY ${colunaData} ASC LIMIT 2500`;
 
         // Executa Query no ERP
         const [titulosERP] = await seiPool.query(querySei, paramsSei);
@@ -193,12 +193,13 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
             }
         }
 
-        // 4. Data Merge & Transformation (DTO)
+        // 4. Transformação e Merge de Dados (DTO)
         const resultado = titulosERP.map(t => {
             const extra = extras.find(e => e.id_titulo_erp === t.ap_regist);
             
             // Lógica de Negócio: Inferência de Modalidade
             let modalidade = extra ? extra.modalidade : 'BOLETO';
+            // Se o ERP diz que é tipo '2' (Cheque), sugerimos Cheque se não houver classificação manual
             if (!extra && t.ap_lanxml == 2) modalidade = 'CHEQUE';
 
             return {
@@ -211,14 +212,18 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
                 fantasia: t.ap_fantas,
                 nf: t.ap_numenf,
                 valor_devido: parseFloat(t.ap_valord || 0),
+                valor_pago: parseFloat(t.ap_valorb || 0),
+                juros: parseFloat(t.ap_jurosm || 0),
+                desconto: parseFloat(t.ap_descon || 0),
                 
-                // Classificação
-                indicacao_pagamento_cod: t.ap_pagame, // Custo/Indicação
-                tipo_despesa_cod: t.ap_lanxml,        // Tipo
+                // Classificação e Detalhes
+                indicacao_pagamento_cod: t.ap_pagame, // Código para mapeamento no front
+                tipo_despesa_cod: t.ap_lanxml,        // Código para mapeamento no front
                 historico: t.ap_histor,
                 
-                // Status e Controle
+                // Status Traduzido
                 status_erp: t.ap_status === '1' ? 'PAGO' : (t.ap_status === '2' ? 'CANCELADO' : 'ABERTO'),
+                estornado: t.ap_estorn === '1' ? 'SIM' : 'NÃO',
                 
                 // Dados Extras Gerenciais
                 modalidade: modalidade,
@@ -226,19 +231,24 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
                 numero_cheque: extra ? extra.numero_cheque : '',
                 observacao: extra ? extra.observacao : '',
                 
-                // Campos Secundários (Disponíveis para colunas ocultas)
+                // Campos Secundários (para colunas ocultas)
                 lancamento: t.ap_dtlanc,
                 baixa: t.ap_dtbaix,
-                cancelamento: t.ap_dtcanc,
                 usuario_lancou: t.ap_usalan,
                 usuario_baixou: t.ap_usabix,
+                usuario_cancelou: t.ap_usacan,
                 duplicata: t.ap_duplic,
                 banco_cheque: t.ap_chbanc,
-                conta_cheque: t.ap_chcont
+                agencia_cheque: t.ap_chagen,
+                conta_cheque: t.ap_chcont,
+                num_cheque_erp: t.ap_chnume,
+                nome_banco_cheque: t.ap_chcorr,
+                rg_fornecedor: t.ap_rgforn,
+                forma_pagto_erp: t.ap_fpagam
             };
         });
 
-        // Filtro final em memória se houver filtro de modalidade
+        // 5. Filtro Final de Modalidade
         const dadosFinais = modalidade 
             ? resultado.filter(item => item.modalidade === modalidade)
             : resultado;
@@ -264,22 +274,18 @@ router.post('/titulos/:id/classificar', authenticateToken, checkPerm('fin_pagar_
     if (!idTitulo) return res.status(400).json({ error: 'ID do título obrigatório.' });
 
     try {
-        // Upsert Pattern (Insert ou Update)
-        const [existe] = await gerencialPool.query('SELECT id FROM financeiro_titulos_extra WHERE id_titulo_erp = ?', [idTitulo]);
-
-        if (existe.length > 0) {
-            await gerencialPool.query(`
-                UPDATE financeiro_titulos_extra 
-                SET modalidade = ?, status_cheque = ?, numero_cheque = ?, observacao = ?, id_usuario_alteracao = ?
-                WHERE id_titulo_erp = ?
-            `, [modalidade, status_cheque, numero_cheque, observacao, idUsuario, idTitulo]);
-        } else {
-            await gerencialPool.query(`
-                INSERT INTO financeiro_titulos_extra 
-                (id_titulo_erp, modalidade, status_cheque, numero_cheque, observacao, id_usuario_alteracao)
-                VALUES (?, ?, ?, ?, ?, ?)
-            `, [idTitulo, modalidade, status_cheque, numero_cheque, observacao, idUsuario]);
-        }
+        // Upsert Pattern (Insert ou Update seguro)
+        // Utiliza ON DUPLICATE KEY UPDATE para evitar duas queries (SELECT + INSERT/UPDATE)
+        await gerencialPool.query(`
+            INSERT INTO financeiro_titulos_extra 
+            (id_titulo_erp, modalidade, status_cheque, numero_cheque, observacao, id_usuario_alteracao)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE 
+            modalidade=?, status_cheque=?, numero_cheque=?, observacao=?, id_usuario_alteracao=?
+        `, [
+            idTitulo, modalidade, status_cheque, numero_cheque, observacao, idUsuario, // Values
+            modalidade, status_cheque, numero_cheque, observacao, idUsuario            // Update
+        ]);
         
         res.json({ success: true, message: 'Classificação atualizada.' });
 

@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', initPage);
 
 const API_BASE = '/api/financeiro';
-let table; // Instância global do Tabulator
+let table; // Instância global da tabela Tabulator
 
 // --- 1. CONSTANTES E MAPEAMENTOS ---
 
@@ -145,17 +145,17 @@ function setupEventListeners() {
 
 function initTable() {
     table = new Tabulator("#tabela-financeiro", {
-        layout: "fitDataFill", // Ajusta colunas ao conteúdo, mas estica se sobrar espaço
-        height: "100%",        // Ocupa toda a altura do container pai
+        layout: "fitDataFill", 
+        height: "100%",        
         placeholder: "Sem dados para exibir",
-        reactiveData: true,    // Reatividade para atualizações de array
+        reactiveData: true,    
         
-        // Persistência: Salva a ordem e visibilidade das colunas no navegador do usuário
         persistence: true, 
-        persistenceID: "financeiroConfigV8", 
+        persistenceID: "financeiroConfigV10", 
         
-        movableColumns: true,  // Permite arrastar colunas
-        resizableColumns: true, // Permite redimensionar
+        // --- CORREÇÃO DO ERRO DE TRAVAMENTO ---
+        resizableColumns: false, // OBRIGATÓRIO: False para não conflitar com ícones
+        movableColumns: true,    
 
         columns: [
             { title: "ID", field: "id", visible: false },
@@ -193,7 +193,7 @@ function initTable() {
                 width: 200, 
                 visible: true,
                 formatter: (cell) => {
-                    // Lógica para tratar códigos que vêm como número ou string (ex: 1 ou "01")
+                    // Trata números ou strings
                     const val = cell.getValue();
                     let key = parseInt(val);
                     if (isNaN(key)) key = val;
@@ -274,15 +274,14 @@ function initTable() {
         
         // --- Callbacks de Eventos ---
         
-        // Quando os dados são carregados (inicial ou refresh)
+        // 1. Carregou dados iniciais: Atualiza Rodapé e Menu
         dataLoaded: function(data) {
             atualizarRodapeTotais(data);
             popularMenuColunas();
         },
         
-        // Quando o usuário filtra a tabela no front (se usar filtros de cabeçalho)
+        // 2. Filtrou dados na tabela: Recalcula Rodapé com base no que sobrou
         dataFiltered: function(filters, rows) {
-            // Recalcula totais baseado apenas nas linhas visíveis
             const dadosVisiveis = rows.map(row => row.getData());
             atualizarRodapeTotais(dadosVisiveis);
         }
@@ -373,9 +372,6 @@ async function loadTitulos() {
         modalidade: document.getElementById('filtro-modalidade').value
     });
 
-    // 2. Feedback Visual (Loading)
-    // O Tabulator lida com isso se configurado, mas podemos forçar um estado visual se quiser
-    
     try {
         const res = await fetch(`${API_BASE}/titulos?${params.toString()}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
@@ -392,7 +388,6 @@ async function loadTitulos() {
         table.setData(dados);
         
         // 4. Ajusta Coluna de Data Dinamicamente (UX)
-        // Se o usuário filtrou por "Baixa", a coluna de data mostra a Data da Baixa
         const tipoData = document.getElementById('filtro-tipo-data').value;
         const colData = table.getColumn("vencimento");
         
