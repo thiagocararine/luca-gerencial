@@ -139,11 +139,10 @@ function initTable() {
         reactiveData: true,    
         
         persistence: true, 
-        persistenceID: "financeiroConfigV11", // ID Atualizado para limpar cache antigo
+        persistenceID: "financeiroConfigV12", // ID NOVO para limpar cache antigo
         
-        // --- MUDANÇA CRÍTICA AQUI ---
-        // Desativa o redimensionamento para evitar o erro "e.element.after is not a function"
-        resizableColumns: false, 
+        // --- CORREÇÃO DO ERRO ---
+        resizableColumns: false, // ESTA LINHA CORRIGE O TRAVAMENTO
         movableColumns: true,    
 
         columns: [
@@ -168,7 +167,7 @@ function initTable() {
                 width: 220, 
                 formatter: (cell) => `<div class='truncate font-bold text-gray-700' title='${cell.getValue()}'>${cell.getValue()}</div>` 
             },
-            { title: "Nome Fantasia", field: "fantasia", width: 180, visible: false },
+            { title: "Fantasia", field: "fantasia", width: 150, visible: false },
             
             // Documentos
             { title: "NF", field: "nf", hozAlign: "center", width: 90 },
