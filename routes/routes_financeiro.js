@@ -135,18 +135,23 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
         // Busca Inteligente (Numérico ou Texto)
         if (busca && busca.trim() !== '') {
             const termo = busca.trim();
-            // Se começar com $, busca por valor aproximado
+            
+            // CORREÇÃO 1: Busca por valor ($)
             if (termo.startsWith('$')) {
-                const valorBusca = parseFloat(termo.replace('$', '').replace(',', '.'));
+                // Remove R$, $, espaços e PONTOS de milhar (ex: 1.500,00 -> 1500.00)
+                const valorLimpo = termo.replace(/[R$\s.]/g, '').replace(',', '.');
+                const valorBusca = parseFloat(valorLimpo);
+                
                 if (!isNaN(valorBusca)) {
                     querySei += ` AND (ABS(ap_valord - ?) < 0.05 OR ABS(ap_valorb - ?) < 0.05)`;
                     paramsSei.push(valorBusca, valorBusca);
                 }
             } else {
-                // Busca textual ampla
-                querySei += ` AND (ap_nomefo LIKE ? OR ap_fantas LIKE ? OR ap_numenf LIKE ? OR ap_histor LIKE ?)`;
+                // CORREÇÃO 2: Inclusão do campo de Controle (ap_ctrlcm) na busca textual
+                // Adicionei "OR ap_ctrlcm LIKE ?"
+                querySei += ` AND (ap_nomefo LIKE ? OR ap_fantas LIKE ? OR ap_numenf LIKE ? OR ap_histor LIKE ? OR ap_ctrlcm LIKE ?)`;
                 const likeTerm = `%${termo}%`;
-                paramsSei.push(likeTerm, likeTerm, likeTerm, likeTerm);
+                paramsSei.push(likeTerm, likeTerm, likeTerm, likeTerm, likeTerm);
             }
         }
 
@@ -205,6 +210,8 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
             return {
                 id: t.ap_regist,
                 
+                controle_parcela: `${t.ap_ctrlcm || ''}-${t.ap_parcel || ''}`,
+
                 // Dados Principais
                 vencimento: t.ap_dtvenc,
                 filial: t.ap_filial,

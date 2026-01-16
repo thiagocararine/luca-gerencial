@@ -146,6 +146,15 @@ function initTable() {
 
             // Identificação
             { title: "Filial", field: "filial", formatter: filialFormatter, hozAlign: "center", width: 80 },
+
+            { 
+                title: "Nº Controle", 
+                field: "controle_parcela", 
+                width: 130, 
+                visible: true,
+                formatter: (cell) => `<span class="font-mono text-xs font-bold text-gray-600">${cell.getValue()}</span>`
+            },
+
             { 
                 title: "Razão Social", 
                 field: "fornecedor", 
