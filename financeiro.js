@@ -6,34 +6,16 @@ let table; // Instância global da tabela Tabulator
 // --- 1. CONSTANTES E MAPEAMENTOS ---
 
 const MAPA_TIPOS_DESPESA = {
-    '1': 'Duplicatas de Compras',
-    '2': 'Cheque',
-    '3': 'Subs. Tributária',
-    '4': 'Despesas Fixas',
-    '5': 'Despesas de Pessoal',
-    '6': 'Impostos',
-    '7': 'Frete e Combustível',
-    '8': 'Manutenção',
-    '9': 'Despesas Administrativas',
-    '10': 'Despesas Financeiras',
-    '11': 'IPTU',
-    '12': 'Veículos'
+    '1': 'Duplicatas de Compras', '2': 'Cheque', '3': 'Subs. Tributária', '4': 'Despesas Fixas',
+    '5': 'Despesas de Pessoal', '6': 'Impostos', '7': 'Frete e Combustível', '8': 'Manutenção',
+    '9': 'Despesas Administrativas', '10': 'Despesas Financeiras', '11': 'IPTU', '12': 'Veículos'
 };
 
-// Mapeamento Fixo conforme Regra de Negócio
 const MAPA_IND_PAGAMENTO = {
-    '1': '01 - Doc. Parada Angelica (Dentro)',
-    '2': '02 - Cheque Predatado',
-    '3': '03 - Doc. Parada Angelica (Fora)',
-    '4': '04 - Doc. Nova Campinas (Dentro)',
-    '5': '05 - Doc. Santa Cruz (Dentro)',
-    '6': '06 - Doc. Piabeta (Dentro)',
-    '7': '07 - Doc. Nova Campinas (Fora)',
-    '8': '08 - Doc. Santa Cruz (Fora)',
-    '9': '09 - Doc. Piabeta (Fora)',
-    '10': '10 - Doc. Mendes',
-    '11': '11 - Doc. 1000T',
-    '12': '12 - Doc. Luk'
+    '1': '01 - Doc. Parada Angelica (Dentro)', '2': '02 - Cheque Predatado', '3': '03 - Doc. Parada Angelica (Fora)',
+    '4': '04 - Doc. Nova Campinas (Dentro)', '5': '05 - Doc. Santa Cruz (Dentro)', '6': '06 - Doc. Piabeta (Dentro)',
+    '7': '07 - Doc. Nova Campinas (Fora)', '8': '08 - Doc. Santa Cruz (Fora)', '9': '09 - Doc. Piabeta (Fora)',
+    '10': '10 - Doc. Mendes', '11': '11 - Doc. 1000T', '12': '12 - Doc. Luk'
 };
 
 const CORES_FILIAL = {
@@ -61,7 +43,7 @@ async function initPage() {
     const elUser = document.getElementById('user-name');
     if (elUser) elUser.textContent = getUserName();
     
-    // Configura Datas
+    // Configura Datas (Padrão: Hoje - 30 dias até Hoje + 30 dias)
     const hoje = new Date();
     const passado = new Date(); passado.setDate(hoje.getDate() - 30);
     const futuro = new Date(); futuro.setDate(hoje.getDate() + 30);
@@ -71,7 +53,7 @@ async function initPage() {
     if(elInicio) elInicio.value = passado.toISOString().split('T')[0];
     if(elFim) elFim.value = futuro.toISOString().split('T')[0];
 
-    // Popula Select
+    // Popula Select de Tipos
     const selectTipo = document.getElementById('filtro-tipo-doc');
     if (selectTipo) {
         while (selectTipo.options.length > 1) { selectTipo.remove(1); }
@@ -85,7 +67,8 @@ async function initPage() {
 
     initTable();
     setupEventListeners();
-    loadTitulos();
+    // Carregamento inicial (aguarda a tabela estar pronta)
+    setTimeout(loadTitulos, 500); 
 }
 
 function setupEventListeners() {
@@ -121,6 +104,7 @@ function setupEventListeners() {
         }
     });
 
+    // Eventos do Modal
     const elModalMod = document.getElementById('modal-modalidade');
     if(elModalMod) elModalMod.addEventListener('change', togglePainelCheque);
     
@@ -135,25 +119,21 @@ function initTable() {
     table = new Tabulator("#tabela-financeiro", {
         layout: "fitDataFill", 
         height: "100%",        
-        placeholder: "Sem dados para exibir",
+        placeholder: "Carregando dados...",
         reactiveData: true,    
         
         persistence: true, 
-        persistenceID: "financeiroConfigV14", // Alterei para V14 para forçar limpeza do cache do navegador
+        persistenceID: "financeiroConfigV15", // ID Atualizado para limpar cache bugado
         
-        // --- CORREÇÃO DO ERRO ---
-        // Na versão 6+, usa-se columnDefaults para desativar o resize.
-        // Isso impede que o módulo ResizeColumns tente acessar o DOM de colunas congeladas e quebre o script.
         columnDefaults: {
-            resizable: false,
+            resizable: false, // Correção crítica para evitar erro de script
         },
-        
         movableColumns: true,    
 
         columns: [
             { title: "ID", field: "id", visible: false },
 
-            // Fixa
+            // Coluna Fixa
             { 
                 title: "Vencimento", 
                 field: "vencimento", 
@@ -161,7 +141,7 @@ function initTable() {
                 hozAlign: "center", 
                 width: 100, 
                 headerSortStartingDir: "asc", 
-                frozen: true // O erro ocorria aqui devido ao conflito de resize
+                frozen: true 
             },
 
             // Identificação
@@ -181,16 +161,13 @@ function initTable() {
 
             // Classificação
             { 
-                title: "Indicação Pagto (C. Custo)", 
+                title: "Indicação Pagto", 
                 field: "indicacao_pagamento_cod", 
                 width: 200, 
                 visible: true,
                 formatter: (cell) => {
-                    const val = cell.getValue();
-                    let key = parseInt(val);
-                    if (isNaN(key)) key = val;
-                    // Conversão para String para garantir match no objeto
-                    let text = MAPA_IND_PAGAMENTO[String(key)] || MAPA_IND_PAGAMENTO[val] || val || '-';
+                    const val = String(cell.getValue());
+                    let text = MAPA_IND_PAGAMENTO[val] || cell.getValue() || '-';
                     return `<div class='truncate text-[10px] text-gray-500 font-medium' title='${text}'>${text}</div>`;
                 }
             },
@@ -199,7 +176,6 @@ function initTable() {
                 field: "tipo_despesa_cod", 
                 width: 140, 
                 formatter: (cell) => {
-                     // Correção de segurança para garantir que acesse o mapa corretamente
                      const val = String(cell.getValue());
                      const desc = MAPA_TIPOS_DESPESA[val] || '-';
                      return `<span class='truncate block w-full text-xs' title='${desc}'>${desc}</span>`;
@@ -219,7 +195,9 @@ function initTable() {
                 field: "valor_devido", 
                 formatter: moneyFormatter, 
                 hozAlign: "right", 
-                width: 120 
+                width: 120,
+                bottomCalc: "sum", // Auxiliar interno do tabulator
+                bottomCalcFormatter: moneyFormatter
             },
             { title: "Valor Pago", field: "valor_pago", formatter: moneyFormatter, hozAlign: "right", width: 110, visible: false },
             { title: "Juros", field: "juros", formatter: moneyFormatter, hozAlign: "right", width: 90, visible: false },
@@ -244,32 +222,27 @@ function initTable() {
 
             // Ocultas
             { title: "Data Lançamento", field: "lancamento", formatter: dateFormatter, hozAlign: "center", width: 100, visible: false },
-            { title: "Usuário Lançou", field: "usuario_lancou", width: 120, visible: false },
             { title: "Data Baixa", field: "baixa", formatter: dateFormatter, hozAlign: "center", width: 100, visible: false },
-            { title: "Usuário Baixou", field: "usuario_baixou", width: 120, visible: false },
             { title: "Data Cancelamento", field: "cancelamento", formatter: dateFormatter, hozAlign: "center", width: 100, visible: false },
-            { title: "Usuário Cancelou", field: "usuario_cancelou", width: 120, visible: false },
-            { title: "Estornado", field: "estornado", hozAlign: "center", width: 80, visible: false },
-            { title: "RG Fornecedor", field: "rg_fornecedor", width: 100, visible: false },
-            { title: "Forma Pagto (ERP)", field: "forma_pagto_erp", width: 120, visible: false },
-            { title: "Histórico Compras", field: "historico_compras", width: 150, visible: false },
-            { title: "Banco (Cheque)", field: "banco_cheque", width: 80, visible: false },
-            { title: "Agência (Cheque)", field: "agencia_cheque", width: 80, visible: false },
-            { title: "Conta (Cheque)", field: "conta_cheque", width: 100, visible: false },
-            { title: "Num Cheque (ERP)", field: "num_cheque_erp", width: 100, visible: false },
-            { title: "Nome Banco", field: "nome_banco_cheque", width: 120, visible: false },
-            { title: "Obs Gerencial", field: "observacao", width: 200, formatter: "textarea", visible: false }
+            { title: "Obs Gerencial", field: "observacao", width: 200, formatter: "textarea", visible: false },
+            // Demais campos técnicos ocultos...
+            { title: "Usuário Lançou", field: "usuario_lancou", width: 100, visible: false },
+            { title: "Usuário Baixou", field: "usuario_baixou", width: 100, visible: false },
+            { title: "Usuário Cancelou", field: "usuario_cancelou", width: 100, visible: false },
+            { title: "Estornado", field: "estornado", width: 80, visible: false },
+            { title: "Forma Pagto (ERP)", field: "forma_pagto_erp", width: 100, visible: false }
         ],
         
-        // CALLBACKS
-        // Importante: No Tabulator 6, o 'dataLoaded' as vezes dispara antes da renderização completa
-        // Adicionamos 'renderComplete' para garantir
-        renderComplete: function() {
-             const rows = this.getRows('active'); // Pega apenas as linhas filtradas/visíveis
-             const data = rows.map(row => row.getData());
-             atualizarTotais(data);
+        // --- CALLBACKS CRÍTICOS (Corrigidos) ---
+        
+        // 1. Renderização do Menu: Só executa quando a estrutura da tabela existe
+        tableBuilt: function() {
+            popularMenuColunas();
         },
+
+        // 2. Atualização de Totais: Baseado no Filtro (Search)
         dataFiltered: function(filters, rows) {
+            // 'rows' aqui são RowComponents. Precisamos extrair os dados.
             const dadosVisiveis = rows.map(row => row.getData());
             atualizarTotais(dadosVisiveis);
         }
@@ -281,7 +254,9 @@ function initTable() {
 function dateFormatter(cell) {
     const val = cell.getValue();
     if (!val) return "-";
-    return new Date(val).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+    // Tenta corrigir fuso horário se necessário, ou usa string direta
+    const d = new Date(val);
+    return isNaN(d) ? val : d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
 function filialFormatter(cell) {
@@ -317,7 +292,7 @@ function buttonFormatter(cell) {
         else if (row.status_cheque && row.status_cheque.includes('DEVOLVIDO')) btnClass = 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100';
         
         btnText = `CHQ ${row.numero_cheque ? '#' + row.numero_cheque : ''}`;
-        if (row.status_cheque !== 'NAO_APLICA' && row.status_cheque) {
+        if (row.status_cheque && row.status_cheque !== 'NAO_APLICA') {
             const statusCurto = row.status_cheque.replace('DEVOLVIDO_', 'DEV ').replace('COMPENSADO', 'OK').replace('ENTREGUE', 'PRÉ').replace('EM_MAOS', 'MÃOS');
             btnText += ` (${statusCurto})`;
         }
@@ -327,9 +302,15 @@ function buttonFormatter(cell) {
     return `<button class="btn-status ${btnClass}" onclick="window.openEditModal(${row.id})">${btnText}</button>`;
 }
 
-// --- 6. CARREGAMENTO ---
+// --- 6. CARREGAMENTO (AJUSTADO PARA FORÇAR TOTAL) ---
 
 async function loadTitulos() {
+    const btnRefresh = document.getElementById('btn-filtrar');
+    const originalText = btnRefresh.innerHTML;
+    btnRefresh.disabled = true;
+    btnRefresh.innerHTML = '<i data-feather="loader" class="w-3.5 h-3.5 animate-spin"></i> Buscando...';
+    if(typeof feather !== 'undefined') feather.replace();
+
     const params = new URLSearchParams({
         dataInicio: document.getElementById('filtro-inicio').value,
         dataFim: document.getElementById('filtro-fim').value,
@@ -346,14 +327,11 @@ async function loadTitulos() {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         
-        if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error || `Erro HTTP ${res.status}`);
-        }
+        if (!res.ok) throw new Error(`Erro API: ${res.status}`);
 
         const dados = await res.json();
-        table.setData(dados);
         
+        // Atualiza título da coluna de data
         const tipoData = document.getElementById('filtro-tipo-data').value;
         const colData = table.getColumn("vencimento");
         if(colData) {
@@ -363,40 +341,70 @@ async function loadTitulos() {
                 field: fieldMap[tipoData] || 'vencimento' 
             });
         }
+
+        // Insere dados e força atualização dos totais MANUALMENTE
+        await table.setData(dados);
+        atualizarTotais(dados); 
+        popularMenuColunas(); // Garante atualização do menu se colunas mudarem
+        
     } catch (err) {
         console.error(err);
-        alert("Erro ao carregar dados: " + err.message);
+        table.setData([]); // Limpa tabela em caso de erro
+        atualizarTotais([]);
+        alert("Erro ao carregar dados. Verifique o console.");
+    } finally {
+        btnRefresh.disabled = false;
+        btnRefresh.innerHTML = originalText;
+        if(typeof feather !== 'undefined') feather.replace();
     }
 }
 
-// --- 7. TOTAIS DO RODAPÉ (Lógica de Renderização) ---
+// --- 7. TOTAIS DO RODAPÉ (Lógica Simplificada) ---
 
 function atualizarTotais(dados) {
-    // Reduz os dados para calcular a soma
-    const total = dados.reduce((acc, curr) => acc + (parseFloat(curr.valor_devido) || 0), 0);
+    if (!dados || !Array.isArray(dados)) dados = [];
+
+    // Soma simples e direta
+    const total = dados.reduce((acc, curr) => {
+        // Garante que é numero, mesmo que venha como string
+        const val = parseFloat(curr.valor_devido); 
+        return acc + (isNaN(val) ? 0 : val);
+    }, 0);
     
+    // Atualiza DOM
     const elReg = document.getElementById('total-registros');
     if(elReg) elReg.textContent = `${dados.length} registros`;
     
     const elValor = document.getElementById('total-valor');
     if(elValor) {
         elValor.textContent = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        elValor.classList.remove('scale-105'); 
-        void elValor.offsetWidth; 
-        elValor.classList.add('scale-105'); 
+        // Efeito visual de atualização
+        elValor.style.transition = 'none';
+        elValor.style.transform = 'scale(1.1)';
+        setTimeout(() => {
+            elValor.style.transition = 'transform 0.2s';
+            elValor.style.transform = 'scale(1)';
+        }, 100);
     }
 }
 
-// --- 8. MENU COLUNAS ---
+// --- 8. MENU COLUNAS (Modularidade) ---
 
 function popularMenuColunas() {
     const lista = document.getElementById('lista-colunas');
-    if(!lista) return;
+    if(!lista || !table) return;
+    
+    // Limpa lista anterior para não duplicar
     lista.innerHTML = ''; 
 
-    table.getColumns().forEach(col => {
+    const columns = table.getColumns();
+    // Se não houver colunas ainda (init), retorna
+    if (!columns || columns.length === 0) return;
+
+    columns.forEach(col => {
         const def = col.getDefinition();
-        if (def.field === 'id') return; 
+        // Ignora coluna ID e colunas sem título
+        if (def.field === 'id' || !def.title) return; 
 
         const div = document.createElement('div');
         div.className = 'flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 cursor-pointer rounded select-none border-b border-gray-50 last:border-0';
@@ -406,14 +414,18 @@ function popularMenuColunas() {
         check.checked = col.isVisible();
         check.className = 'rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer w-3.5 h-3.5';
         
-        const toggle = () => { col.toggle(); check.checked = col.isVisible(); };
+        // Handler de Click
+        const toggle = () => { 
+            if (col.isVisible()) col.hide(); else col.show();
+            check.checked = col.isVisible(); 
+        };
 
         div.onclick = (e) => { e.stopPropagation(); toggle(); };
         check.onclick = (e) => { e.stopPropagation(); toggle(); };
 
         const label = document.createElement('span');
         label.textContent = def.title;
-        label.className = 'text-gray-700 truncate text-[11px]';
+        label.className = 'text-gray-700 truncate text-[11px] font-medium';
 
         div.appendChild(check);
         div.appendChild(label);
@@ -421,7 +433,7 @@ function popularMenuColunas() {
     });
 }
 
-// --- 9. MODAL ---
+// --- 9. MODAL DE EDIÇÃO ---
 
 function togglePainelCheque() {
     const tipo = document.getElementById('modal-modalidade').value;
@@ -444,8 +456,11 @@ function toggleModal(show) {
 }
 
 window.openEditModal = function(idTitulo) {
-    const row = table.getData().find(r => r.id === idTitulo);
-    if (!row) return;
+    // Procura nos dados atuais da tabela
+    const rowObj = table.getRow(idTitulo);
+    if (!rowObj) return;
+    
+    const row = rowObj.getData();
 
     document.getElementById('modal-id-titulo').value = row.id;
     document.getElementById('modal-modalidade').value = row.modalidade || 'BOLETO';
@@ -482,7 +497,11 @@ async function saveClassificacao() {
         if (!res.ok) throw new Error('Erro ao salvar');
 
         toggleModal(false);
-        table.updateData([{ id: parseInt(id), ...payload }]); 
+        // Atualiza a linha localmente sem precisar recarregar tudo
+        table.updateData([{ id: parseInt(id), ...payload }]);
+        
+        // Se mudou o valor (ex: de aberto para outra coisa), atualiza totais se necessário
+        // (Neste caso não precisa pois classificação não muda valor devido)
         
     } catch (err) {
         alert('Falha: ' + err.message);
