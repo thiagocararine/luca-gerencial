@@ -139,10 +139,11 @@ function initTable() {
         reactiveData: true,    
         
         persistence: true, 
-        persistenceID: "financeiroConfigV12", // ID NOVO para limpar cache antigo
+        persistenceID: "financeiroConfigV13", // ID NOVO para limpar cache antigo do navegador
         
         // --- CORREÇÃO DO ERRO ---
-        resizableColumns: false, // ESTA LINHA CORRIGE O TRAVAMENTO
+        // Desativamos o redimensionamento para evitar conflito com os ícones que travava o script
+        resizableColumns: false, 
         movableColumns: true,    
 
         columns: [
