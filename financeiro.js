@@ -464,6 +464,32 @@ function toggleModal(show) {
     }
 }
 
+function togglePainelCheque() {
+    const tipo = document.getElementById('modal-modalidade').value;
+    const painel = document.getElementById('painel-cheque');
+    
+    if (tipo === 'CHEQUE') {
+        painel.classList.remove('hidden'); 
+        // Se mudou para cheque, foca no número
+        setTimeout(() => document.getElementById('modal-numero-cheque').focus(), 100);
+    } else {
+        painel.classList.add('hidden');
+    }
+}
+
+function toggleModal(show) {
+    const modal = document.getElementById('modal-cheque');
+    const content = document.getElementById('modal-content');
+    if (show) {
+        modal.classList.remove('opacity-0', 'pointer-events-none', 'hidden');
+        setTimeout(() => content.classList.replace('scale-95', 'scale-100'), 10);
+    } else {
+        content.classList.replace('scale-100', 'scale-95');
+        modal.classList.add('opacity-0', 'pointer-events-none');
+        setTimeout(() => modal.classList.add('hidden'), 200);
+    }
+}
+
 window.openEditModal = function(idTitulo) {
     // Procura nos dados atuais da tabela
     const rowObj = table.getRow(idTitulo);
@@ -471,9 +497,30 @@ window.openEditModal = function(idTitulo) {
     
     const row = rowObj.getData();
 
+    // 1. Preenchimento dos Campos de Leitura (ERP)
     document.getElementById('modal-id-titulo').value = row.id;
-    document.getElementById('modal-modalidade').value = row.modalidade || 'BOLETO';
-    document.getElementById('modal-status-cheque').value = row.status_cheque || 'NAO_APLICA';
+    document.getElementById('modal-lancamento').value = row.controle_parcela || row.id; // Usa o campo concatenado criado antes
+    document.getElementById('modal-filial').value = `${row.filial}`;
+    document.getElementById('modal-fornecedor').value = row.fornecedor;
+    
+    // Tratamento seguro para textos que podem não vir da query
+    document.getElementById('modal-tipo-despesa').value = MAPA_TIPOS_DESPESA[String(row.tipo_despesa_cod)] || row.tipo_despesa_cod || '-';
+    document.getElementById('modal-indicacao').value = MAPA_IND_PAGAMENTO[String(row.indicacao_pagamento_cod)] || row.indicacao_pagamento_cod || '-';
+    
+    // Valores e Datas
+    document.getElementById('modal-vencimento').value = row.vencimento ? row.vencimento.split('T')[0] : '';
+    document.getElementById('modal-nf').value = row.nf || '';
+    document.getElementById('modal-valor-devido').value = parseFloat(row.valor_devido).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    document.getElementById('modal-valor-original').value = parseFloat(row.valor_devido).toLocaleString('pt-BR', { minimumFractionDigits: 2 }); // Simulado, se tiver valor original use row.valor_original
+    document.getElementById('modal-historico-erp').value = row.historico || '';
+
+    // 2. Preenchimento dos Campos Editáveis (Sistema)
+    // Se a modalidade não for definida ou for diferente de BOLETO/CHEQUE, padroniza para BOLETO
+    let mod = row.modalidade || 'BOLETO';
+    if(mod !== 'BOLETO' && mod !== 'CHEQUE') mod = 'BOLETO';
+    
+    document.getElementById('modal-modalidade').value = mod;
+    document.getElementById('modal-status-cheque').value = row.status_cheque || 'EM_MAOS';
     document.getElementById('modal-numero-cheque').value = row.numero_cheque || '';
     document.getElementById('modal-obs').value = row.observacao || '';
     
@@ -486,7 +533,8 @@ async function saveClassificacao() {
     const originalText = btn.innerHTML;
     
     btn.disabled = true;
-    btn.innerHTML = 'Salvando...';
+    btn.innerHTML = '<i data-feather="loader" class="w-3 h-3 animate-spin"></i> Salvando...';
+    if(typeof feather !== 'undefined') feather.replace();
 
     const id = document.getElementById('modal-id-titulo').value;
     const payload = {
@@ -506,16 +554,14 @@ async function saveClassificacao() {
         if (!res.ok) throw new Error('Erro ao salvar');
 
         toggleModal(false);
-        // Atualiza a linha localmente sem precisar recarregar tudo
+        // Atualiza a linha localmente
         table.updateData([{ id: parseInt(id), ...payload }]);
-        
-        // Se mudou o valor (ex: de aberto para outra coisa), atualiza totais se necessário
-        // (Neste caso não precisa pois classificação não muda valor devido)
         
     } catch (err) {
         alert('Falha: ' + err.message);
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;
+        if(typeof feather !== 'undefined') feather.replace();
     }
 }
