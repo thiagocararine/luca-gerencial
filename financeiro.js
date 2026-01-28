@@ -120,14 +120,22 @@ function initTable() {
         placeholder: "Carregando dados...",
         reactiveData: true,
         
-        // --- CORREÇÃO TABULATOR V6 ---
-        selectableRows: true, // "selectable" virou "selectableRows"
-        selectableRowsRangeMode: "click", // "selectableRangeMode" mudou
-        selectableRowsPersistence: false, // Evita bugs de cache na seleção
-        // -----------------------------
+        // --- CORREÇÃO DA SELEÇÃO MÚLTIPLA ---
+        selectableRows: true, // Habilita seleção múltipla na V6
+        selectableRowsPersistence: false, // Evita travar cache de seleção
         
+        // Truque para permitir clicar em qualquer lugar da linha para somar a seleção
+        // (Sem isso, clicar na linha desmarca as outras)
+        rowClick: function(e, row){
+            // Se o clique não foi no checkbox (que já trata isso), nós alternamos a seleção
+            if(e.target.tagName !== 'INPUT') {
+                row.toggleSelect(); 
+            }
+        },
+        // -------------------------------------
+
         persistence: true, 
-        persistenceID: "financeiroConfigV17", // ID atualizado
+        persistenceID: "financeiroConfigV18", // Atualizei para V18 para garantir limpeza
         
         columnDefaults: {
             resizable: false, 
@@ -139,10 +147,12 @@ function initTable() {
             { 
                 formatter: "rowSelection", 
                 titleFormatter: "rowSelection", 
-                width: 30, 
+                width: 40, // Aumentei um pouco para facilitar o clique
                 hozAlign: "center", 
                 headerSort: false, 
-                frozen: true 
+                frozen: true,
+                // Garante que o checkbox não propague o clique para a linha (evita duplo toggle)
+                cellClick: function(e, cell){ e.stopPropagation(); }
             },
 
             { title: "ID", field: "id", visible: false },
@@ -276,9 +286,8 @@ function initTable() {
             popularMenuColunas();
         },
 
-        // Callback de Seleção: Ativa a "Calculadora"
         rowSelectionChanged: function(data, rows) {
-            atualizarRodapeDinamico(data, true); // Força modo seleção
+            atualizarRodapeDinamico(data, true); 
         },
 
         dataFiltered: function(filters, rows) {
