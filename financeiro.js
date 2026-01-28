@@ -287,15 +287,15 @@ function initTable() {
         },
 
         rowSelectionChanged: function(data, rows) {
-            atualizarRodapeDinamico(data, true); 
+            atualizarRodapeDinamico(); 
         },
 
         dataFiltered: function(filters, rows) {
              const selected = this.getSelectedData();
-             if (selected.length > 0) atualizarRodapeDinamico(selected, true);
+             if (selected.length > 0) atualizarRodapeDinamico();
              else {
                  const dadosVisiveis = rows.map(row => row.getData());
-                 atualizarRodapeDinamico(dadosVisiveis, false);
+                 atualizarRodapeDinamico();
              }
         }
     });
@@ -431,35 +431,45 @@ async function loadTitulos() {
 
 // --- 7. TOTAIS DO RODAPÉ (DINÂMICO/CALCULADORA) ---
 
-function atualizarRodapeDinamico(dados, isSelectionMode) {
-    if (!dados) {
-        if (table) dados = table.getData("active");
-        else dados = [];
+function atualizarRodapeDinamico() {
+    // 1. Primeiro verificamos se há itens SELECIONADOS
+    const selecionados = table ? table.getSelectedData() : [];
+    
+    let dadosParaSomar = [];
+    let isModoSelecao = false;
+
+    if (selecionados.length > 0) {
+        // MODO SELEÇÃO: Soma apenas os checkboxes marcados
+        dadosParaSomar = selecionados;
+        isModoSelecao = true;
+    } else {
+        // MODO NORMAL: Pega tudo que está visível (filtrado) na tabela
+        dadosParaSomar = table ? table.getData("active") : [];
+        isModoSelecao = false;
     }
 
-    const total = dados.reduce((acc, curr) => {
+    // 2. Realiza a Soma
+    const total = dadosParaSomar.reduce((acc, curr) => {
         const val = parseFloat(curr.valor_devido); 
         return acc + (isNaN(val) ? 0 : val);
     }, 0);
 
+    // 3. Atualiza o DOM (Visual)
     const elReg = document.getElementById('total-registros');
     const elValor = document.getElementById('total-valor');
-    const elLabel = elValor ? elValor.previousElementSibling : null;
+    const elLabel = elValor ? elValor.previousElementSibling : null; // O texto "TOTAL:" ou "SELEÇÃO:"
 
-    // Se o modo for explicitamente Seleção OU se o array passado for o de seleção
-    const count = dados.length;
-    
-    if (isSelectionMode && count > 0) {
-        if(elReg) elReg.innerHTML = `<span class="text-blue-600 font-bold flex items-center gap-1"><i data-feather="check-square" class="w-3 h-3"></i> ${count} selecionados</span>`;
+    if (isModoSelecao) {
+        // ESTILO AZUL (Seleção)
+        if(elReg) elReg.innerHTML = `<span class="text-blue-600 font-bold flex items-center gap-1"><i data-feather="check-square" class="w-3 h-3"></i> ${dadosParaSomar.length} selecionados</span>`;
         if(elLabel) elLabel.textContent = "SELEÇÃO:";
         if(elValor) {
-            elValor.className = "text-blue-700 text-sm ml-1 bg-blue-100 px-2 py-0.5 rounded border border-blue-200 min-w-[100px] text-center font-bold transition-all";
+            elValor.className = "text-blue-700 text-sm ml-1 bg-blue-100 px-2 py-0.5 rounded border border-blue-200 min-w-[100px] text-center font-bold transition-all shadow-sm transform scale-105";
         }
         if(typeof feather !== 'undefined') feather.replace();
-    } 
-    else {
-        // Modo Padrão
-        if(elReg) elReg.textContent = `${count} registros`;
+    } else {
+        // ESTILO PADRÃO (Geral)
+        if(elReg) elReg.textContent = `${dadosParaSomar.length} registros`;
         if(elLabel) elLabel.textContent = "TOTAL:";
         if(elValor) {
             elValor.className = "text-indigo-700 text-sm ml-1 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 min-w-[100px] text-center font-bold transition-all";
