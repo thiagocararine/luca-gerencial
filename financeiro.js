@@ -38,6 +38,7 @@ function getUserName() {
 // --- 3. INICIALIZAÇÃO ---
 
 async function initPage() {
+    console.log("Iniciando página..."); // LOG
     if (!getToken()) { window.location.href = 'login.html'; return; }
     
     const elUser = document.getElementById('user-name');
@@ -114,28 +115,26 @@ function setupEventListeners() {
 // --- 4. CONFIGURAÇÃO DA TABELA (TABULATOR) ---
 
 function initTable() {
+    console.log("Configurando Tabulator..."); // LOG
     table = new Tabulator("#tabela-financeiro", {
         layout: "fitDataFill", 
         height: "100%",        
         placeholder: "Carregando dados...",
         reactiveData: true,
         
-        // --- CORREÇÃO DA SELEÇÃO MÚLTIPLA ---
-        selectableRows: true, // Habilita seleção múltipla na V6
-        selectableRowsPersistence: false, // Evita travar cache de seleção
-        
-        // Truque para permitir clicar em qualquer lugar da linha para somar a seleção
-        // (Sem isso, clicar na linha desmarca as outras)
+        // --- SELEÇÃO ---
+        selectableRows: true, 
+        selectableRowsPersistence: false,
         rowClick: function(e, row){
-            // Se o clique não foi no checkbox (que já trata isso), nós alternamos a seleção
+            // Permite clicar na linha para selecionar, exceto se clicar direto no input
             if(e.target.tagName !== 'INPUT') {
                 row.toggleSelect(); 
             }
         },
-        // -------------------------------------
-
+        // ---------------
+        
         persistence: true, 
-        persistenceID: "financeiroConfigV18", // Atualizei para V18 para garantir limpeza
+        persistenceID: "financeiroConfigV19", // Forcei V19 para limpar cache
         
         columnDefaults: {
             resizable: false, 
@@ -143,21 +142,19 @@ function initTable() {
         movableColumns: true,    
 
         columns: [
-            // 1. Checkbox de Seleção
+            // Checkbox
             { 
                 formatter: "rowSelection", 
                 titleFormatter: "rowSelection", 
-                width: 40, // Aumentei um pouco para facilitar o clique
+                width: 40, 
                 hozAlign: "center", 
                 headerSort: false, 
                 frozen: true,
-                // Garante que o checkbox não propague o clique para a linha (evita duplo toggle)
                 cellClick: function(e, cell){ e.stopPropagation(); }
             },
 
             { title: "ID", field: "id", visible: false },
 
-            // 2. Coluna Fixa Data
             { 
                 title: "Vencimento", 
                 field: "vencimento", 
@@ -168,7 +165,6 @@ function initTable() {
                 frozen: true 
             },
 
-            // 3. Coluna de Prazo
             { 
                 title: "Prazo", 
                 field: "vencimento", 
@@ -177,10 +173,8 @@ function initTable() {
                 hozAlign: "center" 
             },
 
-            // Identificação
             { title: "Filial", field: "filial", formatter: filialFormatter, hozAlign: "center", width: 80 },
             
-            // 4. Coluna Nº Controle
             { 
                 title: "Nº Controle", 
                 field: "controle_parcela", 
@@ -197,12 +191,10 @@ function initTable() {
             },
             { title: "Fantasia", field: "fantasia", width: 150, visible: false },
             
-            // Documentos
             { title: "NF", field: "nf", hozAlign: "center", width: 90 },
             { title: "Duplicata", field: "duplicata", hozAlign: "center", width: 80, visible: false },
             { title: "Borderô", field: "bordero", width: 80, visible: false },
 
-            // Classificação
             { 
                 title: "Indicação Pagto", 
                 field: "indicacao_pagamento_cod", 
@@ -232,7 +224,6 @@ function initTable() {
                 formatter: (cell) => `<div class='truncate text-[10px] text-gray-500' title='${cell.getValue()}'>${cell.getValue() || '-'}</div>`
             },
 
-            // Valores
             { 
                 title: "Valor Devido", 
                 field: "valor_devido", 
@@ -244,7 +235,6 @@ function initTable() {
             { title: "Juros", field: "juros", formatter: moneyFormatter, hozAlign: "right", width: 90, visible: false },
             { title: "Desconto", field: "desconto", formatter: moneyFormatter, hozAlign: "right", width: 90, visible: false },
 
-            // Status e Ação
             { 
                 title: "Status", 
                 field: "status_erp", 
@@ -287,16 +277,12 @@ function initTable() {
         },
 
         rowSelectionChanged: function(data, rows) {
-            atualizarRodapeDinamico(); 
+            console.log("Seleção alterada. Qtd: ", data.length); // RASTREADOR
+            atualizarRodape(); 
         },
 
         dataFiltered: function(filters, rows) {
-             const selected = this.getSelectedData();
-             if (selected.length > 0) atualizarRodapeDinamico();
-             else {
-                 const dadosVisiveis = rows.map(row => row.getData());
-                 atualizarRodapeDinamico();
-             }
+             atualizarRodape();
         }
     });
 }
@@ -320,11 +306,8 @@ function prazoFormatter(cell) {
     const val = cell.getValue();
     if (!val) return "-";
     
-    const hoje = new Date();
-    hoje.setHours(0,0,0,0);
-    
-    const venc = new Date(val);
-    venc.setHours(0,0,0,0);
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    const venc = new Date(val); venc.setHours(0,0,0,0);
     
     const diffTime = venc - hoje;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
@@ -414,13 +397,13 @@ async function loadTitulos() {
         }
 
         await table.setData(dados);
-        atualizarRodapeDinamico(dados, false); 
+        atualizarRodape(); 
         popularMenuColunas(); 
         
     } catch (err) {
         console.error(err);
         table.setData([]);
-        atualizarRodapeDinamico([], false);
+        atualizarRodape();
         alert("Erro ao carregar dados. Verifique o console.");
     } finally {
         btnRefresh.disabled = false;
@@ -429,54 +412,47 @@ async function loadTitulos() {
     }
 }
 
-// --- 7. TOTAIS DO RODAPÉ (DINÂMICO/CALCULADORA) ---
+// --- 7. NOVO RODAPÉ COM RASTREAMENTO ---
 
-function atualizarRodapeDinamico() {
-    // 1. Primeiro verificamos se há itens SELECIONADOS
+function atualizarRodape() {
+    console.log("Atualizando rodapé..."); // RASTREADOR
+
+    // 1. DADOS SELECIONADOS
     const selecionados = table ? table.getSelectedData() : [];
+    console.log(`Itens Selecionados: ${selecionados.length}`); // RASTREADOR
     
-    let dadosParaSomar = [];
-    let isModoSelecao = false;
-
-    if (selecionados.length > 0) {
-        // MODO SELEÇÃO: Soma apenas os checkboxes marcados
-        dadosParaSomar = selecionados;
-        isModoSelecao = true;
-    } else {
-        // MODO NORMAL: Pega tudo que está visível (filtrado) na tabela
-        dadosParaSomar = table ? table.getData("active") : [];
-        isModoSelecao = false;
-    }
-
-    // 2. Realiza a Soma
-    const total = dadosParaSomar.reduce((acc, curr) => {
+    // 2. DADOS TOTAIS (VISÍVEIS)
+    const dadosVisiveis = table ? table.getData("active") : [];
+    
+    // Funcao soma
+    const somar = (arr) => arr.reduce((acc, curr) => {
         const val = parseFloat(curr.valor_devido); 
         return acc + (isNaN(val) ? 0 : val);
     }, 0);
 
-    // 3. Atualiza o DOM (Visual)
+    const totalSelecao = somar(selecionados);
+    const totalGeral = somar(dadosVisiveis);
+
+    // 3. ATUALIZA DOM
     const elReg = document.getElementById('total-registros');
-    const elValor = document.getElementById('total-valor');
-    const elLabel = elValor ? elValor.previousElementSibling : null; // O texto "TOTAL:" ou "SELEÇÃO:"
+    const elTotalGeral = document.getElementById('total-valor-geral');
+    const elTotalSelecao = document.getElementById('total-valor-selecao');
+    const boxSelecao = document.getElementById('box-total-selecao');
 
-    if (isModoSelecao) {
-        // ESTILO AZUL (Seleção)
-        if(elReg) elReg.innerHTML = `<span class="text-blue-600 font-bold flex items-center gap-1"><i data-feather="check-square" class="w-3 h-3"></i> ${dadosParaSomar.length} selecionados</span>`;
-        if(elLabel) elLabel.textContent = "SELEÇÃO:";
-        if(elValor) {
-            elValor.className = "text-blue-700 text-sm ml-1 bg-blue-100 px-2 py-0.5 rounded border border-blue-200 min-w-[100px] text-center font-bold transition-all shadow-sm transform scale-105";
-        }
-        if(typeof feather !== 'undefined') feather.replace();
+    // Atualiza contagem
+    if(elReg) elReg.textContent = `${dadosVisiveis.length} registros`;
+
+    // Atualiza Total Geral
+    if(elTotalGeral) elTotalGeral.textContent = totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    // Atualiza Seleção (Mostra/Esconde)
+    if (selecionados.length > 0) {
+        boxSelecao.classList.remove('hidden', 'translate-x-4', 'opacity-0');
+        elTotalSelecao.textContent = totalSelecao.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     } else {
-        // ESTILO PADRÃO (Geral)
-        if(elReg) elReg.textContent = `${dadosParaSomar.length} registros`;
-        if(elLabel) elLabel.textContent = "TOTAL:";
-        if(elValor) {
-            elValor.className = "text-indigo-700 text-sm ml-1 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 min-w-[100px] text-center font-bold transition-all";
-        }
+        boxSelecao.classList.add('translate-x-4', 'opacity-0');
+        setTimeout(() => boxSelecao.classList.add('hidden'), 300); // Animação de saída
     }
-
-    if(elValor) elValor.textContent = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 // --- 8. MENU COLUNAS ---
@@ -520,8 +496,7 @@ function popularMenuColunas() {
     });
 }
 
-// --- 9. MODAL DE EDIÇÃO (LEGACY) ---
-
+// --- 9. MODAL ---
 function togglePainelCheque() {
     const tipo = document.getElementById('modal-modalidade').value;
     const painel = document.getElementById('painel-cheque');
