@@ -120,15 +120,17 @@ function initTable() {
         placeholder: "Carregando dados...",
         reactiveData: true,
         
-        // Configurações de Seleção (Calculadora)
-        selectable: true,
-        selectableRangeMode: "click", // Permite Shift+Click
+        // --- CORREÇÃO TABULATOR V6 ---
+        selectableRows: true, // "selectable" virou "selectableRows"
+        selectableRowsRangeMode: "click", // "selectableRangeMode" mudou
+        selectableRowsPersistence: false, // Evita bugs de cache na seleção
+        // -----------------------------
         
         persistence: true, 
-        persistenceID: "financeiroConfigV16", // Versão atualizada
+        persistenceID: "financeiroConfigV17", // ID atualizado
         
         columnDefaults: {
-            resizable: false, // Trava resize para evitar bugs
+            resizable: false, 
         },
         movableColumns: true,    
 
@@ -156,7 +158,7 @@ function initTable() {
                 frozen: true 
             },
 
-            // 3. Coluna de Prazo (Nova)
+            // 3. Coluna de Prazo
             { 
                 title: "Prazo", 
                 field: "vencimento", 
@@ -168,7 +170,7 @@ function initTable() {
             // Identificação
             { title: "Filial", field: "filial", formatter: filialFormatter, hozAlign: "center", width: 80 },
             
-            // 4. Coluna Nº Controle (Nova)
+            // 4. Coluna Nº Controle
             { 
                 title: "Nº Controle", 
                 field: "controle_parcela", 
@@ -276,17 +278,15 @@ function initTable() {
 
         // Callback de Seleção: Ativa a "Calculadora"
         rowSelectionChanged: function(data, rows) {
-            atualizarRodapeDinamico(data);
+            atualizarRodapeDinamico(data, true); // Força modo seleção
         },
 
         dataFiltered: function(filters, rows) {
              const selected = this.getSelectedData();
-             // Se houver seleção, prioriza ela no rodapé
-             if (selected.length > 0) atualizarRodapeDinamico(selected);
-             // Caso contrário, mostra o total dos dados filtrados visíveis
+             if (selected.length > 0) atualizarRodapeDinamico(selected, true);
              else {
                  const dadosVisiveis = rows.map(row => row.getData());
-                 atualizarRodapeDinamico(dadosVisiveis);
+                 atualizarRodapeDinamico(dadosVisiveis, false);
              }
         }
     });
@@ -307,7 +307,6 @@ function filialFormatter(cell) {
     return `<span class="badge-filial ${cor}">${val || 'ND'}</span>`;
 }
 
-// Novo: Formatador de Prazo
 function prazoFormatter(cell) {
     const val = cell.getValue();
     if (!val) return "-";
@@ -318,7 +317,6 @@ function prazoFormatter(cell) {
     const venc = new Date(val);
     venc.setHours(0,0,0,0);
     
-    // Diferença em dias
     const diffTime = venc - hoje;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
 
@@ -407,13 +405,13 @@ async function loadTitulos() {
         }
 
         await table.setData(dados);
-        atualizarRodapeDinamico(dados); 
+        atualizarRodapeDinamico(dados, false); 
         popularMenuColunas(); 
         
     } catch (err) {
         console.error(err);
         table.setData([]);
-        atualizarRodapeDinamico([]);
+        atualizarRodapeDinamico([], false);
         alert("Erro ao carregar dados. Verifique o console.");
     } finally {
         btnRefresh.disabled = false;
@@ -424,7 +422,7 @@ async function loadTitulos() {
 
 // --- 7. TOTAIS DO RODAPÉ (DINÂMICO/CALCULADORA) ---
 
-function atualizarRodapeDinamico(dados) {
+function atualizarRodapeDinamico(dados, isSelectionMode) {
     if (!dados) {
         if (table) dados = table.getData("active");
         else dados = [];
@@ -439,20 +437,20 @@ function atualizarRodapeDinamico(dados) {
     const elValor = document.getElementById('total-valor');
     const elLabel = elValor ? elValor.previousElementSibling : null;
 
-    const selecionados = table ? table.getSelectedData().length : 0;
+    // Se o modo for explicitamente Seleção OU se o array passado for o de seleção
+    const count = dados.length;
     
-    // MODO SELEÇÃO (Calculadora)
-    if (selecionados > 0 && dados.length === selecionados) {
-        if(elReg) elReg.innerHTML = `<span class="text-blue-600 font-bold flex items-center gap-1"><i data-feather="check-square" class="w-3 h-3"></i> ${selecionados} selecionados</span>`;
+    if (isSelectionMode && count > 0) {
+        if(elReg) elReg.innerHTML = `<span class="text-blue-600 font-bold flex items-center gap-1"><i data-feather="check-square" class="w-3 h-3"></i> ${count} selecionados</span>`;
         if(elLabel) elLabel.textContent = "SELEÇÃO:";
         if(elValor) {
             elValor.className = "text-blue-700 text-sm ml-1 bg-blue-100 px-2 py-0.5 rounded border border-blue-200 min-w-[100px] text-center font-bold transition-all";
         }
         if(typeof feather !== 'undefined') feather.replace();
     } 
-    // MODO TOTAL GERAL
     else {
-        if(elReg) elReg.textContent = `${dados.length} registros`;
+        // Modo Padrão
+        if(elReg) elReg.textContent = `${count} registros`;
         if(elLabel) elLabel.textContent = "TOTAL:";
         if(elValor) {
             elValor.className = "text-indigo-700 text-sm ml-1 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 min-w-[100px] text-center font-bold transition-all";
@@ -475,7 +473,6 @@ function popularMenuColunas() {
 
     columns.forEach(col => {
         const def = col.getDefinition();
-        // Ignora colunas técnicas
         if (def.field === 'id' || !def.title || def.formatter === 'rowSelection') return; 
 
         const div = document.createElement('div');
@@ -540,7 +537,7 @@ window.openEditModal = function(idTitulo) {
     
     const row = rowObj.getData();
 
-    // 1. Campos de Leitura (ERP)
+    // 1. Campos de Leitura
     document.getElementById('modal-id-titulo').value = row.id;
     document.getElementById('modal-lancamento').value = row.controle_parcela || row.id; 
     document.getElementById('modal-filial').value = `${row.filial}`;
@@ -594,7 +591,6 @@ async function saveClassificacao() {
         if (!res.ok) throw new Error('Erro ao salvar');
 
         toggleModal(false);
-        // Atualiza apenas os campos alterados localmente
         table.updateData([{ id: parseInt(id), ...payload }]);
         
     } catch (err) {
