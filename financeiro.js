@@ -43,7 +43,7 @@ async function initPage() {
     const elUser = document.getElementById('user-name');
     if (elUser) elUser.textContent = getUserName();
     
-    // Configura Datas (Padrão: Hoje - 30 dias até Hoje + 30 dias)
+    // Configura Datas
     const hoje = new Date();
     const passado = new Date(); passado.setDate(hoje.getDate() - 30);
     const futuro = new Date(); futuro.setDate(hoje.getDate() + 30);
@@ -53,7 +53,7 @@ async function initPage() {
     if(elInicio) elInicio.value = passado.toISOString().split('T')[0];
     if(elFim) elFim.value = futuro.toISOString().split('T')[0];
 
-    // Popula Select de Tipos
+    // Popula Select
     const selectTipo = document.getElementById('filtro-tipo-doc');
     if (selectTipo) {
         while (selectTipo.options.length > 1) { selectTipo.remove(1); }
@@ -67,8 +67,7 @@ async function initPage() {
 
     initTable();
     setupEventListeners();
-    // Carregamento inicial (aguarda a tabela estar pronta)
-    setTimeout(loadTitulos, 500); 
+    setTimeout(loadTitulos, 500);
 }
 
 function setupEventListeners() {
@@ -104,7 +103,6 @@ function setupEventListeners() {
         }
     });
 
-    // Eventos do Modal
     const elModalMod = document.getElementById('modal-modalidade');
     if(elModalMod) elModalMod.addEventListener('change', togglePainelCheque);
     
@@ -120,20 +118,34 @@ function initTable() {
         layout: "fitDataFill", 
         height: "100%",        
         placeholder: "Carregando dados...",
-        reactiveData: true,    
+        reactiveData: true,
+        
+        // Configurações de Seleção (Calculadora)
+        selectable: true,
+        selectableRangeMode: "click", // Permite Shift+Click
         
         persistence: true, 
-        persistenceID: "financeiroConfigV15", // ID Atualizado para limpar cache bugado
+        persistenceID: "financeiroConfigV16", // Versão atualizada
         
         columnDefaults: {
-            resizable: false, // Correção crítica para evitar erro de script
+            resizable: false, // Trava resize para evitar bugs
         },
         movableColumns: true,    
 
         columns: [
+            // 1. Checkbox de Seleção
+            { 
+                formatter: "rowSelection", 
+                titleFormatter: "rowSelection", 
+                width: 30, 
+                hozAlign: "center", 
+                headerSort: false, 
+                frozen: true 
+            },
+
             { title: "ID", field: "id", visible: false },
 
-            // Coluna Fixa
+            // 2. Coluna Fixa Data
             { 
                 title: "Vencimento", 
                 field: "vencimento", 
@@ -144,17 +156,19 @@ function initTable() {
                 frozen: true 
             },
 
+            // 3. Coluna de Prazo (Nova)
             { 
                 title: "Prazo", 
                 field: "vencimento", 
-                formatter: prazoFormatter, // Vamos criar essa função abaixo
+                formatter: prazoFormatter, 
                 width: 90, 
                 hozAlign: "center" 
             },
 
             // Identificação
             { title: "Filial", field: "filial", formatter: filialFormatter, hozAlign: "center", width: 80 },
-
+            
+            // 4. Coluna Nº Controle (Nova)
             { 
                 title: "Nº Controle", 
                 field: "controle_parcela", 
@@ -212,9 +226,7 @@ function initTable() {
                 field: "valor_devido", 
                 formatter: moneyFormatter, 
                 hozAlign: "right", 
-                width: 120,
-                bottomCalc: "sum", // Auxiliar interno do tabulator
-                bottomCalcFormatter: moneyFormatter
+                width: 120
             },
             { title: "Valor Pago", field: "valor_pago", formatter: moneyFormatter, hozAlign: "right", width: 110, visible: false },
             { title: "Juros", field: "juros", formatter: moneyFormatter, hozAlign: "right", width: 90, visible: false },
@@ -239,34 +251,43 @@ function initTable() {
 
             // Ocultas
             { title: "Data Lançamento", field: "lancamento", formatter: dateFormatter, hozAlign: "center", width: 100, visible: false },
+            { title: "Usuário Lançou", field: "usuario_lancou", width: 120, visible: false },
             { title: "Data Baixa", field: "baixa", formatter: dateFormatter, hozAlign: "center", width: 100, visible: false },
+            { title: "Usuário Baixou", field: "usuario_baixou", width: 120, visible: false },
             { title: "Data Cancelamento", field: "cancelamento", formatter: dateFormatter, hozAlign: "center", width: 100, visible: false },
-            { title: "Obs Gerencial", field: "observacao", width: 200, formatter: "textarea", visible: false },
-            // Demais campos técnicos ocultos...
-            { title: "Usuário Lançou", field: "usuario_lancou", width: 100, visible: false },
-            { title: "Usuário Baixou", field: "usuario_baixou", width: 100, visible: false },
-            { title: "Usuário Cancelou", field: "usuario_cancelou", width: 100, visible: false },
-            { title: "Estornado", field: "estornado", width: 80, visible: false },
-            { title: "Forma Pagto (ERP)", field: "forma_pagto_erp", width: 100, visible: false }
+            { title: "Usuário Cancelou", field: "usuario_cancelou", width: 120, visible: false },
+            { title: "Estornado", field: "estornado", hozAlign: "center", width: 80, visible: false },
+            { title: "RG Fornecedor", field: "rg_fornecedor", width: 100, visible: false },
+            { title: "Forma Pagto (ERP)", field: "forma_pagto_erp", width: 120, visible: false },
+            { title: "Histórico Compras", field: "historico_compras", width: 150, visible: false },
+            { title: "Banco (Cheque)", field: "banco_cheque", width: 80, visible: false },
+            { title: "Agência (Cheque)", field: "agencia_cheque", width: 80, visible: false },
+            { title: "Conta (Cheque)", field: "conta_cheque", width: 100, visible: false },
+            { title: "Num Cheque (ERP)", field: "num_cheque_erp", width: 100, visible: false },
+            { title: "Nome Banco", field: "nome_banco_cheque", width: 120, visible: false },
+            { title: "Obs Gerencial", field: "observacao", width: 200, formatter: "textarea", visible: false }
         ],
         
-        // --- CALLBACKS CRÍTICOS (Corrigidos) ---
+        // --- CALLBACKS ---
         
-        // 1. Renderização do Menu: Só executa quando a estrutura da tabela existe
         tableBuilt: function() {
             popularMenuColunas();
         },
 
+        // Callback de Seleção: Ativa a "Calculadora"
         rowSelectionChanged: function(data, rows) {
             atualizarRodapeDinamico(data);
         },
 
-        // 2. Atualização de Totais: Baseado no Filtro (Search)
         dataFiltered: function(filters, rows) {
-             // Se houver seleção, ignora o filtro no rodapé, senão usa o filtro
              const selected = this.getSelectedData();
+             // Se houver seleção, prioriza ela no rodapé
              if (selected.length > 0) atualizarRodapeDinamico(selected);
-             else atualizarRodapeDinamico(rows.map(r => r.getData()));
+             // Caso contrário, mostra o total dos dados filtrados visíveis
+             else {
+                 const dadosVisiveis = rows.map(row => row.getData());
+                 atualizarRodapeDinamico(dadosVisiveis);
+             }
         }
     });
 }
@@ -276,7 +297,6 @@ function initTable() {
 function dateFormatter(cell) {
     const val = cell.getValue();
     if (!val) return "-";
-    // Tenta corrigir fuso horário se necessário, ou usa string direta
     const d = new Date(val);
     return isNaN(d) ? val : d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
@@ -285,6 +305,31 @@ function filialFormatter(cell) {
     const val = cell.getValue();
     const cor = CORES_FILIAL[val] || 'bg-gray-100 text-gray-600 border-gray-200';
     return `<span class="badge-filial ${cor}">${val || 'ND'}</span>`;
+}
+
+// Novo: Formatador de Prazo
+function prazoFormatter(cell) {
+    const val = cell.getValue();
+    if (!val) return "-";
+    
+    const hoje = new Date();
+    hoje.setHours(0,0,0,0);
+    
+    const venc = new Date(val);
+    venc.setHours(0,0,0,0);
+    
+    // Diferença em dias
+    const diffTime = venc - hoje;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+
+    const rowData = cell.getRow().getData();
+    if (rowData.status_erp === 'PAGO' || rowData.status_erp === 'CANCELADO') return `<span class="text-gray-300">-</span>`;
+
+    if (diffDays === 0) return `<span class="text-xs font-bold text-blue-600 bg-blue-50 px-1 rounded border border-blue-100">HOJE</span>`;
+    if (diffDays === 1) return `<span class="text-xs font-bold text-orange-500">AMANHÃ</span>`;
+    if (diffDays < 0) return `<span class="text-[10px] font-bold text-red-600">HÁ ${Math.abs(diffDays)} DIAS</span>`;
+    
+    return `<span class="text-[10px] text-gray-400 font-medium">Em ${diffDays} dias</span>`;
 }
 
 function moneyFormatter(cell) {
@@ -318,13 +363,11 @@ function buttonFormatter(cell) {
             const statusCurto = row.status_cheque.replace('DEVOLVIDO_', 'DEV ').replace('COMPENSADO', 'OK').replace('ENTREGUE', 'PRÉ').replace('EM_MAOS', 'MÃOS');
             btnText += ` (${statusCurto})`;
         }
-    } else if (row.modalidade === 'PIX') {
-        btnClass = 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100';
     }
     return `<button class="btn-status ${btnClass}" onclick="window.openEditModal(${row.id})">${btnText}</button>`;
 }
 
-// --- 6. CARREGAMENTO (AJUSTADO PARA FORÇAR TOTAL) ---
+// --- 6. CARREGAMENTO ---
 
 async function loadTitulos() {
     const btnRefresh = document.getElementById('btn-filtrar');
@@ -353,7 +396,6 @@ async function loadTitulos() {
 
         const dados = await res.json();
         
-        // Atualiza título da coluna de data
         const tipoData = document.getElementById('filtro-tipo-data').value;
         const colData = table.getColumn("vencimento");
         if(colData) {
@@ -364,15 +406,14 @@ async function loadTitulos() {
             });
         }
 
-        // Insere dados e força atualização dos totais MANUALMENTE
         await table.setData(dados);
-        atualizarTotais(dados); 
-        popularMenuColunas(); // Garante atualização do menu se colunas mudarem
+        atualizarRodapeDinamico(dados); 
+        popularMenuColunas(); 
         
     } catch (err) {
         console.error(err);
-        table.setData([]); // Limpa tabela em caso de erro
-        atualizarTotais([]);
+        table.setData([]);
+        atualizarRodapeDinamico([]);
         alert("Erro ao carregar dados. Verifique o console.");
     } finally {
         btnRefresh.disabled = false;
@@ -381,52 +422,61 @@ async function loadTitulos() {
     }
 }
 
-// --- 7. TOTAIS DO RODAPÉ (Lógica Simplificada) ---
+// --- 7. TOTAIS DO RODAPÉ (DINÂMICO/CALCULADORA) ---
 
-function atualizarTotais(dados) {
-    if (!dados || !Array.isArray(dados)) dados = [];
+function atualizarRodapeDinamico(dados) {
+    if (!dados) {
+        if (table) dados = table.getData("active");
+        else dados = [];
+    }
 
-    // Soma simples e direta
     const total = dados.reduce((acc, curr) => {
-        // Garante que é numero, mesmo que venha como string
         const val = parseFloat(curr.valor_devido); 
         return acc + (isNaN(val) ? 0 : val);
     }, 0);
-    
-    // Atualiza DOM
+
     const elReg = document.getElementById('total-registros');
-    if(elReg) elReg.textContent = `${dados.length} registros`;
-    
     const elValor = document.getElementById('total-valor');
-    if(elValor) {
-        elValor.textContent = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        // Efeito visual de atualização
-        elValor.style.transition = 'none';
-        elValor.style.transform = 'scale(1.1)';
-        setTimeout(() => {
-            elValor.style.transition = 'transform 0.2s';
-            elValor.style.transform = 'scale(1)';
-        }, 100);
+    const elLabel = elValor ? elValor.previousElementSibling : null;
+
+    const selecionados = table ? table.getSelectedData().length : 0;
+    
+    // MODO SELEÇÃO (Calculadora)
+    if (selecionados > 0 && dados.length === selecionados) {
+        if(elReg) elReg.innerHTML = `<span class="text-blue-600 font-bold flex items-center gap-1"><i data-feather="check-square" class="w-3 h-3"></i> ${selecionados} selecionados</span>`;
+        if(elLabel) elLabel.textContent = "SELEÇÃO:";
+        if(elValor) {
+            elValor.className = "text-blue-700 text-sm ml-1 bg-blue-100 px-2 py-0.5 rounded border border-blue-200 min-w-[100px] text-center font-bold transition-all";
+        }
+        if(typeof feather !== 'undefined') feather.replace();
+    } 
+    // MODO TOTAL GERAL
+    else {
+        if(elReg) elReg.textContent = `${dados.length} registros`;
+        if(elLabel) elLabel.textContent = "TOTAL:";
+        if(elValor) {
+            elValor.className = "text-indigo-700 text-sm ml-1 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 min-w-[100px] text-center font-bold transition-all";
+        }
     }
+
+    if(elValor) elValor.textContent = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-// --- 8. MENU COLUNAS (Modularidade) ---
+// --- 8. MENU COLUNAS ---
 
 function popularMenuColunas() {
     const lista = document.getElementById('lista-colunas');
     if(!lista || !table) return;
     
-    // Limpa lista anterior para não duplicar
     lista.innerHTML = ''; 
 
     const columns = table.getColumns();
-    // Se não houver colunas ainda (init), retorna
     if (!columns || columns.length === 0) return;
 
     columns.forEach(col => {
         const def = col.getDefinition();
-        // Ignora coluna ID e colunas sem título
-        if (def.field === 'id' || !def.title) return; 
+        // Ignora colunas técnicas
+        if (def.field === 'id' || !def.title || def.formatter === 'rowSelection') return; 
 
         const div = document.createElement('div');
         div.className = 'flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 cursor-pointer rounded select-none border-b border-gray-50 last:border-0';
@@ -436,7 +486,6 @@ function popularMenuColunas() {
         check.checked = col.isVisible();
         check.className = 'rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer w-3.5 h-3.5';
         
-        // Handler de Click
         const toggle = () => { 
             if (col.isVisible()) col.hide(); else col.show();
             check.checked = col.isVisible(); 
@@ -455,27 +504,7 @@ function popularMenuColunas() {
     });
 }
 
-// --- 9. MODAL DE EDIÇÃO ---
-
-function togglePainelCheque() {
-    const tipo = document.getElementById('modal-modalidade').value;
-    const painel = document.getElementById('painel-cheque');
-    if (tipo === 'CHEQUE') painel.classList.remove('hidden'); 
-    else painel.classList.add('hidden');
-}
-
-function toggleModal(show) {
-    const modal = document.getElementById('modal-cheque');
-    const content = document.getElementById('modal-content');
-    if (show) {
-        modal.classList.remove('opacity-0', 'pointer-events-none', 'hidden');
-        setTimeout(() => content.classList.replace('scale-95', 'scale-100'), 10);
-    } else {
-        content.classList.replace('scale-100', 'scale-95');
-        modal.classList.add('opacity-0', 'pointer-events-none');
-        setTimeout(() => modal.classList.add('hidden'), 200);
-    }
-}
+// --- 9. MODAL DE EDIÇÃO (LEGACY) ---
 
 function togglePainelCheque() {
     const tipo = document.getElementById('modal-modalidade').value;
@@ -483,8 +512,10 @@ function togglePainelCheque() {
     
     if (tipo === 'CHEQUE') {
         painel.classList.remove('hidden'); 
-        // Se mudou para cheque, foca no número
-        setTimeout(() => document.getElementById('modal-numero-cheque').focus(), 100);
+        setTimeout(() => {
+            const elNum = document.getElementById('modal-numero-cheque');
+            if(elNum) elNum.focus();
+        }, 100);
     } else {
         painel.classList.add('hidden');
     }
@@ -504,31 +535,27 @@ function toggleModal(show) {
 }
 
 window.openEditModal = function(idTitulo) {
-    // Procura nos dados atuais da tabela
     const rowObj = table.getRow(idTitulo);
     if (!rowObj) return;
     
     const row = rowObj.getData();
 
-    // 1. Preenchimento dos Campos de Leitura (ERP)
+    // 1. Campos de Leitura (ERP)
     document.getElementById('modal-id-titulo').value = row.id;
-    document.getElementById('modal-lancamento').value = row.controle_parcela || row.id; // Usa o campo concatenado criado antes
+    document.getElementById('modal-lancamento').value = row.controle_parcela || row.id; 
     document.getElementById('modal-filial').value = `${row.filial}`;
     document.getElementById('modal-fornecedor').value = row.fornecedor;
     
-    // Tratamento seguro para textos que podem não vir da query
     document.getElementById('modal-tipo-despesa').value = MAPA_TIPOS_DESPESA[String(row.tipo_despesa_cod)] || row.tipo_despesa_cod || '-';
     document.getElementById('modal-indicacao').value = MAPA_IND_PAGAMENTO[String(row.indicacao_pagamento_cod)] || row.indicacao_pagamento_cod || '-';
     
-    // Valores e Datas
     document.getElementById('modal-vencimento').value = row.vencimento ? row.vencimento.split('T')[0] : '';
     document.getElementById('modal-nf').value = row.nf || '';
     document.getElementById('modal-valor-devido').value = parseFloat(row.valor_devido).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    document.getElementById('modal-valor-original').value = parseFloat(row.valor_devido).toLocaleString('pt-BR', { minimumFractionDigits: 2 }); // Simulado, se tiver valor original use row.valor_original
+    document.getElementById('modal-valor-original').value = parseFloat(row.valor_devido).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
     document.getElementById('modal-historico-erp').value = row.historico || '';
 
-    // 2. Preenchimento dos Campos Editáveis (Sistema)
-    // Se a modalidade não for definida ou for diferente de BOLETO/CHEQUE, padroniza para BOLETO
+    // 2. Campos Editáveis
     let mod = row.modalidade || 'BOLETO';
     if(mod !== 'BOLETO' && mod !== 'CHEQUE') mod = 'BOLETO';
     
@@ -567,7 +594,7 @@ async function saveClassificacao() {
         if (!res.ok) throw new Error('Erro ao salvar');
 
         toggleModal(false);
-        // Atualiza a linha localmente
+        // Atualiza apenas os campos alterados localmente
         table.updateData([{ id: parseInt(id), ...payload }]);
         
     } catch (err) {
@@ -577,68 +604,4 @@ async function saveClassificacao() {
         btn.innerHTML = originalText;
         if(typeof feather !== 'undefined') feather.replace();
     }
-}
-
-// Formata o prazo amigavelmente (Ex: "Hoje", "Há 3 dias", "Em 5 dias")
-function prazoFormatter(cell) {
-    const val = cell.getValue();
-    if (!val) return "-";
-    
-    const hoje = new Date();
-    hoje.setHours(0,0,0,0);
-    
-    const venc = new Date(val);
-    venc.setHours(0,0,0,0); // Ignores horas para comparar apenas dias
-    
-    // Diferença em dias
-    const diffTime = venc - hoje;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-
-    const status = cell.getRow().getData().status_erp;
-    if (status === 'PAGO' || status === 'CANCELADO') return `<span class="text-gray-300">-</span>`;
-
-    if (diffDays === 0) return `<span class="text-xs font-bold text-blue-600 bg-blue-50 px-1 rounded">HOJE</span>`;
-    if (diffDays === 1) return `<span class="text-xs font-bold text-orange-500">AMANHÃ</span>`;
-    if (diffDays < 0) return `<span class="text-[10px] font-bold text-red-600">HÁ ${Math.abs(diffDays)} DIAS</span>`;
-    
-    return `<span class="text-[10px] text-gray-500">Em ${diffDays} dias</span>`;
-}
-
-// Atualiza o rodapé decidindo se mostra o TOTAL GERAL ou o TOTAL SELECIONADO
-function atualizarRodapeDinamico(dados) {
-    // Se não passar dados, pega da tabela (linhas visíveis)
-    if (!dados) {
-        if (table) dados = table.getData("active");
-        else dados = [];
-    }
-
-    const total = dados.reduce((acc, curr) => {
-        const val = parseFloat(curr.valor_devido); 
-        return acc + (isNaN(val) ? 0 : val);
-    }, 0);
-
-    const elReg = document.getElementById('total-registros');
-    const elValor = document.getElementById('total-valor');
-    const elLabel = elValor.previousElementSibling; // O texto "TOTAL:"
-
-    // Verifica se é uma seleção ou o todo (checa se a tabela tem linhas selecionadas)
-    const selecionados = table ? table.getSelectedData().length : 0;
-    
-    if (selecionados > 0 && dados.length === selecionados) {
-        // MODO SELEÇÃO
-        if(elReg) elReg.innerHTML = `<span class="text-blue-600 font-bold">${selecionados} selecionados</span>`;
-        if(elLabel) elLabel.textContent = "SELEÇÃO:";
-        if(elValor) {
-            elValor.className = "text-blue-700 text-sm ml-1 bg-blue-100 px-2 py-0.5 rounded border border-blue-200 min-w-[100px] text-center font-bold transition-all";
-        }
-    } else {
-        // MODO NORMAL
-        if(elReg) elReg.textContent = `${dados.length} registros`;
-        if(elLabel) elLabel.textContent = "TOTAL:";
-        if(elValor) {
-            elValor.className = "text-indigo-700 text-sm ml-1 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 min-w-[100px] text-center font-bold transition-all";
-        }
-    }
-
-    if(elValor) elValor.textContent = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
