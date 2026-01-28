@@ -144,6 +144,14 @@ function initTable() {
                 frozen: true 
             },
 
+            { 
+                title: "Prazo", 
+                field: "vencimento", 
+                formatter: prazoFormatter, // Vamos criar essa função abaixo
+                width: 90, 
+                hozAlign: "center" 
+            },
+
             // Identificação
             { title: "Filial", field: "filial", formatter: filialFormatter, hozAlign: "center", width: 80 },
 
@@ -249,11 +257,16 @@ function initTable() {
             popularMenuColunas();
         },
 
+        rowSelectionChanged: function(data, rows) {
+            atualizarRodapeDinamico(data);
+        },
+
         // 2. Atualização de Totais: Baseado no Filtro (Search)
         dataFiltered: function(filters, rows) {
-            // 'rows' aqui são RowComponents. Precisamos extrair os dados.
-            const dadosVisiveis = rows.map(row => row.getData());
-            atualizarTotais(dadosVisiveis);
+             // Se houver seleção, ignora o filtro no rodapé, senão usa o filtro
+             const selected = this.getSelectedData();
+             if (selected.length > 0) atualizarRodapeDinamico(selected);
+             else atualizarRodapeDinamico(rows.map(r => r.getData()));
         }
     });
 }
@@ -564,4 +577,68 @@ async function saveClassificacao() {
         btn.innerHTML = originalText;
         if(typeof feather !== 'undefined') feather.replace();
     }
+}
+
+// Formata o prazo amigavelmente (Ex: "Hoje", "Há 3 dias", "Em 5 dias")
+function prazoFormatter(cell) {
+    const val = cell.getValue();
+    if (!val) return "-";
+    
+    const hoje = new Date();
+    hoje.setHours(0,0,0,0);
+    
+    const venc = new Date(val);
+    venc.setHours(0,0,0,0); // Ignores horas para comparar apenas dias
+    
+    // Diferença em dias
+    const diffTime = venc - hoje;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+
+    const status = cell.getRow().getData().status_erp;
+    if (status === 'PAGO' || status === 'CANCELADO') return `<span class="text-gray-300">-</span>`;
+
+    if (diffDays === 0) return `<span class="text-xs font-bold text-blue-600 bg-blue-50 px-1 rounded">HOJE</span>`;
+    if (diffDays === 1) return `<span class="text-xs font-bold text-orange-500">AMANHÃ</span>`;
+    if (diffDays < 0) return `<span class="text-[10px] font-bold text-red-600">HÁ ${Math.abs(diffDays)} DIAS</span>`;
+    
+    return `<span class="text-[10px] text-gray-500">Em ${diffDays} dias</span>`;
+}
+
+// Atualiza o rodapé decidindo se mostra o TOTAL GERAL ou o TOTAL SELECIONADO
+function atualizarRodapeDinamico(dados) {
+    // Se não passar dados, pega da tabela (linhas visíveis)
+    if (!dados) {
+        if (table) dados = table.getData("active");
+        else dados = [];
+    }
+
+    const total = dados.reduce((acc, curr) => {
+        const val = parseFloat(curr.valor_devido); 
+        return acc + (isNaN(val) ? 0 : val);
+    }, 0);
+
+    const elReg = document.getElementById('total-registros');
+    const elValor = document.getElementById('total-valor');
+    const elLabel = elValor.previousElementSibling; // O texto "TOTAL:"
+
+    // Verifica se é uma seleção ou o todo (checa se a tabela tem linhas selecionadas)
+    const selecionados = table ? table.getSelectedData().length : 0;
+    
+    if (selecionados > 0 && dados.length === selecionados) {
+        // MODO SELEÇÃO
+        if(elReg) elReg.innerHTML = `<span class="text-blue-600 font-bold">${selecionados} selecionados</span>`;
+        if(elLabel) elLabel.textContent = "SELEÇÃO:";
+        if(elValor) {
+            elValor.className = "text-blue-700 text-sm ml-1 bg-blue-100 px-2 py-0.5 rounded border border-blue-200 min-w-[100px] text-center font-bold transition-all";
+        }
+    } else {
+        // MODO NORMAL
+        if(elReg) elReg.textContent = `${dados.length} registros`;
+        if(elLabel) elLabel.textContent = "TOTAL:";
+        if(elValor) {
+            elValor.className = "text-indigo-700 text-sm ml-1 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 min-w-[100px] text-center font-bold transition-all";
+        }
+    }
+
+    if(elValor) elValor.textContent = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
