@@ -13,7 +13,6 @@
     <link href="https://unpkg.com/tabulator-tables@6.2.1/dist/css/tabulator_simple.min.css" rel="stylesheet">
     <script type="text/javascript" src="https://unpkg.com/tabulator-tables@6.2.1/dist/js/tabulator.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
         body { font-family: 'Inter', sans-serif; }
@@ -25,6 +24,9 @@
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         
         .drop-active { border-color: #4f46e5 !important; background-color: #eef2ff !important; }
+        
+        /* Animação do ícone de expandir */
+        .rotate-90 { transform: rotate(90deg); }
     </style>
 </head>
 <body class="h-full text-gray-900 flex flex-col overflow-hidden">
@@ -57,7 +59,7 @@
         
         <div class="grid grid-cols-4 gap-4 p-4 border-b border-gray-200">
             <div class="bg-white p-3 rounded shadow-sm border-l-4 border-l-blue-500 flex flex-col justify-center">
-                <p class="text-[10px] font-bold text-gray-500 uppercase">Valor Bruto MP</p>
+                <p class="text-[10px] font-bold text-gray-500 uppercase">Valor Bruto Transacionado</p>
                 <p id="card-bruto" class="text-lg font-bold text-gray-800 leading-tight">R$ 0,00</p>
             </div>
             <div class="bg-white p-3 rounded shadow-sm border-l-4 border-l-red-500 flex flex-col justify-center">
@@ -65,7 +67,7 @@
                 <p id="card-taxas" class="text-lg font-bold text-red-600 leading-tight">R$ 0,00</p>
             </div>
             <div class="bg-white p-3 rounded shadow-sm border-l-4 border-l-green-500 flex flex-col justify-center">
-                <p class="text-[10px] font-bold text-gray-500 uppercase">Líquido MP</p>
+                <p class="text-[10px] font-bold text-gray-500 uppercase">Líquido a Receber</p>
                 <p id="card-liquido" class="text-lg font-bold text-green-700 leading-tight">R$ 0,00</p>
             </div>
             <div class="bg-white p-3 rounded shadow-sm border-l-4 border-l-yellow-500 flex flex-col justify-center relative overflow-hidden">
@@ -75,48 +77,36 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-0 bg-white divide-x divide-gray-200">
-            
-            <div class="col-span-2 p-4">
-                <h3 class="text-xs font-bold text-gray-800 mb-3 flex items-center gap-1.5 uppercase tracking-wide">
-                    <i data-feather="bar-chart-2" class="w-4 h-4 text-indigo-600"></i> Auditoria por Modalidade / Bandeira
-                </h3>
-                <div class="overflow-x-auto rounded border border-gray-200">
-                    <table class="w-full text-left text-xs border-collapse">
-                        <thead>
-                            <tr class="bg-gray-100 text-gray-600 border-b border-gray-200">
-                                <th class="py-2 px-3 font-bold uppercase tracking-wider">Modalidade</th>
-                                <th class="py-2 px-3 font-bold uppercase tracking-wider text-center">Qtd</th>
-                                <th class="py-2 px-3 font-bold uppercase tracking-wider text-right text-blue-700">Bruto MP</th>
-                                <th class="py-2 px-3 font-bold uppercase tracking-wider text-right text-red-700">Taxas MP</th>
-                                <th class="py-2 px-3 font-bold uppercase tracking-wider text-right text-green-700">Líquido MP</th>
-                                <th class="py-2 px-3 font-bold uppercase tracking-wider text-center w-36 bg-blue-50 border-x border-blue-100">Total ERP (Bruto)</th>
-                                <th class="py-2 px-3 font-bold uppercase tracking-wider text-right">Diferença</th>
-                                <th class="py-2 px-3 font-bold uppercase tracking-wider text-center">Status</th>
-                                <th class="py-2 px-3 font-bold uppercase tracking-wider">Obs</th>
-                                <th class="py-2 px-3 font-bold uppercase tracking-wider text-center">Ação</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tbody-modalidades" class="divide-y divide-gray-100 bg-white">
-                            </tbody>
-                    </table>
-                </div>
+        <div class="p-4 bg-white overflow-y-auto max-h-[350px]">
+            <h3 class="text-xs font-bold text-gray-800 mb-2 flex items-center gap-1.5 uppercase tracking-wide">
+                <i data-feather="bar-chart-2" class="w-3.5 h-3.5 text-indigo-600"></i>
+                Auditoria por Modalidade (Clique na modalidade para ver detalhes)
+            </h3>
+            <div class="rounded border border-gray-200">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead>
+                        <tr class="bg-gray-100 text-gray-600 border-b border-gray-200">
+                            <th class="py-2.5 px-3 font-bold uppercase tracking-wider w-48">Modalidade</th>
+                            <th class="py-2.5 px-3 font-bold uppercase tracking-wider text-center w-16">Qtd</th>
+                            <th class="py-2.5 px-3 font-bold uppercase tracking-wider text-right w-28 text-blue-700">Bruto MP</th>
+                            <th class="py-2.5 px-3 font-bold uppercase tracking-wider text-right w-28 text-red-700">Taxas MP</th>
+                            <th class="py-2.5 px-3 font-bold uppercase tracking-wider text-right w-28 text-green-700">Líquido MP</th>
+                            <th class="py-2.5 px-3 font-bold uppercase tracking-wider text-center w-36 bg-blue-50 border-x border-blue-100">Total ERP (Bruto)</th>
+                            <th class="py-2.5 px-3 font-bold uppercase tracking-wider text-right w-28">Diferença</th>
+                            <th class="py-2.5 px-3 font-bold uppercase tracking-wider text-center w-16">Status</th>
+                            <th class="py-2.5 px-3 font-bold uppercase tracking-wider">Observação</th>
+                            <th class="py-2.5 px-3 font-bold uppercase tracking-wider text-center w-20">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-modalidades" class="divide-y divide-gray-100 bg-white">
+                        </tbody>
+                </table>
             </div>
-
-            <div class="col-span-1 p-4 flex flex-col bg-gray-50/50">
-                <h3 class="text-xs font-bold text-gray-800 mb-2 flex items-center gap-1.5 uppercase tracking-wide">
-                    <i data-feather="pie-chart" class="w-4 h-4 text-indigo-600"></i> Volume por Parcelamento
-                </h3>
-                <div class="flex-1 relative w-full min-h-[180px] flex items-center justify-center">
-                    <canvas id="grafico-parcelas"></canvas>
-                </div>
-            </div>
-
         </div>
     </div>
 
     <div class="flex-1 w-full bg-white relative overflow-hidden flex flex-col">
-        <div class="px-4 py-2 bg-gray-50 border-b border-gray-200 flex justify-between items-center shrink-0">
+        <div class="px-4 py-2 bg-gray-50 border-t border-b border-gray-200 flex justify-between items-center shrink-0">
             <h3 class="text-xs font-bold text-gray-600 flex items-center gap-1.5 uppercase">
                 <i data-feather="list" class="w-3.5 h-3.5 text-gray-400"></i>
                 Extrato Detalhado de Transações (Consulta)
@@ -148,7 +138,7 @@
                 </div>
 
                 <label class="block text-xs font-bold text-gray-600 mb-1.5 uppercase">Motivo / Observação do Fechamento</label>
-                <textarea id="modal-obs" rows="3" class="w-full border-gray-300 rounded text-sm p-3 focus:ring-yellow-500 focus:border-yellow-500 bg-white shadow-inner" placeholder="Ex: Cliente passou valor a mais e devolvemos em dinheiro..."></textarea>
+                <textarea id="modal-obs" rows="3" class="w-full border-gray-300 rounded text-sm p-3 focus:ring-yellow-500 focus:border-yellow-500 bg-white shadow-inner" placeholder="Ex: Cliente passou R$ 10 a mais na máquina e devolvemos em dinheiro..."></textarea>
             </div>
             <div class="bg-gray-50 px-5 py-3 border-t border-gray-100 flex justify-end gap-2">
                 <button onclick="fecharModal()" class="px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-200 rounded transition-colors">Cancelar</button>

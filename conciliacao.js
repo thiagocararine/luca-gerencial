@@ -3,8 +3,6 @@ document.addEventListener('DOMContentLoaded', initPage);
 let table; 
 let dadosProcessados = [];
 let totaisPorModalidade = {}; 
-let totaisPorParcela = {}; // Dados para o Gráfico
-let chartInstancia = null; // Instância do Chart.js
 
 function initPage() {
     setupDragAndDrop();
@@ -36,14 +34,13 @@ function setupDragAndDrop() {
     fileInput.addEventListener('change', (e) => processarArquivo(e.target.files[0]), false);
 }
 
-// --- 2. PROCESSAMENTO DO CSV (COM INTELIGÊNCIA DE NOMES) ---
+// --- 2. PROCESSAMENTO DO CSV ---
 function processarArquivo(file) {
     if (!file || !file.name.endsWith('.csv')) {
         alert("Por favor, envie um arquivo .csv");
         return;
     }
 
-    // Comprime a área de upload
     document.getElementById('upload-zone').classList.add('py-1', 'px-6');
     document.getElementById('drop-area').classList.replace('py-6', 'py-1');
     document.getElementById('upload-icon-container').classList.add('hidden');
@@ -64,7 +61,6 @@ function processarArquivo(file) {
 
 function transformarDadosMercadoPago(csvData) {
     totaisPorModalidade = {}; 
-    totaisPorParcela = {}; 
     
     dadosProcessados = csvData.map((row, index) => {
         
@@ -76,64 +72,60 @@ function transformarDadosMercadoPago(csvData) {
         const idTransacao = row['SOURCE_ID'] || row['ID DA TRANSAÇÃO NO MERCADO PAGO'];
         const dataOrigem = row['SETTLEMENT_DATE'] || row['DATA DE APROVAÇÃO'] || row['TRANSACTION_DATE'] || row['DATA DE ORIGEM'];
         
-        // STATUS (Devolução)
+        // STATUS (Identifica se é devolução)
         const tipoTransacaoOriginal = row['TRANSACTION_TYPE'] || row['TIPO DE TRANSAÇÃO'];
         const isRefund = tipoTransacaoOriginal === 'REFUND' || tipoTransacaoOriginal === 'Devolução';
         const statusFormatado = isRefund ? 'DEVOLVIDO' : 'APROVADO';
 
-        // --- INTELIGÊNCIA DE BANDEIRAS ---
+        // --- INTELIGÊNCIA: TRADUÇÃO DE BANDEIRAS ---
         const meioPagtoRaw = (row['PAYMENT_METHOD'] || row['MEIO DE PAGAMENTO'] || '').toLowerCase();
         let bandeira = 'Outros';
-        
         if (meioPagtoRaw.includes('visa')) bandeira = 'Visa';
         else if (meioPagtoRaw.includes('master')) bandeira = 'Mastercard';
         else if (meioPagtoRaw.includes('elo')) bandeira = 'Elo';
-        else if (meioPagtoRaw.includes('amex') || meioPagtoRaw.includes('american')) bandeira = 'American Express';
+        else if (meioPagtoRaw.includes('amex') || meioPagtoRaw.includes('american')) bandeira = 'Amex';
         else if (meioPagtoRaw.includes('pix') || meioPagtoRaw.includes('money') || meioPagtoRaw.includes('qr')) bandeira = 'PIX';
+        else bandeira = row['PAYMENT_METHOD'] || 'Outros';
 
-        // --- INTELIGÊNCIA DE PARCELAS E MODALIDADE MACRO ---
+        // --- INTELIGÊNCIA: PARCELAS E MACRO MODALIDADE ---
         const parcelasRaw = row['INSTALLMENTS'] || row['PARCELAS'] || '1';
         const qtdParcelas = parseInt(parcelasRaw) || 1;
+        const strParcela = qtdParcelas === 1 ? 'À vista' : `${qtdParcelas}x`;
         
         const tipoOriginalRaw = (row['PAYMENT_METHOD_TYPE'] || row['TIPO DE MEIO DE PAGAMENTO'] || '').toLowerCase();
         let tipoMacro = 'Outros';
 
-        if (tipoOriginalRaw.includes('credit') || tipoOriginalRaw.includes('crédito')) {
-            // Fica assim: "Crédito Visa (À vista)" ou "Crédito Mastercard (2x)"
-            tipoMacro = `Crédito ${bandeira} ` + (qtdParcelas === 1 ? '(À vista)' : `(${qtdParcelas}x)`);
-        } 
-        else if (tipoOriginalRaw.includes('debit') || tipoOriginalRaw.includes('débito')) {
-            tipoMacro = `Débito ${bandeira}`;
-        } 
-        else if (tipoOriginalRaw.includes('bank') || tipoOriginalRaw.includes('pix') || tipoOriginalRaw.includes('money') || tipoOriginalRaw.includes('disponível')) {
-            // available_money, bank_transfer, tudo vira PIX
-            tipoMacro = 'PIX';
-        } 
-        else if (tipoOriginalRaw.includes('ticket') || tipoOriginalRaw.includes('boleto')) {
-            tipoMacro = 'Boleto Bancário';
-        }
+        if (tipoOriginalRaw.includes('credit') || tipoOriginalRaw.includes('crédito')) tipoMacro = 'Cartão de Crédito';
+        else if (tipoOriginalRaw.includes('debit') || tipoOriginalRaw.includes('débito')) tipoMacro = 'Cartão de Débito';
+        else if (tipoOriginalRaw.includes('bank') || tipoOriginalRaw.includes('pix') || tipoOriginalRaw.includes('money') || tipoOriginalRaw.includes('disponível')) tipoMacro = 'PIX / Dinheiro';
+        else if (tipoOriginalRaw.includes('ticket') || tipoOriginalRaw.includes('boleto')) tipoMacro = 'Boleto Bancário';
 
-        // Gráfico de parcelas (Gera receita apenas)
-        if (bruto > 0) { 
-            const labelParcela = qtdParcelas === 1 ? 'À vista (1x)' : `${qtdParcelas}x`;
-            if (!totaisPorParcela[labelParcela]) totaisPorParcela[labelParcela] = 0;
-            totaisPorParcela[labelParcela] += bruto;
-        }
+        // Cria a string do detalhe (Ex: "Visa (2x)")
+        const labelDetalhe = tipoMacro.includes('Cartão') ? `${bandeira} (${strParcela})` : bandeira;
 
-        // Acumulando para a Tabela De-Para
+        // ACUMULADORES (Nível 1: Macro)
         if(!totaisPorModalidade[tipoMacro]) {
-            totaisPorModalidade[tipoMacro] = { qtd: 0, bruto: 0, taxa: 0, liquido: 0, valor_erp: null, observacao: '' };
+            totaisPorModalidade[tipoMacro] = { 
+                qtd: 0, bruto: 0, taxa: 0, liquido: 0, valor_erp: null, observacao: '', detalhes: {} 
+            };
         }
         totaisPorModalidade[tipoMacro].qtd += 1;
         totaisPorModalidade[tipoMacro].bruto += bruto;
         totaisPorModalidade[tipoMacro].taxa += taxa;
         totaisPorModalidade[tipoMacro].liquido += liquidoCSV;
 
+        // ACUMULADORES (Nível 2: Detalhes/Composição)
+        if(!totaisPorModalidade[tipoMacro].detalhes[labelDetalhe]) {
+            totaisPorModalidade[tipoMacro].detalhes[labelDetalhe] = { qtd: 0, bruto: 0 };
+        }
+        totaisPorModalidade[tipoMacro].detalhes[labelDetalhe].qtd += 1;
+        totaisPorModalidade[tipoMacro].detalhes[labelDetalhe].bruto += bruto;
+
         return {
             id_interno: index + 1,
             id_transacao: idTransacao,
             data: dataOrigem,
-            meio_pagto: bandeira, 
+            meio_pagto: bandeira,
             tipo_macro: tipoMacro, 
             parcelas: qtdParcelas,
             status_transacao: statusFormatado,
@@ -146,21 +138,21 @@ function transformarDadosMercadoPago(csvData) {
     table.setData(dadosProcessados);
     atualizarCardsResumo();
     renderizarDeParaModalidades();
-    renderizarGraficoParcelas();
 }
 
-// --- 3. TABELA DE-PARA (MACRO) ---
+// --- 3. TABELA DE-PARA (COM GAVETA DE DETALHES) ---
 function renderizarDeParaModalidades() {
     const tbody = document.getElementById('tbody-modalidades');
     tbody.innerHTML = '';
 
     for (const [modalidade, dados] of Object.entries(totaisPorModalidade)) {
-        const tr = document.createElement('tr');
-        tr.className = 'hover:bg-blue-50/50 transition-colors group border-b border-gray-100';
         
         const inputId = `input-erp-${modalidade.replace(/[^a-zA-Z0-9]/g, '')}`;
 
-        // DIFERENÇA = BRUTO MP - VALOR ERP
+        // 1. LINHA PRINCIPAL (MACRO)
+        const trMain = document.createElement('tr');
+        trMain.className = 'hover:bg-blue-50/30 transition-colors group border-b border-gray-100';
+        
         let valERP = dados.valor_erp !== null ? dados.valor_erp : '';
         let diferenca = dados.valor_erp !== null ? dados.bruto - dados.valor_erp : 0;
         
@@ -173,41 +165,72 @@ function renderizarDeParaModalidades() {
                 iconHtml = `<i data-feather="check-circle" class="w-4 h-4 text-green-500 mx-auto"></i>`;
             } else {
                 diffHtml = `<span class="text-red-600 bg-red-50 px-2 py-0.5 rounded font-bold">${diferenca.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>`;
-                if(dados.observacao) {
-                    iconHtml = `<i data-feather="file-text" class="w-4 h-4 text-blue-500 mx-auto"></i>`;
-                } else {
-                    iconHtml = `<i data-feather="alert-triangle" class="w-4 h-4 text-red-500 mx-auto"></i>`;
-                }
+                if(dados.observacao) iconHtml = `<i data-feather="file-text" class="w-4 h-4 text-blue-500 mx-auto"></i>`;
+                else iconHtml = `<i data-feather="alert-triangle" class="w-4 h-4 text-red-500 mx-auto"></i>`;
             }
         }
 
-        tr.innerHTML = `
-            <td class="py-2 px-3 font-semibold text-gray-700 whitespace-nowrap">${modalidade}</td>
-            <td class="py-2 px-3 text-center"><span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-bold text-[10px]">${dados.qtd}</span></td>
+        trMain.innerHTML = `
+            <td class="py-2.5 px-3 font-semibold text-gray-700 whitespace-nowrap cursor-pointer hover:text-indigo-600 select-none" onclick="toggleDetalhes('${inputId}')" title="Clique para ver a composição">
+                <div class="flex items-center gap-1.5">
+                    <i data-feather="chevron-right" id="icon-${inputId}" class="w-4 h-4 transition-transform duration-200"></i>
+                    ${modalidade}
+                </div>
+            </td>
+            <td class="py-2.5 px-3 text-center"><span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-bold text-[10px]">${dados.qtd}</span></td>
             
-            <td class="py-2 px-3 text-right font-bold text-blue-700">${dados.bruto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-            <td class="py-2 px-3 text-right font-medium text-red-500">${dados.taxa.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-            <td class="py-2 px-3 text-right font-bold text-green-700">${dados.liquido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+            <td class="py-2.5 px-3 text-right font-bold text-gray-800">${dados.bruto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+            <td class="py-2.5 px-3 text-right font-medium text-red-500">${dados.taxa.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+            <td class="py-2.5 px-3 text-right font-bold text-green-700">${dados.liquido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
             
             <td class="py-1 px-3 text-center bg-blue-50/50 border-x border-blue-100">
-                <input type="number" id="${inputId}" value="${valERP}" class="w-28 text-right border-gray-300 border focus:ring-blue-500 focus:border-blue-500 rounded text-xs p-1 shadow-inner bg-white font-bold text-blue-800" placeholder="R$ Bruto ERP">
+                <input type="number" id="${inputId}" value="${valERP}" class="w-32 text-right border-gray-300 border focus:ring-blue-500 focus:border-blue-500 rounded text-xs p-1.5 shadow-inner bg-white font-bold text-blue-800" placeholder="R$ Bruto ERP">
             </td>
             
-            <td class="py-2 px-3 text-right" id="diff-${inputId}">${diffHtml}</td>
-            <td class="py-2 px-3 text-center" id="status-${inputId}">${iconHtml}</td>
+            <td class="py-2.5 px-3 text-right" id="diff-${inputId}">${diffHtml}</td>
+            <td class="py-2.5 px-3 text-center" id="status-${inputId}">${iconHtml}</td>
             
-            <td class="py-2 px-3">
-                <span class="text-[10px] text-gray-500 italic block w-full max-w-[120px] truncate" title="${dados.observacao}">${dados.observacao || '-'}</span>
+            <td class="py-2.5 px-3">
+                <span class="text-[10px] text-gray-500 italic block w-full max-w-[150px] truncate" title="${dados.observacao}">${dados.observacao || '-'}</span>
             </td>
             
-            <td class="py-2 px-3 text-center">
+            <td class="py-2.5 px-3 text-center">
                 <button onclick="abrirModalModalidade('${modalidade}')" class="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-2 py-1 rounded hover:bg-blue-100 font-bold transition-colors shadow-sm">Justificar</button>
             </td>
         `;
+        tbody.appendChild(trMain);
 
-        tbody.appendChild(tr);
+        // 2. LINHA SECUNDÁRIA (GAVETA DE DETALHES - INICIA OCULTA)
+        const trDetail = document.createElement('tr');
+        trDetail.id = `detalhes-${inputId}`;
+        trDetail.className = 'hidden bg-indigo-50/40 border-b border-indigo-100/50';
+        
+        let subHtml = '';
+        for (const [subName, subDados] of Object.entries(dados.detalhes)) {
+            // Cards pequenininhos para mostrar a composição
+            subHtml += `
+            <div class="bg-white p-2 rounded shadow-sm border border-gray-200/60 flex flex-col gap-1 hover:border-indigo-300 transition-colors">
+                <div class="flex justify-between items-center">
+                    <span class="text-[11px] font-bold text-gray-700">${subName}</span>
+                    <span class="bg-gray-100 text-gray-500 text-[9px] px-1.5 py-0.5 rounded font-bold">${subDados.qtd}x</span>
+                </div>
+                <div class="text-xs font-bold text-indigo-600">${subDados.bruto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
+            </div>`;
+        }
 
-        // Ao digitar, calcula e atualiza
+        trDetail.innerHTML = `
+            <td colspan="10" class="p-4 shadow-inner">
+                <h4 class="text-[10px] font-bold text-indigo-400 uppercase tracking-wide mb-3 flex items-center gap-1">
+                    <i data-feather="corner-down-right" class="w-3 h-3"></i> Composição de ${modalidade}
+                </h4>
+                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                    ${subHtml}
+                </div>
+            </td>
+        `;
+        tbody.appendChild(trDetail);
+
+        // EVENTO DO INPUT ERP
         const inputElement = document.getElementById(inputId);
         inputElement.addEventListener('input', (e) => {
             const newVal = parseFloat(e.target.value);
@@ -221,17 +244,13 @@ function renderizarDeParaModalidades() {
                 statusCell.innerHTML = `<div class="w-2 h-2 rounded-full bg-gray-300 mx-auto"></div>`;
             } else {
                 const d = dados.bruto - newVal;
-                
                 if (Math.abs(d) < 0.01) {
                     diffCell.innerHTML = `<span class="text-green-600 bg-green-50 px-2 py-0.5 rounded font-bold">R$ 0,00</span>`;
                     statusCell.innerHTML = `<i data-feather="check-circle" class="w-4 h-4 text-green-500 mx-auto"></i>`;
                 } else {
                     diffCell.innerHTML = `<span class="text-red-600 bg-red-50 px-2 py-0.5 rounded font-bold">${d.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>`;
-                    if(totaisPorModalidade[modalidade].observacao) {
-                        statusCell.innerHTML = `<i data-feather="file-text" class="w-4 h-4 text-blue-500 mx-auto"></i>`;
-                    } else {
-                        statusCell.innerHTML = `<i data-feather="alert-triangle" class="w-4 h-4 text-red-500 mx-auto"></i>`;
-                    }
+                    if(totaisPorModalidade[modalidade].observacao) statusCell.innerHTML = `<i data-feather="file-text" class="w-4 h-4 text-blue-500 mx-auto"></i>`;
+                    else statusCell.innerHTML = `<i data-feather="alert-triangle" class="w-4 h-4 text-red-500 mx-auto"></i>`;
                 }
             }
             atualizarCardsResumo(); 
@@ -241,7 +260,17 @@ function renderizarDeParaModalidades() {
     if (typeof feather !== 'undefined') feather.replace();
 }
 
-// --- 4. TABELA DETALHADA (SOMENTE LEITURA E CONSULTA) ---
+// FUNÇÃO PARA ABRIR/FECHAR A GAVETA DE DETALHES
+window.toggleDetalhes = function(id) {
+    const row = document.getElementById(`detalhes-${id}`);
+    const icon = document.getElementById(`icon-${id}`);
+    if (row && icon) {
+        row.classList.toggle('hidden');
+        icon.classList.toggle('rotate-90');
+    }
+};
+
+// --- 4. TABELA DETALHADA (EXTRATO CONSULTA) ---
 function initTable() {
     table = new Tabulator("#tabela-conciliacao", {
         layout: "fitDataFill",
@@ -250,7 +279,7 @@ function initTable() {
         reactiveData: false,
         index: "id_interno",
         pagination: "local",
-        paginationSize: 50,
+        paginationSize: 100,
 
         columns: [
             { title: "Status", field: "status_transacao", width: 100, hozAlign: "center", formatter: (c) => {
@@ -260,8 +289,10 @@ function initTable() {
             }},
             
             { title: "Data/Hora", field: "data", width: 130, formatter: dataFormatter },
-            { title: "Tipo de Venda", field: "tipo_macro", width: 180, formatter: (c) => `<span class="font-bold text-gray-600">${c.getValue()}</span>` },
-            { title: "ID Transação", field: "id_transacao", width: 140, formatter: (c) => `<span class="font-mono text-xs text-gray-400">${c.getValue() || '-'}</span>` },
+            { title: "Modalidade", field: "tipo_macro", width: 150, formatter: (c) => `<span class="font-bold text-gray-600">${c.getValue()}</span>` },
+            { title: "Bandeira", field: "meio_pagto", width: 120 },
+            { title: "Parcelas", field: "parcelas", width: 80, hozAlign: "center", formatter: (c) => c.getValue() === 1 ? 'À vista' : `${c.getValue()}x` },
+            { title: "ID Transação", field: "id_transacao", width: 150, formatter: (c) => `<span class="font-mono text-xs text-gray-400">${c.getValue() || '-'}</span>` },
             
             { title: "Bruto", field: "valor_bruto", width: 110, hozAlign: "right", formatter: moneyFormatter },
             { title: "Taxas", field: "valor_taxa", width: 90, hozAlign: "right", formatter: (c) => `<span class="text-red-500">${moneyFormatter(c)}</span>` },
@@ -306,7 +337,7 @@ function atualizarCardsResumo() {
     cardDiff.className = Math.abs(diffTotal) > 0.01 ? "text-lg font-bold text-red-600 z-10 relative" : "text-lg font-bold text-green-600 z-10 relative";
 }
 
-// --- 6. MODAL DE JUSTIFICATIVA (POR MODALIDADE) ---
+// --- 6. MODAL DE JUSTIFICATIVA ---
 window.abrirModalModalidade = function(modalidade) {
     document.getElementById('modal-modality-id').value = modalidade;
     document.getElementById('modal-trans-id').textContent = modalidade;
@@ -347,57 +378,3 @@ window.salvarJustificativa = function() {
     window.fecharModal();
     renderizarDeParaModalidades(); 
 };
-
-// --- 7. GRÁFICO DE PARCELAS ---
-function renderizarGraficoParcelas() {
-    const ctx = document.getElementById('grafico-parcelas');
-    if (!ctx) return;
-
-    if (chartInstancia) chartInstancia.destroy();
-
-    const labels = Object.keys(totaisPorParcela).sort((a, b) => {
-        if (a.includes('vista')) return -1;
-        if (b.includes('vista')) return 1;
-        return parseInt(a) - parseInt(b);
-    });
-
-    const dataValues = labels.map(label => totaisPorParcela[label]);
-
-    chartInstancia = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: dataValues,
-                backgroundColor: ['#4f46e5', '#3b82f6', '#0ea5e9', '#06b6d4', '#14b8a6', '#10b981', '#f59e0b', '#f97316'],
-                borderWidth: 2,
-                borderColor: '#ffffff'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '65%', 
-            plugins: {
-                legend: {
-                    position: 'right',
-                    labels: {
-                        usePointStyle: true,
-                        boxWidth: 8,
-                        padding: 12,
-                        font: { size: 10, family: "'Inter', sans-serif" }
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            let label = context.label || '';
-                            let valor = context.raw || 0;
-                            return ` ${label}: ${valor.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}`;
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
