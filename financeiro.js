@@ -188,8 +188,8 @@ function initTable() {
 
             { title: "ID", field: "id", visible: false, download: false, },
 
-            { title: "Vencimento", field: "vencimento", formatter: dateFormatter, hozAlign: "center", width: 100, headerSortStartingDir: "asc", frozen: true },
-            { title: "Prazo", field: "vencimento", formatter: prazoFormatter, width: 90, hozAlign: "center" },
+            { title: "Vencimento", field: "vencimento", formatter: dateFormatter, accessorDownload: dateAccessorDownload, hozAlign: "center", width: 100, headerSortStartingDir: "asc", frozen: true },
+            { title: "Prazo", field: "vencimento", formatter: prazoFormatter, width: 90, hozAlign: "center", download: false },
             { title: "Filial", field: "filial", formatter: filialFormatter, hozAlign: "center", width: 80 },
             { title: "Nº Controle", field: "controle_parcela", width: 130, visible: true, formatter: (cell) => `<span class="font-mono text-xs font-bold text-gray-600">${cell.getValue()}</span>` },
             { title: "Razão Social", field: "fornecedor", width: 220, formatter: (cell) => `<div class='truncate font-bold text-gray-700' title='${cell.getValue()}'>${cell.getValue()}</div>` },
@@ -226,11 +226,11 @@ function initTable() {
             { title: "Classificação", field: "modalidade", formatter: buttonFormatter, hozAlign: "center", width: 130, headerSort: false },
 
             // Ocultas
-            { title: "Data Lançamento", field: "lancamento", formatter: dateFormatter, hozAlign: "center", width: 100, visible: false },
+            { title: "Data Lançamento", field: "lancamento", formatter: dateFormatter, accessorDownload: dateAccessorDownload, hozAlign: "center", width: 100, visible: false },
             { title: "Usuário Lançou", field: "usuario_lancou", width: 120, visible: false },
-            { title: "Data Baixa", field: "baixa", formatter: dateFormatter, hozAlign: "center", width: 100, visible: false },
+            { title: "Data Baixa", field: "baixa", formatter: dateFormatter, accessorDownload: dateAccessorDownload, hozAlign: "center", width: 100, visible: false },
             { title: "Usuário Baixou", field: "usuario_baixou", width: 120, visible: false },
-            { title: "Data Cancelamento", field: "cancelamento", formatter: dateFormatter, hozAlign: "center", width: 100, visible: false },
+            { title: "Data Cancelamento", field: "cancelamento", formatter: dateFormatter, accessorDownload: dateAccessorDownload, hozAlign: "center", width: 100, visible: false },
             { title: "Usuário Cancelou", field: "usuario_cancelou", width: 120, visible: false },
             { title: "Estornado", field: "estornado", hozAlign: "center", width: 80, visible: false },
             { title: "RG Fornecedor", field: "rg_fornecedor", width: 100, visible: false },
@@ -266,6 +266,13 @@ function dateFormatter(cell) {
     if (!val) return "-";
     const d = new Date(val);
     return isNaN(d) ? val : d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+}
+
+// Função exclusiva para formatar a data na hora de baixar o Excel
+function dateAccessorDownload(value, data, type, params, column) {
+    if (!value) return "";
+    const d = new Date(value);
+    return isNaN(d) ? value : d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
 function filialFormatter(cell) {
