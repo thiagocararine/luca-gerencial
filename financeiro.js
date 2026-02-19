@@ -148,7 +148,7 @@ function initTable() {
         },
         
         persistence: true, 
-        persistenceID: "financeiroConfigV21", // Atualizado para limpar cache
+        persistenceID: "financeiroConfigV22", // Atualizado para limpar cache
         
         columnDefaults: { resizable: false },
         movableColumns: true,    
@@ -188,8 +188,25 @@ function initTable() {
 
             { title: "ID", field: "id", visible: false, download: false, },
 
-            { title: "Vencimento", field: "vencimento", formatter: dateFormatter, accessorDownload: dateAccessorDownload, hozAlign: "center", width: 100, headerSortStartingDir: "asc", frozen: true },
-            { title: "Prazo", field: "vencimento", formatter: prazoFormatter, width: 90, hozAlign: "center", download: false },
+            // Coluna Fixa Data
+            { 
+                title: "Vencimento", 
+                field: "vencimento", 
+                formatter: dateFormatter, 
+                accessorDownload: dateAccessorDownload, 
+                hozAlign: "center", 
+                width: 100, 
+                headerSortStartingDir: "asc", 
+                frozen: true 
+            },
+            { 
+                title: "Prazo", 
+                field: "prazo_virtual", // <-- NOME ÚNICO AQUI
+                formatter: prazoFormatter, 
+                width: 100, 
+                hozAlign: "center",
+                download: false // <-- Garante que não duplica no Excel
+            },
             { title: "Filial", field: "filial", formatter: filialFormatter, hozAlign: "center", width: 80 },
             { title: "Nº Controle", field: "controle_parcela", width: 130, visible: true, formatter: (cell) => `<span class="font-mono text-xs font-bold text-gray-600">${cell.getValue()}</span>` },
             { title: "Razão Social", field: "fornecedor", width: 220, formatter: (cell) => `<div class='truncate font-bold text-gray-700' title='${cell.getValue()}'>${cell.getValue()}</div>` },
@@ -282,23 +299,39 @@ function filialFormatter(cell) {
 }
 
 function prazoFormatter(cell) {
-    const val = cell.getValue();
+    // Busca a data original da linha, independentemente do "field" da coluna
+    const rowData = cell.getRow().getData();
+    const val = rowData.vencimento; 
+    
     if (!val) return "-";
     
-    const hoje = new Date(); hoje.setHours(0,0,0,0);
-    const venc = new Date(val); venc.setHours(0,0,0,0);
+    const hoje = new Date();
+    hoje.setHours(0,0,0,0);
     
+    const venc = new Date(val);
+    venc.setHours(0,0,0,0);
+    
+    // Calcula a diferença exata de dias
     const diffTime = venc - hoje;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
 
-    const rowData = cell.getRow().getData();
-    if (rowData.status_erp === 'PAGO' || rowData.status_erp === 'CANCELADO') return `<span class="text-gray-300">-</span>`;
+    // Se já estiver pago ou cancelado, mostra apenas um traço
+    if (rowData.status_erp === 'PAGO' || rowData.status_erp === 'CANCELADO') {
+        return `<span class="text-gray-300 font-bold">-</span>`;
+    }
 
-    if (diffDays === 0) return `<span class="text-xs font-bold text-blue-600 bg-blue-50 px-1 rounded border border-blue-100">HOJE</span>`;
-    if (diffDays === 1) return `<span class="text-xs font-bold text-orange-500">AMANHÃ</span>`;
-    if (diffDays < 0) return `<span class="text-[10px] font-bold text-red-600">HÁ ${Math.abs(diffDays)} DIAS</span>`;
+    if (diffDays === 0) {
+        return `<span class="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">HOJE</span>`;
+    }
+    if (diffDays === 1) {
+        return `<span class="text-xs font-bold text-orange-500">AMANHÃ</span>`;
+    }
+    if (diffDays < 0) {
+        // AQUI ESTÁ A LÓGICA DE DIAS VENCIDOS!
+        return `<span class="text-[10px] font-bold text-red-700 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">${Math.abs(diffDays)} DIAS VENC.</span>`;
+    }
     
-    return `<span class="text-[10px] text-gray-400 font-medium">Em ${diffDays} dias</span>`;
+    return `<span class="text-[10px] text-gray-500 font-medium">Em ${diffDays} dias</span>`;
 }
 
 function moneyFormatter(cell) {
