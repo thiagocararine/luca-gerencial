@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-br" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conciliação de Recebíveis</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="https://unpkg.com/feather-icons"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link href="https://unpkg.com/tabulator-tables@6.2.1/dist/css/tabulator_simple.min.css" rel="stylesheet">
+    <script type="text/javascript" src="https://unpkg.com/tabulator-tables@6.2.1/dist/js/tabulator.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .tabulator { border: none; background-color: white; font-size: 0.75rem; }
+        .tabulator-header { border-bottom: 2px solid #e5e7eb !important; background-color: #f8fafc !important; color: #475569; font-weight: 700; text-transform: uppercase; font-size: 0.7rem; }
+        .tabulator-row { border-bottom: 1px solid #f1f5f9; min-height: 35px; }
+        .tabulator-row:hover { background-color: #f0fdf4 !important; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        
+        /* Efeito área de Drop */
+        .drop-active { border-color: #4f46e5 !important; background-color: #eef2ff !important; }
+        
+        /* Célula Editável */
+        .cell-editable { background-color: #fffbeb !important; border: 1px dashed #fcd34d !important; cursor: text; transition: all 0.2s; }
+        .cell-editable:hover { background-color: #fef3c7 !important; border-style: solid !important; }
+    </style>
+</head>
+<body class="h-full text-gray-900 flex flex-col overflow-hidden">
+
+    <header class="bg-white border-b h-14 flex items-center justify-between px-6 shadow-sm z-30 shrink-0">
+        <div class="flex items-center gap-4">
+            <a href="index.html" class="text-gray-500 hover:text-indigo-600 flex items-center gap-1.5 font-semibold text-xs transition-colors py-2 px-3 hover:bg-gray-50 rounded-md">
+                <i data-feather="arrow-left" class="w-4 h-4"></i> MENU PRINCIPAL
+            </a>
+            <div class="h-6 w-px bg-gray-200"></div>
+            <h1 class="text-base font-bold text-gray-800 flex items-center gap-2">
+                <div class="p-1.5 bg-blue-50 rounded-md"><i data-feather="layers" class="w-4 h-4 text-blue-600"></i></div>
+                Conciliação de Recebíveis
+            </h1>
+        </div>
+    </header>
+
+    <div id="upload-zone" class="p-6 bg-white shrink-0 border-b border-gray-200 transition-all duration-300">
+        <div id="drop-area" class="border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 flex flex-col items-center justify-center py-10 transition-colors cursor-pointer hover:bg-gray-100">
+            <div class="p-3 bg-white rounded-full shadow-sm mb-3">
+                <i data-feather="upload-cloud" class="w-8 h-8 text-indigo-500"></i>
+            </div>
+            <h3 class="text-sm font-bold text-gray-700">Arraste seu arquivo CSV ou Excel (.csv)</h3>
+            <p class="text-xs text-gray-500 mt-1">Plataformas suportadas: Mercado Pago</p>
+            <input type="file" id="file-input" class="hidden" accept=".csv">
+            <button class="mt-4 px-4 py-2 bg-indigo-600 text-white rounded text-xs font-bold shadow-sm hover:bg-indigo-700 transition-all">
+                SELECIONAR ARQUIVO
+            </button>
+        </div>
+    </div>
+
+    <div id="summary-cards" class="hidden p-4 bg-gray-50 border-b border-gray-200 shrink-0 grid grid-cols-4 gap-4">
+        <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-200 border-l-4 border-l-blue-500">
+            <p class="text-[10px] font-bold text-gray-500 uppercase">Valor Bruto Transacionado</p>
+            <p id="card-bruto" class="text-lg font-bold text-gray-800">R$ 0,00</p>
+        </div>
+        <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-200 border-l-4 border-l-red-500">
+            <p class="text-[10px] font-bold text-gray-500 uppercase">Total de Taxas</p>
+            <p id="card-taxas" class="text-lg font-bold text-red-600">R$ 0,00</p>
+        </div>
+        <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-200 border-l-4 border-l-green-500">
+            <p class="text-[10px] font-bold text-gray-500 uppercase">Líquido a Receber (Plataforma)</p>
+            <p id="card-liquido" class="text-lg font-bold text-green-700">R$ 0,00</p>
+        </div>
+        <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-200 border-l-4 border-l-yellow-500">
+            <p class="text-[10px] font-bold text-gray-500 uppercase">Diferença Encontrada (ERP)</p>
+            <p id="card-diferenca" class="text-lg font-bold text-yellow-600">R$ 0,00</p>
+        </div>
+    </div>
+
+    <div class="flex-1 w-full bg-white relative overflow-hidden">
+        <div id="tabela-conciliacao" class="w-full h-full"></div>
+    </div>
+
+    <div id="modal-justificativa" class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm hidden z-50 flex items-center justify-center opacity-0 transition-opacity">
+        <div class="bg-white rounded-xl shadow-2xl w-96 overflow-hidden">
+            <div class="bg-yellow-50 px-5 py-3 border-b border-yellow-200 flex justify-between items-center">
+                <h3 class="text-sm font-bold text-yellow-800">Justificar Diferença</h3>
+                <button onclick="fecharModal()" class="text-yellow-600 hover:text-red-500"><i data-feather="x" class="w-4 h-4"></i></button>
+            </div>
+            <div class="p-5">
+                <input type="hidden" id="modal-row-id">
+                <p class="text-xs text-gray-600 mb-4">A transação <strong id="modal-trans-id"></strong> apresenta uma diferença de <strong id="modal-valor-diff" class="text-red-600"></strong>.</p>
+                <label class="block text-xs font-bold text-gray-500 mb-1">Motivo / Observação</label>
+                <textarea id="modal-obs" rows="3" class="w-full border-gray-300 rounded text-sm p-2 focus:ring-yellow-500 focus:border-yellow-500 bg-gray-50" placeholder="Ex: Cliente pagou parte em dinheiro..."></textarea>
+            </div>
+            <div class="bg-gray-50 px-5 py-3 border-t border-gray-100 flex justify-end gap-2">
+                <button onclick="fecharModal()" class="px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-200 rounded">Cancelar</button>
+                <button onclick="salvarJustificativa()" class="px-4 py-2 text-xs font-bold bg-yellow-500 text-white rounded hover:bg-yellow-600 shadow-sm">Confirmar Conciliação</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="conciliacao.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof feather !== 'undefined') feather.replace();
+        });
+    </script>
+</body>
+</html>

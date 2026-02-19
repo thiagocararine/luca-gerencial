@@ -66,6 +66,10 @@ app.get('/financeiro', (req, res) => {
     res.sendFile(path.join(__dirname, 'financeiro.html'));
 });
 
+app.get('/conciliacao', (req, res) => {
+    res.sendFile(path.join(__dirname, 'conciliacao.html'));
+});
+
 // Outras páginas
 app.get('/entregas', (req, res) => res.sendFile(path.join(__dirname, 'entregas.html')));
 app.get('/produtos', (req, res) => res.sendFile(path.join(__dirname, 'produtos.html')));
