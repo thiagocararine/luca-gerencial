@@ -61,6 +61,35 @@
     </div>
 
     <div id="summary-cards" class="hidden p-4 bg-gray-50 border-b border-gray-200 shrink-0 grid grid-cols-4 gap-4">
+        </div>
+
+    <div id="resumo-modalidades" class="hidden p-4 bg-white border-b border-gray-200 shrink-0 shadow-sm z-10">
+        <h3 class="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <i data-feather="pie-chart" class="w-4 h-4 text-indigo-600"></i>
+            Conciliação por Modalidade (De-Para)
+        </h3>
+        <div class="overflow-x-auto rounded-lg border border-gray-200">
+            <table class="w-full text-left text-xs border-collapse bg-white">
+                <thead>
+                    <tr class="bg-gray-50 text-gray-500 border-b border-gray-200">
+                        <th class="py-2.5 px-4 font-bold uppercase tracking-wider">Modalidade</th>
+                        <th class="py-2.5 px-4 font-bold uppercase tracking-wider text-center">Transações</th>
+                        <th class="py-2.5 px-4 font-bold uppercase tracking-wider text-right">Líquido (Plataforma)</th>
+                        <th class="py-2.5 px-4 font-bold uppercase tracking-wider text-right w-48">Total ERP (Sistema)</th>
+                        <th class="py-2.5 px-4 font-bold uppercase tracking-wider text-right">Diferença</th>
+                        <th class="py-2.5 px-4 font-bold uppercase tracking-wider text-center">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-modalidades" class="divide-y divide-gray-100">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="flex-1 w-full bg-white relative overflow-hidden">
+        <div id="tabela-conciliacao" class="w-full h-full"></div>
+    </div>
+
+    <div id="summary-cards" class="hidden p-4 bg-gray-50 border-b border-gray-200 shrink-0 grid grid-cols-4 gap-4">
         <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-200 border-l-4 border-l-blue-500">
             <p class="text-[10px] font-bold text-gray-500 uppercase">Valor Bruto Transacionado</p>
             <p id="card-bruto" class="text-lg font-bold text-gray-800">R$ 0,00</p>
