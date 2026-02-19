@@ -115,91 +115,78 @@ function setupEventListeners() {
 // --- 4. CONFIGURAÇÃO DA TABELA (TABULATOR) ---
 
 function initTable() {
-    console.log("Configurando Tabulator..."); // LOG
+    console.log("Configurando Tabulator (Modo Data-Driven)...");
     table = new Tabulator("#tabela-financeiro", {
         layout: "fitDataFill", 
         height: "100%",        
         placeholder: "Carregando dados...",
-        reactiveData: true,
+        reactiveData: false, 
+        index: "id", 
         
-        // --- SELEÇÃO ---
-        selectableRows: true, 
-        selectableRowsPersistence: false,
+        // Removemos a seleção nativa bugada do Tabulator
+        // selectableRows: true, <-- REMOVIDO!
+        
+        // Evento de Clique na Linha: Inverte o nosso campo 'selecionado'
         rowClick: function(e, row){
-            // Permite clicar na linha para selecionar, exceto se clicar direto no input
             if(e.target.tagName !== 'INPUT') {
-                row.toggleSelect(); 
+                let isChecked = row.getData().selecionado || false;
+                row.update({ selecionado: !isChecked });
+                atualizarRodape(); 
             }
         },
-        // ---------------
         
         persistence: true, 
-        persistenceID: "financeiroConfigV19", // Forcei V19 para limpar cache
+        persistenceID: "financeiroConfigV21", // Atualizado para limpar cache
         
-        columnDefaults: {
-            resizable: false, 
-        },
+        columnDefaults: { resizable: false },
         movableColumns: true,    
 
         columns: [
-            // Checkbox
+            // 1. NOSSO NOVO CHECKBOX BLINDADO (Com Select All)
             { 
-                formatter: "rowSelection", 
-                titleFormatter: "rowSelection", 
-                width: 40, 
+                title: "<input type='checkbox' id='check-all-rows' class='cursor-pointer w-3.5 h-3.5 text-indigo-600 rounded border-gray-300'>", 
+                field: "selecionado", 
+                width: 45, 
                 hozAlign: "center", 
                 headerSort: false, 
                 frozen: true,
-                cellClick: function(e, cell){ e.stopPropagation(); }
+                formatter: function(cell) {
+                    // Desenha o checkbox baseado no nosso dado manual
+                    let checked = cell.getValue() ? "checked" : "";
+                    return `<input type="checkbox" class="cursor-pointer w-3.5 h-3.5 text-indigo-600 rounded border-gray-300" ${checked}>`;
+                },
+                cellClick: function(e, cell){ 
+                    e.stopPropagation(); // Evita clicar duas vezes
+                    let isChecked = cell.getValue() || false;
+                    cell.getRow().update({ selecionado: !isChecked });
+                    atualizarRodape();
+                },
+                headerClick: function(e, column) {
+                    e.stopPropagation();
+                    if(e.target.tagName === 'INPUT') {
+                        let isChecked = e.target.checked;
+                        // Pega apenas as linhas que estão visíveis após os filtros
+                        let rows = table.getRows("active");
+                        rows.forEach(row => row.update({ selecionado: isChecked }));
+                        atualizarRodape();
+                    }
+                }
             },
 
             { title: "ID", field: "id", visible: false },
 
-            { 
-                title: "Vencimento", 
-                field: "vencimento", 
-                formatter: dateFormatter, 
-                hozAlign: "center", 
-                width: 100, 
-                headerSortStartingDir: "asc", 
-                frozen: true 
-            },
-
-            { 
-                title: "Prazo", 
-                field: "vencimento", 
-                formatter: prazoFormatter, 
-                width: 90, 
-                hozAlign: "center" 
-            },
-
+            { title: "Vencimento", field: "vencimento", formatter: dateFormatter, hozAlign: "center", width: 100, headerSortStartingDir: "asc", frozen: true },
+            { title: "Prazo", field: "vencimento", formatter: prazoFormatter, width: 90, hozAlign: "center" },
             { title: "Filial", field: "filial", formatter: filialFormatter, hozAlign: "center", width: 80 },
-            
-            { 
-                title: "Nº Controle", 
-                field: "controle_parcela", 
-                width: 130, 
-                visible: true,
-                formatter: (cell) => `<span class="font-mono text-xs font-bold text-gray-600">${cell.getValue()}</span>`
-            },
-
-            { 
-                title: "Razão Social", 
-                field: "fornecedor", 
-                width: 220, 
-                formatter: (cell) => `<div class='truncate font-bold text-gray-700' title='${cell.getValue()}'>${cell.getValue()}</div>` 
-            },
+            { title: "Nº Controle", field: "controle_parcela", width: 130, visible: true, formatter: (cell) => `<span class="font-mono text-xs font-bold text-gray-600">${cell.getValue()}</span>` },
+            { title: "Razão Social", field: "fornecedor", width: 220, formatter: (cell) => `<div class='truncate font-bold text-gray-700' title='${cell.getValue()}'>${cell.getValue()}</div>` },
             { title: "Fantasia", field: "fantasia", width: 150, visible: false },
-            
             { title: "NF", field: "nf", hozAlign: "center", width: 90 },
             { title: "Duplicata", field: "duplicata", hozAlign: "center", width: 80, visible: false },
             { title: "Borderô", field: "bordero", width: 80, visible: false },
 
             { 
-                title: "Indicação Pagto", 
-                field: "indicacao_pagamento_cod", 
-                width: 200, 
-                visible: true,
+                title: "Indicação Pagto", field: "indicacao_pagamento_cod", width: 200, visible: true,
                 formatter: (cell) => {
                     const val = String(cell.getValue());
                     let text = MAPA_IND_PAGAMENTO[val] || cell.getValue() || '-';
@@ -207,49 +194,23 @@ function initTable() {
                 }
             },
             { 
-                title: "Tipo Despesa", 
-                field: "tipo_despesa_cod", 
-                width: 140, 
+                title: "Tipo Despesa", field: "tipo_despesa_cod", width: 140, 
                 formatter: (cell) => {
                      const val = String(cell.getValue());
                      const desc = MAPA_TIPOS_DESPESA[val] || '-';
                      return `<span class='truncate block w-full text-xs' title='${desc}'>${desc}</span>`;
                 }
             },
-            { 
-                title: "Histórico", 
-                field: "historico", 
-                width: 220, 
-                visible: true,
-                formatter: (cell) => `<div class='truncate text-[10px] text-gray-500' title='${cell.getValue()}'>${cell.getValue() || '-'}</div>`
-            },
+            { title: "Histórico", field: "historico", width: 220, visible: true, formatter: (cell) => `<div class='truncate text-[10px] text-gray-500' title='${cell.getValue()}'>${cell.getValue() || '-'}</div>` },
 
-            { 
-                title: "Valor Devido", 
-                field: "valor_devido", 
-                formatter: moneyFormatter, 
-                hozAlign: "right", 
-                width: 120
-            },
+            // Valores
+            { title: "Valor Devido", field: "valor_devido", formatter: moneyFormatter, hozAlign: "right", width: 120 },
             { title: "Valor Pago", field: "valor_pago", formatter: moneyFormatter, hozAlign: "right", width: 110, visible: false },
             { title: "Juros", field: "juros", formatter: moneyFormatter, hozAlign: "right", width: 90, visible: false },
             { title: "Desconto", field: "desconto", formatter: moneyFormatter, hozAlign: "right", width: 90, visible: false },
 
-            { 
-                title: "Status", 
-                field: "status_erp", 
-                formatter: statusFormatter, 
-                hozAlign: "center", 
-                width: 100 
-            },
-            { 
-                title: "Classificação", 
-                field: "modalidade", 
-                formatter: buttonFormatter, 
-                hozAlign: "center", 
-                width: 130, 
-                headerSort: false 
-            },
+            { title: "Status", field: "status_erp", formatter: statusFormatter, hozAlign: "center", width: 100 },
+            { title: "Classificação", field: "modalidade", formatter: buttonFormatter, hozAlign: "center", width: 130, headerSort: false },
 
             // Ocultas
             { title: "Data Lançamento", field: "lancamento", formatter: dateFormatter, hozAlign: "center", width: 100, visible: false },
@@ -270,19 +231,17 @@ function initTable() {
             { title: "Obs Gerencial", field: "observacao", width: 200, formatter: "textarea", visible: false }
         ],
         
-        // --- CALLBACKS ---
-        
         tableBuilt: function() {
             popularMenuColunas();
         },
 
-        rowSelectionChanged: function(data, rows) {
-            console.log("Seleção alterada. Qtd: ", data.length); // RASTREADOR
-            atualizarRodape(); 
-        },
-
+        // Chamado sempre que o usuário faz uma busca ou muda os filtros
         dataFiltered: function(filters, rows) {
              atualizarRodape();
+        },
+        
+        renderComplete: function() {
+            atualizarRodape();
         }
     });
 }
@@ -415,16 +374,15 @@ async function loadTitulos() {
 // --- 7. NOVO RODAPÉ COM RASTREAMENTO ---
 
 function atualizarRodape() {
-    console.log("Atualizando rodapé..."); // RASTREADOR
-
-    // 1. DADOS SELECIONADOS
-    const selecionados = table ? table.getSelectedData() : [];
-    console.log(`Itens Selecionados: ${selecionados.length}`); // RASTREADOR
-    
-    // 2. DADOS TOTAIS (VISÍVEIS)
+    // Pega todos os dados que estão visíveis na tela (respeitando sua barra de busca/filtros)
     const dadosVisiveis = table ? table.getData("active") : [];
     
-    // Funcao soma
+    // O grande segredo: Filtra apenas quem nós marcamos com 'selecionado: true'
+    const selecionados = dadosVisiveis.filter(item => item.selecionado === true);
+    
+    console.log(`[Rodapé Blindado] Total: ${dadosVisiveis.length} | Selecionados: ${selecionados.length}`);
+    
+    // Função para somar
     const somar = (arr) => arr.reduce((acc, curr) => {
         const val = parseFloat(curr.valor_devido); 
         return acc + (isNaN(val) ? 0 : val);
@@ -433,25 +391,24 @@ function atualizarRodape() {
     const totalSelecao = somar(selecionados);
     const totalGeral = somar(dadosVisiveis);
 
-    // 3. ATUALIZA DOM
+    // Atualização do HTML
     const elReg = document.getElementById('total-registros');
     const elTotalGeral = document.getElementById('total-valor-geral');
     const elTotalSelecao = document.getElementById('total-valor-selecao');
     const boxSelecao = document.getElementById('box-total-selecao');
 
-    // Atualiza contagem
+    // 1. Atualiza Geral
     if(elReg) elReg.textContent = `${dadosVisiveis.length} registros`;
-
-    // Atualiza Total Geral
     if(elTotalGeral) elTotalGeral.textContent = totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-    // Atualiza Seleção (Mostra/Esconde)
-    if (selecionados.length > 0) {
-        boxSelecao.classList.remove('hidden', 'translate-x-4', 'opacity-0');
-        elTotalSelecao.textContent = totalSelecao.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    } else {
-        boxSelecao.classList.add('translate-x-4', 'opacity-0');
-        setTimeout(() => boxSelecao.classList.add('hidden'), 300); // Animação de saída
+    // 2. Atualiza a Caixa de Seleção (Esconde se for zero, mostra se for > 0)
+    if (boxSelecao && elTotalSelecao) {
+        if (selecionados.length > 0) {
+            boxSelecao.classList.remove('hidden'); // Exibe a div
+            elTotalSelecao.textContent = totalSelecao.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        } else {
+            boxSelecao.classList.add('hidden'); // Oculta a div
+        }
     }
 }
 
