@@ -12,6 +12,10 @@
 
     <link href="https://unpkg.com/tabulator-tables@6.2.1/dist/css/tabulator_simple.min.css" rel="stylesheet">
     <script type="text/javascript" src="https://unpkg.com/tabulator-tables@6.2.1/dist/js/tabulator.min.js"></script>
+    <link href="https://unpkg.com/tabulator-tables@6.2.1/dist/css/tabulator_simple.min.css" rel="stylesheet">
+    <script type="text/javascript" src="https://unpkg.com/tabulator-tables@6.2.1/dist/js/tabulator.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
     <style>
         body { font-family: 'Inter', sans-serif; }
@@ -170,6 +174,10 @@
             </div>
             
             <div class="w-px h-8 bg-gray-200 mx-1"></div>
+
+            <button id="btn-exportar" class="h-8 bg-green-600 text-white border border-green-700 px-3 rounded text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-2 transition-all">
+                <i data-feather="download" class="w-3.5 h-3.5"></i> EXCEL
+            </button>
 
             <div class="relative">
                 <button id="btn-colunas" class="h-8 bg-white text-gray-700 border border-gray-300 px-3 rounded text-xs font-bold hover:bg-gray-50 hover:text-indigo-600 hover:border-indigo-300 shadow-sm flex items-center gap-2 transition-all">

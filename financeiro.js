@@ -96,6 +96,18 @@ function setupEventListeners() {
         });
     }
 
+    // Botão Exportar Excel
+    const btnExportar = document.getElementById('btn-exportar');
+    if (btnExportar) {
+        btnExportar.addEventListener('click', () => {
+            if (!table) return;
+            
+            // O Tabulator já faz a mágica sozinho!
+            // Ele exporta as colunas que estão visíveis e respeita a busca/filtros atuais.
+            table.download("xlsx", "Relatorio_Financeiro.xlsx", {sheetName:"Contas a Pagar"});
+        });
+    }
+
     document.addEventListener('click', (e) => {
         const menu = document.getElementById('menu-colunas');
         const btn = document.getElementById('btn-colunas');
@@ -146,6 +158,7 @@ function initTable() {
             { 
                 title: "<input type='checkbox' id='check-all-rows' class='cursor-pointer w-3.5 h-3.5 text-indigo-600 rounded border-gray-300'>", 
                 field: "selecionado", 
+                download: false,
                 width: 45, 
                 hozAlign: "center", 
                 headerSort: false, 
@@ -173,7 +186,7 @@ function initTable() {
                 }
             },
 
-            { title: "ID", field: "id", visible: false },
+            { title: "ID", field: "id", visible: false, download: false, },
 
             { title: "Vencimento", field: "vencimento", formatter: dateFormatter, hozAlign: "center", width: 100, headerSortStartingDir: "asc", frozen: true },
             { title: "Prazo", field: "vencimento", formatter: prazoFormatter, width: 90, hozAlign: "center" },
