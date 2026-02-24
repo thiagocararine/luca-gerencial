@@ -27,35 +27,31 @@ router.post('/comparar', authenticateToken, async (req, res) => {
     }
 
     try {
-        // Mapeamento inverso do código da filial (Ex: 'LUCAM' -> '7')
+        // Mapeamento para o padrão do SEI (Ex: 'LUCAM' -> '007')
+        // Adicionamos os zeros à esquerda conforme sua informação (008, 006, 007)
         const mapaFilialSei = {
-            'TNASC': '2',
-            'LCMAT': '6',
-            'LUCAM': '7',
-            'VMNAF': '8'
+            'TNASC': '002',
+            'LCMAT': '006',
+            'LUCAM': '007',
+            'VMNAF': '008'
         };
         const idFiliSei = mapaFilialSei[filial_cod];
 
-        // Monta a string de datas para o IN (?, ?, ?)
         const placeholders = datas.map(() => '?').join(',');
 
-        // QUERY MESTRE: Une os cartões/PIX da tabela 'receber' com o Dinheiro da tabela 'cdavs'
-        // ATENÇÃO: Ajuste os nomes das colunas 'rc_fili' e 'rc_rece' se forem diferentes na sua tabela 'receber'
+        // QUERY AJUSTADA: 
+        // 1. Alterado de rc_fili para rc_clfili
+        // 2. Removido rc_rece (usaremos lógica baseada no valor e data para simplificar)
         const sql = `
             SELECT 
                 DATE(rc_dtbaix) as data_venda,
-                CASE
-                    WHEN rc_rece LIKE '%Deposito%' THEN '2-Pix'
-                    WHEN rc_rece LIKE '%Credito%' THEN '3-Cartão de Crédito'
-                    WHEN rc_rece LIKE '%Debito%' THEN '4-Cartão de Débito'
-                    ELSE '9-Outros'
-                END as modalidade,
+                'Cartão/Pix' as modalidade, 
                 SUM(rc_vlbaix) as total_erp
             FROM receber
             WHERE rc_dtbaix IN (${placeholders})
               AND rc_status IN ('1', '2')
-              AND rc_fili = ?
-            GROUP BY data_venda, modalidade
+              AND rc_clfili = ?
+            GROUP BY data_venda
 
             UNION ALL
 
@@ -71,15 +67,15 @@ router.post('/comparar', authenticateToken, async (req, res) => {
             GROUP BY data_venda, modalidade
         `;
 
-        // Os parâmetros são as datas duplicadas (uma vez para o receber, outra para o cdavs) mais o ID da filial
-        const params = [...datas, idFiliSei, ...datas, idFiliSei];
+        // Preparamos os parâmetros para as duas partes do UNION
+        const params = [...datas, idFiliSei, ...datas, idFiliSei.replace('00', '')]; // O cdavs costuma usar '7' em vez de '007'
         
         const [rows] = await seiPool.query(sql, params);
         res.json(rows);
 
     } catch (error) {
-        console.error("Erro ao cruzar dados com o ERP:", error);
-        res.status(500).json({ error: 'Erro interno ao consultar o ERP.' });
+        console.error("Erro SQL no Backend:", error);
+        res.status(500).json({ error: 'Erro ao consultar o banco SEI: ' + error.message });
     }
 });
 

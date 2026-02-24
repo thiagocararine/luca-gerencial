@@ -125,20 +125,25 @@ function processarArquivo(file) {
 
 async function cruzarComERP(codFilial, datas, dadosCSV) {
     try {
-        // 2. Busca os dados no ERP
+        // Busca os dados no ERP
         const res = await fetch(`${API_BASE}/comparar`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify({ filial_cod: codFilial, datas: datas })
         });
+        
         const dadosERP = await res.json();
+
+        // NOVA PROTEÇÃO: Se a API der Erro 500, para a execução e mostra o motivo!
+        if (!res.ok) {
+            throw new Error(dadosERP.error || 'Erro interno no servidor do ERP.');
+        }
 
         dadosConsolidados = [];
         const processados = new Set();
 
-        // 3. Junta os dados do ERP com o CSV
+        // Junta os dados do ERP com o CSV
         dadosERP.forEach(erp => {
-            // Ajusta o fuso horário da data vinda do banco para exibição/chave
             const dataPura = erp.data_venda.split('T')[0]; 
             const chave = `${dataPura}|${erp.modalidade}`;
             const valorMaq = dadosCSV[chave] || 0;
@@ -158,7 +163,7 @@ async function cruzarComERP(codFilial, datas, dadosCSV) {
             processados.add(chave);
         });
 
-        // 4. Adiciona o que tem na Maquininha mas NÃO tem no ERP
+        // Adiciona o que tem na Maquininha mas NÃO tem no ERP
         Object.keys(dadosCSV).forEach(chave => {
             if (!processados.has(chave)) {
                 const [dataPura, mod] = chave.split('|');
@@ -177,12 +182,14 @@ async function cruzarComERP(codFilial, datas, dadosCSV) {
             }
         });
 
-        // 5. Exibe na Tabela
+        // Exibe na Tabela
         table.setData(dadosConsolidados);
         document.getElementById('tabela-container').classList.remove('hidden');
 
     } catch (err) {
+        // Agora o alerta mostrará exatamente o motivo do erro e evitará travar a tela
         alert("Erro ao cruzar dados com o ERP: " + err.message);
+        console.error("Detalhes do erro:", err);
     }
 }
 
