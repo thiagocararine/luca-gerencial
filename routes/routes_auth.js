@@ -147,6 +147,55 @@ router.post('/signup', async (req, res) => {
     }
 });
 
+// PUT /api/auth/me - Atualiza dados do próprio usuário
+router.put('/me', authenticateToken, async (req, res) => {
+    const userId = req.user.userId; // ID extraído do token JWT
+    const { email_user, cpf_user, nova_senha } = req.body;
+    
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        
+        let fieldsToUpdate = [];
+        let params = [];
+
+        if (email_user) {
+            fieldsToUpdate.push('email_user = ?');
+            params.push(email_user);
+        }
+        if (cpf_user) {
+            fieldsToUpdate.push('cpf_user = ?');
+            params.push(cpf_user);
+        }
+        if (nova_senha) {
+            const salt = await bcrypt.genSalt(10);
+            const senha_hash_user = await bcrypt.hash(nova_senha, salt);
+            fieldsToUpdate.push('senha_hash_user = ?');
+            params.push(senha_hash_user);
+        }
+
+        if (fieldsToUpdate.length === 0) {
+            return res.status(400).json({ error: "Nenhum dado para atualizar." });
+        }
+
+        params.push(userId);
+        
+        const sql = `UPDATE cad_user SET ${fieldsToUpdate.join(', ')} WHERE ID = ?`;
+        const [result] = await connection.execute(sql, params);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Usuário não encontrado.' });
+        }
+        
+        res.json({ message: 'Seus dados foram atualizados com sucesso!' });
+    } catch (error) {
+        console.error("Erro ao atualizar próprio perfil:", error);
+        res.status(500).json({ error: 'Erro interno ao atualizar dados.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
 // GET /api/auth/users (CORRIGIDO)
 router.get('/users', authenticateToken, authorizeAdmin, async (req, res) => {
     let connection;
