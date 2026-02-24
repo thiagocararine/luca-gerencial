@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', initPage);
 
-const API_BASE = '/api/financeiro';
+//const API_BASE = '/api/financeiro';
 let table; // Instância global da tabela Tabulator
 
 // --- 1. CONSTANTES E MAPEAMENTOS ---

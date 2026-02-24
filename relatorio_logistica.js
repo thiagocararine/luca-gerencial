@@ -3,7 +3,7 @@
 document.addEventListener('DOMContentLoaded', initRelatoriosPage);
 
 //const apiUrlBase = 'http://10.113.0.17:3000/api';
-const apiUrlBase = '/api';
+//const apiUrlBase = '/api';
 const { authenticateToken, checkPerm, getFiltroFilialSeguro } = require('../middlewares');
 let datepicker = null;
 let LOGO_BASE_64 = null; // Para guardar a logo da empresa

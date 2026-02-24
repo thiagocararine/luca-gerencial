@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', initChecklistPage);
 
-const apiUrlBase = '/api';
+//const apiUrlBase = '/api';
 
 // Funções utilitárias de autenticação
 function getToken() { return localStorage.getItem('lucaUserToken'); }

@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', initPage);
 
-const API_BASE = '/api/estoque';
+//const API_BASE = '/api/estoque';
 let currentEnderecoId = null;
 let currentProductsList = []; 
 let debounceTimer;

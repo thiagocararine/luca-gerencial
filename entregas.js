@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', initEntregasPage);
 // ==========================================================
 //               VARIÁVEIS GLOBAIS
 // ==========================================================
-const apiUrlBase = '/api';
+//const apiUrlBase = '/api';
 let currentRomaneioId = null;     
 let currentRomaneioStatus = null; 
 let currentEligibleDavs = []; 

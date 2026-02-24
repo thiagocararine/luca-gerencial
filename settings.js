@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- Constantes e Variáveis de Estado Globais ---
-const apiUrlBase = '/api';
+//const apiUrlBase = '/api';
 let parametrosTable, usersTable, perfisTable, itensEstoqueTable;
 let currentParamCode = null;
 let currentParentList = []; 
