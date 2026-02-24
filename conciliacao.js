@@ -33,10 +33,19 @@ function identificarFilial(nomeArquivo) {
 }
 
 function mapearModalidadeMaquininha(tipoStr) {
-    const t = tipoStr.toUpperCase();
-    if (t.includes('CREDITO') || t.includes('CRÉDITO')) return '3-Cartão de Crédito';
-    if (t.includes('DEBITO') || t.includes('DÉBITO')) return '4-Cartão de Débito';
-    if (t.includes('PIX')) return '2-Pix';
+    if (!tipoStr) return '9-Outros';
+    const t = String(tipoStr).toLowerCase();
+    
+    // Padrões em português (PagBank, Stone, etc)
+    if (t.includes('credito') || t.includes('crédito')) return '3-Cartão de Crédito';
+    if (t.includes('debito') || t.includes('débito')) return '4-Cartão de Débito';
+    if (t.includes('pix')) return '2-Pix';
+    
+    // Padrões do Mercado Pago (Inglês)
+    if (t === 'credit_card') return '3-Cartão de Crédito';
+    if (t === 'debit_card') return '4-Cartão de Débito';
+    if (t === 'bank_transfer') return '2-Pix'; 
+
     return '9-Outros';
 }
 
@@ -52,32 +61,63 @@ function processarArquivo(file) {
     Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
+        delimiter: ";", // Força a leitura do padrão do Mercado Pago e Excel brasileiro
         complete: async function(results) {
             let dadosCSV = {};
             let datasEncontradas = new Set();
 
-            // 1. Agrupa os valores da maquininha por Data e Modalidade
             results.data.forEach(row => {
-                // Ajuste os nomes "Data" e "ValorBruto" de acordo com o cabeçalho real do seu CSV
-                let dataTransacao = row['Data'] || row['Data da Venda']; 
-                let valor = parseFloat((row['ValorBruto'] || row['Valor']).replace('R$', '').replace('.', '').replace(',', '.'));
-                let modalidade = mapearModalidadeMaquininha(row['Tipo'] || row['Modalidade']);
+                // Tenta puxar pelas colunas do Mercado Pago primeiro. Se não achar, tenta as antigas.
+                let rawData = row['TRANSACTION_DATE'] || row['Data'] || row['Data da Venda']; 
+                let rawValor = row['TRANSACTION_AMOUNT'] || row['ValorBruto'] || row['Valor'];
+                let rawTipo = row['PAYMENT_METHOD_TYPE'] || row['Tipo'] || row['Modalidade'];
 
-                if (dataTransacao && !isNaN(valor)) {
-                    // Converte de DD/MM/AAAA para AAAA-MM-DD se necessário
-                    if (dataTransacao.includes('/')) {
-                        const [d, m, y] = dataTransacao.split(' ')[0].split('/');
-                        dataTransacao = `${y}-${m}-${d}`;
+                if (rawData && rawValor) {
+                    // 1. TRATAMENTO DA DATA
+                    let dataTransacao = '';
+                    if (String(rawData).includes('T')) {
+                        // Formato Mercado Pago (ex: 2026-02-23T17:49:54.000-03:00) -> Pega só o "2026-02-23"
+                        dataTransacao = String(rawData).split('T')[0];
+                    } else if (String(rawData).includes('/')) {
+                        // Formato BR antigo (ex: 23/02/2026) -> Inverte para "2026-02-23"
+                        const partes = String(rawData).split(' ')[0].split('/');
+                        if (partes.length === 3) dataTransacao = `${partes[2]}-${partes[1]}-${partes[0]}`;
+                    } else {
+                        dataTransacao = String(rawData);
                     }
-                    datasEncontradas.add(dataTransacao);
-                    
-                    const chave = `${dataTransacao}|${modalidade}`;
-                    if (!dadosCSV[chave]) dadosCSV[chave] = 0;
-                    dadosCSV[chave] += valor;
+
+                    // 2. TRATAMENTO DO VALOR
+                    // Remove R$ se existir, e ajusta se veio com vírgula ou ponto
+                    let valorStr = String(rawValor).replace('R$', '').trim();
+                    if (valorStr.includes(',') && valorStr.includes('.')) {
+                        valorStr = valorStr.replace(/\./g, '').replace(',', '.'); // R$ 1.500,00 -> 1500.00
+                    } else if (valorStr.includes(',') && !valorStr.includes('.')) {
+                        valorStr = valorStr.replace(',', '.'); // 1500,00 -> 1500.00
+                    }
+                    let valor = parseFloat(valorStr);
+
+                    // 3. IDENTIFICAR MODALIDADE (Crédito, Débito, PIX)
+                    let modalidade = mapearModalidadeMaquininha(rawTipo);
+
+                    if (dataTransacao && !isNaN(valor)) {
+                        datasEncontradas.add(dataTransacao);
+                        
+                        // Somador por Dia e por Modalidade
+                        const chave = `${dataTransacao}|${modalidade}`;
+                        if (!dadosCSV[chave]) dadosCSV[chave] = 0;
+                        dadosCSV[chave] += valor;
+                    }
                 }
             });
 
             const datasArray = Array.from(datasEncontradas);
+            
+            if (datasArray.length === 0) {
+                 alert("Não conseguimos ler as datas e valores desse arquivo. Verifique se é o relatório correto do Mercado Pago.");
+                 return;
+            }
+
+            // Manda para o Node.js cruzar com o banco SEI
             await cruzarComERP(codFilial, datasArray, dadosCSV);
         }
     });
