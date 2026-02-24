@@ -27,21 +27,19 @@ router.post('/comparar', authenticateToken, async (req, res) => {
     }
 
     try {
-        // Mapeamento para o padrão do SEI (Ex: 'LUCAM' -> '007')
-        // Adicionamos os zeros à esquerda conforme sua informação (008, 006, 007)
-        const mapaFilialSei = {
-            'TNASC': '002',
-            'LCMAT': '006',
-            'LUCAM': '007',
-            'VMNAF': '008'
-        };
-        const idFiliSei = mapaFilialSei[filial_cod];
+        // Mapeamento exato conforme seu ERP
+        const mapaFilialSeiLong = { 'TNASC': '002', 'LCMAT': '006', 'LUCAM': '007', 'VMNAF': '008' };
+        const mapaFilialSeiShort = { 'TNASC': '2', 'LCMAT': '6', 'LUCAM': '7', 'VMNAF': '8' };
+
+        const idFiliLong = mapaFilialSeiLong[filial_cod];   // Para tabela 'receber' (007)
+        const idFiliShort = mapaFilialSeiShort[filial_cod]; // Para tabela 'cdavs' (7)
 
         const placeholders = datas.map(() => '?').join(',');
 
-        // QUERY AJUSTADA: 
-        // 1. Alterado de rc_fili para rc_clfili
-        // 2. Removido rc_rece (usaremos lógica baseada no valor e data para simplificar)
+        // QUERY AJUSTADA:
+        // 1. Usa rc_clfili para a tabela receber
+        // 2. Remove filtros de tipo inexistentes
+        // 3. Usa UNION ALL para consolidar Cartão/Pix e Dinheiro
         const sql = `
             SELECT 
                 DATE(rc_dtbaix) as data_venda,
@@ -67,8 +65,8 @@ router.post('/comparar', authenticateToken, async (req, res) => {
             GROUP BY data_venda, modalidade
         `;
 
-        // Preparamos os parâmetros para as duas partes do UNION
-        const params = [...datas, idFiliSei, ...datas, idFiliSei.replace('00', '')]; // O cdavs costuma usar '7' em vez de '007'
+        // Ordem dos parâmetros: Datas(receber), Filial(Long), Datas(cdavs), Filial(Short)
+        const params = [...datas, idFiliLong, ...datas, idFiliShort];
         
         const [rows] = await seiPool.query(sql, params);
         res.json(rows);
