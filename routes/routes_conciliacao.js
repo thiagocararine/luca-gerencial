@@ -47,8 +47,8 @@ router.post('/comparar', authenticateToken, async (req, res) => {
                 SUM(rc_vlbaix) as total_erp
             FROM receber
             WHERE rc_dtbaix IN (${placeholders})
-              AND rc_status IN ('1', '2')
-              AND rc_clfili = ?
+            AND rc_status IN ('1', '2')
+            AND rc_clfili = ?
             GROUP BY data_venda
 
             UNION ALL
@@ -59,9 +59,9 @@ router.post('/comparar', authenticateToken, async (req, res) => {
                 SUM(cr_dinh) as total_erp
             FROM cdavs
             WHERE cr_erec IN (${placeholders})
-              AND cr_reca = '1'
-              AND cr_fili = ?
-              AND (cr_rece = '01-Dinheiro' OR (cr_rece = '20-Diversos' AND LENGTH(TRIM(cr_dinh)) > 0))
+            AND cr_reca = '1'
+            AND cr_fili = ?
+            AND (cr_rece = '01-Dinheiro' OR (cr_rece = '20-Diversos' AND LENGTH(TRIM(cr_dinh)) > 0))
             GROUP BY data_venda, modalidade
         `;
 

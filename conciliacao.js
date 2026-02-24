@@ -36,15 +36,12 @@ function mapearModalidadeMaquininha(tipoStr) {
     if (!tipoStr) return '9-Outros';
     const t = String(tipoStr).toLowerCase();
     
-    // Padrões em português (PagBank, Stone, etc)
-    if (t.includes('credito') || t.includes('crédito')) return '3-Cartão de Crédito';
-    if (t.includes('debito') || t.includes('débito')) return '4-Cartão de Débito';
-    if (t.includes('pix')) return '2-Pix';
-    
-    // Padrões do Mercado Pago (Inglês)
-    if (t === 'credit_card') return '3-Cartão de Crédito';
-    if (t === 'debit_card') return '4-Cartão de Débito';
-    if (t === 'bank_transfer') return '2-Pix'; 
+    // Unificamos todos os cartões e pix sob o mesmo nome que vem do ERP
+    if (t.includes('credito') || t.includes('crédito') || t === 'credit_card' ||
+        t.includes('debito') || t.includes('débito') || t === 'debit_card' ||
+        t.includes('pix') || t === 'bank_transfer') {
+        return 'Cartão/Pix';
+    }
 
     return '9-Outros';
 }
