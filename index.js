@@ -40,6 +40,7 @@ const produtosRoutes = require('./routes/routes_produtos');
 const entregasRoutes = require('./routes/routes_entregas');
 const estoqueRoutes = require('./routes/routes_estoque');
 const financeiroRoutes = require('./routes/routes_financeiro');
+const conciliacaoRoutes = require('./routes/routes_conciliacao');
 
 // 5. Utilização das Rotas da API
 const apiRouter = express.Router();
@@ -52,6 +53,7 @@ apiRouter.use('/produtos', produtosRoutes);
 apiRouter.use('/entregas', entregasRoutes);
 apiRouter.use('/estoque', estoqueRoutes);
 apiRouter.use('/financeiro', financeiroRoutes);
+apiRouter.use('/conciliacao', conciliacaoRoutes);
 
 app.use('/api', apiRouter);
 
