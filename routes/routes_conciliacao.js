@@ -44,9 +44,9 @@ router.post('/comparar', authenticateToken, async (req, res) => {
             SELECT 
                 DATE(rc_dtbaix) as data_venda,
                 CASE
-                    WHEN rc_rece LIKE '%Deposito%' OR rc_rece LIKE '%Pix%' THEN '2-Pix'
-                    WHEN rc_rece LIKE '%Credito%' THEN '3-Cartão de Crédito'
-                    WHEN rc_rece LIKE '%Debito%' THEN '4-Cartão de Débito'
+                    WHEN rc_formar = '11-Deposito Conta' THEN '2-Pix'
+                    WHEN rc_formar = '04-Cartao Credito' THEN '3-Cartão de Crédito'
+                    WHEN rc_formar = '05-Cartao Debito' THEN '4-Cartão de Débito'
                     ELSE '9-Outros'
                 END as modalidade,
                 SUM(rc_vlbaix) as total_erp
