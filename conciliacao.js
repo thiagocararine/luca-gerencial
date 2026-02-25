@@ -331,29 +331,65 @@ function fecharModalAuditoria() {
 // --- SALVAMENTO ---
 async function salvarFechamentoFinal() {
     const dadosParaSalvar = tablePrincipal.getData();
+    
+    // Trava de segurança: só deixa salvar se o analista preencheu os motivos
     const pendentes = dadosParaSalvar.filter(d => d.status === 'Com Diferença' && !d.observacao);
-
     if (pendentes.length > 0) {
-        alert("Existem divergências sem justificativa! Preencha a coluna 'Obs. Fechamento' clicando nela.");
+        alert("Existem divergências sem justificativa! Preencha a coluna 'Anotar Observação' clicando nela.");
         return;
     }
+
+    // Monta o pacote inteligente (Capa + Divergências Detalhadas)
+    const fechamentosEnriquecidos = dadosParaSalvar.map(row => {
+        let divergencias = [];
+
+        // Roda o De-Para em segundo plano para extrair o que sobrou
+        if (row.status === 'Com Diferença' && row.modalidade !== 'Dinheiro') {
+            const chave = row.chave_id;
+            let maq = JSON.parse(JSON.stringify(transacoesMaqPorChave[chave] || []));
+            let erp = JSON.parse(JSON.stringify(transacoesERPPorChave[chave] || []));
+
+            maq.sort((a,b) => b.valor - a.valor);
+            erp.sort((a,b) => b.valor - a.valor);
+
+            for (let i = maq.length - 1; i >= 0; i--) {
+                let indexERP = erp.findIndex(e => Math.abs(e.valor - maq[i].valor) < 0.01);
+                if (indexERP !== -1) {
+                    erp.splice(indexERP, 1);
+                    maq.splice(i, 1);
+                }
+            }
+
+            // O que o analista tem que lançar no SEI
+            maq.forEach(m => divergencias.push({
+                origem: 'Falta no ERP', hora: m.hora, valor: m.valor, doc: 'Mercado Pago'
+            }));
+
+            // O que a maquininha cobrou a menos ou engoliu (Com o Número do DAV!)
+            erp.forEach(e => divergencias.push({
+                origem: 'Falta na Maquininha', hora: e.hora, valor: e.valor, doc: e.dav
+            }));
+        }
+
+        return { ...row, divergencias };
+    });
 
     try {
         const res = await fetch(`${API_BASE}/salvar`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-            body: JSON.stringify({ fechamentos: dadosParaSalvar })
+            body: JSON.stringify({ fechamentos: fechamentosEnriquecidos })
         });
         
         if (res.ok) {
-            alert("Conciliação salva no banco gerencial com sucesso!");
+            alert("Conciliação e Auditoria Detalhada salvas no banco com sucesso!");
             tablePrincipal.clearData();
             document.getElementById('dashboard-container').classList.add('hidden');
         } else {
             const errData = await res.json();
-            throw new Error(errData.error || 'Erro desconhecido ao salvar.');
+            throw new Error(errData.error || 'Erro interno no servidor.');
         }
     } catch (err) {
-        alert("Erro ao salvar: " + err.message);
+        alert("Erro ao gravar: " + err.message);
     }
 }

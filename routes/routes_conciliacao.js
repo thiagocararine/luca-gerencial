@@ -51,7 +51,7 @@ router.post('/comparar', authenticateToken, async (req, res) => {
                 END as modalidade,
                 rc_vlbaix as valor,
                 rc_ndocum as doc_original,
-                rc_relacao as doc_relacao
+                rc_relaca as doc_relacao -- <== AQUI ESTÁ A CORREÇÃO!
             FROM receber
             WHERE rc_dtbaix IN (${placeholders})
             AND rc_status IN ('1', '2')
@@ -89,7 +89,6 @@ router.post('/comparar', authenticateToken, async (req, res) => {
 // 2. ROTA PARA SALVAR O FECHAMENTO (GERENCIAL)
 router.post('/salvar', authenticateToken, async (req, res) => {
     const { fechamentos } = req.body;
-    const userId = req.user.userId;
     const nomeUsuario = req.user.nome;
 
     const connection = await gerencialPool.getConnection();
@@ -97,7 +96,7 @@ router.post('/salvar', authenticateToken, async (req, res) => {
         await connection.beginTransaction();
 
         for (const item of fechamentos) {
-            // 1. Salva a Capa
+            // 1. Salva a Capa (Resumo da Modalidade)
             const [capaResult] = await connection.execute(`
                 INSERT INTO conciliacao_fechamentos 
                 (data_venda, cod_filial, modalidade, valor_total_erp, valor_total_maq, diferenca, status, observacao_geral, nome_usuario)
@@ -111,23 +110,44 @@ router.post('/salvar', authenticateToken, async (req, res) => {
                 item.status, item.observacao || null, nomeUsuario
             ]);
 
-            // 2. Salva o Detalhe da Divergência (se houver e for Insert novo)
-            if (item.status === 'Com Diferença' && capaResult.insertId) {
-                const origem = item.diferenca > 0 ? 'Falta na Maquininha' : 'Falta no ERP';
-                await connection.execute(`
-                    INSERT INTO conciliacao_divergencias 
-                    (id_fechamento, origem, valor_transacao, detalhes)
-                    VALUES (?, ?, ?, ?)
-                `, [capaResult.insertId, origem, Math.abs(item.diferenca), item.observacao]);
+            // Pega o ID da capa (seja Insert novo ou Update)
+            let idFechamento = capaResult.insertId;
+            if (!idFechamento) {
+                const [rows] = await connection.execute(
+                    'SELECT id FROM conciliacao_fechamentos WHERE data_venda=? AND cod_filial=? AND modalidade=?',
+                    [item.data_venda, item.cod_filial, item.modalidade]
+                );
+                idFechamento = rows[0].id;
+            }
+
+            // 2. Limpa as divergências antigas desse dia para não duplicar caso o usuário salve 2 vezes
+            await connection.execute('DELETE FROM conciliacao_divergencias WHERE id_fechamento = ?', [idFechamento]);
+
+            // 3. Salva os Detalhes Cirúrgicos (DAV, Hora, Valor Exato)
+            if (item.divergencias && item.divergencias.length > 0) {
+                for (const div of item.divergencias) {
+                    await connection.execute(`
+                        INSERT INTO conciliacao_divergencias 
+                        (id_fechamento, origem, data_hora_transacao, valor_transacao, nsu_ou_doc, detalhes)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    `, [
+                        idFechamento,
+                        div.origem, 
+                        div.hora !== '-' ? `${item.data_venda} ${div.hora}` : null, // Salva Data e Hora junta
+                        div.valor, 
+                        div.doc || null, 
+                        item.observacao // Repete a observação
+                    ]);
+                }
             }
         }
 
         await connection.commit();
-        res.json({ message: 'Conciliação salva com sucesso!' });
+        res.json({ message: 'Fechamento e auditoria detalhada salvos com sucesso!' });
     } catch (error) {
         await connection.rollback();
-        console.error("Erro ao salvar conciliação:", error);
-        res.status(500).json({ error: 'Erro ao gravar fechamento no banco.' });
+        console.error("Erro ao salvar conciliação detalhada:", error);
+        res.status(500).json({ error: 'Erro ao gravar auditoria no banco de dados.' });
     } finally {
         connection.release();
     }
