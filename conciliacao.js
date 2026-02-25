@@ -4,8 +4,8 @@ const API_BASE = '/api/conciliacao';
 let tablePrincipal; 
 let tableAuditoria; 
 let dadosConsolidados = [];
-let transacoesMaqPorChave = {}; // Guarda os itens do CSV
-let transacoesERPPorChave = {}; // Guarda os itens do Banco SEI
+let transacoesMaqPorChave = {}; 
+let transacoesERPPorChave = {}; 
 
 function initPage() {
     setupDragAndDrop();
@@ -49,10 +49,7 @@ function processarArquivo(file) {
     if (!file) return;
 
     const codFilial = identificarFilial(file.name);
-    if (!codFilial) {
-        alert("Não identificamos a filial no nome do arquivo (ex: conciliacao_vendas_santa-cruz.csv)");
-        return;
-    }
+    if (!codFilial) return alert("Não identificamos a filial no nome do arquivo (ex: conciliacao_vendas_santa-cruz.csv)");
 
     transacoesMaqPorChave = {};
     transacoesERPPorChave = {};
@@ -63,32 +60,39 @@ function processarArquivo(file) {
         delimiter: ";", 
         complete: async function(results) {
             let dadosCSVAgrupados = {};
+            let taxasCSVAgrupadas = {}; // NOVO: Acumulador de taxas
             let datasEncontradas = new Set();
 
             results.data.forEach(row => {
                 let rawData = row['TRANSACTION_DATE'] || row['Data'] || row['Data da Venda']; 
                 let rawValor = row['TRANSACTION_AMOUNT'] || row['ValorBruto'] || row['Valor'];
                 let rawTipo = row['PAYMENT_METHOD_TYPE'] || row['Tipo'] || row['Modalidade'];
+                
+                // NOVO: Lê a taxa cobrada pelo Mercado Pago (ignora o sinal negativo para ficar mais bonito na tela)
+                let rawTaxa = row['FEE_AMOUNT'] || row['Taxa'] || row['Tarifa'] || row['Fee'] || 0;
 
                 if (rawData && rawValor) {
                     let dataTransacao = '';
-                    if (String(rawData).includes('T')) {
-                        dataTransacao = String(rawData).split('T')[0];
-                    } else if (String(rawData).includes('/')) {
+                    if (String(rawData).includes('T')) dataTransacao = String(rawData).split('T')[0];
+                    else if (String(rawData).includes('/')) {
                         const partes = String(rawData).split(' ')[0].split('/');
                         if (partes.length === 3) dataTransacao = `${partes[2]}-${partes[1]}-${partes[0]}`;
-                    } else {
-                        dataTransacao = String(rawData);
-                    }
+                    } else dataTransacao = String(rawData);
 
+                    // Tratamento Valor
                     let valorStr = String(rawValor).replace('R$', '').trim();
                     if (valorStr.includes(',') && valorStr.includes('.')) valorStr = valorStr.replace(/\./g, '').replace(',', '.');
                     else if (valorStr.includes(',') && !valorStr.includes('.')) valorStr = valorStr.replace(',', '.');
                     let valor = parseFloat(valorStr);
 
+                    // Tratamento Taxa (Pega o valor absoluto para não mostrar -78.00)
+                    let taxaStr = String(rawTaxa).replace('R$', '').replace('-', '').trim();
+                    if (taxaStr.includes(',') && taxaStr.includes('.')) taxaStr = taxaStr.replace(/\./g, '').replace(',', '.');
+                    else if (taxaStr.includes(',') && !taxaStr.includes('.')) taxaStr = taxaStr.replace(',', '.');
+                    let taxa = parseFloat(taxaStr) || 0;
+
                     let modalidade = mapearModalidadeMaquininha(rawTipo);
 
-                    // Só processa se a modalidade existir (Ignora NULL e Outros)
                     if (dataTransacao && !isNaN(valor) && modalidade) {
                         datasEncontradas.add(dataTransacao);
                         const chave = `${dataTransacao}|${modalidade}`;
@@ -96,10 +100,15 @@ function processarArquivo(file) {
                         if (!dadosCSVAgrupados[chave]) dadosCSVAgrupados[chave] = 0;
                         dadosCSVAgrupados[chave] += valor;
 
+                        // NOVO: Agrupa as taxas
+                        if (!taxasCSVAgrupadas[chave]) taxasCSVAgrupadas[chave] = 0;
+                        taxasCSVAgrupadas[chave] += taxa;
+
                         if (!transacoesMaqPorChave[chave]) transacoesMaqPorChave[chave] = [];
                         transacoesMaqPorChave[chave].push({
                             hora: String(rawData).includes('T') ? String(rawData).split('T')[1].substring(0,8) : '-',
-                            valor: valor
+                            valor: valor,
+                            taxa: taxa // NOVO: Guarda a taxa individual para auditoria
                         });
                     }
                 }
@@ -107,12 +116,12 @@ function processarArquivo(file) {
 
             const datasArray = Array.from(datasEncontradas);
             if (datasArray.length === 0) return alert("Não conseguimos ler as datas válidas do arquivo.");
-            await cruzarComERP(codFilial, datasArray, dadosCSVAgrupados);
+            await cruzarComERP(codFilial, datasArray, dadosCSVAgrupados, taxasCSVAgrupadas);
         }
     });
 }
 
-async function cruzarComERP(codFilial, datas, dadosCSVAgrupados) {
+async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupadas) {
     try {
         const res = await fetch(`${API_BASE}/comparar`, {
             method: 'POST',
@@ -131,19 +140,15 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados) {
             const dataPura = row.data_venda.split('T')[0];
             const chave = `${dataPura}|${row.modalidade}`;
             
-            // --- LÓGICA DE EXTRAÇÃO DO DAV ---
+            // Lógica do DAV
             let dav = row.doc_original ? String(row.doc_original).trim() : '';
             if (dav.endsWith('DR')) {
-                // Pega do rc_relacao (ex: 1|0000000828153/01|)
                 let rel = row.doc_relacao ? String(row.doc_relacao) : '';
                 let partes = rel.split('|');
-                if (partes.length > 1) {
-                    dav = partes[1].split('/')[0]; // Pega o '0000000828153'
-                }
+                if (partes.length > 1) dav = partes[1].split('/')[0]; 
             }
-            dav = dav.replace(/^0+/, ''); // Tira os zeros à esquerda
+            dav = dav.replace(/^0+/, ''); 
             if (!dav) dav = '-';
-            // ---------------------------------
 
             if (!erpAgrupado[chave]) erpAgrupado[chave] = 0;
             erpAgrupado[chave] += parseFloat(row.valor);
@@ -152,25 +157,26 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados) {
             transacoesERPPorChave[chave].push({
                 hora: row.hora || '-',
                 valor: parseFloat(row.valor),
-                dav: dav // Salvando o DAV para a auditoria
+                dav: dav 
             });
         });
 
         dadosConsolidados = [];
         const processados = new Set();
-        let totalERP = 0, totalMaq = 0, totalDif = 0;
+        let totalERP = 0, totalMaq = 0, totalDif = 0, totalTaxasGlobais = 0;
 
         Object.keys(erpAgrupado).forEach(chave => {
             const [dataPura, mod] = chave.split('|');
             const valorERP = erpAgrupado[chave];
             const valorMaq = dadosCSVAgrupados[chave] || 0;
+            const taxaMaq = taxasCSVAgrupadas[chave] || 0; // NOVO: Puxa a taxa agrupada
             const dif = valorERP - valorMaq;
 
-            totalERP += valorERP; totalMaq += valorMaq; totalDif += dif;
+            totalERP += valorERP; totalMaq += valorMaq; totalDif += dif; totalTaxasGlobais += taxaMaq;
 
             dadosConsolidados.push({
                 chave_id: chave, data_venda: dataPura, cod_filial: codFilial, modalidade: mod,
-                valor_erp: valorERP, valor_maq: valorMaq, diferenca: dif,
+                valor_erp: valorERP, valor_maq: valorMaq, diferenca: dif, taxa_maq: taxaMaq,
                 status: Math.abs(dif) < 0.10 ? 'Conciliado' : 'Com Diferença', observacao: ''
             });
             processados.add(chave);
@@ -180,18 +186,22 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados) {
             if (!processados.has(chave)) {
                 const [dataPura, mod] = chave.split('|');
                 const valorMaq = dadosCSVAgrupados[chave];
-                totalMaq += valorMaq; totalDif -= valorMaq;
+                const taxaMaq = taxasCSVAgrupadas[chave] || 0;
+
+                totalMaq += valorMaq; totalDif -= valorMaq; totalTaxasGlobais += taxaMaq;
 
                 dadosConsolidados.push({
                     chave_id: chave, data_venda: dataPura, cod_filial: codFilial, modalidade: mod,
-                    valor_erp: 0, valor_maq: valorMaq, diferenca: 0 - valorMaq,
+                    valor_erp: 0, valor_maq: valorMaq, diferenca: 0 - valorMaq, taxa_maq: taxaMaq,
                     status: 'Com Diferença', observacao: ''
                 });
             }
         });
 
+        // Atualiza os Cards
         document.getElementById('card-total-erp').textContent = `R$ ${totalERP.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         document.getElementById('card-total-maq').textContent = `R$ ${totalMaq.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+        document.getElementById('card-total-taxas').textContent = `R$ ${totalTaxasGlobais.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         document.getElementById('card-diferenca').textContent = `R$ ${totalDif.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
 
         tablePrincipal.setData(dadosConsolidados);
@@ -212,9 +222,11 @@ function initTablePrincipal() {
         data: [], layout: "fitColumns", groupBy: "data_venda",
         columns: [
             { title: "Filial", field: "cod_filial", width: 90 },
-            { title: "Modalidade", field: "modalidade", width: 170 },
+            { title: "Modalidade", field: "modalidade", width: 140 },
             { title: "Sistema", field: "valor_erp", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
             { title: "Mercado Pago", field: "valor_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
+            // NOVO: Coluna de Taxa Agrupada
+            { title: "Taxa MP", field: "taxa_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, cssClass: "text-red-600" },
             { 
                 title: "Diferença", field: "diferenca", 
                 formatter: function(cell) {
@@ -223,21 +235,21 @@ function initTablePrincipal() {
                     return `<span class="text-red-600 font-bold">R$ ${val.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>`;
                 }
             },
-            { title: "Status", field: "status", formatter: function(cell) {
+            { title: "Status", field: "status", width: 110, formatter: function(cell) {
                 let val = cell.getValue();
                 let color = val === 'Conciliado' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
                 return `<span class="px-2 py-1 rounded text-xs font-bold ${color}">${val}</span>`;
             }},
             { 
-                title: "Anotar Observação", field: "observacao", editor: "input", width: 200,
+                title: "Anotar Observação", field: "observacao", editor: "input", width: 170,
                 formatter: function(cell) {
                     let val = cell.getValue();
-                    if (!val) return `<div class="text-gray-400 italic flex items-center gap-1">${editIcon} Clique para digitar...</div>`;
+                    if (!val) return `<div class="text-gray-400 italic flex items-center gap-1">${editIcon} Clique para digitar</div>`;
                     return `<div class="font-medium text-blue-700">${val}</div>`;
                 }
             },
             { 
-                title: "Ação", width: 130, hozAlign: "center", headerSort: false,
+                title: "Ação", width: 110, hozAlign: "center", headerSort: false,
                 formatter: function() {
                     return `<button class="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 font-bold text-xs rounded-md hover:bg-indigo-100 border border-indigo-200 transition-colors w-full justify-center shadow-sm">${searchIcon} Auditar</button>`;
                 },
@@ -251,17 +263,17 @@ function initTableAuditoria() {
     tableAuditoria = new Tabulator("#tabela-itens-csv", {
         data: [], layout: "fitColumns",
         columns: [
-            { title: "Status", field: "status_icone", formatter: "html", width: 130, hozAlign: "center" },
-            { title: "Hora M. Pago", field: "maq_hora", width: 120, hozAlign: "center" },
+            { title: "Status", field: "status_icone", formatter: "html", width: 120, hozAlign: "center" },
+            { title: "Hora M. Pago", field: "maq_hora", width: 110, hozAlign: "center" },
             { title: "Valor M. Pago", field: "maq_valor", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, bottomCalc: "sum", bottomCalcFormatter: "money", bottomCalcFormatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
-            { title: "Hora Sistema", field: "erp_hora", width: 120, hozAlign: "center" },
-            { title: "DAV (Sistema)", field: "erp_dav", width: 120, hozAlign: "center", formatter: function(cell){ return `<span class="font-bold text-gray-700">${cell.getValue()}</span>`; } },
+            // NOVO: Coluna de Taxa Individual
+            { title: "Taxa MP", field: "maq_taxa", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, cssClass: "text-red-600", bottomCalc: "sum", bottomCalcFormatter: "money", bottomCalcFormatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
+            { title: "Hora Sistema", field: "erp_hora", width: 110, hozAlign: "center" },
+            { title: "DAV (Sistema)", field: "erp_dav", width: 110, hozAlign: "center", formatter: function(cell){ return `<span class="font-bold text-gray-700">${cell.getValue()}</span>`; } },
             { title: "Valor Sistema", field: "erp_valor", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, bottomCalc: "sum", bottomCalcFormatter: "money", bottomCalcFormatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } }
         ]
     });
 }
-
-// --- O MOTOR DO DE-PARA ---
 
 function abrirAuditoriaItemAItem(rowData) {
     if (rowData.modalidade === 'Dinheiro') {
@@ -289,7 +301,7 @@ function abrirAuditoriaItemAItem(rowData) {
             let e = erp[indexERP];
             resultado.push({
                 status_icone: '<span class="text-green-600 font-bold bg-green-50 px-2 py-1 rounded text-[11px] border border-green-200">✓ Ok</span>',
-                maq_hora: m.hora, maq_valor: m.valor, erp_hora: e.hora, erp_dav: e.dav, erp_valor: e.valor
+                maq_hora: m.hora, maq_valor: m.valor, maq_taxa: m.taxa, erp_hora: e.hora, erp_dav: e.dav, erp_valor: e.valor
             });
             erp.splice(indexERP, 1);
             maq.splice(i, 1);
@@ -300,14 +312,14 @@ function abrirAuditoriaItemAItem(rowData) {
     maq.forEach(m => {
         resultado.push({
             status_icone: '<span class="text-red-600 font-bold bg-red-50 px-2 py-1 rounded text-[11px] border border-red-200">✗ Falta no Sis</span>',
-            maq_hora: m.hora, maq_valor: m.valor, erp_hora: '-', erp_dav: '-', erp_valor: 0
+            maq_hora: m.hora, maq_valor: m.valor, maq_taxa: m.taxa, erp_hora: '-', erp_dav: '-', erp_valor: 0
         });
     });
 
     erp.forEach(e => {
         resultado.push({
             status_icone: '<span class="text-yellow-600 font-bold bg-yellow-50 px-2 py-1 rounded text-[11px] border border-yellow-200">! Falta no MP</span>',
-            maq_hora: '-', maq_valor: 0, erp_hora: e.hora, erp_dav: e.dav, erp_valor: e.valor
+            maq_hora: '-', maq_valor: 0, maq_taxa: 0, erp_hora: e.hora, erp_dav: e.dav, erp_valor: e.valor
         });
     });
 
@@ -322,28 +334,16 @@ function abrirAuditoriaItemAItem(rowData) {
     }, 10);
 }
 
-function fecharModalAuditoria() {
-    document.getElementById('modal-auditoria').classList.add('opacity-0');
-    document.getElementById('modal-auditoria-content').classList.add('scale-95');
-    setTimeout(() => { document.getElementById('modal-auditoria').classList.add('hidden'); }, 200);
-}
-
-// --- SALVAMENTO ---
+// ... SALVAMENTO
 async function salvarFechamentoFinal() {
     const dadosParaSalvar = tablePrincipal.getData();
     
-    // Trava de segurança: só deixa salvar se o analista preencheu os motivos
     const pendentes = dadosParaSalvar.filter(d => d.status === 'Com Diferença' && !d.observacao);
-    if (pendentes.length > 0) {
-        alert("Existem divergências sem justificativa! Preencha a coluna 'Anotar Observação' clicando nela.");
-        return;
-    }
+    if (pendentes.length > 0) return alert("Existem divergências sem justificativa! Preencha a coluna 'Anotar Observação'.");
 
-    // Monta o pacote inteligente (Capa + Divergências Detalhadas)
     const fechamentosEnriquecidos = dadosParaSalvar.map(row => {
         let divergencias = [];
 
-        // Roda o De-Para em segundo plano para extrair o que sobrou
         if (row.status === 'Com Diferença' && row.modalidade !== 'Dinheiro') {
             const chave = row.chave_id;
             let maq = JSON.parse(JSON.stringify(transacoesMaqPorChave[chave] || []));
@@ -360,17 +360,9 @@ async function salvarFechamentoFinal() {
                 }
             }
 
-            // O que o analista tem que lançar no SEI
-            maq.forEach(m => divergencias.push({
-                origem: 'Falta no ERP', hora: m.hora, valor: m.valor, doc: 'Mercado Pago'
-            }));
-
-            // O que a maquininha cobrou a menos ou engoliu (Com o Número do DAV!)
-            erp.forEach(e => divergencias.push({
-                origem: 'Falta na Maquininha', hora: e.hora, valor: e.valor, doc: e.dav
-            }));
+            maq.forEach(m => divergencias.push({ origem: 'Falta no ERP', hora: m.hora, valor: m.valor, doc: 'Mercado Pago' }));
+            erp.forEach(e => divergencias.push({ origem: 'Falta na Maquininha', hora: e.hora, valor: e.valor, doc: e.dav }));
         }
-
         return { ...row, divergencias };
     });
 
@@ -389,7 +381,5 @@ async function salvarFechamentoFinal() {
             const errData = await res.json();
             throw new Error(errData.error || 'Erro interno no servidor.');
         }
-    } catch (err) {
-        alert("Erro ao gravar: " + err.message);
-    }
+    } catch (err) { alert("Erro ao gravar: " + err.message); }
 }

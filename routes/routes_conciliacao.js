@@ -86,7 +86,35 @@ router.post('/comparar', authenticateToken, async (req, res) => {
     }
 });
 
-// 2. ROTA PARA SALVAR O FECHAMENTO (GERENCIAL)
+// ---------------------------------------------------------
+// ROTA NOVA: VERIFICA SE O DIA JÁ FOI FECHADO
+// ---------------------------------------------------------
+router.post('/verificar', authenticateToken, async (req, res) => {
+    const { filial_cod, datas } = req.body;
+    if (!filial_cod || !datas || datas.length === 0) return res.json({ ja_conciliados: [] });
+
+    try {
+        const placeholders = datas.map(() => '?').join(',');
+        const connection = await gerencialPool.getConnection();
+        
+        // Busca se existe alguma linha para esta filial e datas
+        const [rows] = await connection.execute(
+            `SELECT DISTINCT DATE_FORMAT(data_venda, '%Y-%m-%d') as data_venda 
+             FROM conciliacao_fechamentos 
+             WHERE cod_filial = ? AND data_venda IN (${placeholders})`,
+            [filial_cod, ...datas]
+        );
+        connection.release();
+        
+        const datasEncontradas = rows.map(r => r.data_venda);
+        res.json({ ja_conciliados: datasEncontradas });
+
+    } catch (error) {
+        console.error("Erro ao verificar conciliações:", error);
+        res.status(500).json({ error: 'Erro ao verificar datas.' });
+    }
+});
+
 router.post('/salvar', authenticateToken, async (req, res) => {
     const { fechamentos } = req.body;
     const nomeUsuario = req.user.nome;
@@ -96,21 +124,21 @@ router.post('/salvar', authenticateToken, async (req, res) => {
         await connection.beginTransaction();
 
         for (const item of fechamentos) {
-            // 1. Salva a Capa (Resumo da Modalidade)
+            // 1. Salva a Capa (AGORA INCLUINDO AS TAXAS)
             const [capaResult] = await connection.execute(`
                 INSERT INTO conciliacao_fechamentos 
-                (data_venda, cod_filial, modalidade, valor_total_erp, valor_total_maq, diferenca, status, observacao_geral, nome_usuario)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (data_venda, cod_filial, modalidade, valor_total_erp, valor_total_maq, taxas_maq, diferenca, status, observacao_geral, nome_usuario)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE 
-                valor_total_erp=VALUES(valor_total_erp), valor_total_maq=VALUES(valor_total_maq), diferenca=VALUES(diferenca), 
+                valor_total_erp=VALUES(valor_total_erp), valor_total_maq=VALUES(valor_total_maq), taxas_maq=VALUES(taxas_maq), diferenca=VALUES(diferenca), 
                 status=VALUES(status), observacao_geral=VALUES(observacao_geral), nome_usuario=VALUES(nome_usuario)
             `, [
                 item.data_venda, item.cod_filial, item.modalidade, 
-                item.valor_erp, item.valor_maq, item.diferenca, 
+                item.valor_erp, item.valor_maq, item.taxa_maq || 0, item.diferenca, // Aqui entra a taxa!
                 item.status, item.observacao || null, nomeUsuario
             ]);
 
-            // Pega o ID da capa (seja Insert novo ou Update)
+            // Pega o ID para os detalhes
             let idFechamento = capaResult.insertId;
             if (!idFechamento) {
                 const [rows] = await connection.execute(
@@ -120,10 +148,10 @@ router.post('/salvar', authenticateToken, async (req, res) => {
                 idFechamento = rows[0].id;
             }
 
-            // 2. Limpa as divergências antigas desse dia para não duplicar caso o usuário salve 2 vezes
+            // Limpa as divergências antigas e recria
             await connection.execute('DELETE FROM conciliacao_divergencias WHERE id_fechamento = ?', [idFechamento]);
 
-            // 3. Salva os Detalhes Cirúrgicos (DAV, Hora, Valor Exato)
+            // Salva os Detalhes Cirúrgicos
             if (item.divergencias && item.divergencias.length > 0) {
                 for (const div of item.divergencias) {
                     await connection.execute(`
@@ -131,23 +159,19 @@ router.post('/salvar', authenticateToken, async (req, res) => {
                         (id_fechamento, origem, data_hora_transacao, valor_transacao, nsu_ou_doc, detalhes)
                         VALUES (?, ?, ?, ?, ?, ?)
                     `, [
-                        idFechamento,
-                        div.origem, 
-                        div.hora !== '-' ? `${item.data_venda} ${div.hora}` : null, // Salva Data e Hora junta
-                        div.valor, 
-                        div.doc || null, 
-                        item.observacao // Repete a observação
+                        idFechamento, div.origem, div.hora !== '-' ? `${item.data_venda} ${div.hora}` : null,
+                        div.valor, div.doc || null, item.observacao
                     ]);
                 }
             }
         }
 
         await connection.commit();
-        res.json({ message: 'Fechamento e auditoria detalhada salvos com sucesso!' });
+        res.json({ message: 'Fechamento salvo com sucesso!' });
     } catch (error) {
         await connection.rollback();
-        console.error("Erro ao salvar conciliação detalhada:", error);
-        res.status(500).json({ error: 'Erro ao gravar auditoria no banco de dados.' });
+        console.error("Erro ao salvar:", error);
+        res.status(500).json({ error: 'Erro ao gravar no banco de dados.' });
     } finally {
         connection.release();
     }
