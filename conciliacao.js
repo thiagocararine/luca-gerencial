@@ -60,15 +60,13 @@ function processarArquivo(file) {
         delimiter: ";", 
         complete: async function(results) {
             let dadosCSVAgrupados = {};
-            let taxasCSVAgrupadas = {}; // NOVO: Acumulador de taxas
+            let taxasCSVAgrupadas = {}; 
             let datasEncontradas = new Set();
 
             results.data.forEach(row => {
                 let rawData = row['TRANSACTION_DATE'] || row['Data'] || row['Data da Venda']; 
                 let rawValor = row['TRANSACTION_AMOUNT'] || row['ValorBruto'] || row['Valor'];
                 let rawTipo = row['PAYMENT_METHOD_TYPE'] || row['Tipo'] || row['Modalidade'];
-                
-                // NOVO: Lê a taxa cobrada pelo Mercado Pago (ignora o sinal negativo para ficar mais bonito na tela)
                 let rawTaxa = row['FEE_AMOUNT'] || row['Taxa'] || row['Tarifa'] || row['Fee'] || 0;
 
                 if (rawData && rawValor) {
@@ -79,13 +77,11 @@ function processarArquivo(file) {
                         if (partes.length === 3) dataTransacao = `${partes[2]}-${partes[1]}-${partes[0]}`;
                     } else dataTransacao = String(rawData);
 
-                    // Tratamento Valor
                     let valorStr = String(rawValor).replace('R$', '').trim();
                     if (valorStr.includes(',') && valorStr.includes('.')) valorStr = valorStr.replace(/\./g, '').replace(',', '.');
                     else if (valorStr.includes(',') && !valorStr.includes('.')) valorStr = valorStr.replace(',', '.');
                     let valor = parseFloat(valorStr);
 
-                    // Tratamento Taxa (Pega o valor absoluto para não mostrar -78.00)
                     let taxaStr = String(rawTaxa).replace('R$', '').replace('-', '').trim();
                     if (taxaStr.includes(',') && taxaStr.includes('.')) taxaStr = taxaStr.replace(/\./g, '').replace(',', '.');
                     else if (taxaStr.includes(',') && !taxaStr.includes('.')) taxaStr = taxaStr.replace(',', '.');
@@ -100,7 +96,6 @@ function processarArquivo(file) {
                         if (!dadosCSVAgrupados[chave]) dadosCSVAgrupados[chave] = 0;
                         dadosCSVAgrupados[chave] += valor;
 
-                        // NOVO: Agrupa as taxas
                         if (!taxasCSVAgrupadas[chave]) taxasCSVAgrupadas[chave] = 0;
                         taxasCSVAgrupadas[chave] += taxa;
 
@@ -108,7 +103,7 @@ function processarArquivo(file) {
                         transacoesMaqPorChave[chave].push({
                             hora: String(rawData).includes('T') ? String(rawData).split('T')[1].substring(0,8) : '-',
                             valor: valor,
-                            taxa: taxa // NOVO: Guarda a taxa individual para auditoria
+                            taxa: taxa 
                         });
                     }
                 }
@@ -123,6 +118,28 @@ function processarArquivo(file) {
 
 async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupadas) {
     try {
+        // VERIFICA SE O DIA JÁ FOI FECHADO
+        const resVerifica = await fetch(`${API_BASE}/verificar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+            body: JSON.stringify({ filial_cod: codFilial, datas: datas })
+        });
+        const verifData = await resVerifica.json();
+        
+        if (verifData.ja_conciliados && verifData.ja_conciliados.length > 0) {
+            const datasFormatadas = verifData.ja_conciliados.map(d => {
+                const [ano, mes, dia] = d.split('-');
+                return `${dia}/${mes}/${ano}`;
+            }).join(', ');
+            
+            const confirma = confirm(`⚠️ ATENÇÃO: O Fechamento de Caixa para as datas (${datasFormatadas}) nesta filial já foi realizado e salvo no banco.\n\nDeseja carregar a tela e SOBRESCREVER os dados anteriores?`);
+            
+            if (!confirma) {
+                document.getElementById('file-input').value = '';
+                return;
+            }
+        }
+
         const res = await fetch(`${API_BASE}/comparar`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -140,7 +157,6 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
             const dataPura = row.data_venda.split('T')[0];
             const chave = `${dataPura}|${row.modalidade}`;
             
-            // Lógica do DAV
             let dav = row.doc_original ? String(row.doc_original).trim() : '';
             if (dav.endsWith('DR')) {
                 let rel = row.doc_relacao ? String(row.doc_relacao) : '';
@@ -169,7 +185,7 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
             const [dataPura, mod] = chave.split('|');
             const valorERP = erpAgrupado[chave];
             const valorMaq = dadosCSVAgrupados[chave] || 0;
-            const taxaMaq = taxasCSVAgrupadas[chave] || 0; // NOVO: Puxa a taxa agrupada
+            const taxaMaq = taxasCSVAgrupadas[chave] || 0; 
             const dif = valorERP - valorMaq;
 
             totalERP += valorERP; totalMaq += valorMaq; totalDif += dif; totalTaxasGlobais += taxaMaq;
@@ -198,7 +214,6 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
             }
         });
 
-        // Atualiza os Cards
         document.getElementById('card-total-erp').textContent = `R$ ${totalERP.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         document.getElementById('card-total-maq').textContent = `R$ ${totalMaq.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         document.getElementById('card-total-taxas').textContent = `R$ ${totalTaxasGlobais.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
@@ -225,7 +240,6 @@ function initTablePrincipal() {
             { title: "Modalidade", field: "modalidade", width: 140 },
             { title: "Sistema", field: "valor_erp", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
             { title: "Mercado Pago", field: "valor_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
-            // NOVO: Coluna de Taxa Agrupada
             { title: "Taxa MP", field: "taxa_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, cssClass: "text-red-600" },
             { 
                 title: "Diferença", field: "diferenca", 
@@ -266,7 +280,6 @@ function initTableAuditoria() {
             { title: "Status", field: "status_icone", formatter: "html", width: 120, hozAlign: "center" },
             { title: "Hora M. Pago", field: "maq_hora", width: 110, hozAlign: "center" },
             { title: "Valor M. Pago", field: "maq_valor", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, bottomCalc: "sum", bottomCalcFormatter: "money", bottomCalcFormatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
-            // NOVO: Coluna de Taxa Individual
             { title: "Taxa MP", field: "maq_taxa", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, cssClass: "text-red-600", bottomCalc: "sum", bottomCalcFormatter: "money", bottomCalcFormatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
             { title: "Hora Sistema", field: "erp_hora", width: 110, hozAlign: "center" },
             { title: "DAV (Sistema)", field: "erp_dav", width: 110, hozAlign: "center", formatter: function(cell){ return `<span class="font-bold text-gray-700">${cell.getValue()}</span>`; } },
@@ -274,6 +287,8 @@ function initTableAuditoria() {
         ]
     });
 }
+
+// --- CONTROLES DO MODAL DE AUDITORIA ---
 
 function abrirAuditoriaItemAItem(rowData) {
     if (rowData.modalidade === 'Dinheiro') {
@@ -334,7 +349,17 @@ function abrirAuditoriaItemAItem(rowData) {
     }, 10);
 }
 
-// ... SALVAMENTO
+// AQUI ESTÁ A FUNÇÃO QUE TINHA SUMIDO!
+function fecharModalAuditoria() {
+    document.getElementById('modal-auditoria').classList.add('opacity-0');
+    document.getElementById('modal-auditoria-content').classList.add('scale-95');
+    setTimeout(() => {
+        document.getElementById('modal-auditoria').classList.add('hidden');
+    }, 200);
+}
+
+// --- SALVAMENTO ---
+
 async function salvarFechamentoFinal() {
     const dadosParaSalvar = tablePrincipal.getData();
     
