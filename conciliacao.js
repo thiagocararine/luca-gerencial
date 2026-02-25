@@ -121,29 +121,41 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados) {
         });
         
         const dadosERPRaw = await res.json();
-        if (!res.ok) throw new Error(dadosERPRaw.error || 'Erro interno no ERP.');
+        if (!res.ok) throw new Error(dadosERPRaw.error || 'Erro interno no Sistema.');
 
-        // 1. Agrupar os dados detalhados que vieram do banco
         let erpAgrupado = {};
         
         dadosERPRaw.forEach(row => {
-            // Elimina qualquer NULL que o banco tente empurrar
             if (!row.modalidade || String(row.modalidade).toLowerCase() === 'null') return; 
 
             const dataPura = row.data_venda.split('T')[0];
             const chave = `${dataPura}|${row.modalidade}`;
             
+            // --- LÓGICA DE EXTRAÇÃO DO DAV ---
+            let dav = row.doc_original ? String(row.doc_original).trim() : '';
+            if (dav.endsWith('DR')) {
+                // Pega do rc_relacao (ex: 1|0000000828153/01|)
+                let rel = row.doc_relacao ? String(row.doc_relacao) : '';
+                let partes = rel.split('|');
+                if (partes.length > 1) {
+                    dav = partes[1].split('/')[0]; // Pega o '0000000828153'
+                }
+            }
+            dav = dav.replace(/^0+/, ''); // Tira os zeros à esquerda
+            if (!dav) dav = '-';
+            // ---------------------------------
+
             if (!erpAgrupado[chave]) erpAgrupado[chave] = 0;
             erpAgrupado[chave] += parseFloat(row.valor);
 
             if (!transacoesERPPorChave[chave]) transacoesERPPorChave[chave] = [];
             transacoesERPPorChave[chave].push({
                 hora: row.hora || '-',
-                valor: parseFloat(row.valor)
+                valor: parseFloat(row.valor),
+                dav: dav // Salvando o DAV para a auditoria
             });
         });
 
-        // 2. Montar a tabela principal consolidada
         dadosConsolidados = [];
         const processados = new Set();
         let totalERP = 0, totalMaq = 0, totalDif = 0;
@@ -193,7 +205,6 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados) {
 // --- TABELAS ---
 
 function initTablePrincipal() {
-    // Icone inline para garantir que o botão sempre apareça
     const searchIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>`;
     const editIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
 
@@ -202,8 +213,8 @@ function initTablePrincipal() {
         columns: [
             { title: "Filial", field: "cod_filial", width: 90 },
             { title: "Modalidade", field: "modalidade", width: 170 },
-            { title: "Sistema (SEI)", field: "valor_erp", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
-            { title: "Maquininha", field: "valor_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
+            { title: "Sistema", field: "valor_erp", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
+            { title: "Mercado Pago", field: "valor_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
             { 
                 title: "Diferença", field: "diferenca", 
                 formatter: function(cell) {
@@ -240,11 +251,12 @@ function initTableAuditoria() {
     tableAuditoria = new Tabulator("#tabela-itens-csv", {
         data: [], layout: "fitColumns",
         columns: [
-            { title: "Status do Cruzamento", field: "status_icone", formatter: "html", width: 180, hozAlign: "center" },
-            { title: "Hora Maquininha", field: "maq_hora", width: 140, hozAlign: "center" },
-            { title: "Valor Maquininha", field: "maq_valor", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, bottomCalc: "sum", bottomCalcFormatter: "money", bottomCalcFormatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
-            { title: "Hora SEI", field: "erp_hora", width: 140, hozAlign: "center" },
-            { title: "Valor SEI", field: "erp_valor", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, bottomCalc: "sum", bottomCalcFormatter: "money", bottomCalcFormatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } }
+            { title: "Status", field: "status_icone", formatter: "html", width: 130, hozAlign: "center" },
+            { title: "Hora M. Pago", field: "maq_hora", width: 120, hozAlign: "center" },
+            { title: "Valor M. Pago", field: "maq_valor", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, bottomCalc: "sum", bottomCalcFormatter: "money", bottomCalcFormatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
+            { title: "Hora Sistema", field: "erp_hora", width: 120, hozAlign: "center" },
+            { title: "DAV (Sistema)", field: "erp_dav", width: 120, hozAlign: "center", formatter: function(cell){ return `<span class="font-bold text-gray-700">${cell.getValue()}</span>`; } },
+            { title: "Valor Sistema", field: "erp_valor", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, bottomCalc: "sum", bottomCalcFormatter: "money", bottomCalcFormatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } }
         ]
     });
 }
@@ -261,16 +273,14 @@ function abrirAuditoriaItemAItem(rowData) {
     let maqOriginal = transacoesMaqPorChave[chave] || [];
     let erpOriginal = transacoesERPPorChave[chave] || [];
 
-    // Clona os arrays para podermos "riscar" os itens que baterem
     let maq = JSON.parse(JSON.stringify(maqOriginal));
     let erp = JSON.parse(JSON.stringify(erpOriginal));
     let resultado = [];
 
-    // Ordena do maior valor para o menor (ajuda o algoritmo a parear melhor)
     maq.sort((a,b) => b.valor - a.valor);
     erp.sort((a,b) => b.valor - a.valor);
 
-    // 1. Procura casamentos exatos de valor
+    // Casamento de dados
     for (let i = maq.length - 1; i >= 0; i--) {
         let m = maq[i];
         let indexERP = erp.findIndex(e => Math.abs(e.valor - m.valor) < 0.01);
@@ -278,28 +288,26 @@ function abrirAuditoriaItemAItem(rowData) {
         if (indexERP !== -1) {
             let e = erp[indexERP];
             resultado.push({
-                status_icone: '<span class="text-green-600 font-bold bg-green-50 px-3 py-1 rounded border border-green-200">✓ Encontrado</span>',
-                maq_hora: m.hora, maq_valor: m.valor, erp_hora: e.hora, erp_valor: e.valor
+                status_icone: '<span class="text-green-600 font-bold bg-green-50 px-2 py-1 rounded text-[11px] border border-green-200">✓ Ok</span>',
+                maq_hora: m.hora, maq_valor: m.valor, erp_hora: e.hora, erp_dav: e.dav, erp_valor: e.valor
             });
-            // Tira da lista os que já casaram
             erp.splice(indexERP, 1);
             maq.splice(i, 1);
         }
     }
 
-    // 2. O que sobrou na lista da Maquininha (Passou cartão mas não lançou no SEI)
+    // Sobras
     maq.forEach(m => {
         resultado.push({
-            status_icone: '<span class="text-red-600 font-bold bg-red-50 px-2 py-1 rounded border border-red-200">✗ Falta no SEI</span>',
-            maq_hora: m.hora, maq_valor: m.valor, erp_hora: '-', erp_valor: 0
+            status_icone: '<span class="text-red-600 font-bold bg-red-50 px-2 py-1 rounded text-[11px] border border-red-200">✗ Falta no Sis</span>',
+            maq_hora: m.hora, maq_valor: m.valor, erp_hora: '-', erp_dav: '-', erp_valor: 0
         });
     });
 
-    // 3. O que sobrou na lista do ERP (Lançou no SEI mas não tem na Maquininha)
     erp.forEach(e => {
         resultado.push({
-            status_icone: '<span class="text-yellow-600 font-bold bg-yellow-50 px-2 py-1 rounded border border-yellow-200">! Falta na Maq</span>',
-            maq_hora: '-', maq_valor: 0, erp_hora: e.hora, erp_valor: e.valor
+            status_icone: '<span class="text-yellow-600 font-bold bg-yellow-50 px-2 py-1 rounded text-[11px] border border-yellow-200">! Falta no MP</span>',
+            maq_hora: '-', maq_valor: 0, erp_hora: e.hora, erp_dav: e.dav, erp_valor: e.valor
         });
     });
 

@@ -49,7 +49,9 @@ router.post('/comparar', authenticateToken, async (req, res) => {
                     WHEN rc_formar = '04-Cartao Credito' THEN 'Cartão de Crédito'
                     WHEN rc_formar = '05-Cartao Debito' THEN 'Cartão de Débito'
                 END as modalidade,
-                rc_vlbaix as valor
+                rc_vlbaix as valor,
+                rc_ndocum as doc_original,
+                rc_relacao as doc_relacao
             FROM receber
             WHERE rc_dtbaix IN (${placeholders})
             AND rc_status IN ('1', '2')
@@ -62,7 +64,9 @@ router.post('/comparar', authenticateToken, async (req, res) => {
                 DATE(cr_erec) as data_venda,
                 cr_hrec as hora,
                 'Dinheiro' as modalidade,
-                cr_dinh as valor
+                cr_dinh as valor,
+                cr_ndav as doc_original,
+                '' as doc_relacao
             FROM cdavs
             WHERE cr_erec IN (${placeholders})
             AND cr_reca = '1'
