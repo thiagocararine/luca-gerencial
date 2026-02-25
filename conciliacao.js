@@ -2,9 +2,10 @@ document.addEventListener('DOMContentLoaded', initPage);
 
 const API_BASE = '/api/conciliacao';
 let tablePrincipal; 
-let tableAuditoria; // Tabela que ficará dentro do modal
+let tableAuditoria; 
 let dadosConsolidados = [];
-let transacoesPorChave = {}; // NOVO: Guarda os itens individuais do CSV para a auditoria
+let transacoesMaqPorChave = {}; // Guarda os itens do CSV
+let transacoesERPPorChave = {}; // Guarda os itens do Banco SEI
 
 function initPage() {
     setupDragAndDrop();
@@ -36,12 +37,12 @@ function identificarFilial(nomeArquivo) {
 }
 
 function mapearModalidadeMaquininha(tipoStr) {
-    if (!tipoStr) return null; // Retorna vazio em vez de "Outros"
+    if (!tipoStr) return null; 
     const t = String(tipoStr).toLowerCase();
     if (t === 'credit_card' || t.includes('credito') || t.includes('crédito')) return 'Cartão de Crédito';
     if (t === 'debit_card' || t.includes('debito') || t.includes('débito')) return 'Cartão de Débito';
     if (t === 'bank_transfer' || t.includes('pix')) return 'Pix';
-    return null; // Retorna vazio em vez de "Outros"
+    return null; 
 }
 
 function processarArquivo(file) {
@@ -53,8 +54,8 @@ function processarArquivo(file) {
         return;
     }
 
-    // Resetamos o objeto de auditoria para nova leitura
-    transacoesPorChave = {};
+    transacoesMaqPorChave = {};
+    transacoesERPPorChave = {};
 
     Papa.parse(file, {
         header: true,
@@ -68,7 +69,6 @@ function processarArquivo(file) {
                 let rawData = row['TRANSACTION_DATE'] || row['Data'] || row['Data da Venda']; 
                 let rawValor = row['TRANSACTION_AMOUNT'] || row['ValorBruto'] || row['Valor'];
                 let rawTipo = row['PAYMENT_METHOD_TYPE'] || row['Tipo'] || row['Modalidade'];
-                let rawID = row['SOURCE_ID'] || row['NSU'] || row['ID']; // Pega o ID da transação
 
                 if (rawData && rawValor) {
                     let dataTransacao = '';
@@ -88,30 +88,25 @@ function processarArquivo(file) {
 
                     let modalidade = mapearModalidadeMaquininha(rawTipo);
 
-                    if (dataTransacao && !isNaN(valor)) {
+                    // Só processa se a modalidade existir (Ignora NULL e Outros)
+                    if (dataTransacao && !isNaN(valor) && modalidade) {
                         datasEncontradas.add(dataTransacao);
                         const chave = `${dataTransacao}|${modalidade}`;
                         
-                        // Soma os totais
                         if (!dadosCSVAgrupados[chave]) dadosCSVAgrupados[chave] = 0;
                         dadosCSVAgrupados[chave] += valor;
 
-                        // GUARDA O ITEM INDIVIDUAL PARA AUDITORIA
-                        if (!transacoesPorChave[chave]) transacoesPorChave[chave] = [];
-                        transacoesPorChave[chave].push({
-                            id_transacao: rawID || 'N/A',
-                            data_hora: String(rawData).replace('T', ' ').substring(0, 19), // Formata bonito
-                            valor_item: valor
+                        if (!transacoesMaqPorChave[chave]) transacoesMaqPorChave[chave] = [];
+                        transacoesMaqPorChave[chave].push({
+                            hora: String(rawData).includes('T') ? String(rawData).split('T')[1].substring(0,8) : '-',
+                            valor: valor
                         });
                     }
                 }
             });
 
             const datasArray = Array.from(datasEncontradas);
-            if (datasArray.length === 0) {
-                 alert("Não conseguimos ler as datas e valores. Verifique o formato do arquivo.");
-                 return;
-            }
+            if (datasArray.length === 0) return alert("Não conseguimos ler as datas válidas do arquivo.");
             await cruzarComERP(codFilial, datasArray, dadosCSVAgrupados);
         }
     });
@@ -125,55 +120,64 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados) {
             body: JSON.stringify({ filial_cod: codFilial, datas: datas })
         });
         
-        const dadosERP = await res.json();
-        if (!res.ok) throw new Error(dadosERP.error || 'Erro interno no ERP.');
+        const dadosERPRaw = await res.json();
+        if (!res.ok) throw new Error(dadosERPRaw.error || 'Erro interno no ERP.');
 
+        // 1. Agrupar os dados detalhados que vieram do banco
+        let erpAgrupado = {};
+        
+        dadosERPRaw.forEach(row => {
+            // Elimina qualquer NULL que o banco tente empurrar
+            if (!row.modalidade || String(row.modalidade).toLowerCase() === 'null') return; 
+
+            const dataPura = row.data_venda.split('T')[0];
+            const chave = `${dataPura}|${row.modalidade}`;
+            
+            if (!erpAgrupado[chave]) erpAgrupado[chave] = 0;
+            erpAgrupado[chave] += parseFloat(row.valor);
+
+            if (!transacoesERPPorChave[chave]) transacoesERPPorChave[chave] = [];
+            transacoesERPPorChave[chave].push({
+                hora: row.hora || '-',
+                valor: parseFloat(row.valor)
+            });
+        });
+
+        // 2. Montar a tabela principal consolidada
         dadosConsolidados = [];
         const processados = new Set();
         let totalERP = 0, totalMaq = 0, totalDif = 0;
 
-        dadosERP.forEach(erp => {
-            const dataPura = erp.data_venda.split('T')[0]; 
-            const chave = `${dataPura}|${erp.modalidade}`;
+        Object.keys(erpAgrupado).forEach(chave => {
+            const [dataPura, mod] = chave.split('|');
+            const valorERP = erpAgrupado[chave];
             const valorMaq = dadosCSVAgrupados[chave] || 0;
-            const dif = parseFloat(erp.total_erp) - valorMaq;
+            const dif = valorERP - valorMaq;
 
-            totalERP += parseFloat(erp.total_erp);
-            totalMaq += valorMaq;
-            totalDif += dif;
+            totalERP += valorERP; totalMaq += valorMaq; totalDif += dif;
 
             dadosConsolidados.push({
-                chave_id: chave,
-                data_venda: dataPura,
-                cod_filial: codFilial,
-                modalidade: erp.modalidade,
-                valor_erp: parseFloat(erp.total_erp),
-                valor_maq: valorMaq,
-                diferenca: dif,
-                status: Math.abs(dif) < 0.10 ? 'Conciliado' : 'Com Diferença',
-                observacao: ''
+                chave_id: chave, data_venda: dataPura, cod_filial: codFilial, modalidade: mod,
+                valor_erp: valorERP, valor_maq: valorMaq, diferenca: dif,
+                status: Math.abs(dif) < 0.10 ? 'Conciliado' : 'Com Diferença', observacao: ''
             });
             processados.add(chave);
         });
 
-        // Adiciona o que tem na maquininha mas não no ERP
         Object.keys(dadosCSVAgrupados).forEach(chave => {
             if (!processados.has(chave)) {
                 const [dataPura, mod] = chave.split('|');
                 const valorMaq = dadosCSVAgrupados[chave];
-                
-                totalMaq += valorMaq;
-                totalDif -= valorMaq;
+                totalMaq += valorMaq; totalDif -= valorMaq;
 
                 dadosConsolidados.push({
                     chave_id: chave, data_venda: dataPura, cod_filial: codFilial, modalidade: mod,
                     valor_erp: 0, valor_maq: valorMaq, diferenca: 0 - valorMaq,
-                    status: 'Com Diferença', observacao: 'Falta lançar no ERP'
+                    status: 'Com Diferença', observacao: ''
                 });
             }
         });
 
-        // Atualiza os Cards de Resumo
         document.getElementById('card-total-erp').textContent = `R$ ${totalERP.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         document.getElementById('card-total-maq').textContent = `R$ ${totalMaq.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         document.getElementById('card-diferenca').textContent = `R$ ${totalDif.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
@@ -189,15 +193,17 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados) {
 // --- TABELAS ---
 
 function initTablePrincipal() {
+    // Icone inline para garantir que o botão sempre apareça
+    const searchIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>`;
+    const editIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
+
     tablePrincipal = new Tabulator("#tabela-conciliacao", {
-        data: [],
-        layout: "fitColumns",
-        groupBy: "data_venda",
+        data: [], layout: "fitColumns", groupBy: "data_venda",
         columns: [
             { title: "Filial", field: "cod_filial", width: 90 },
             { title: "Modalidade", field: "modalidade", width: 170 },
-            { title: "Valor Sistema", field: "valor_erp", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
-            { title: "Valor Maquininha", field: "valor_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
+            { title: "Sistema (SEI)", field: "valor_erp", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
+            { title: "Maquininha", field: "valor_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
             { 
                 title: "Diferença", field: "diferenca", 
                 formatter: function(cell) {
@@ -211,15 +217,20 @@ function initTablePrincipal() {
                 let color = val === 'Conciliado' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
                 return `<span class="px-2 py-1 rounded text-xs font-bold ${color}">${val}</span>`;
             }},
-            { title: "Obs. Fechamento", field: "observacao", editor: "input", tooltip: "Clique para justificar diferenças", headerSort: false },
             { 
-                title: "Auditoria", width: 100, headerSort: false, hozAlign: "center",
-                formatter: function() {
-                    return `<button class="p-1 text-indigo-600 hover:bg-indigo-50 rounded" title="Ver itens da Maquininha"><i data-feather="search" class="w-4 h-4"></i></button>`;
-                },
-                cellClick: function(e, cell) {
-                    abrirAuditoriaItemAItem(cell.getRow().getData());
+                title: "Anotar Observação", field: "observacao", editor: "input", width: 200,
+                formatter: function(cell) {
+                    let val = cell.getValue();
+                    if (!val) return `<div class="text-gray-400 italic flex items-center gap-1">${editIcon} Clique para digitar...</div>`;
+                    return `<div class="font-medium text-blue-700">${val}</div>`;
                 }
+            },
+            { 
+                title: "Ação", width: 130, hozAlign: "center", headerSort: false,
+                formatter: function() {
+                    return `<button class="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 font-bold text-xs rounded-md hover:bg-indigo-100 border border-indigo-200 transition-colors w-full justify-center shadow-sm">${searchIcon} Auditar</button>`;
+                },
+                cellClick: function(e, cell) { abrirAuditoriaItemAItem(cell.getRow().getData()); }
             }
         ]
     });
@@ -227,48 +238,86 @@ function initTablePrincipal() {
 
 function initTableAuditoria() {
     tableAuditoria = new Tabulator("#tabela-itens-csv", {
-        data: [],
-        layout: "fitColumns",
+        data: [], layout: "fitColumns",
         columns: [
-            { title: "Data e Hora da Transação", field: "data_hora", width: 250 },
-            { title: "ID / NSU", field: "id_transacao", width: 250 },
-            { title: "Valor Cobrado", field: "valor_item", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, bottomCalc: "sum", bottomCalcFormatter: "money", bottomCalcFormatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } }
+            { title: "Status do Cruzamento", field: "status_icone", formatter: "html", width: 180, hozAlign: "center" },
+            { title: "Hora Maquininha", field: "maq_hora", width: 140, hozAlign: "center" },
+            { title: "Valor Maquininha", field: "maq_valor", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, bottomCalc: "sum", bottomCalcFormatter: "money", bottomCalcFormatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
+            { title: "Hora SEI", field: "erp_hora", width: 140, hozAlign: "center" },
+            { title: "Valor SEI", field: "erp_valor", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, bottomCalc: "sum", bottomCalcFormatter: "money", bottomCalcFormatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } }
         ]
     });
 }
 
-// --- LOGICA DO MODAL DE AUDITORIA ITEM A ITEM ---
+// --- O MOTOR DO DE-PARA ---
 
 function abrirAuditoriaItemAItem(rowData) {
-    const chave = rowData.chave_id;
-    const itens = transacoesPorChave[chave] || [];
-
-    // Se for dinheiro ou não tiver itens na maquininha
-    if (itens.length === 0) {
-        alert(rowData.modalidade === '1-Dinheiro' ? "Dinheiro não possui registro na maquininha." : "Não há transações na maquininha para esta modalidade neste dia.");
+    if (rowData.modalidade === 'Dinheiro') {
+        alert("Dinheiro é recebido apenas fisicamente. Não há transações digitais para auditar no Mercado Pago.");
         return;
     }
 
-    // Formata a data para exibir bonito
+    const chave = rowData.chave_id;
+    let maqOriginal = transacoesMaqPorChave[chave] || [];
+    let erpOriginal = transacoesERPPorChave[chave] || [];
+
+    // Clona os arrays para podermos "riscar" os itens que baterem
+    let maq = JSON.parse(JSON.stringify(maqOriginal));
+    let erp = JSON.parse(JSON.stringify(erpOriginal));
+    let resultado = [];
+
+    // Ordena do maior valor para o menor (ajuda o algoritmo a parear melhor)
+    maq.sort((a,b) => b.valor - a.valor);
+    erp.sort((a,b) => b.valor - a.valor);
+
+    // 1. Procura casamentos exatos de valor
+    for (let i = maq.length - 1; i >= 0; i--) {
+        let m = maq[i];
+        let indexERP = erp.findIndex(e => Math.abs(e.valor - m.valor) < 0.01);
+        
+        if (indexERP !== -1) {
+            let e = erp[indexERP];
+            resultado.push({
+                status_icone: '<span class="text-green-600 font-bold bg-green-50 px-3 py-1 rounded border border-green-200">✓ Encontrado</span>',
+                maq_hora: m.hora, maq_valor: m.valor, erp_hora: e.hora, erp_valor: e.valor
+            });
+            // Tira da lista os que já casaram
+            erp.splice(indexERP, 1);
+            maq.splice(i, 1);
+        }
+    }
+
+    // 2. O que sobrou na lista da Maquininha (Passou cartão mas não lançou no SEI)
+    maq.forEach(m => {
+        resultado.push({
+            status_icone: '<span class="text-red-600 font-bold bg-red-50 px-2 py-1 rounded border border-red-200">✗ Falta no SEI</span>',
+            maq_hora: m.hora, maq_valor: m.valor, erp_hora: '-', erp_valor: 0
+        });
+    });
+
+    // 3. O que sobrou na lista do ERP (Lançou no SEI mas não tem na Maquininha)
+    erp.forEach(e => {
+        resultado.push({
+            status_icone: '<span class="text-yellow-600 font-bold bg-yellow-50 px-2 py-1 rounded border border-yellow-200">! Falta na Maq</span>',
+            maq_hora: '-', maq_valor: 0, erp_hora: e.hora, erp_valor: e.valor
+        });
+    });
+
     const [ano, mes, dia] = rowData.data_venda.split('-');
     document.getElementById('auditoria-subtitulo').textContent = `Modalidade: ${rowData.modalidade} | Data: ${dia}/${mes}/${ano}`;
 
     document.getElementById('modal-auditoria').classList.remove('hidden');
-    
-    // Pequeno atraso para o Tabulator calcular a largura das colunas dentro do modal visível
     setTimeout(() => {
         document.getElementById('modal-auditoria').classList.remove('opacity-0');
         document.getElementById('modal-auditoria-content').classList.remove('scale-95');
-        tableAuditoria.setData(itens);
+        tableAuditoria.setData(resultado);
     }, 10);
 }
 
 function fecharModalAuditoria() {
     document.getElementById('modal-auditoria').classList.add('opacity-0');
     document.getElementById('modal-auditoria-content').classList.add('scale-95');
-    setTimeout(() => {
-        document.getElementById('modal-auditoria').classList.add('hidden');
-    }, 200);
+    setTimeout(() => { document.getElementById('modal-auditoria').classList.add('hidden'); }, 200);
 }
 
 // --- SALVAMENTO ---
