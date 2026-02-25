@@ -43,13 +43,18 @@ router.post('/comparar', authenticateToken, async (req, res) => {
         const sql = `
             SELECT 
                 DATE(rc_dtbaix) as data_venda,
-                'Cartão/Pix' as modalidade, 
+                CASE
+                    WHEN rc_rece LIKE '%Deposito%' OR rc_rece LIKE '%Pix%' THEN '2-Pix'
+                    WHEN rc_rece LIKE '%Credito%' THEN '3-Cartão de Crédito'
+                    WHEN rc_rece LIKE '%Debito%' THEN '4-Cartão de Débito'
+                    ELSE '9-Outros'
+                END as modalidade,
                 SUM(rc_vlbaix) as total_erp
             FROM receber
             WHERE rc_dtbaix IN (${placeholders})
             AND rc_status IN ('1', '2')
             AND rc_clfili = ?
-            GROUP BY data_venda
+            GROUP BY data_venda, modalidade
 
             UNION ALL
 

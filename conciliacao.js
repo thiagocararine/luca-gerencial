@@ -36,12 +36,10 @@ function mapearModalidadeMaquininha(tipoStr) {
     if (!tipoStr) return '9-Outros';
     const t = String(tipoStr).toLowerCase();
     
-    // Unificamos todos os cartões e pix sob o mesmo nome que vem do ERP
-    if (t.includes('credito') || t.includes('crédito') || t === 'credit_card' ||
-        t.includes('debito') || t.includes('débito') || t === 'debit_card' ||
-        t.includes('pix') || t === 'bank_transfer') {
-        return 'Cartão/Pix';
-    }
+    // Mapeamento exato para bater com o CASE do SQL acima
+    if (t === 'credit_card' || t.includes('credito')) return '3-Cartão de Crédito';
+    if (t === 'debit_card' || t.includes('debito')) return '4-Cartão de Débito';
+    if (t === 'bank_transfer' || t.includes('pix')) return '2-Pix';
 
     return '9-Outros';
 }
