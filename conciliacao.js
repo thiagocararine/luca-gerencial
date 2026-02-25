@@ -1,12 +1,15 @@
 document.addEventListener('DOMContentLoaded', initPage);
 
 const API_BASE = '/api/conciliacao';
-let table; 
+let tablePrincipal; 
+let tableAuditoria; // Tabela que ficará dentro do modal
 let dadosConsolidados = [];
+let transacoesPorChave = {}; // NOVO: Guarda os itens individuais do CSV para a auditoria
 
 function initPage() {
     setupDragAndDrop();
-    initTable();
+    initTablePrincipal();
+    initTableAuditoria();
 }
 
 function setupDragAndDrop() {
@@ -33,15 +36,12 @@ function identificarFilial(nomeArquivo) {
 }
 
 function mapearModalidadeMaquininha(tipoStr) {
-    if (!tipoStr) return '9-Outros';
+    if (!tipoStr) return null; // Retorna vazio em vez de "Outros"
     const t = String(tipoStr).toLowerCase();
-    
-    // Mapeamento para Mercado Pago (conforme o CSV enviado)
-    if (t === 'credit_card') return '3-Cartão de Crédito';
-    if (t === 'debit_card') return '4-Cartão de Débito';
-    if (t === 'bank_transfer') return '2-Pix'; 
-
-    return '9-Outros';
+    if (t === 'credit_card' || t.includes('credito') || t.includes('crédito')) return 'Cartão de Crédito';
+    if (t === 'debit_card' || t.includes('debito') || t.includes('débito')) return 'Cartão de Débito';
+    if (t === 'bank_transfer' || t.includes('pix')) return 'Pix';
+    return null; // Retorna vazio em vez de "Outros"
 }
 
 function processarArquivo(file) {
@@ -49,78 +49,76 @@ function processarArquivo(file) {
 
     const codFilial = identificarFilial(file.name);
     if (!codFilial) {
-        alert("Não foi possível identificar a filial pelo nome do arquivo. Use o padrão 'conciliacao_vendas_nome-filial.csv'");
+        alert("Não identificamos a filial no nome do arquivo (ex: conciliacao_vendas_santa-cruz.csv)");
         return;
     }
+
+    // Resetamos o objeto de auditoria para nova leitura
+    transacoesPorChave = {};
 
     Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
-        delimiter: ";", // Força a leitura do padrão do Mercado Pago e Excel brasileiro
+        delimiter: ";", 
         complete: async function(results) {
-            let dadosCSV = {};
+            let dadosCSVAgrupados = {};
             let datasEncontradas = new Set();
 
             results.data.forEach(row => {
-                // Tenta puxar pelas colunas do Mercado Pago primeiro. Se não achar, tenta as antigas.
                 let rawData = row['TRANSACTION_DATE'] || row['Data'] || row['Data da Venda']; 
                 let rawValor = row['TRANSACTION_AMOUNT'] || row['ValorBruto'] || row['Valor'];
                 let rawTipo = row['PAYMENT_METHOD_TYPE'] || row['Tipo'] || row['Modalidade'];
+                let rawID = row['SOURCE_ID'] || row['NSU'] || row['ID']; // Pega o ID da transação
 
                 if (rawData && rawValor) {
-                    // 1. TRATAMENTO DA DATA
                     let dataTransacao = '';
                     if (String(rawData).includes('T')) {
-                        // Formato Mercado Pago (ex: 2026-02-23T17:49:54.000-03:00) -> Pega só o "2026-02-23"
                         dataTransacao = String(rawData).split('T')[0];
                     } else if (String(rawData).includes('/')) {
-                        // Formato BR antigo (ex: 23/02/2026) -> Inverte para "2026-02-23"
                         const partes = String(rawData).split(' ')[0].split('/');
                         if (partes.length === 3) dataTransacao = `${partes[2]}-${partes[1]}-${partes[0]}`;
                     } else {
                         dataTransacao = String(rawData);
                     }
 
-                    // 2. TRATAMENTO DO VALOR
-                    // Remove R$ se existir, e ajusta se veio com vírgula ou ponto
                     let valorStr = String(rawValor).replace('R$', '').trim();
-                    if (valorStr.includes(',') && valorStr.includes('.')) {
-                        valorStr = valorStr.replace(/\./g, '').replace(',', '.'); // R$ 1.500,00 -> 1500.00
-                    } else if (valorStr.includes(',') && !valorStr.includes('.')) {
-                        valorStr = valorStr.replace(',', '.'); // 1500,00 -> 1500.00
-                    }
+                    if (valorStr.includes(',') && valorStr.includes('.')) valorStr = valorStr.replace(/\./g, '').replace(',', '.');
+                    else if (valorStr.includes(',') && !valorStr.includes('.')) valorStr = valorStr.replace(',', '.');
                     let valor = parseFloat(valorStr);
 
-                    // 3. IDENTIFICAR MODALIDADE (Crédito, Débito, PIX)
                     let modalidade = mapearModalidadeMaquininha(rawTipo);
 
                     if (dataTransacao && !isNaN(valor)) {
                         datasEncontradas.add(dataTransacao);
-                        
-                        // Somador por Dia e por Modalidade
                         const chave = `${dataTransacao}|${modalidade}`;
-                        if (!dadosCSV[chave]) dadosCSV[chave] = 0;
-                        dadosCSV[chave] += valor;
+                        
+                        // Soma os totais
+                        if (!dadosCSVAgrupados[chave]) dadosCSVAgrupados[chave] = 0;
+                        dadosCSVAgrupados[chave] += valor;
+
+                        // GUARDA O ITEM INDIVIDUAL PARA AUDITORIA
+                        if (!transacoesPorChave[chave]) transacoesPorChave[chave] = [];
+                        transacoesPorChave[chave].push({
+                            id_transacao: rawID || 'N/A',
+                            data_hora: String(rawData).replace('T', ' ').substring(0, 19), // Formata bonito
+                            valor_item: valor
+                        });
                     }
                 }
             });
 
             const datasArray = Array.from(datasEncontradas);
-            
             if (datasArray.length === 0) {
-                 alert("Não conseguimos ler as datas e valores desse arquivo. Verifique se é o relatório correto do Mercado Pago.");
+                 alert("Não conseguimos ler as datas e valores. Verifique o formato do arquivo.");
                  return;
             }
-
-            // Manda para o Node.js cruzar com o banco SEI
-            await cruzarComERP(codFilial, datasArray, dadosCSV);
+            await cruzarComERP(codFilial, datasArray, dadosCSVAgrupados);
         }
     });
 }
 
-async function cruzarComERP(codFilial, datas, dadosCSV) {
+async function cruzarComERP(codFilial, datas, dadosCSVAgrupados) {
     try {
-        // Busca os dados no ERP
         const res = await fetch(`${API_BASE}/comparar`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -128,21 +126,21 @@ async function cruzarComERP(codFilial, datas, dadosCSV) {
         });
         
         const dadosERP = await res.json();
-
-        // NOVA PROTEÇÃO: Se a API der Erro 500, para a execução e mostra o motivo!
-        if (!res.ok) {
-            throw new Error(dadosERP.error || 'Erro interno no servidor do ERP.');
-        }
+        if (!res.ok) throw new Error(dadosERP.error || 'Erro interno no ERP.');
 
         dadosConsolidados = [];
         const processados = new Set();
+        let totalERP = 0, totalMaq = 0, totalDif = 0;
 
-        // Junta os dados do ERP com o CSV
         dadosERP.forEach(erp => {
             const dataPura = erp.data_venda.split('T')[0]; 
             const chave = `${dataPura}|${erp.modalidade}`;
-            const valorMaq = dadosCSV[chave] || 0;
-            const diferenca = parseFloat(erp.total_erp) - valorMaq;
+            const valorMaq = dadosCSVAgrupados[chave] || 0;
+            const dif = parseFloat(erp.total_erp) - valorMaq;
+
+            totalERP += parseFloat(erp.total_erp);
+            totalMaq += valorMaq;
+            totalDif += dif;
 
             dadosConsolidados.push({
                 chave_id: chave,
@@ -151,60 +149,61 @@ async function cruzarComERP(codFilial, datas, dadosCSV) {
                 modalidade: erp.modalidade,
                 valor_erp: parseFloat(erp.total_erp),
                 valor_maq: valorMaq,
-                diferenca: diferenca,
-                status: Math.abs(diferenca) < 0.10 ? 'Conciliado' : 'Com Diferença',
+                diferenca: dif,
+                status: Math.abs(dif) < 0.10 ? 'Conciliado' : 'Com Diferença',
                 observacao: ''
             });
             processados.add(chave);
         });
 
-        // Adiciona o que tem na Maquininha mas NÃO tem no ERP
-        Object.keys(dadosCSV).forEach(chave => {
+        // Adiciona o que tem na maquininha mas não no ERP
+        Object.keys(dadosCSVAgrupados).forEach(chave => {
             if (!processados.has(chave)) {
                 const [dataPura, mod] = chave.split('|');
-                const valorMaq = dadosCSV[chave];
+                const valorMaq = dadosCSVAgrupados[chave];
+                
+                totalMaq += valorMaq;
+                totalDif -= valorMaq;
+
                 dadosConsolidados.push({
-                    chave_id: chave,
-                    data_venda: dataPura,
-                    cod_filial: codFilial,
-                    modalidade: mod,
-                    valor_erp: 0,
-                    valor_maq: valorMaq,
-                    diferenca: 0 - valorMaq,
-                    status: 'Com Diferença',
-                    observacao: 'Falta lançar no sistema'
+                    chave_id: chave, data_venda: dataPura, cod_filial: codFilial, modalidade: mod,
+                    valor_erp: 0, valor_maq: valorMaq, diferenca: 0 - valorMaq,
+                    status: 'Com Diferença', observacao: 'Falta lançar no ERP'
                 });
             }
         });
 
-        // Exibe na Tabela
-        table.setData(dadosConsolidados);
-        document.getElementById('tabela-container').classList.remove('hidden');
+        // Atualiza os Cards de Resumo
+        document.getElementById('card-total-erp').textContent = `R$ ${totalERP.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+        document.getElementById('card-total-maq').textContent = `R$ ${totalMaq.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+        document.getElementById('card-diferenca').textContent = `R$ ${totalDif.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+
+        tablePrincipal.setData(dadosConsolidados);
+        document.getElementById('dashboard-container').classList.remove('hidden');
 
     } catch (err) {
-        // Agora o alerta mostrará exatamente o motivo do erro e evitará travar a tela
-        alert("Erro ao cruzar dados com o ERP: " + err.message);
-        console.error("Detalhes do erro:", err);
+        alert("Erro na auditoria: " + err.message);
     }
 }
 
-// --- CONFIGURAÇÃO DA TABELA (TABULATOR) ---
-function initTable() {
-    table = new Tabulator("#tabela-conciliacao", {
+// --- TABELAS ---
+
+function initTablePrincipal() {
+    tablePrincipal = new Tabulator("#tabela-conciliacao", {
         data: [],
         layout: "fitColumns",
         groupBy: "data_venda",
         columns: [
-            { title: "Filial", field: "cod_filial", width: 100 },
-            { title: "Modalidade", field: "modalidade", width: 180 },
-            { title: "Valor ERP", field: "valor_erp", formatter: "money", formatterParams: { symbol: "R$ " } },
-            { title: "Valor Maquininha", field: "valor_maq", formatter: "money", formatterParams: { symbol: "R$ " } },
+            { title: "Filial", field: "cod_filial", width: 90 },
+            { title: "Modalidade", field: "modalidade", width: 170 },
+            { title: "Valor Sistema", field: "valor_erp", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
+            { title: "Valor Maquininha", field: "valor_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
             { 
                 title: "Diferença", field: "diferenca", 
                 formatter: function(cell) {
                     let val = cell.getValue();
                     if (Math.abs(val) < 0.10) return `<span class="text-green-600 font-bold">R$ 0,00</span>`;
-                    return `<span class="text-red-600 font-bold">R$ ${val.toFixed(2)}</span>`;
+                    return `<span class="text-red-600 font-bold">R$ ${val.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>`;
                 }
             },
             { title: "Status", field: "status", formatter: function(cell) {
@@ -212,18 +211,73 @@ function initTable() {
                 let color = val === 'Conciliado' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
                 return `<span class="px-2 py-1 rounded text-xs font-bold ${color}">${val}</span>`;
             }},
-            { title: "Obs", field: "observacao", editor: "input", tooltip: "Clique para justificar diferenças" }
+            { title: "Obs. Fechamento", field: "observacao", editor: "input", tooltip: "Clique para justificar diferenças", headerSort: false },
+            { 
+                title: "Auditoria", width: 100, headerSort: false, hozAlign: "center",
+                formatter: function() {
+                    return `<button class="p-1 text-indigo-600 hover:bg-indigo-50 rounded" title="Ver itens da Maquininha"><i data-feather="search" class="w-4 h-4"></i></button>`;
+                },
+                cellClick: function(e, cell) {
+                    abrirAuditoriaItemAItem(cell.getRow().getData());
+                }
+            }
         ]
     });
 }
 
-// Chame esta função a partir de um botão "Salvar Fechamento" no seu HTML
+function initTableAuditoria() {
+    tableAuditoria = new Tabulator("#tabela-itens-csv", {
+        data: [],
+        layout: "fitColumns",
+        columns: [
+            { title: "Data e Hora da Transação", field: "data_hora", width: 250 },
+            { title: "ID / NSU", field: "id_transacao", width: 250 },
+            { title: "Valor Cobrado", field: "valor_item", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, bottomCalc: "sum", bottomCalcFormatter: "money", bottomCalcFormatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } }
+        ]
+    });
+}
+
+// --- LOGICA DO MODAL DE AUDITORIA ITEM A ITEM ---
+
+function abrirAuditoriaItemAItem(rowData) {
+    const chave = rowData.chave_id;
+    const itens = transacoesPorChave[chave] || [];
+
+    // Se for dinheiro ou não tiver itens na maquininha
+    if (itens.length === 0) {
+        alert(rowData.modalidade === '1-Dinheiro' ? "Dinheiro não possui registro na maquininha." : "Não há transações na maquininha para esta modalidade neste dia.");
+        return;
+    }
+
+    // Formata a data para exibir bonito
+    const [ano, mes, dia] = rowData.data_venda.split('-');
+    document.getElementById('auditoria-subtitulo').textContent = `Modalidade: ${rowData.modalidade} | Data: ${dia}/${mes}/${ano}`;
+
+    document.getElementById('modal-auditoria').classList.remove('hidden');
+    
+    // Pequeno atraso para o Tabulator calcular a largura das colunas dentro do modal visível
+    setTimeout(() => {
+        document.getElementById('modal-auditoria').classList.remove('opacity-0');
+        document.getElementById('modal-auditoria-content').classList.remove('scale-95');
+        tableAuditoria.setData(itens);
+    }, 10);
+}
+
+function fecharModalAuditoria() {
+    document.getElementById('modal-auditoria').classList.add('opacity-0');
+    document.getElementById('modal-auditoria-content').classList.add('scale-95');
+    setTimeout(() => {
+        document.getElementById('modal-auditoria').classList.add('hidden');
+    }, 200);
+}
+
+// --- SALVAMENTO ---
 async function salvarFechamentoFinal() {
-    const dadosParaSalvar = table.getData();
+    const dadosParaSalvar = tablePrincipal.getData();
     const pendentes = dadosParaSalvar.filter(d => d.status === 'Com Diferença' && !d.observacao);
 
     if (pendentes.length > 0) {
-        alert("Existem divergências sem justificativa! Preencha a coluna 'Obs' clicando nela.");
+        alert("Existem divergências sem justificativa! Preencha a coluna 'Obs. Fechamento' clicando nela.");
         return;
     }
 
@@ -235,9 +289,12 @@ async function salvarFechamentoFinal() {
         });
         
         if (res.ok) {
-            alert("Conciliação salva com sucesso!");
-            table.clearData();
-            document.getElementById('tabela-container').classList.add('hidden');
+            alert("Conciliação salva no banco gerencial com sucesso!");
+            tablePrincipal.clearData();
+            document.getElementById('dashboard-container').classList.add('hidden');
+        } else {
+            const errData = await res.json();
+            throw new Error(errData.error || 'Erro desconhecido ao salvar.');
         }
     } catch (err) {
         alert("Erro ao salvar: " + err.message);

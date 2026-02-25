@@ -44,23 +44,24 @@ router.post('/comparar', authenticateToken, async (req, res) => {
             SELECT 
                 DATE(rc_dtbaix) as data_venda,
                 CASE
-                    WHEN rc_formar = '11-Deposito Conta' THEN '2-Pix'
-                    WHEN rc_formar = '04-Cartao Credito' THEN '3-Cartão de Crédito'
-                    WHEN rc_formar = '05-Cartao Debito' THEN '4-Cartão de Débito'
-                    ELSE '9-Outros'
+                    WHEN rc_formar = '11-Deposito Conta' THEN 'Pix'
+                    WHEN rc_formar = '04-Cartao Credito' THEN 'Cartão de Crédito'
+                    WHEN rc_formar = '05-Cartao Debito' THEN 'Cartão de Débito'
                 END as modalidade,
                 SUM(rc_vlbaix) as total_erp
             FROM receber
             WHERE rc_dtbaix IN (${placeholders})
             AND rc_status IN ('1', '2')
             AND rc_clfili = ?
+            -- Esta linha bloqueia qualquer outra forma de pagamento (Boletos, Carteira, etc)
+            AND rc_formar IN ('11-Deposito Conta', '04-Cartao Credito', '05-Cartao Debito') 
             GROUP BY data_venda, modalidade
 
             UNION ALL
 
             SELECT 
                 DATE(cr_erec) as data_venda,
-                '1-Dinheiro' as modalidade,
+                'Dinheiro' as modalidade,
                 SUM(cr_dinh) as total_erp
             FROM cdavs
             WHERE cr_erec IN (${placeholders})
