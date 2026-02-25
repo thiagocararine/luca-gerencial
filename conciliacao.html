@@ -111,7 +111,12 @@
                     </h3>
                     <p id="auditoria-subtitulo" class="text-xs text-gray-500 mt-1 font-medium">Analisando: PIX | Data: 23/02/2026</p>
                 </div>
-                <button onclick="fecharModalAuditoria()" class="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
+                <div class="flex items-center gap-3">
+                    <button id="btn-conciliar-manual" onclick="conciliarManualmente()" class="hidden px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded hover:bg-blue-700 shadow-sm transition-colors items-center gap-1.5 flex">
+                        <i data-feather="link" class="w-3.5 h-3.5"></i> Forçar Conciliação
+                    </button>
+                    <button onclick="fecharModalAuditoria()" class="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
+                </div>
             </div>
             
             <div class="flex-1 overflow-hidden p-6 bg-white flex flex-col">
