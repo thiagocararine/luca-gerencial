@@ -150,6 +150,11 @@ function processarArquivo(file) {
 
                     let modalidade = mapearModalidadeMaquininha(rawTipo);
 
+                    // ALERTA DE QR CODE NO CRÉDITO
+                    let rawSubUnit = row['SUB_UNIT'] || row['Sub Unit'] || '';
+                    let rawTags = row['OPERATION_TAGS'] || '';
+                    let isQRCredito = (modalidade === 'Cartão de Crédito' && (String(rawSubUnit).toUpperCase() === 'QR' || String(rawTags).includes('QR')));
+
                     if (dataTransacao && !isNaN(valor) && modalidade) {
                         datasEncontradas.add(dataTransacao);
                         const chave = `${dataTransacao}|${modalidade}`;
@@ -170,7 +175,8 @@ function processarArquivo(file) {
                         transacoesMaqPorChave[chave].push({
                             hora: horaTransacao,
                             valor: valor,
-                            taxa: taxa 
+                            taxa: taxa,
+                            isQRCredito: isQRCredito // Gravando a flag para a auditoria
                         });
                     }
                 }
@@ -502,11 +508,18 @@ function renderizarTabelaAuditoria(chave) {
     });
 
     state.sobrasMaq.forEach(function(m, idx) {
+        // Renderiza o alerta de QR Code se a flag existir
+        let iconeStatus = '<span class="text-red-600 font-bold bg-red-50 px-2 py-1 rounded text-[11px] border border-red-200">✗ Falta no Sis</span>';
+        
+        if (m.isQRCredito) {
+            iconeStatus = '<span class="text-white font-bold bg-red-600 px-2 py-1 rounded text-[11px] border border-red-800 animate-pulse shadow-sm" title="O cliente leu o QR Code na loja, mas optou por pagar com Cartão de Crédito no app. Ajuste o lançamento no ERP de PIX para Cartão!">🚨 QR NO CRÉDITO</span>';
+        }
+
         resultado.push({ 
             selecionavel: true, 
             tipo_sobra: 'maq', 
             origem_idx: idx, 
-            status_icone: '<span class="text-red-600 font-bold bg-red-50 px-2 py-1 rounded text-[11px] border border-red-200">✗ Falta no Sis</span>',
+            status_icone: iconeStatus,
             maq_hora: m.hora, 
             maq_valor: m.valor, 
             maq_taxa: m.taxa, 
@@ -723,5 +736,3 @@ async function salvarFechamentoFinal() {
         alert("Erro ao gravar: " + err.message); 
     }
 }
-
-// Teste para o Git achar o arquivo
