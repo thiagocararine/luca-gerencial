@@ -39,13 +39,26 @@
                 Conciliação Financeira
             </h1>
         </div>
+        
         <div class="flex items-center gap-3">
-            <div class="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2 rounded-md transition-colors" onclick="abrirModalPerfil()">
-                <div class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">
-                    <i data-feather="user" class="w-4 h-4"></i>
+            
+            <a href="relatorio_conciliacao.html" class="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 font-bold text-xs rounded-md hover:bg-indigo-100 border border-indigo-200 transition-colors shadow-sm">
+                <i data-feather="bar-chart-2" class="w-3.5 h-3.5"></i> Ver Dossiê
+            </a>
+
+            <div class="h-6 w-px bg-gray-200 mx-1"></div>
+
+            <div class="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1.5 rounded-md transition-colors" onclick="abrirModalPerfil()">
+                <div class="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">
+                    <i data-feather="user" class="w-3.5 h-3.5"></i>
                 </div>
                 <span id="user-name" class="text-sm font-semibold text-gray-700">Carregando...</span>
             </div>
+
+            <button onclick="fazerLogout()" class="flex items-center gap-1.5 p-1.5 px-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors text-xs font-bold border border-transparent hover:border-red-100" title="Sair do Sistema">
+                <i data-feather="log-out" class="w-3.5 h-3.5"></i> Sair
+            </button>
+
         </div>
     </header>
 

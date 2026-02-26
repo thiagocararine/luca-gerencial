@@ -177,6 +177,70 @@ router.post('/salvar', authenticateToken, async (req, res) => {
     }
 });
 
+// ---------------------------------------------------------
+// ROTA: CONSULTAR HISTÓRICO DE FECHAMENTOS (RELATÓRIO)
+// ---------------------------------------------------------
+router.post('/relatorio', authenticateToken, async (req, res) => {
+    const { data_inicial, data_final, cod_filial, status } = req.body;
+
+    if (!data_inicial || !data_final) {
+        return res.status(400).json({ error: 'Data inicial e final são obrigatórias.' });
+    }
+
+    try {
+        const connection = await gerencialPool.getConnection();
+        
+        // Monta a query dinâmica baseada nos filtros
+        let sqlCapa = `
+            SELECT 
+                id, data_venda, cod_filial, modalidade, valor_total_erp, 
+                valor_total_maq, taxas_maq, diferenca, status, observacao_geral, nome_usuario, data_fechamento
+            FROM conciliacao_fechamentos 
+            WHERE data_venda BETWEEN ? AND ?
+        `;
+        let params = [data_inicial, data_final];
+
+        if (cod_filial && cod_filial !== 'TODAS') {
+            sqlCapa += ` AND cod_filial = ?`;
+            params.push(cod_filial);
+        }
+
+        if (status && status !== 'TODOS') {
+            sqlCapa += ` AND status = ?`;
+            params.push(status);
+        }
+
+        sqlCapa += ` ORDER BY data_venda DESC, cod_filial ASC, modalidade ASC`;
+
+        const [capas] = await connection.execute(sqlCapa, params);
+
+        // Se encontrou dados, busca os detalhes (divergências) de cada um
+        if (capas.length > 0) {
+            const idsCapa = capas.map(c => c.id);
+            const placeholders = idsCapa.map(() => '?').join(',');
+            
+            const [divergencias] = await connection.execute(
+                `SELECT id_fechamento, origem, data_hora_transacao, valor_transacao, nsu_ou_doc 
+                 FROM conciliacao_divergencias 
+                 WHERE id_fechamento IN (${placeholders})`,
+                idsCapa
+            );
+
+            // Anexa as divergências dentro da sua respectiva capa
+            capas.forEach(capa => {
+                capa.divergencias = divergencias.filter(d => d.id_fechamento === capa.id);
+            });
+        }
+
+        connection.release();
+        res.json(capas);
+
+    } catch (error) {
+        console.error("Erro ao gerar relatório:", error);
+        res.status(500).json({ error: 'Erro ao consultar histórico no banco de dados.' });
+    }
+});
+
 module.exports = router;
 
 // Teste para o Git achar o arquivo

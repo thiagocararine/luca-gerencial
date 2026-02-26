@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-br" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório de Conciliação - Luca</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="https://unpkg.com/feather-icons"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link href="https://unpkg.com/tabulator-tables@6.2.1/dist/css/tabulator_simple.min.css" rel="stylesheet">
+    <script type="text/javascript" src="https://unpkg.com/tabulator-tables@6.2.1/dist/js/tabulator.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .tabulator { border: none; background-color: white; font-size: 0.85rem; border-radius: 0.5rem;}
+        .tabulator-header { border-bottom: 2px solid #e5e7eb !important; background-color: #f8fafc !important; color: #475569; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; }
+        .tabulator-row { border-bottom: 1px solid #f1f5f9; min-height: 45px; }
+        .tabulator-row:hover { background-color: #f8fafc !important; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="h-full text-gray-900 flex flex-col overflow-hidden">
+
+    <header class="bg-white border-b h-14 flex items-center justify-between px-6 shadow-sm z-30 shrink-0">
+        <div class="flex items-center gap-4">
+            <a href="conciliacao.html" class="text-gray-500 hover:text-indigo-600 flex items-center gap-1.5 font-semibold text-xs transition-colors py-2 px-3 hover:bg-gray-50 rounded-md">
+                <i data-feather="arrow-left" class="w-4 h-4"></i> VOLTAR PARA CONCILIAÇÃO
+            </a>
+            <div class="h-6 w-px bg-gray-200"></div>
+            <h1 class="text-base font-bold text-gray-800 flex items-center gap-2">
+                <div class="p-1.5 bg-indigo-50 rounded-md"><i data-feather="bar-chart-2" class="w-4 h-4 text-indigo-600"></i></div>
+                Dossiê de Fechamentos
+            </h1>
+        </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto p-6 bg-gray-50">
+        <div class="max-w-7xl mx-auto space-y-6">
+            
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+                <h2 class="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2 uppercase tracking-wide">
+                    <i data-feather="filter" class="w-4 h-4 text-indigo-500"></i> Filtros de Pesquisa
+                </h2>
+                
+                <div class="grid grid-cols-5 gap-4 items-end">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Data Inicial</label>
+                        <input type="date" id="filtro-data-inicial" class="w-full text-sm border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Data Final</label>
+                        <input type="date" id="filtro-data-final" class="w-full text-sm border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Filial</label>
+                        <select id="filtro-filial" class="w-full text-sm border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all">
+                            <option value="TODAS">Todas as Filiais</option>
+                            <option value="LUCAM">LUCAM (Santa Cruz)</option>
+                            <option value="TNASC">TNASC (P. Angélica)</option>
+                            <option value="LCMAT">LCMAT (N. Campinas)</option>
+                            <option value="VMNAF">VMNAF (Piabetá)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Status</label>
+                        <select id="filtro-status" class="w-full text-sm border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all">
+                            <option value="TODOS">Todos os Status</option>
+                            <option value="Conciliado">Conciliado (OK)</option>
+                            <option value="Com Diferença">Com Diferença (Divergente)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <button onclick="buscarRelatorio()" class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 shadow-sm transition-colors">
+                            <i data-feather="search" class="w-4 h-4"></i> Buscar Dados
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="resumo-container" class="grid grid-cols-4 gap-4 hidden">
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-blue-500">
+                    <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Faturamento Sistema (Período)</p>
+                    <h2 id="resumo-erp" class="text-xl font-black text-gray-800">R$ 0,00</h2>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-indigo-500">
+                    <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Processado MP (Período)</p>
+                    <h2 id="resumo-maq" class="text-xl font-black text-gray-800">R$ 0,00</h2>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-red-500">
+                    <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Custo de Taxas MP</p>
+                    <h2 id="resumo-taxas" class="text-xl font-black text-red-600">R$ 0,00</h2>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-yellow-500 relative overflow-hidden">
+                    <div class="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-yellow-50 to-transparent"></div>
+                    <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1 z-10">Diferença Total Encontrada</p>
+                    <h2 id="resumo-diferenca" class="text-xl font-black text-yellow-600 z-10">R$ 0,00</h2>
+                </div>
+            </div>
+
+            <div class="w-full bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+                <div class="px-5 py-4 border-b border-gray-200 bg-white flex justify-between items-center">
+                    <h3 class="text-sm font-bold text-gray-800 flex items-center gap-2 uppercase tracking-wide">
+                        <i data-feather="database" class="w-4 h-4 text-indigo-600"></i> Histórico de Fechamentos
+                    </h3>
+                    <button id="btn-exportar" onclick="exportarCSV()" class="hidden px-4 py-1.5 bg-green-50 text-green-700 border border-green-200 text-xs font-bold rounded-lg hover:bg-green-100 shadow-sm flex items-center gap-2 transition-colors">
+                        <i data-feather="download" class="w-3.5 h-3.5"></i> Baixar Relatório (.csv)
+                    </button>
+                </div>
+                <div id="tabela-relatorio" class="w-full min-h-[300px] flex items-center justify-center text-gray-400 italic text-sm">
+                    Preencha os filtros acima e clique em "Buscar Dados"
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <div id="modal-detalhes" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-50 flex items-center justify-center opacity-0 transition-opacity">
+        <div class="bg-white rounded-xl shadow-2xl w-[700px] max-h-[80vh] flex flex-col overflow-hidden transform scale-95 transition-transform duration-200" id="modal-detalhes-content">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <i data-feather="zoom-in" class="w-5 h-5 text-indigo-600"></i> Detalhes da Divergência
+                    </h3>
+                    <p id="detalhes-subtitulo" class="text-xs text-gray-500 mt-1 font-medium">Carregando...</p>
+                </div>
+                <button onclick="fecharModalDetalhes()" class="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="flex-1 overflow-auto p-6 bg-white">
+                <div id="lista-divergencias" class="space-y-3">
+                    </div>
+                <div class="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p class="text-xs font-bold text-yellow-800 uppercase mb-1">Justificativa Anotada pelo Caixa:</p>
+                    <p id="detalhes-observacao" class="text-sm text-yellow-900 italic font-medium">Nenhuma observação registrada.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="assets/global.js"></script>
+    <script src="relatorio_conciliacao.js"></script>
+</body>
+</html>
