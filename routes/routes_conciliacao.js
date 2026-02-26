@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2/promise');
-const { authenticateToken, getFiltroFilialSeguro } = require('../middlewares');
+const { authenticateToken } = require('../middlewares');
 const dbConfig = require('../dbConfig');
 
 // Configuração do SEI (ERP)
@@ -18,7 +18,9 @@ const dbConfigSei = {
 const seiPool = mysql.createPool(dbConfigSei);
 const gerencialPool = mysql.createPool(dbConfig);
 
+// ---------------------------------------------------------
 // 1. ROTA DE CONSULTA AO ERP (SEI)
+// ---------------------------------------------------------
 router.post('/comparar', authenticateToken, async (req, res) => {
     const { filial_cod, datas } = req.body;
 
@@ -27,16 +29,14 @@ router.post('/comparar', authenticateToken, async (req, res) => {
     }
 
     try {
-        // Mapeamento exato conforme seu ERP
         const mapaFilialSeiLong = { 'TNASC': '002', 'LCMAT': '006', 'LUCAM': '007', 'VMNAF': '008' };
         const mapaFilialSeiShort = { 'TNASC': '2', 'LCMAT': '6', 'LUCAM': '7', 'VMNAF': '8' };
 
-        const idFiliLong = mapaFilialSeiLong[filial_cod];   // Para tabela 'receber' (007)
-        const idFiliShort = mapaFilialSeiShort[filial_cod]; // Para tabela 'cdavs' (7)
+        const idFiliLong = mapaFilialSeiLong[filial_cod];   
+        const idFiliShort = mapaFilialSeiShort[filial_cod]; 
 
         const placeholders = datas.map(() => '?').join(',');
 
-        // QUERY AJUSTADA
         const sql = `
             SELECT 
                 DATE(rc_dtbaix) as data_venda,
@@ -71,9 +71,7 @@ router.post('/comparar', authenticateToken, async (req, res) => {
             AND (cr_rece = '01-Dinheiro' OR (cr_rece = '20-Diversos' AND LENGTH(TRIM(cr_dinh)) > 0))
         `;
 
-        // Ordem dos parâmetros: Datas(receber), Filial(Long), Datas(cdavs), Filial(Short)
         const params = [...datas, idFiliLong, ...datas, idFiliShort];
-        
         const [rows] = await seiPool.query(sql, params);
         res.json(rows);
 
@@ -84,7 +82,7 @@ router.post('/comparar', authenticateToken, async (req, res) => {
 });
 
 // ---------------------------------------------------------
-// ROTA NOVA: VERIFICA SE O DIA JÁ FOI FECHADO
+// 2. ROTA: VERIFICA SE O DIA JÁ FOI FECHADO
 // ---------------------------------------------------------
 router.post('/verificar', authenticateToken, async (req, res) => {
     const { filial_cod, datas } = req.body;
@@ -94,7 +92,6 @@ router.post('/verificar', authenticateToken, async (req, res) => {
         const placeholders = datas.map(() => '?').join(',');
         const connection = await gerencialPool.getConnection();
         
-        // Busca se existe alguma linha para esta filial e datas
         const [rows] = await connection.execute(
             `SELECT DISTINCT DATE_FORMAT(data_venda, '%Y-%m-%d') as data_venda 
              FROM conciliacao_fechamentos 
@@ -113,7 +110,7 @@ router.post('/verificar', authenticateToken, async (req, res) => {
 });
 
 // ---------------------------------------------------------
-// ROTA DE SALVAMENTO
+// 3. ROTA DE SALVAMENTO DE CONCILIAÇÃO
 // ---------------------------------------------------------
 router.post('/salvar', authenticateToken, async (req, res) => {
     const { fechamentos } = req.body;
@@ -124,7 +121,6 @@ router.post('/salvar', authenticateToken, async (req, res) => {
         await connection.beginTransaction();
 
         for (const item of fechamentos) {
-            // 1. Salva a Capa (COM AS TAXAS)
             const [capaResult] = await connection.execute(`
                 INSERT INTO conciliacao_fechamentos 
                 (data_venda, cod_filial, modalidade, valor_total_erp, valor_total_maq, taxas_maq, diferenca, status, observacao_geral, nome_usuario)
@@ -138,7 +134,6 @@ router.post('/salvar', authenticateToken, async (req, res) => {
                 item.status, item.observacao || null, nomeUsuario
             ]);
 
-            // Pega o ID para os detalhes
             let idFechamento = capaResult.insertId;
             if (!idFechamento) {
                 const [rows] = await connection.execute(
@@ -148,10 +143,8 @@ router.post('/salvar', authenticateToken, async (req, res) => {
                 idFechamento = rows[0].id;
             }
 
-            // Limpa as divergências antigas e recria
             await connection.execute('DELETE FROM conciliacao_divergencias WHERE id_fechamento = ?', [idFechamento]);
 
-            // Salva os Detalhes Cirúrgicos
             if (item.divergencias && item.divergencias.length > 0) {
                 for (const div of item.divergencias) {
                     await connection.execute(`
@@ -178,7 +171,7 @@ router.post('/salvar', authenticateToken, async (req, res) => {
 });
 
 // ---------------------------------------------------------
-// ROTA: CONSULTAR HISTÓRICO DE FECHAMENTOS (RELATÓRIO)
+// 4. NOVA ROTA: CONSULTAR HISTÓRICO DE FECHAMENTOS (RELATÓRIO)
 // ---------------------------------------------------------
 router.post('/relatorio', authenticateToken, async (req, res) => {
     const { data_inicial, data_final, cod_filial, status } = req.body;
@@ -190,7 +183,6 @@ router.post('/relatorio', authenticateToken, async (req, res) => {
     try {
         const connection = await gerencialPool.getConnection();
         
-        // Monta a query dinâmica baseada nos filtros
         let sqlCapa = `
             SELECT 
                 id, data_venda, cod_filial, modalidade, valor_total_erp, 
@@ -214,7 +206,6 @@ router.post('/relatorio', authenticateToken, async (req, res) => {
 
         const [capas] = await connection.execute(sqlCapa, params);
 
-        // Se encontrou dados, busca os detalhes (divergências) de cada um
         if (capas.length > 0) {
             const idsCapa = capas.map(c => c.id);
             const placeholders = idsCapa.map(() => '?').join(',');
@@ -226,7 +217,6 @@ router.post('/relatorio', authenticateToken, async (req, res) => {
                 idsCapa
             );
 
-            // Anexa as divergências dentro da sua respectiva capa
             capas.forEach(capa => {
                 capa.divergencias = divergencias.filter(d => d.id_fechamento === capa.id);
             });
@@ -242,5 +232,3 @@ router.post('/relatorio', authenticateToken, async (req, res) => {
 });
 
 module.exports = router;
-
-// Teste para o Git achar o arquivo
