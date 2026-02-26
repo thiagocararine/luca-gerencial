@@ -723,3 +723,5 @@ async function salvarFechamentoFinal() {
         alert("Erro ao gravar: " + err.message); 
     }
 }
+
+// Teste para o Git achar o arquivo
