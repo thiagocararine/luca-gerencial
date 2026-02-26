@@ -74,19 +74,17 @@ function identificarFilial(nomeArquivo) {
 }
 
 function mapearModalidadeMaquininha(tipoStr) {
-    if (!tipoStr) {
-        return null; 
-    }
+    if (!tipoStr) return null; 
+    const t = String(tipoStr).toLowerCase();
     
-    const tipoFormatado = String(tipoStr).toLowerCase();
-    
-    if (tipoFormatado === 'credit_card' || tipoFormatado.includes('credito') || tipoFormatado.includes('crédito')) {
+    if (t === 'credit_card' || t.includes('credito') || t.includes('crédito')) {
         return 'Cartão de Crédito';
     }
-    if (tipoFormatado === 'debit_card' || tipoFormatado.includes('debito') || tipoFormatado.includes('débito')) {
+    if (t === 'debit_card' || t.includes('debito') || t.includes('débito')) {
         return 'Cartão de Débito';
     }
-    if (tipoFormatado === 'bank_transfer' || tipoFormatado.includes('pix')) {
+    // Adicionamos o 'available_money' e 'account_money' (Saldo MP via QR Code) para agrupar como Pix!
+    if (t === 'bank_transfer' || t.includes('pix') || t === 'available_money' || t === 'account_money') {
         return 'Pix';
     }
     
