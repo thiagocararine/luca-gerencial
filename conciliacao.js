@@ -111,6 +111,7 @@ function processarArquivo(file) {
             let dadosCSVAgrupados = {};
             let taxasCSVAgrupadas = {}; 
             let datasEncontradas = new Set();
+            let obsAutoPorChave = {};
 
             results.data.forEach(function(row) {
                 let rawData = row['TRANSACTION_DATE'] || row['Data'] || row['Data da Venda']; 
@@ -154,6 +155,12 @@ function processarArquivo(file) {
                     let rawSubUnit = row['SUB_UNIT'] || row['Sub Unit'] || '';
                     let rawTags = row['OPERATION_TAGS'] || '';
                     let isQRCredito = (modalidade === 'Cartão de Crédito' && (String(rawSubUnit).toUpperCase() === 'QR' || String(rawTags).includes('QR')));
+
+                    if (isQRCredito) {
+                        modalidade = 'Pix';
+                        const tempChave = `${dataTransacao}|Pix`;
+                        obsAutoPorChave[tempChave] = 'Aviso: Contém venda QR Crédito lançada como Pix';
+                    }
 
                     if (dataTransacao && !isNaN(valor) && modalidade) {
                         datasEncontradas.add(dataTransacao);
@@ -304,7 +311,7 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
                 diferenca: dif, 
                 taxa_maq: taxaMaq, 
                 status: statusConsolidado, 
-                observacao: '' 
+                observacao: obsAutoPorChave[chave] || '' 
             });
             
             processados.add(chave);
@@ -330,7 +337,7 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
                     diferenca: 0 - valorMaq, 
                     taxa_maq: taxaMaq, 
                     status: 'Com Diferença', 
-                    observacao: '' 
+                    observacao: obsAutoPorChave[chave] || '' 
                 });
             }
         });
@@ -493,6 +500,11 @@ function renderizarTabelaAuditoria(chave) {
         let iconeStatus = '<span class="text-green-600 font-bold bg-green-50 px-2 py-1 rounded text-[11px] border border-green-200">✓ Automático</span>';
         if (m.tipo === 'manual') {
             iconeStatus = '<span class="text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded text-[11px] border border-blue-200">🔗 Manual</span>';
+        }
+
+        // NOVO: Se casou, mas era QR Crédito, adiciona o alerta do lado do botão verde!
+        if (m.maqItem && m.maqItem.isQRCredito) {
+            iconeStatus = '<span class="text-white font-bold bg-red-600 px-2 py-1 rounded text-[11px] border border-red-800 shadow-sm mr-1">🚨 QR CRÉDITO</span>' + iconeStatus;
         }
 
         resultado.push({ 
