@@ -29,7 +29,6 @@ function setupDragAndDrop() {
         fileInput.click();
     });
 
-    // Previne o comportamento padrão do navegador de abrir o arquivo
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
         dropArea.addEventListener(evt, function(e) {
             e.preventDefault();
@@ -37,7 +36,6 @@ function setupDragAndDrop() {
         }, false);
     });
 
-    // Efeitos visuais ao arrastar
     ['dragenter', 'dragover'].forEach(evt => {
         dropArea.addEventListener(evt, function() {
             dropArea.classList.add('drop-active');
@@ -50,7 +48,6 @@ function setupDragAndDrop() {
         }, false);
     });
 
-    // Processa o arquivo ao soltar ou selecionar
     dropArea.addEventListener('drop', function(e) {
         processarArquivo(e.dataTransfer.files[0]);
     }, false);
@@ -83,7 +80,6 @@ function mapearModalidadeMaquininha(tipoStr) {
     if (t === 'debit_card' || t.includes('debito') || t.includes('débito')) {
         return 'Cartão de Débito';
     }
-    // Adicionamos o 'available_money' e 'account_money' (Saldo MP via QR Code) para agrupar como Pix!
     if (t === 'bank_transfer' || t.includes('pix') || t === 'available_money' || t === 'account_money') {
         return 'Pix';
     }
@@ -94,9 +90,7 @@ function mapearModalidadeMaquininha(tipoStr) {
 // --- PROCESSAMENTO DO ARQUIVO CSV ---
 
 function processarArquivo(file) {
-    if (!file) {
-        return;
-    }
+    if (!file) return;
 
     const codFilial = identificarFilial(file.name);
     
@@ -105,7 +99,6 @@ function processarArquivo(file) {
         return;
     }
 
-    // Reseta as memórias ao processar um novo arquivo
     transacoesMaqPorChave = {};
     transacoesERPPorChave = {};
     estadoAuditoria = {}; 
@@ -128,7 +121,6 @@ function processarArquivo(file) {
                 if (rawData && rawValor) {
                     let dataTransacao = '';
                     
-                    // Tratamento da Data
                     if (String(rawData).includes('T')) {
                         dataTransacao = String(rawData).split('T')[0];
                     } else if (String(rawData).includes('/')) {
@@ -140,7 +132,6 @@ function processarArquivo(file) {
                         dataTransacao = String(rawData);
                     }
 
-                    // Tratamento do Valor
                     let valorStr = String(rawValor).replace('R$', '').trim();
                     if (valorStr.includes(',') && valorStr.includes('.')) {
                         valorStr = valorStr.replace(/\./g, '').replace(',', '.');
@@ -149,7 +140,6 @@ function processarArquivo(file) {
                     }
                     let valor = parseFloat(valorStr);
 
-                    // Tratamento da Taxa
                     let taxaStr = String(rawTaxa).replace('R$', '').replace('-', '').trim();
                     if (taxaStr.includes(',') && taxaStr.includes('.')) {
                         taxaStr = taxaStr.replace(/\./g, '').replace(',', '.');
@@ -164,22 +154,13 @@ function processarArquivo(file) {
                         datasEncontradas.add(dataTransacao);
                         const chave = `${dataTransacao}|${modalidade}`;
                         
-                        // Somatório Principal
-                        if (!dadosCSVAgrupados[chave]) {
-                            dadosCSVAgrupados[chave] = 0;
-                        }
+                        if (!dadosCSVAgrupados[chave]) dadosCSVAgrupados[chave] = 0;
                         dadosCSVAgrupados[chave] += valor;
 
-                        // Somatório de Taxas
-                        if (!taxasCSVAgrupadas[chave]) {
-                            taxasCSVAgrupadas[chave] = 0;
-                        }
+                        if (!taxasCSVAgrupadas[chave]) taxasCSVAgrupadas[chave] = 0;
                         taxasCSVAgrupadas[chave] += taxa;
 
-                        // Guarda a transação individual
-                        if (!transacoesMaqPorChave[chave]) {
-                            transacoesMaqPorChave[chave] = [];
-                        }
+                        if (!transacoesMaqPorChave[chave]) transacoesMaqPorChave[chave] = [];
                         
                         let horaTransacao = '-';
                         if (String(rawData).includes('T')) {
@@ -211,7 +192,6 @@ function processarArquivo(file) {
 
 async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupadas) {
     try {
-        // 1. Verifica se o dia já foi fechado
         const resVerifica = await fetch(`${API_BASE}/verificar`, {
             method: 'POST', 
             headers: { 
@@ -237,7 +217,6 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
             }
         }
 
-        // 2. Busca os dados no ERP
         const res = await fetch(`${API_BASE}/comparar`, {
             method: 'POST', 
             headers: { 
@@ -249,22 +228,16 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
         
         const dadosERPRaw = await res.json();
         
-        if (!res.ok) {
-            throw new Error(dadosERPRaw.error || 'Erro interno no Sistema.');
-        }
+        if (!res.ok) throw new Error(dadosERPRaw.error || 'Erro interno no Sistema.');
 
         let erpAgrupado = {};
         
-        // 3. Processa e Agrupa os dados do ERP
         dadosERPRaw.forEach(function(row) {
-            if (!row.modalidade || String(row.modalidade).toLowerCase() === 'null') {
-                return; 
-            }
+            if (!row.modalidade || String(row.modalidade).toLowerCase() === 'null') return; 
             
             const dataPura = row.data_venda.split('T')[0];
             const chave = `${dataPura}|${row.modalidade}`;
             
-            // Tratamento do Número do DAV (Removendo DR e Zeros)
             let dav = row.doc_original ? String(row.doc_original).trim() : '';
             
             if (dav.endsWith('DR')) {
@@ -276,18 +249,12 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
             }
             
             dav = dav.replace(/^0+/, ''); 
-            if (!dav) {
-                dav = '-';
-            }
+            if (!dav) dav = '-';
 
-            if (!erpAgrupado[chave]) {
-                erpAgrupado[chave] = 0;
-            }
+            if (!erpAgrupado[chave]) erpAgrupado[chave] = 0;
             erpAgrupado[chave] += parseFloat(row.valor);
 
-            if (!transacoesERPPorChave[chave]) {
-                transacoesERPPorChave[chave] = [];
-            }
+            if (!transacoesERPPorChave[chave]) transacoesERPPorChave[chave] = [];
             
             transacoesERPPorChave[chave].push({ 
                 hora: row.hora || '-', 
@@ -304,7 +271,6 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
         let totalDif = 0;
         let totalTaxasGlobais = 0;
 
-        // 4. Junta ERP com Maquininha
         Object.keys(erpAgrupado).forEach(function(chave) {
             const [dataPura, mod] = chave.split('|');
             const valorERP = erpAgrupado[chave];
@@ -338,7 +304,6 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
             processados.add(chave);
         });
 
-        // 5. Adiciona o que tem na Maquininha mas não no ERP
         Object.keys(dadosCSVAgrupados).forEach(function(chave) {
             if (!processados.has(chave)) {
                 const [dataPura, mod] = chave.split('|');
@@ -364,7 +329,6 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
             }
         });
 
-        // 6. Atualiza a Interface
         document.getElementById('card-total-erp').textContent = `R$ ${totalERP.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         document.getElementById('card-total-maq').textContent = `R$ ${totalMaq.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         document.getElementById('card-total-taxas').textContent = `R$ ${totalTaxasGlobais.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
@@ -486,13 +450,11 @@ function prepararEstadoAuditoria(chave) {
     let maq = JSON.parse(JSON.stringify(transacoesMaqPorChave[chave] || []));
     let erp = JSON.parse(JSON.stringify(transacoesERPPorChave[chave] || []));
     
-    // Ordena do maior para o menor para facilitar o algoritmo
     maq.sort(function(a, b) { return b.valor - a.valor; }); 
     erp.sort(function(a, b) { return b.valor - a.valor; });
 
     let matches = [];
     
-    // Varre de trás para frente para poder remover itens do array sem quebrar o loop
     for (let i = maq.length - 1; i >= 0; i--) {
         let itemMaq = maq[i];
         let indexERP = erp.findIndex(function(e) { 
@@ -521,7 +483,6 @@ function renderizarTabelaAuditoria(chave) {
     let state = estadoAuditoria[chave];
     let resultado = [];
 
-    // 1. Mostra os Pareados (Auto ou Manual)
     state.matches.forEach(function(m) {
         let iconeStatus = '<span class="text-green-600 font-bold bg-green-50 px-2 py-1 rounded text-[11px] border border-green-200">✓ Automático</span>';
         if (m.tipo === 'manual') {
@@ -540,7 +501,6 @@ function renderizarTabelaAuditoria(chave) {
         });
     });
 
-    // 2. Mostra as Sobras da Maquininha
     state.sobrasMaq.forEach(function(m, idx) {
         resultado.push({ 
             selecionavel: true, 
@@ -556,7 +516,6 @@ function renderizarTabelaAuditoria(chave) {
         });
     });
 
-    // 3. Mostra as Sobras do ERP
     state.sobrasERP.forEach(function(e, idx) {
         resultado.push({ 
             selecionavel: true, 
@@ -596,7 +555,6 @@ function abrirAuditoriaItemAItem(rowData) {
         document.getElementById('modal-auditoria').classList.remove('opacity-0'); 
         document.getElementById('modal-auditoria-content').classList.remove('scale-95'); 
         
-        // Recarrega os ícones feather se houver
         if (typeof feather !== 'undefined') {
             feather.replace(); 
         }
@@ -636,7 +594,6 @@ function conciliarManualmente() {
     let chave = linhaAtualAuditoria.chave_id;
     let state = estadoAuditoria[chave];
 
-    // Cria o item combinado da Maquininha
     let horasMaqFormatadas = selMaq.map(function(m) { return m.maq_hora; }).join(' / ');
     let taxasMaqSomadas = 0;
     selMaq.forEach(function(c) { taxasMaqSomadas += c.maq_taxa; });
@@ -647,7 +604,6 @@ function conciliarManualmente() {
         taxa: taxasMaqSomadas 
     };
 
-    // Cria o item combinado do ERP
     let horasErpFormatadas = selErp.map(function(e) { return e.erp_hora; }).join(' / ');
     let davsErpFormatados = selErp.map(function(e) { return e.erp_dav; }).join(' / ');
     
@@ -657,14 +613,12 @@ function conciliarManualmente() {
         valor: sumErp 
     };
     
-    // Adiciona o par manual na memória
     state.matches.push({ 
         maqItem: maqCombo, 
         erpItem: erpCombo, 
         tipo: 'manual' 
     });
 
-    // Remove os itens das listas de sobras
     let maqIndices = selMaq.map(function(m) { return m.origem_idx; });
     maqIndices.sort(function(a, b) { return b - a; }); 
     maqIndices.forEach(function(idx) { 
@@ -704,14 +658,12 @@ async function salvarFechamentoFinal() {
         return;
     }
 
-    // Prepara o pacote de envio com as divergências reais (ignorando o que foi conciliado manualmente)
     const fechamentosEnriquecidos = dadosParaSalvar.map(function(row) {
         let divergencias = [];
         
         if (row.status === 'Com Diferença' && row.modalidade !== 'Dinheiro') {
             const chave = row.chave_id;
             
-            // Garante que o estado existe caso o analista clique em salvar sem abrir a auditoria
             prepararEstadoAuditoria(chave); 
             let state = estadoAuditoria[chave];
             

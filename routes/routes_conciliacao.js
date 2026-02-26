@@ -36,10 +36,7 @@ router.post('/comparar', authenticateToken, async (req, res) => {
 
         const placeholders = datas.map(() => '?').join(',');
 
-        // QUERY AJUSTADA:
-        // 1. Usa rc_clfili para a tabela receber
-        // 2. Remove filtros de tipo inexistentes
-        // 3. Usa UNION ALL para consolidar Cartão/Pix e Dinheiro
+        // QUERY AJUSTADA
         const sql = `
             SELECT 
                 DATE(rc_dtbaix) as data_venda,
@@ -51,7 +48,7 @@ router.post('/comparar', authenticateToken, async (req, res) => {
                 END as modalidade,
                 rc_vlbaix as valor,
                 rc_ndocum as doc_original,
-                rc_relaca as doc_relacao -- <== AQUI ESTÁ A CORREÇÃO!
+                rc_relaca as doc_relacao 
             FROM receber
             WHERE rc_dtbaix IN (${placeholders})
             AND rc_status IN ('1', '2')
@@ -115,6 +112,9 @@ router.post('/verificar', authenticateToken, async (req, res) => {
     }
 });
 
+// ---------------------------------------------------------
+// ROTA DE SALVAMENTO
+// ---------------------------------------------------------
 router.post('/salvar', authenticateToken, async (req, res) => {
     const { fechamentos } = req.body;
     const nomeUsuario = req.user.nome;
@@ -124,7 +124,7 @@ router.post('/salvar', authenticateToken, async (req, res) => {
         await connection.beginTransaction();
 
         for (const item of fechamentos) {
-            // 1. Salva a Capa (AGORA INCLUINDO AS TAXAS)
+            // 1. Salva a Capa (COM AS TAXAS)
             const [capaResult] = await connection.execute(`
                 INSERT INTO conciliacao_fechamentos 
                 (data_venda, cod_filial, modalidade, valor_total_erp, valor_total_maq, taxas_maq, diferenca, status, observacao_geral, nome_usuario)
@@ -134,7 +134,7 @@ router.post('/salvar', authenticateToken, async (req, res) => {
                 status=VALUES(status), observacao_geral=VALUES(observacao_geral), nome_usuario=VALUES(nome_usuario)
             `, [
                 item.data_venda, item.cod_filial, item.modalidade, 
-                item.valor_erp, item.valor_maq, item.taxa_maq || 0, item.diferenca, // Aqui entra a taxa!
+                item.valor_erp, item.valor_maq, item.taxa_maq || 0, item.diferenca, 
                 item.status, item.observacao || null, nomeUsuario
             ]);
 
