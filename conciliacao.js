@@ -12,6 +12,7 @@ let transacoesMaqPorChave = {};
 let transacoesERPPorChave = {}; 
 let estadoAuditoria = {}; 
 let linhaAtualAuditoria = null;
+let obsAutoPorChave = {};
 
 // --- INICIALIZAÇÃO ---
 
@@ -102,6 +103,7 @@ function processarArquivo(file) {
     transacoesMaqPorChave = {};
     transacoesERPPorChave = {};
     estadoAuditoria = {}; 
+    obsAutoPorChave = {};
 
     Papa.parse(file, {
         header: true,
