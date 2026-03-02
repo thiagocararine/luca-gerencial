@@ -29,10 +29,9 @@ router.post('/comparar', authenticateToken, async (req, res) => {
     }
 
     try {
-        const mapaFilialSeiLong = { 'TNASC': '002', 'LCMAT': '006', 'LUCAM': '007', 'VMNAF': '008' };
+        // Mantemos o mapeamento curto apenas para a tabela cdavs (Dinheiro), 
+        // já que a tabela receber agora usará a sigla diretamente.
         const mapaFilialSeiShort = { 'TNASC': '2', 'LCMAT': '6', 'LUCAM': '7', 'VMNAF': '8' };
-
-        const idFiliLong = mapaFilialSeiLong[filial_cod];   
         const idFiliShort = mapaFilialSeiShort[filial_cod]; 
 
         const placeholders = datas.map(() => '?').join(',');
@@ -52,7 +51,7 @@ router.post('/comparar', authenticateToken, async (req, res) => {
             FROM receber
             WHERE rc_dtbaix IN (${placeholders})
             AND rc_status IN ('1', '2')
-            AND rc_clfili = ?
+            AND rc_indefi = ?  -- <--- NOVA REGRA: Filtra pela sigla da filial de origem (ex: LCMAT)
             AND rc_formar IN ('11-Deposito Conta', '04-Cartao Credito', '05-Cartao Debito')
 
             UNION ALL
@@ -67,11 +66,12 @@ router.post('/comparar', authenticateToken, async (req, res) => {
             FROM cdavs
             WHERE cr_erec IN (${placeholders})
             AND cr_reca = '1'
-            AND cr_fili = ?
+            AND cr_fili = ?    -- Mantido o código curto para a frente de caixa
             AND (cr_rece = '01-Dinheiro' OR (cr_rece = '20-Diversos' AND LENGTH(TRIM(cr_dinh)) > 0))
         `;
 
-        const params = [...datas, idFiliLong, ...datas, idFiliShort];
+        // Passamos 'filial_cod' (a sigla) direto para a primeira parte da query
+        const params = [...datas, filial_cod, ...datas, idFiliShort];
         const [rows] = await seiPool.query(sql, params);
         res.json(rows);
 
