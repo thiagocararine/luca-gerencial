@@ -73,6 +73,8 @@ function initTabela() {
 }
 
 async function buscarRelatorio() {
+    alert("O BOTÃO ESTÁ VIVO E O CACHE FOI LIMPO!");
+    
     const dataInicial = document.getElementById('filtro-data-inicial').value;
     const dataFinal = document.getElementById('filtro-data-final').value;
     const filial = document.getElementById('filtro-filial').value;
