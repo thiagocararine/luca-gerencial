@@ -82,24 +82,45 @@ async function buscarRelatorio() {
         return alert("Por favor, preencha a data inicial e final.");
     }
 
-    // Muda o texto da tabela para loading
     document.getElementById('tabela-relatorio').innerHTML = '<div class="p-8 text-center text-gray-500 font-medium animate-pulse">Buscando informações no banco de dados...</div>';
 
     try {
+        // RASTREADOR 1: Verificando o Token
+        const token = getToken();
+        if (!token) {
+            alert("ERRO: Você não está logado ou o Token sumiu da memória!");
+            return;
+        }
+
         const res = await fetch(`${API_BASE}/relatorio`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${getToken()}` // Garanta que a função getToken() existe no seu global.js
+                'Authorization': `Bearer ${token}` 
             },
             body: JSON.stringify({ data_inicial: dataInicial, data_final: dataFinal, cod_filial: filial, status: status })
         });
 
-        if (!res.ok) throw new Error("Erro ao buscar relatório.");
+        // RASTREADOR 2: Se o servidor responder com erro (500, 404, etc)
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({ error: 'O servidor não enviou os detalhes do erro.' }));
+            const msgErro = `CÓDIGO: ${res.status}\nMENSAGEM: ${errData.error || 'Erro Desconhecido no Servidor'}`;
+            alert("O SERVIDOR RECUSOU A BUSCA!\n\n" + msgErro);
+            document.getElementById('tabela-relatorio').innerHTML = `<div class="p-8 text-center text-red-500 font-medium whitespace-pre-line">${msgErro}</div>`;
+            return;
+        }
         
         dadosBrutos = await res.json();
         
-        // Atualiza a Tabela
+        // RASTREADOR 3: Se a busca funcionou, mas não trouxe nada
+        if (!dadosBrutos || dadosBrutos.length === 0) {
+            alert("A busca funcionou perfeitamente, MAS O BANCO DE DADOS DEVOLVEU ZERO RESULTADOS.\n\nOu você não salvou nenhuma conciliação nesta data (" + dataInicial + " até " + dataFinal + "), ou o filtro de filial (" + filial + ") está escondendo os dados.");
+            tabelaRelatorio.setData([]);
+            document.getElementById('resumo-container').classList.add('hidden');
+            return;
+        }
+
+        // Se chegou aqui, deu tudo certo! Atualiza a tabela:
         tabelaRelatorio.setData(dadosBrutos);
         document.getElementById('btn-exportar').classList.remove('hidden');
 
@@ -121,8 +142,9 @@ async function buscarRelatorio() {
         document.getElementById('resumo-container').classList.remove('hidden');
 
     } catch (err) {
-        alert("Falha na comunicação: " + err.message);
-        document.getElementById('tabela-relatorio').innerHTML = '<div class="p-8 text-center text-red-500 font-medium">Erro ao carregar os dados.</div>';
+        // RASTREADOR 4: Se a internet cair ou o Node.js estiver desligado
+        alert("FALHA CATASTRÓFICA DE CONEXÃO:\n\n" + err.message + "\n\nO seu navegador não conseguiu nem conversar com o servidor Node.js.");
+        document.getElementById('tabela-relatorio').innerHTML = '<div class="p-8 text-center text-red-500 font-medium">Erro crítico de comunicação.</div>';
     }
 }
 
