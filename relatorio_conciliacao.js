@@ -73,8 +73,6 @@ function initTabela() {
 }
 
 async function buscarRelatorio() {
-    alert("O BOTÃO ESTÁ VIVO E O CACHE FOI LIMPO!");
-    
     const dataInicial = document.getElementById('filtro-data-inicial').value;
     const dataFinal = document.getElementById('filtro-data-final').value;
     const filial = document.getElementById('filtro-filial').value;
@@ -84,14 +82,13 @@ async function buscarRelatorio() {
         return alert("Por favor, preencha a data inicial e final.");
     }
 
-    document.getElementById('tabela-relatorio').innerHTML = '<div class="p-8 text-center text-gray-500 font-medium animate-pulse">Buscando informações no banco de dados...</div>';
+    const tabelaDiv = document.getElementById('tabela-relatorio');
+    tabelaDiv.innerHTML = '<div class="p-8 text-center text-gray-500 font-medium animate-pulse">Buscando informações no banco de dados...</div>';
 
     try {
-        // RASTREADOR 1: Verificando o Token
         const token = getToken();
         if (!token) {
-            alert("ERRO: Você não está logado ou o Token sumiu da memória!");
-            return;
+            throw new Error("Token de autenticação não encontrado.");
         }
 
         const res = await fetch(`${API_BASE}/relatorio`, {
@@ -103,37 +100,39 @@ async function buscarRelatorio() {
             body: JSON.stringify({ data_inicial: dataInicial, data_final: dataFinal, cod_filial: filial, status: status })
         });
 
-        // RASTREADOR 2: Se o servidor responder com erro (500, 404, etc)
+        // Tratamento de erro robusto!
         if (!res.ok) {
-            const errData = await res.json().catch(() => ({ error: 'O servidor não enviou os detalhes do erro.' }));
-            const msgErro = `CÓDIGO: ${res.status}\nMENSAGEM: ${errData.error || 'Erro Desconhecido no Servidor'}`;
-            alert("O SERVIDOR RECUSOU A BUSCA!\n\n" + msgErro);
-            document.getElementById('tabela-relatorio').innerHTML = `<div class="p-8 text-center text-red-500 font-medium whitespace-pre-line">${msgErro}</div>`;
-            return;
+            let errorMsg = `Erro ${res.status}: `;
+            try {
+                const errData = await res.json();
+                errorMsg += errData.error || "Erro desconhecido no servidor.";
+            } catch (e) {
+                errorMsg += "Não foi possível interpretar a resposta do servidor.";
+            }
+            throw new Error(errorMsg);
         }
         
         dadosBrutos = await res.json();
         
-        // RASTREADOR 3: Se a busca funcionou, mas não trouxe nada
         if (!dadosBrutos || dadosBrutos.length === 0) {
-            alert("A busca funcionou perfeitamente, MAS O BANCO DE DADOS DEVOLVEU ZERO RESULTADOS.\n\nOu você não salvou nenhuma conciliação nesta data (" + dataInicial + " até " + dataFinal + "), ou o filtro de filial (" + filial + ") está escondendo os dados.");
-            tabelaRelatorio.setData([]);
+            tabelaDiv.innerHTML = '<div class="p-8 text-center text-gray-500 font-medium">Nenhum dado encontrado para os filtros selecionados.</div>';
+            if(tabelaRelatorio) tabelaRelatorio.setData([]);
             document.getElementById('resumo-container').classList.add('hidden');
             return;
         }
 
-        // Se chegou aqui, deu tudo certo! Atualiza a tabela:
+        // Sucesso!
+        tabelaDiv.innerHTML = ''; // Limpa a mensagem de loading
         tabelaRelatorio.setData(dadosBrutos);
         document.getElementById('btn-exportar').classList.remove('hidden');
 
-        // Calcula os Totais dos Cards
         let totalErp = 0, totalMaq = 0, totalTaxas = 0, totalDif = 0;
         
         dadosBrutos.forEach(row => {
-            totalErp += parseFloat(row.valor_total_erp);
-            totalMaq += parseFloat(row.valor_total_maq);
-            totalTaxas += parseFloat(row.taxas_maq);
-            totalDif += parseFloat(row.diferenca);
+            totalErp += parseFloat(row.valor_total_erp || 0);
+            totalMaq += parseFloat(row.valor_total_maq || 0);
+            totalTaxas += parseFloat(row.taxas_maq || 0);
+            totalDif += parseFloat(row.diferenca || 0);
         });
 
         document.getElementById('resumo-erp').textContent = `R$ ${totalErp.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
@@ -144,9 +143,10 @@ async function buscarRelatorio() {
         document.getElementById('resumo-container').classList.remove('hidden');
 
     } catch (err) {
-        // RASTREADOR 4: Se a internet cair ou o Node.js estiver desligado
-        alert("FALHA CATASTRÓFICA DE CONEXÃO:\n\n" + err.message + "\n\nO seu navegador não conseguiu nem conversar com o servidor Node.js.");
-        document.getElementById('tabela-relatorio').innerHTML = '<div class="p-8 text-center text-red-500 font-medium">Erro crítico de comunicação.</div>';
+        console.error("Erro na busca:", err);
+        tabelaDiv.innerHTML = `<div class="p-8 text-center text-red-600 font-bold whitespace-pre-line">
+            ⚠️ FALHA NA COMUNICAÇÃO ⚠️\n\n${err.message}
+        </div>`;
     }
 }
 

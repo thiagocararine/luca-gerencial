@@ -186,7 +186,7 @@ router.post('/relatorio', authenticateToken, async (req, res) => {
         let sqlCapa = `
             SELECT 
                 id, data_venda, cod_filial, modalidade, valor_total_erp, 
-                valor_total_maq, taxas_maq, diferenca, status, observacao_geral, nome_usuario, data_registro AS data_fechamento
+                valor_total_maq, taxas_maq, diferenca, status, observacao_geral, nome_usuario, data_registro as data_fechamento
             FROM conciliacao_fechamentos 
             WHERE data_venda BETWEEN ? AND ?
         `;
