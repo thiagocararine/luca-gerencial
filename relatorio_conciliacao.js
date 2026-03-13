@@ -2,12 +2,11 @@ document.addEventListener('DOMContentLoaded', initRelatorio);
 
 const API_BASE = '/api/conciliacao';
 let tabelaRelatorio;
-let dadosBrutos = []; // Guarda os dados na memória para o modal de detalhes
+let dadosBrutos = []; 
 
 function initRelatorio() {
     if (typeof feather !== 'undefined') feather.replace();
 
-    // Seta as datas iniciais padrão (Ex: Primeiro dia do mês até hoje)
     const hoje = new Date();
     const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
     
@@ -73,6 +72,10 @@ function initTabela() {
 }
 
 async function buscarRelatorio() {
+    
+    // Rastreador 1 - O botão respondeu?
+    console.log("Botão Buscar Relatório Acionado!");
+    
     const dataInicial = document.getElementById('filtro-data-inicial').value;
     const dataFinal = document.getElementById('filtro-data-final').value;
     const filial = document.getElementById('filtro-filial').value;
@@ -100,7 +103,6 @@ async function buscarRelatorio() {
             body: JSON.stringify({ data_inicial: dataInicial, data_final: dataFinal, cod_filial: filial, status: status })
         });
 
-        // Tratamento de erro robusto!
         if (!res.ok) {
             let errorMsg = `Erro ${res.status}: `;
             try {
@@ -113,6 +115,7 @@ async function buscarRelatorio() {
         }
         
         dadosBrutos = await res.json();
+        console.log("Dados Retornados da API: ", dadosBrutos); // Rastreador 2 - O servidor mandou os dados?
         
         if (!dadosBrutos || dadosBrutos.length === 0) {
             tabelaDiv.innerHTML = '<div class="p-8 text-center text-gray-500 font-medium">Nenhum dado encontrado para os filtros selecionados.</div>';
@@ -121,8 +124,7 @@ async function buscarRelatorio() {
             return;
         }
 
-        // Sucesso!
-        tabelaDiv.innerHTML = ''; // Limpa a mensagem de loading
+        tabelaDiv.innerHTML = ''; 
         tabelaRelatorio.setData(dadosBrutos);
         document.getElementById('btn-exportar').classList.remove('hidden');
 
@@ -150,8 +152,6 @@ async function buscarRelatorio() {
     }
 }
 
-// --- MODAL DE DETALHES ---
-
 function abrirModalDetalhes(rowData) {
     const [ano, mes, dia] = rowData.data_venda.split('-');
     document.getElementById('detalhes-subtitulo').textContent = `${rowData.cod_filial} | ${rowData.modalidade} | ${dia}/${mes}/${ano}`;
@@ -165,7 +165,6 @@ function abrirModalDetalhes(rowData) {
         listaContainer.innerHTML = '<p class="text-sm text-gray-500 italic">Os detalhes desta divergência não foram salvos no banco antigo.</p>';
     } else {
         rowData.divergencias.forEach(div => {
-            // Estilização condicional baseada na origem
             let colorTheme = div.origem.includes('ERP') ? 'red' : 'yellow';
             let icon = div.origem.includes('ERP') ? 'x-circle' : 'alert-triangle';
 
@@ -206,9 +205,7 @@ function fecharModalDetalhes() {
     }, 200);
 }
 
-// --- EXPORTAÇÃO ---
 function exportarCSV() {
-    // Exporta a tabela formatada, ignorando a coluna de Ação/Auditoria
     tabelaRelatorio.download("csv", "Relatorio_Conciliacao_Financeira.csv", {delimiter: ";"}, {
         columnCalcs: false, 
         columns: ["data_venda", "cod_filial", "modalidade", "valor_total_erp", "valor_total_maq", "taxas_maq", "diferenca", "status", "nome_usuario"]
