@@ -72,8 +72,6 @@ function initTabela() {
 }
 
 async function buscarRelatorio() {
-    
-    // Rastreador 1 - O botão respondeu?
     console.log("Botão Buscar Relatório Acionado!");
     
     const dataInicial = document.getElementById('filtro-data-inicial').value;
@@ -86,7 +84,12 @@ async function buscarRelatorio() {
     }
 
     const tabelaDiv = document.getElementById('tabela-relatorio');
-    tabelaDiv.innerHTML = '<div class="p-8 text-center text-gray-500 font-medium animate-pulse">Buscando informações no banco de dados...</div>';
+    const loadingMsg = document.getElementById('loading-mensagem');
+
+    // Mostra o loading, esconde a tabela
+    tabelaDiv.classList.add('hidden');
+    loadingMsg.classList.remove('hidden');
+    loadingMsg.innerHTML = 'Buscando informações no banco de dados...';
 
     try {
         const token = getToken();
@@ -115,16 +118,22 @@ async function buscarRelatorio() {
         }
         
         dadosBrutos = await res.json();
-        console.log("Dados Retornados da API: ", dadosBrutos); // Rastreador 2 - O servidor mandou os dados?
+        console.log("Dados Retornados da API: ", dadosBrutos); 
         
         if (!dadosBrutos || dadosBrutos.length === 0) {
-            tabelaDiv.innerHTML = '<div class="p-8 text-center text-gray-500 font-medium">Nenhum dado encontrado para os filtros selecionados.</div>';
+            loadingMsg.innerHTML = '<span class="text-gray-500">Nenhum dado encontrado para os filtros selecionados.</span>';
             if(tabelaRelatorio) tabelaRelatorio.setData([]);
             document.getElementById('resumo-container').classList.add('hidden');
             return;
         }
 
-        tabelaDiv.innerHTML = ''; 
+        // Deu tudo certo! Esconde o loading, mostra a tabela
+        loadingMsg.classList.add('hidden');
+        tabelaDiv.classList.remove('hidden');
+        
+        // Remove a classe flex para que o Tabulator ocupe o espaço corretamente
+        tabelaDiv.classList.remove('flex', 'items-center', 'justify-center');
+
         tabelaRelatorio.setData(dadosBrutos);
         document.getElementById('btn-exportar').classList.remove('hidden');
 
@@ -146,9 +155,7 @@ async function buscarRelatorio() {
 
     } catch (err) {
         console.error("Erro na busca:", err);
-        tabelaDiv.innerHTML = `<div class="p-8 text-center text-red-600 font-bold whitespace-pre-line">
-            ⚠️ FALHA NA COMUNICAÇÃO ⚠️\n\n${err.message}
-        </div>`;
+        loadingMsg.innerHTML = `<span class="text-red-600 font-bold whitespace-pre-line">⚠️ FALHA NA COMUNICAÇÃO ⚠️\n\n${err.message}</span>`;
     }
 }
 
