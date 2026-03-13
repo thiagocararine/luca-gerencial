@@ -26,7 +26,18 @@ function initTabela() {
         paginationSize: 15,
         placeholder: "Nenhum dado encontrado para os filtros selecionados.",
         columns: [
-            { title: "Data Venda", field: "data_venda", width: 110, formatter: "datetime", formatterParams: { inputFormat: "yyyy-MM-dd", outputFormat: "dd/MM/yyyy" } },
+            { 
+                title: "Data", 
+                field: "data_venda", 
+                width: 100, 
+                formatter: function(cell) {
+                    let val = cell.getValue();
+                    if (!val) return "";
+                    // Pega a string "2026-03-03T00:00:00.000Z", corta o 'T' e inverte a data nativamente
+                    let [ano, mes, dia] = val.split('T')[0].split('-');
+                    return `${dia}/${mes}/${ano}`;
+                } 
+            },
             { title: "Filial", field: "cod_filial", width: 90 },
             { title: "Modalidade", field: "modalidade", width: 130 },
             { title: "Faturado SEI", field: "valor_total_erp", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
