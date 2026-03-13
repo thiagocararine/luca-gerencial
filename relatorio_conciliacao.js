@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', initRelatorio);
 
 const API_BASE = '/api/conciliacao';
-let tabelaRelatorio;
+let tabelaRelatorio; // Começa vazia (dormindo)
 let dadosBrutos = []; 
 
 function initRelatorio() {
@@ -13,7 +13,7 @@ function initRelatorio() {
     document.getElementById('filtro-data-inicial').value = primeiroDia.toISOString().split('T')[0];
     document.getElementById('filtro-data-final').value = hoje.toISOString().split('T')[0];
 
-    initTabela();
+    // A mágica começa aqui: Não inicializamos a tabela no carregamento da página!
 }
 
 function initTabela() {
@@ -33,7 +33,6 @@ function initTabela() {
                 formatter: function(cell) {
                     let val = cell.getValue();
                     if (!val) return "";
-                    // Pega a string "2026-03-03T00:00:00.000Z", corta o 'T' e inverte a data nativamente
                     let [ano, mes, dia] = val.split('T')[0].split('-');
                     return `${dia}/${mes}/${ano}`;
                 } 
@@ -83,8 +82,6 @@ function initTabela() {
 }
 
 async function buscarRelatorio() {
-    console.log("Botão Buscar Relatório Acionado!");
-    
     const dataInicial = document.getElementById('filtro-data-inicial').value;
     const dataFinal = document.getElementById('filtro-data-final').value;
     const filial = document.getElementById('filtro-filial').value;
@@ -97,16 +94,22 @@ async function buscarRelatorio() {
     const tabelaDiv = document.getElementById('tabela-relatorio');
     const loadingMsg = document.getElementById('loading-mensagem');
 
-    // Mostra o loading, esconde a tabela
+    // Remove as classes de centralização que deixavam o texto inicial no meio
+    tabelaDiv.classList.remove('flex', 'items-center', 'justify-center', 'text-gray-400', 'italic', 'text-sm');
+    
+    // Se a tabela ainda não existe, limpa o texto "Preencha os filtros..."
+    if (!tabelaRelatorio) {
+        tabelaDiv.innerHTML = ''; 
+    }
+
+    // Mostra a mensagem de loading, esconde a div da tabela
     tabelaDiv.classList.add('hidden');
     loadingMsg.classList.remove('hidden');
-    loadingMsg.innerHTML = 'Buscando informações no banco de dados...';
+    loadingMsg.innerHTML = '<div class="animate-pulse">Buscando informações no banco de dados...</div>';
 
     try {
         const token = getToken();
-        if (!token) {
-            throw new Error("Token de autenticação não encontrado.");
-        }
+        if (!token) throw new Error("Token de autenticação não encontrado.");
 
         const res = await fetch(`${API_BASE}/relatorio`, {
             method: 'POST',
@@ -129,25 +132,27 @@ async function buscarRelatorio() {
         }
         
         dadosBrutos = await res.json();
-        console.log("Dados Retornados da API: ", dadosBrutos); 
         
         if (!dadosBrutos || dadosBrutos.length === 0) {
-            loadingMsg.innerHTML = '<span class="text-gray-500">Nenhum dado encontrado para os filtros selecionados.</span>';
+            loadingMsg.innerHTML = '<span class="text-gray-500 font-medium">Nenhum dado encontrado para os filtros selecionados.</span>';
             if(tabelaRelatorio) tabelaRelatorio.setData([]);
             document.getElementById('resumo-container').classList.add('hidden');
             return;
         }
 
-        // Deu tudo certo! Esconde o loading, mostra a tabela
+        // Sucesso total! Esconde o loading, mostra a div da tabela
         loadingMsg.classList.add('hidden');
         tabelaDiv.classList.remove('hidden');
-        
-        // Remove a classe flex para que o Tabulator ocupe o espaço corretamente
-        tabelaDiv.classList.remove('flex', 'items-center', 'justify-center');
+
+        // Se for a primeira busca do dia, "acorda" a tabela e desenha ela na tela
+        if (!tabelaRelatorio) {
+            initTabela();
+        }
 
         tabelaRelatorio.setData(dadosBrutos);
         document.getElementById('btn-exportar').classList.remove('hidden');
 
+        // Calcula Totais
         let totalErp = 0, totalMaq = 0, totalTaxas = 0, totalDif = 0;
         
         dadosBrutos.forEach(row => {
@@ -171,7 +176,7 @@ async function buscarRelatorio() {
 }
 
 function abrirModalDetalhes(rowData) {
-    const [ano, mes, dia] = rowData.data_venda.split('-');
+    const [ano, mes, dia] = rowData.data_venda.split('T')[0].split('-');
     document.getElementById('detalhes-subtitulo').textContent = `${rowData.cod_filial} | ${rowData.modalidade} | ${dia}/${mes}/${ano}`;
     
     document.getElementById('detalhes-observacao').textContent = rowData.observacao_geral || "Nenhuma observação registrada pelo caixa.";
