@@ -16,11 +16,11 @@ function initRelatorio() {
     // A mágica começa aqui: Não inicializamos a tabela no carregamento da página!
 }
 
-function initTabela() {
+function initTabela(dadosParaCarregar = []) {
     const eyeIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
 
     tabelaRelatorio = new Tabulator("#tabela-relatorio", {
-        data: [], 
+        data: dadosParaCarregar, // <--- A MÁGICA ACONTECE AQUI
         layout: "fitColumns", 
         pagination: "local",
         paginationSize: 15,
@@ -144,12 +144,14 @@ async function buscarRelatorio() {
         loadingMsg.classList.add('hidden');
         tabelaDiv.classList.remove('hidden');
 
-        // Se for a primeira busca do dia, "acorda" a tabela e desenha ela na tela
+        // Se for a primeira busca do dia, "acorda" a tabela JÁ COM OS DADOS!
         if (!tabelaRelatorio) {
-            initTabela();
+            initTabela(dadosBrutos);
+        } else {
+            // Se a tabela já existia de uma busca anterior, só atualiza os dados
+            tabelaRelatorio.setData(dadosBrutos);
         }
 
-        tabelaRelatorio.setData(dadosBrutos);
         document.getElementById('btn-exportar').classList.remove('hidden');
 
         // Calcula Totais
