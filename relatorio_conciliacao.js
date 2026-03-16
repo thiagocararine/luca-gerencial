@@ -20,16 +20,51 @@ function initTabela(dadosParaCarregar = []) {
     const eyeIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
 
     tabelaRelatorio = new Tabulator("#tabela-relatorio", {
-        data: dadosParaCarregar, // <--- A MÁGICA ACONTECE AQUI
+        data: dadosParaCarregar, 
         layout: "fitColumns", 
         pagination: "local",
-        paginationSize: 15,
+        paginationSize: 20, // Aumentei um pouco para caber mais grupos na mesma página
+        
+        // --- A MÁGICA DO AGRUPAMENTO COMEÇA AQUI ---
+        groupBy: "data_venda",
+        groupHeader: function(value, count, data, group) {
+            // value é a data que veio do banco (ex: 2026-03-03T00:00...)
+            let [ano, mes, dia] = value.split('T')[0].split('-');
+            let dataFormatada = `${dia}/${mes}/${ano}`;
+            
+            // Soma a diferença de todas as filiais e modalidades desse dia específico
+            let difTotalDia = 0;
+            data.forEach(row => {
+                difTotalDia += parseFloat(row.diferenca || 0);
+            });
+            
+            // Cria uma etiqueta colorida para o cabeçalho do grupo
+            let badge = '';
+            if (difTotalDia > 0.10 || difTotalDia < -0.10) {
+                 badge = `<span class="ml-4 px-2 py-0.5 bg-red-100 text-red-700 rounded border border-red-200 text-[11px] font-bold shadow-sm">⚠️ Diferença do Dia: R$ ${difTotalDia.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>`;
+            } else {
+                 badge = `<span class="ml-4 px-2 py-0.5 bg-green-100 text-green-700 rounded border border-green-200 text-[11px] font-bold shadow-sm">✓ Dia Zerado</span>`;
+            }
+
+            // Retorna o cabeçalho bonitão desenhado em HTML
+            return `<div class="flex items-center py-1">
+                        <span class="font-black text-indigo-900 uppercase tracking-wider text-xs flex items-center gap-1.5">
+                            <i data-feather="calendar" class="w-4 h-4 text-indigo-500"></i> FECHAMENTOS DE ${dataFormatada}
+                        </span> 
+                        <span class="text-gray-400 font-medium text-[11px] ml-2">(${count} registros)</span> 
+                        ${badge}
+                    </div>`;
+        },
+        groupStartOpen: true, // Define se os grupos já começam abertos (true) ou fechados (false)
+        // -------------------------------------------
+
         placeholder: "Nenhum dado encontrado para os filtros selecionados.",
         columns: [
             { 
                 title: "Data", 
                 field: "data_venda", 
                 width: 100, 
+                visible: false, // Escondemos a coluna de data, já que ela agora é o título do grupo!
                 formatter: function(cell) {
                     let val = cell.getValue();
                     if (!val) return "";
@@ -41,7 +76,7 @@ function initTabela(dadosParaCarregar = []) {
             { title: "Modalidade", field: "modalidade", width: 130 },
             { title: "Faturado SEI", field: "valor_total_erp", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
             { title: "Proc. MP", field: "valor_total_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
-            { title: "Taxas MP", field: "taxas_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, cssClass: "text-red-600" },
+            { title: "Taxas MP", field: "taxas_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, cssClass: "text-red-600 font-medium" },
             { 
                 title: "Diferença", 
                 field: "diferenca", 
@@ -57,8 +92,8 @@ function initTabela(dadosParaCarregar = []) {
                 width: 120, 
                 formatter: function(cell) {
                     let val = cell.getValue(); 
-                    let color = val === 'Conciliado' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
-                    return `<span class="px-2 py-1 rounded text-[11px] font-bold ${color}">${val}</span>`;
+                    let color = val === 'Conciliado' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200';
+                    return `<span class="px-2 py-1 rounded text-[11px] font-bold border ${color}">${val}</span>`;
                 }
             },
             { title: "Usuário", field: "nome_usuario", width: 100 },
@@ -77,7 +112,13 @@ function initTabela(dadosParaCarregar = []) {
                     if (rowData.status === 'Com Diferença') abrirModalDetalhes(rowData); 
                 } 
             }
-        ]
+        ],
+        // Esse evento garante que os ícones do Feather sejam desenhados dentro do cabeçalho do grupo
+        dataGrouped: function() {
+            if (typeof feather !== 'undefined') {
+                setTimeout(() => feather.replace(), 100);
+            }
+        }
     });
 }
 
