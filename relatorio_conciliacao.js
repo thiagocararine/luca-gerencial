@@ -14,8 +14,11 @@ function initRelatorio() {
     document.getElementById('filtro-data-final').value = hoje.toISOString().split('T')[0];
 }
 
-// Formatador reutilizável para as colunas de diferença
-function formatarDif(cell) {
+// Formatador para as colunas de diferença (só mostra no Pai, esconde no Filho)
+function formatarDifParent(cell) {
+    let rowData = cell.getRow().getData();
+    if (rowData.is_child) return ""; // Esconde essas colunas nas linhas abertas (filhas)
+
     let val = parseFloat(cell.getValue() || 0);
     if (Math.abs(val) < 0.10) return `<span class="text-gray-300 font-medium">R$ 0,00</span>`;
     return `<span class="text-red-600 font-bold">R$ ${val.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>`;
@@ -30,24 +33,42 @@ function initTabela(dadosParaCarregar = []) {
         pagination: "local",
         paginationSize: 15,
         placeholder: "Nenhum dado encontrado para os filtros selecionados.",
+        
+        // --- A MÁGICA DA ÁRVORE DE DADOS (SANFONA) ---
+        dataTree: true,
+        dataTreeStartExpanded: false, // Começa fechado
+        dataTreeChildField: "_children", // É aqui que ele lê as modalidades ocultas
+        dataTreeBranchElement: "<span class='text-gray-300 mr-1'>|</span>",
+        // ----------------------------------------------
+
         columns: [
             { 
                 title: "Data", 
                 field: "data_venda", 
-                width: 95, 
+                width: 125, // Aumentamos um pouco para caber a setinha
                 formatter: function(cell) {
                     let val = cell.getValue();
                     if (!val) return "";
                     let [ano, mes, dia] = val.split('T')[0].split('-');
-                    return `<span class="font-bold text-gray-700">${dia}/${mes}/${ano}</span>`;
+                    return `<span class="font-bold text-gray-700 ml-1">${dia}/${mes}/${ano}</span>`;
                 } 
             },
-            { title: "Filial", field: "cod_filial", width: 85, cssClass: "font-bold" },
+            { 
+                title: "Filial / Mod.", 
+                field: "cod_filial", 
+                width: 130, 
+                formatter: function(cell) {
+                    let row = cell.getRow().getData();
+                    // Se for linha filha, escreve a modalidade em azul. Se for pai, escreve a filial normal.
+                    if (row.is_child) return `<span class="text-indigo-600 font-semibold text-[11px] uppercase">${cell.getValue()}</span>`;
+                    return `<span class="font-bold">${cell.getValue()}</span>`;
+                }
+            },
             { title: "Fat. SEI", field: "valor_total_erp", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
             { title: "Proc. MP", field: "valor_total_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
-            { title: "Dif. Pix", field: "dif_pix", formatter: formatarDif },
-            { title: "Dif. Crédito", field: "dif_credito", formatter: formatarDif },
-            { title: "Dif. Débito", field: "dif_debito", formatter: formatarDif },
+            { title: "Dif. Pix", field: "dif_pix", formatter: formatarDifParent },
+            { title: "Dif. Crédito", field: "dif_credito", formatter: formatarDifParent },
+            { title: "Dif. Débito", field: "dif_debito", formatter: formatarDifParent },
             { 
                 title: "DIF. TOTAL", 
                 field: "diferenca_total", 
@@ -74,24 +95,24 @@ function initTabela(dadosParaCarregar = []) {
                 headerSort: false, 
                 formatter: function(cell) { 
                     let rowData = cell.getRow().getData();
+                    if (rowData.is_child) return ""; // Não exibe botão na linha filha para ficar limpo
                     if (rowData.status === 'Conciliado') return `<span class="text-gray-300 text-[11px] italic">Sem ressalvas</span>`;
                     return `<button class="flex items-center gap-1.5 px-3 py-1 bg-white text-indigo-700 font-bold text-xs rounded border border-indigo-200 hover:bg-indigo-50 transition-colors w-full justify-center shadow-sm">${eyeIcon} Detalhes</button>`; 
                 },
                 cellClick: function(e, cell) { 
                     let rowData = cell.getRow().getData();
-                    if (rowData.status === 'Com Diferença') abrirModalDetalhes(rowData); 
+                    if (!rowData.is_child && rowData.status === 'Com Diferença') abrirModalDetalhes(rowData); 
                 } 
             }
         ]
     });
 }
 
-// A MÁGICA DO PIVOT ACONTECE AQUI
+// O PIVOT AGORA CRIA "FILHOS" OCULTOS
 function transformarEmLinhaUnica(dados) {
     let consolidados = {};
 
     dados.forEach(row => {
-        // Cria uma chave combinando Data e Filial (ex: 2026-03-03_LCMAT)
         let dataPura = row.data_venda.split('T')[0];
         let chave = `${dataPura}_${row.cod_filial}`;
 
@@ -106,28 +127,37 @@ function transformarEmLinhaUnica(dados) {
                 dif_pix: 0,
                 dif_credito: 0,
                 dif_debito: 0,
-                linhas_originais: [] // Guarda os dados originais para o Modal
+                linhas_originais: [], 
+                _children: [] // <--- ARRAY QUE GUARDA AS LINHAS QUE ABREM NA SANFONA
             };
         }
 
         let dif = parseFloat(row.diferenca || 0);
         
-        // Vai somando os totais do dia
         consolidados[chave].valor_total_erp += parseFloat(row.valor_total_erp || 0);
         consolidados[chave].valor_total_maq += parseFloat(row.valor_total_maq || 0);
         consolidados[chave].taxas_maq += parseFloat(row.taxas_maq || 0);
         consolidados[chave].diferenca_total += dif;
 
-        // Distribui a diferença para a coluna correta baseada no nome
         let mod = (row.modalidade || '').toLowerCase();
         if (mod.includes('pix')) consolidados[chave].dif_pix += dif;
         else if (mod.includes('crédito') || mod.includes('credito')) consolidados[chave].dif_credito += dif;
         else if (mod.includes('débito') || mod.includes('debito')) consolidados[chave].dif_debito += dif;
 
         consolidados[chave].linhas_originais.push(row);
+
+        // Adiciona a modalidade como um "Filho" oculto na Árvore
+        consolidados[chave]._children.push({
+            data_venda: "", // Vazio para ficar identado
+            cod_filial: `↳ ${row.modalidade}`, // Ex: ↳ Pix
+            valor_total_erp: row.valor_total_erp,
+            valor_total_maq: row.valor_total_maq,
+            diferenca_total: row.diferenca, // Mostra a diferença EXATA daquela modalidade
+            status: row.status,
+            is_child: true
+        });
     });
 
-    // Transforma o objeto de volta em um Array e define o Status Final do Dia
     return Object.values(consolidados).map(row => {
         row.status = Math.abs(row.diferenca_total) < 0.10 ? 'Conciliado' : 'Com Diferença';
         return row;
@@ -173,7 +203,6 @@ async function buscarRelatorio() {
             return;
         }
 
-        // CHAMA A FUNÇÃO DE PIVOTAMENTO AQUI
         let dadosPivotados = transformarEmLinhaUnica(dadosBrutos);
 
         loadingMsg.classList.add('hidden');
@@ -204,7 +233,6 @@ async function buscarRelatorio() {
     }
 }
 
-// Atualizado para varrer os dados "escondidos" na linha mesclada
 function abrirModalDetalhes(rowData) {
     const [ano, mes, dia] = rowData.data_venda.split('T')[0].split('-');
     document.getElementById('detalhes-subtitulo').textContent = `${rowData.cod_filial} | Resumo do Dia | ${dia}/${mes}/${ano}`;
@@ -215,7 +243,6 @@ function abrirModalDetalhes(rowData) {
     let observacoesSomadas = "";
     let encontrouDivergencia = false;
 
-    // Varre todas as modalidades que foram "esmagadas" nessa linha
     rowData.linhas_originais.forEach(linha => {
         if (linha.observacao_geral) {
             observacoesSomadas += `<div class="mb-2"><span class="font-bold text-gray-700">[${linha.modalidade}]</span> ${linha.observacao_geral}</div>`;
@@ -269,8 +296,10 @@ function fecharModalDetalhes() {
 }
 
 function exportarCSV() {
+    // dataTree: false faz com que o arquivo Excel baixe SÓ as linhas consolidadas, sem duplicar com as filhas!
     tabelaRelatorio.download("csv", "Relatorio_Conciliacao_Financeira.csv", {delimiter: ";"}, {
         columnCalcs: false, 
+        dataTree: false,
         columns: ["data_venda", "cod_filial", "valor_total_erp", "valor_total_maq", "dif_pix", "dif_credito", "dif_debito", "diferenca_total", "status"]
     });
 }
