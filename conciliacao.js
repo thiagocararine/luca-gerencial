@@ -415,11 +415,25 @@ function initTablePrincipal() {
                 width: 110, 
                 hozAlign: "center", 
                 headerSort: false, 
-                formatter: function() { 
+                formatter: function(cell) { 
+                    let rowData = cell.getRow().getData();
+                    
+                    // SE FOR DINHEIRO, MOSTRA O BOTÃO VERDE DA GAVETA
+                    if (rowData.modalidade === 'Dinheiro') {
+                        return `<button class="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 font-bold text-xs rounded-md hover:bg-green-100 border border-green-200 transition-colors w-full justify-center shadow-sm">💰 Gaveta</button>`;
+                    }
+                    
+                    // SE FOR CARTÃO/PIX, MOSTRA O BOTÃO NORMAL DE AUDITAR
                     return `<button class="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 font-bold text-xs rounded-md hover:bg-indigo-100 border border-indigo-200 transition-colors w-full justify-center shadow-sm">${searchIcon} Auditar</button>`; 
                 },
                 cellClick: function(e, cell) { 
-                    abrirAuditoriaItemAItem(cell.getRow().getData()); 
+                    let rowData = cell.getRow().getData();
+                    // SE FOR DINHEIRO, CHAMA A NOVA FUNÇÃO. SE NÃO, AUDITA O MP.
+                    if (rowData.modalidade === 'Dinheiro') {
+                        informarGaveta(rowData);
+                    } else {
+                        abrirAuditoriaItemAItem(rowData); 
+                    }
                 } 
             }
         ]
@@ -749,4 +763,61 @@ async function salvarFechamentoFinal() {
     } catch (err) { 
         alert("Erro ao gravar: " + err.message); 
     }
+}
+
+// --- AUDITORIA DE GAVETA (DINHEIRO) ---
+
+function informarGaveta(rowData) {
+    let valorInformado = prompt(`CONFERÊNCIA DE CAIXA FÍSICO (DINHEIRO)\n\nO Sistema (ERP) diz que devem haver: R$ ${rowData.valor_erp.toLocaleString('pt-BR', {minimumFractionDigits: 2})}\n\nDigite o valor real que você conferiu na gaveta agora:`);
+
+    if (valorInformado === null || valorInformado.trim() === '') return; // Usuário cancelou
+
+    // Converte o que o usuário digitou para formato de cálculo (ex: de "1.500,50" para "1500.50")
+    let valorLimpo = parseFloat(valorInformado.replace(/\./g, '').replace(',', '.'));
+    
+    if (isNaN(valorLimpo)) {
+        return alert("Valor inválido! Por favor, digite apenas números e vírgula.");
+    }
+
+    // Calcula a nova diferença usando a gaveta no lugar do Mercado Pago
+    let novaDiferenca = rowData.valor_erp - valorLimpo;
+    let novoStatus = Math.abs(novaDiferenca) < 0.10 ? 'Conciliado' : 'Com Diferença';
+    let novaObs = rowData.observacao;
+
+    // Gera a observação automática
+    if (novoStatus === 'Com Diferença') {
+        let tipoFuro = novaDiferenca > 0 ? 'Falta' : 'Sobra';
+        novaObs = `Conferência Física: ${tipoFuro} de R$ ${Math.abs(novaDiferenca).toLocaleString('pt-BR', {minimumFractionDigits: 2})} na gaveta.`;
+    } else {
+        novaObs = "Conferência Física: Gaveta OK.";
+    }
+
+    // Atualiza a linha viva na tabela
+    tablePrincipal.updateData([{
+        chave_id: rowData.chave_id,
+        valor_maq: valorLimpo, // Substituímos o "Zero" do MP pelo valor que o caixa contou
+        diferenca: novaDiferenca,
+        status: novoStatus,
+        observacao: novaObs
+    }]);
+
+    // Atualiza os painéis (Cards) coloridos no topo da tela
+    recalcularDashboards();
+}
+
+function recalcularDashboards() {
+    let dadosAtuais = tablePrincipal.getData();
+    let totalERP = 0, totalMaq = 0, totalTaxasGlobais = 0, totalDif = 0;
+
+    dadosAtuais.forEach(row => {
+        totalERP += parseFloat(row.valor_erp || 0);
+        totalMaq += parseFloat(row.valor_maq || 0);
+        totalTaxasGlobais += parseFloat(row.taxa_maq || 0);
+        totalDif += parseFloat(row.diferenca || 0);
+    });
+
+    document.getElementById('card-total-erp').textContent = `R$ ${totalERP.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    document.getElementById('card-total-maq').textContent = `R$ ${totalMaq.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    document.getElementById('card-total-taxas').textContent = `R$ ${totalTaxasGlobais.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    document.getElementById('card-diferenca').textContent = `R$ ${totalDif.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
 }

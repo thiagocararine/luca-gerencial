@@ -45,7 +45,7 @@ function initTabela(dadosParaCarregar = []) {
             { 
                 title: "Data", 
                 field: "data_venda", 
-                width: 125, // Aumentamos um pouco para caber a setinha
+                width: 125, 
                 formatter: function(cell) {
                     let val = cell.getValue();
                     if (!val) return "";
@@ -59,18 +59,15 @@ function initTabela(dadosParaCarregar = []) {
                 width: 130, 
                 formatter: function(cell) {
                     let row = cell.getRow().getData();
-                    // Se for linha filha, escreve a modalidade em azul. Se for pai, escreve a filial normal.
                     if (row.is_child) return `<span class="text-indigo-600 font-semibold text-[11px] uppercase">${cell.getValue()}</span>`;
                     return `<span class="font-bold">${cell.getValue()}</span>`;
                 }
             },
             { title: "Fat. SEI", field: "valor_total_erp", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
-            { title: "Proc. MP", field: "valor_total_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
-            { title: "Dif. Pix", field: "dif_pix", formatter: formatarDifParent },
-            { title: "Dif. Crédito", field: "dif_credito", formatter: formatarDifParent },
-            { title: "Dif. Débito", field: "dif_debito", formatter: formatarDifParent },
+            { title: "Proc. MP / Gaveta", field: "valor_total_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
+            { title: "Taxas MP", field: "taxas_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, cssClass: "text-red-600" },
             { 
-                title: "DIF. TOTAL", 
+                title: "Diferença", 
                 field: "diferenca_total", 
                 formatter: function(cell) {
                     let val = parseFloat(cell.getValue() || 0);
@@ -95,7 +92,7 @@ function initTabela(dadosParaCarregar = []) {
                 headerSort: false, 
                 formatter: function(cell) { 
                     let rowData = cell.getRow().getData();
-                    if (rowData.is_child) return ""; // Não exibe botão na linha filha para ficar limpo
+                    if (rowData.is_child) return ""; 
                     if (rowData.status === 'Conciliado') return `<span class="text-gray-300 text-[11px] italic">Sem ressalvas</span>`;
                     return `<button class="flex items-center gap-1.5 px-3 py-1 bg-white text-indigo-700 font-bold text-xs rounded border border-indigo-200 hover:bg-indigo-50 transition-colors w-full justify-center shadow-sm">${eyeIcon} Detalhes</button>`; 
                 },
