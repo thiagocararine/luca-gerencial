@@ -149,6 +149,7 @@ function transformarEmLinhaUnica(dados) {
             cod_filial: `↳ ${row.modalidade}`, // Ex: ↳ Pix
             valor_total_erp: row.valor_total_erp,
             valor_total_maq: row.valor_total_maq,
+            taxas_maq: row.taxas_maq,
             diferenca_total: row.diferenca, // Mostra a diferença EXATA daquela modalidade
             status: row.status,
             is_child: true
