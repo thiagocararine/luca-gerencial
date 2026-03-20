@@ -233,50 +233,105 @@ async function buscarRelatorio() {
 
 function abrirModalDetalhes(rowData) {
     const [ano, mes, dia] = rowData.data_venda.split('T')[0].split('-');
-    document.getElementById('detalhes-subtitulo').textContent = `${rowData.cod_filial} | Resumo do Dia | ${dia}/${mes}/${ano}`;
+    document.getElementById('detalhes-subtitulo').textContent = `${rowData.cod_filial} | Dossiê de Auditoria Diária | ${dia}/${mes}/${ano}`;
     
     const listaContainer = document.getElementById('lista-divergencias');
     listaContainer.innerHTML = '';
     
     let observacoesSomadas = "";
     let encontrouDivergencia = false;
+    let divergenciasPorModalidade = {};
 
+    // 1. Coleta e agrupa os dados por modalidade
     rowData.linhas_originais.forEach(linha => {
         if (linha.observacao_geral) {
-            observacoesSomadas += `<div class="mb-2"><span class="font-bold text-gray-700">[${linha.modalidade}]</span> ${linha.observacao_geral}</div>`;
+            observacoesSomadas += `<div class="mb-2 text-sm"><span class="font-bold text-gray-700 uppercase">[${linha.modalidade}]</span> <span class="text-gray-600">${linha.observacao_geral}</span></div>`;
         }
 
         if (linha.divergencias && linha.divergencias.length > 0) {
             encontrouDivergencia = true;
+            if (!divergenciasPorModalidade[linha.modalidade]) {
+                divergenciasPorModalidade[linha.modalidade] = [];
+            }
             linha.divergencias.forEach(div => {
-                let colorTheme = div.origem.includes('ERP') ? 'red' : 'yellow';
-                let icon = div.origem.includes('ERP') ? 'x-circle' : 'alert-triangle';
-
-                listaContainer.innerHTML += `
-                    <div class="flex items-center justify-between p-3 bg-white border border-${colorTheme}-200 rounded-lg shadow-sm border-l-4 border-l-${colorTheme}-500">
-                        <div class="flex items-center gap-3">
-                            <div class="p-2 bg-${colorTheme}-50 rounded-full text-${colorTheme}-600">
-                                <i data-feather="${icon}" class="w-4 h-4"></i>
-                            </div>
-                            <div>
-                                <p class="text-xs font-bold text-gray-800 uppercase">${div.origem} <span class="text-gray-400">(${linha.modalidade})</span></p>
-                                <p class="text-[11px] text-gray-500 mt-0.5">Hora: <span class="font-semibold text-gray-700">${div.data_hora_transacao ? div.data_hora_transacao.split(' ')[1] : '--:--'}</span> | DOC/NSU: <span class="font-semibold text-gray-700">${div.nsu_ou_doc || '-'}</span></p>
-                            </div>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-sm font-black text-${colorTheme}-600">R$ ${parseFloat(div.valor_transacao).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
-                        </div>
-                    </div>
-                `;
+                divergenciasPorModalidade[linha.modalidade].push(div);
             });
         }
     });
 
     if (!encontrouDivergencia) {
-        listaContainer.innerHTML = '<p class="text-sm text-gray-500 italic">Os detalhes desta divergência não foram salvos no banco antigo.</p>';
+        listaContainer.innerHTML = '<div class="p-8 text-center text-gray-500 italic bg-gray-50 rounded-lg border border-gray-200">Não há transações individuais perdidas registradas para este fechamento.</div>';
+    } else {
+        // 2. Constrói o HTML Profissional (Tabelas Agrupadas)
+        let htmlFinal = '';
+
+        for (const [modalidade, divs] of Object.entries(divergenciasPorModalidade)) {
+            // Ordena para mostrar os erros do ERP primeiro, depois os do MP
+            divs.sort((a, b) => a.origem.localeCompare(b.origem));
+
+            let totalFaltaERP = 0;
+            let totalFaltaMP = 0;
+
+            let linhasTabela = divs.map(div => {
+                let isERP = div.origem.includes('ERP');
+                let colorClass = isERP ? 'text-red-700 bg-red-50 border-red-100' : 'text-amber-700 bg-amber-50 border-amber-100';
+                let tagText = isERP ? 'Falta no SEI' : 'Falta no MP';
+                
+                let valor = parseFloat(div.valor_transacao || 0);
+                if (isERP) totalFaltaERP += valor;
+                else totalFaltaMP += valor;
+
+                let hora = div.data_hora_transacao ? div.data_hora_transacao.split(' ')[1].substring(0,5) : '--:--';
+                
+                return `
+                    <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td class="py-2.5 px-4 text-xs font-medium text-gray-500">${hora}</td>
+                        <td class="py-2.5 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-bold border ${colorClass}">${tagText}</span></td>
+                        <td class="py-2.5 px-4 text-xs font-bold text-gray-700">${div.nsu_ou_doc || '-'}</td>
+                        <td class="py-2.5 px-4 text-right text-sm font-black text-gray-800">R$ ${valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Adiciona o bloco da modalidade na tela
+            htmlFinal += `
+                <div class="mb-5 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                    <div class="bg-slate-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+                        <h4 class="font-bold text-slate-700 text-xs uppercase flex items-center gap-2 tracking-wide">
+                            <i data-feather="layers" class="w-4 h-4 text-indigo-500"></i> ${modalidade}
+                        </h4>
+                        <div class="flex gap-2 text-[10px] font-bold">
+                            <span class="text-red-700 bg-red-100 px-2 py-1 rounded shadow-sm border border-red-200" title="Valor que o cliente pagou na máquina, mas o operador não baixou no ERP">
+                                SEI (R$ -${totalFaltaERP.toLocaleString('pt-BR', {minimumFractionDigits: 2})})
+                            </span>
+                            <span class="text-amber-700 bg-amber-100 px-2 py-1 rounded shadow-sm border border-amber-200" title="Valor baixado no ERP, mas que não consta no extrato do Mercado Pago">
+                                MP (R$ -${totalFaltaMP.toLocaleString('pt-BR', {minimumFractionDigits: 2})})
+                            </span>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-white border-b border-gray-100 text-[10px] uppercase text-gray-400 font-bold tracking-wider">
+                                    <th class="py-2 px-4">Hora</th>
+                                    <th class="py-2 px-4">Motivo</th>
+                                    <th class="py-2 px-4">DOC / NSU</th>
+                                    <th class="py-2 px-4 text-right">Valor Bruto</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${linhasTabela}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        listaContainer.innerHTML = htmlFinal;
     }
 
-    document.getElementById('detalhes-observacao').innerHTML = observacoesSomadas || "Nenhuma observação registrada pelo caixa neste dia.";
+    document.getElementById('detalhes-observacao').innerHTML = observacoesSomadas || "<span class='text-gray-500 italic text-sm'>Nenhuma observação foi registrada pelo caixa ao salvar este dia.</span>";
 
     if (typeof feather !== 'undefined') feather.replace();
 
