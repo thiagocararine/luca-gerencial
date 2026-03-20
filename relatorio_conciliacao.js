@@ -204,12 +204,17 @@ async function buscarRelatorio() {
 
         if (!res.ok) throw new Error(`Erro no servidor: ${res.status}`);
         
-        dadosBrutos = await res.json();
+        const pacoteFinal = await res.json();
+        
+        // Separa o que é conciliação do que é despesa
+        dadosBrutos = pacoteFinal.capas || [];
+        const despesasBrutas = pacoteFinal.despesas || [];
         
         if (!dadosBrutos || dadosBrutos.length === 0) {
             loadingMsg.innerHTML = '<span class="text-gray-500 font-medium">Nenhum dado encontrado.</span>';
             if(tabelaRelatorio) tabelaRelatorio.setData([]);
             document.getElementById('resumo-container').classList.add('hidden');
+            document.getElementById('container-despesas').classList.add('hidden');
             return;
         }
 
@@ -223,6 +228,7 @@ async function buscarRelatorio() {
 
         document.getElementById('btn-exportar').classList.remove('hidden');
 
+        // CALCULA TOTAIS DA CONCILIAÇÃO
         let totalErp = 0, totalMaq = 0, totalDev = 0, totalTaxas = 0, totalDif = 0;
         dadosBrutos.forEach(row => {
             totalErp += parseFloat(row.valor_total_erp || 0);
@@ -232,13 +238,39 @@ async function buscarRelatorio() {
             totalDif += parseFloat(row.diferenca || 0);
         });
 
+        // CALCULA O TOTAL DAS DESPESAS
+        let totalDespesas = 0;
+        despesasBrutas.forEach(d => { totalDespesas += parseFloat(d.dsp_valordsp || 0); });
+
+        // ATUALIZA OS CARDS (Agora com as Despesas incluídas)
         document.getElementById('resumo-erp').textContent = `R$ ${totalErp.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         document.getElementById('resumo-maq').textContent = `R$ ${totalMaq.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         document.getElementById('resumo-devolucao').textContent = `R$ ${totalDev.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         document.getElementById('resumo-taxas').textContent = `R$ ${totalTaxas.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         document.getElementById('resumo-diferenca').textContent = `R$ ${totalDif.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+        document.getElementById('resumo-despesas').textContent = `R$ ${totalDespesas.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         
         document.getElementById('resumo-container').classList.remove('hidden');
+
+        // DESENHA A TABELA DE DESPESAS (Se houver alguma)
+        if (despesasBrutas.length > 0) {
+            document.getElementById('container-despesas').classList.remove('hidden');
+            new Tabulator("#tabela-despesas-relatorio", {
+                data: despesasBrutas,
+                layout: "fitColumns",
+                columns: [
+                    { title: "Data", field: "dsp_datadesp", width: 100, formatter: cell => { let [a,m,d] = cell.getValue().split('T')[0].split('-'); return `<span class="font-bold text-gray-700">${d}/${m}/${a}</span>`; } },
+                    { title: "Filial", field: "dsp_filial", width: 90, cssClass: "font-bold" },
+                    { title: "Grupo da Despesa", field: "dsp_grupo", width: 150 },
+                    { title: "Classificação", field: "dsp_tipo", width: 150 },
+                    { title: "Descrição Anotada", field: "dsp_descricao" },
+                    { title: "Lançado Por", field: "dsp_userlanc", width: 130 },
+                    { title: "Valor da Saída", field: "dsp_valordsp", width: 140, formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, cssClass: "text-purple-700 font-black" }
+                ]
+            });
+        } else {
+            document.getElementById('container-despesas').classList.add('hidden');
+        }
 
     } catch (err) {
         console.error("Erro:", err);

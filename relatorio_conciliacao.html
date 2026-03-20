@@ -81,7 +81,7 @@
                 </div>
             </div>
 
-            <div id="resumo-container" class="grid grid-cols-5 gap-4 hidden">
+            <div id="resumo-container" class="grid grid-cols-6 gap-4 hidden">
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-blue-500 relative overflow-hidden">
                     <div class="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-blue-50 to-transparent"></div>
                     <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1 relative z-10">Faturamento Sistema</p>
@@ -96,6 +96,11 @@
                     <div class="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-orange-50 to-transparent"></div>
                     <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1 relative z-10">Devoluções MP</p>
                     <h2 id="resumo-devolucao" class="text-xl font-black text-orange-600 relative z-10">R$ 0,00</h2>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-purple-500 relative overflow-hidden">
+                    <div class="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-purple-50 to-transparent"></div>
+                    <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1 relative z-10">Despesas da Loja</p>
+                    <h2 id="resumo-despesas" class="text-xl font-black text-purple-600 relative z-10">R$ 0,00</h2>
                 </div>
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-red-500 relative overflow-hidden">
                     <div class="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-red-50 to-transparent"></div>
@@ -124,6 +129,14 @@
                 <div id="tabela-relatorio" class="w-full min-h-[300px] flex items-center justify-center text-gray-400 italic text-sm">
                     Preencha os filtros acima e clique em "Buscar Dados"
                 </div>
+                <div id="container-despesas" class="w-full bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col mt-6 hidden">
+                <div class="px-5 py-4 border-b border-gray-200 bg-white flex justify-between items-center">
+                    <h3 class="text-sm font-bold text-gray-800 flex items-center gap-2 uppercase tracking-wide">
+                        <i data-feather="shopping-bag" class="w-4 h-4 text-purple-600"></i> Detalhamento de Despesas (Sangria)
+                    </h3>
+                </div>
+                <div id="tabela-despesas-relatorio" class="w-full min-h-[150px]"></div>
+            </div>
             </div>
 
         </div>
@@ -152,6 +165,6 @@
     </div>
 
     <script src="assets/global.js"></script>
-    <script src="relatorio_conciliacao.js?v=10"></script>
+    <script src="relatorio_conciliacao.js?v=11"></script>
 </body>
 </html>

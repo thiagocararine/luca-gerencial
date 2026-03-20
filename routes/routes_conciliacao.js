@@ -225,12 +225,28 @@ router.post('/relatorio', authenticateToken, async (req, res) => {
             });
         }
 
-        connection.release();
-        res.json(capas);
+        // NOVO: Busca as despesas ativas do mesmo período e filial
+        let sqlDesp = `SELECT dsp_datadesp, dsp_filial, dsp_grupo, dsp_tipo, dsp_descricao, dsp_valordsp, dsp_userlanc 
+                       FROM despesa_caixa 
+                       WHERE dsp_datadesp BETWEEN ? AND ? AND dsp_status = 1`;
+        let paramsDesp = [data_inicial, data_final];
 
+        if (cod_filial && cod_filial !== 'TODAS') {
+            sqlDesp += ` AND dsp_filial = ?`;
+            paramsDesp.push(cod_filial);
+        }
+
+        const [despesas] = await connection.execute(sqlDesp, paramsDesp);
+
+        connection.release();
+        
+        // Agora a API devolve um PACOTE com as Capas de Fechamento E as Despesas!
+        res.json({ capas: capas, despesas: despesas });
+        
     } catch (error) {
-        console.error("Erro ao gerar relatório:", error);
-        res.status(500).json({ error: 'Erro ao consultar histórico no banco de dados.' });
+        if (connection) connection.release();
+        console.error("Erro no relatório:", error);
+        res.status(500).json({ error: 'Erro ao gerar relatório.' });
     }
 });
 

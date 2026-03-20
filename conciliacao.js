@@ -6,6 +6,7 @@ const API_BASE = '/api/conciliacao';
 let tablePrincipal; 
 let tableAuditoria; 
 let dadosConsolidados = [];
+let despesasDoDia = []; // NOVO: Guarda as despesas daquele dia
 
 // Variáveis de Memória para a Auditoria
 let transacoesMaqPorChave = {}; 
@@ -104,6 +105,7 @@ function processarArquivo(file) {
     transacoesERPPorChave = {};
     estadoAuditoria = {}; 
     obsAutoPorChave = {};
+    despesasDoDia = []; // Reseta as despesas da memória
 
     Papa.parse(file, {
         header: true,
@@ -112,7 +114,7 @@ function processarArquivo(file) {
         complete: async function(results) {
             let dadosCSVAgrupados = {};
             let taxasCSVAgrupadas = {}; 
-            let devolucoesCSVAgrupadas = {}; // NOVO: Guarda o valor das devoluções
+            let devolucoesCSVAgrupadas = {}; 
             let datasEncontradas = new Set();
             
             // FASE 1: Coleta e Agrupa por SOURCE_ID para achar estornos
@@ -192,7 +194,6 @@ function processarArquivo(file) {
             });
 
             // FASE 2: O FILTRO DESTRUIDOR DE ESTORNOS
-            // Agrupamos por SOURCE_ID
             let agrupadoPorId = {};
             transacoesBrutas.forEach(t => {
                 if (!agrupadoPorId[t.sourceId]) agrupadoPorId[t.sourceId] = [];
@@ -205,13 +206,11 @@ function processarArquivo(file) {
                 let vendas = grupo.filter(t => t.transactionType !== 'REFUND' && t.valor > 0);
 
                 refunds.forEach(ref => {
-                    // Se achar uma venda com o mesmo valor (absoluto) no mesmo ID, eles se anulam!
                     let idx = vendas.findIndex(v => Math.abs(v.valor + ref.valor) < 0.01);
                     if (idx !== -1) {
                         ref.anulado = true;
                         vendas[idx].anulado = true;
                         
-                        // Registramos o valor devolvido para o Relatório, mas eles sumirão da auditoria!
                         if (!devolucoesCSVAgrupadas[ref.chave]) devolucoesCSVAgrupadas[ref.chave] = 0;
                         devolucoesCSVAgrupadas[ref.chave] += Math.abs(ref.valor);
 
@@ -223,12 +222,11 @@ function processarArquivo(file) {
             // FASE 3: Montar os Acumuladores Finais e os Arrays da Auditoria
             transacoesBrutas.forEach(t => {
                 if (!dadosCSVAgrupados[t.chave]) dadosCSVAgrupados[t.chave] = 0;
-                dadosCSVAgrupados[t.chave] += t.valor; // O valor líquido real (já abatido os estornos)
+                dadosCSVAgrupados[t.chave] += t.valor; 
 
                 if (!taxasCSVAgrupadas[t.chave]) taxasCSVAgrupadas[t.chave] = 0;
                 taxasCSVAgrupadas[t.chave] += t.taxa;
 
-                // Se a transação FOI ANULADA, ela não vai aparecer na tela de Auditoria!
                 if (!t.anulado) {
                     if (!transacoesMaqPorChave[t.chave]) transacoesMaqPorChave[t.chave] = [];
                     transacoesMaqPorChave[t.chave].push({ 
@@ -294,6 +292,27 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
         
         if (!res.ok) throw new Error(dadosERPRaw.error || 'Erro interno no Sistema.');
 
+        // NOVO: BUSCA DESPESAS DO MÓDULO FINANCEIRO
+        try {
+            let datasSort = [...datas].sort();
+            let dataIni = datasSort[0];
+            let dataFim = datasSort[datasSort.length - 1];
+            
+            const resDesp = await fetch(`/api/despesas?filial=${codFilial}&dataInicio=${dataIni}&dataFim=${dataFim}&status=1`, {
+                headers: { 'Authorization': `Bearer ${getToken()}` }
+            });
+            if (resDesp.ok) {
+                const despesasBrutas = await resDesp.json();
+                despesasDoDia = despesasBrutas.filter(d => {
+                    if (!d.dsp_datadesp) return false;
+                    let dataD = d.dsp_datadesp.split('T')[0];
+                    return datas.includes(dataD);
+                });
+            }
+        } catch (e) {
+            console.error("Aviso: Não foi possível carregar as despesas.", e);
+        }
+
         let erpAgrupado = {};
         
         dadosERPRaw.forEach(function(row) {
@@ -340,7 +359,7 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
             const valorERP = erpAgrupado[chave];
             const valorMaq = dadosCSVAgrupados[chave] || 0;
             const taxaMaq = taxasCSVAgrupadas[chave] || 0; 
-            const devolucoes = devolucoesCSVAgrupadas[chave] || 0; // Trazendo as devoluções
+            const devolucoes = devolucoesCSVAgrupadas[chave] || 0; 
             const dif = valorERP - valorMaq;
 
             totalERP += valorERP; 
@@ -360,7 +379,7 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
                 modalidade: mod, 
                 valor_erp: valorERP, 
                 valor_maq: valorMaq, 
-                devolucao_maq: devolucoes, // Incluindo no banco e na tela
+                devolucao_maq: devolucoes, 
                 diferenca: dif, 
                 taxa_maq: taxaMaq, 
                 status: statusConsolidado, 
@@ -397,13 +416,8 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
             }
         });
 
-        document.getElementById('card-total-erp').textContent = `R$ ${totalERP.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
-        document.getElementById('card-total-maq').textContent = `R$ ${totalMaq.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
-        document.getElementById('card-total-taxas').textContent = `R$ ${totalTaxasGlobais.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
-        document.getElementById('card-diferenca').textContent = `R$ ${totalDif.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
-
         tablePrincipal.setData(dadosConsolidados);
-        recalcularDashboards();
+        recalcularDashboards(); // <-- Usa a função para preencher todos os cards e despesas automaticamente
         document.getElementById('dashboard-container').classList.remove('hidden');
 
     } catch (err) { 
@@ -659,7 +673,6 @@ function conciliarManualmente() {
     let selMaq = selecionados.filter(function(d) { return d.tipo_sobra === 'maq'; });
     let selErp = selecionados.filter(function(d) { return d.tipo_sobra === 'erp'; });
 
-    // Permite conciliar caso tenha apenas MP ou ERP selecionado (ex: limpar estornos quebrados)
     if (selMaq.length === 0 && selErp.length === 0) {
         alert("Selecione os itens marcando a caixinha na primeira coluna.");
         return;
@@ -865,9 +878,42 @@ function recalcularDashboards() {
         totalDif += parseFloat(row.diferenca || 0);
     });
 
+    let totalDespesas = 0;
+    despesasDoDia.forEach(d => totalDespesas += parseFloat(d.dsp_valordsp || 0));
+
     document.getElementById('card-total-erp').textContent = `R$ ${totalERP.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
     document.getElementById('card-total-maq').textContent = `R$ ${totalMaq.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
     document.getElementById('card-total-devolucao').textContent = `R$ ${totalDev.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`; // O Card Novo
+    
+    // Verifica se o card de despesas foi criado no HTML antes de setar o valor
+    if(document.getElementById('card-total-despesas')) {
+        document.getElementById('card-total-despesas').textContent = `R$ ${totalDespesas.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    }
+    
     document.getElementById('card-total-taxas').textContent = `R$ ${totalTaxasGlobais.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
     document.getElementById('card-diferenca').textContent = `R$ ${totalDif.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+
+    // DESENHA A TABELA DE DESPESAS (Se houver)
+    const containerDesp = document.getElementById('container-despesas-auditoria');
+    if (containerDesp) {
+        if (despesasDoDia.length > 0) {
+            containerDesp.classList.remove('hidden');
+            if (typeof feather !== 'undefined') feather.replace();
+            
+            new Tabulator("#tabela-despesas-auditoria", {
+                data: despesasDoDia, 
+                layout: "fitColumns",
+                columns: [
+                    { title: "Data", field: "dsp_datadesp", width: 100, formatter: cell => { let [a,m,d] = cell.getValue().split('T')[0].split('-'); return `<span class="font-bold text-gray-700">${d}/${m}/${a}</span>`; } },
+                    { title: "Grupo da Despesa", field: "dsp_grupo", width: 150 },
+                    { title: "Classificação", field: "dsp_tipo", width: 150 },
+                    { title: "Descrição Anotada", field: "dsp_descricao" },
+                    { title: "Lançado Por", field: "dsp_userlanc", width: 130 },
+                    { title: "Valor da Saída", field: "dsp_valordsp", width: 140, formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, cssClass: "text-purple-700 font-black" }
+                ]
+            });
+        } else {
+            containerDesp.classList.add('hidden');
+        }
+    }
 }
