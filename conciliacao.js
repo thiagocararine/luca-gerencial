@@ -403,6 +403,7 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
         document.getElementById('card-diferenca').textContent = `R$ ${totalDif.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
 
         tablePrincipal.setData(dadosConsolidados);
+        recalcularDashboards();
         document.getElementById('dashboard-container').classList.remove('hidden');
 
     } catch (err) { 
@@ -420,6 +421,7 @@ function initTablePrincipal() {
         data: [], 
         layout: "fitColumns", 
         groupBy: "data_venda",
+        index: "chave_id",
         columns: [
             { title: "Filial", field: "cod_filial", width: 90 },
             { title: "Modalidade", field: "modalidade", width: 140 },
@@ -853,17 +855,19 @@ function informarGaveta(rowData) {
 
 function recalcularDashboards() {
     let dadosAtuais = tablePrincipal.getData();
-    let totalERP = 0, totalMaq = 0, totalTaxasGlobais = 0, totalDif = 0;
+    let totalERP = 0, totalMaq = 0, totalDev = 0, totalTaxasGlobais = 0, totalDif = 0;
 
     dadosAtuais.forEach(row => {
         totalERP += parseFloat(row.valor_erp || 0);
         totalMaq += parseFloat(row.valor_maq || 0);
+        totalDev += parseFloat(row.devolucao_maq || 0); // Lendo as devoluções
         totalTaxasGlobais += parseFloat(row.taxa_maq || 0);
         totalDif += parseFloat(row.diferenca || 0);
     });
 
     document.getElementById('card-total-erp').textContent = `R$ ${totalERP.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
     document.getElementById('card-total-maq').textContent = `R$ ${totalMaq.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    document.getElementById('card-total-devolucao').textContent = `R$ ${totalDev.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`; // O Card Novo
     document.getElementById('card-total-taxas').textContent = `R$ ${totalTaxasGlobais.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
     document.getElementById('card-diferenca').textContent = `R$ ${totalDif.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
 }
