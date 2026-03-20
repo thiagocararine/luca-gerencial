@@ -112,14 +112,19 @@ function processarArquivo(file) {
         complete: async function(results) {
             let dadosCSVAgrupados = {};
             let taxasCSVAgrupadas = {}; 
+            let devolucoesCSVAgrupadas = {}; // NOVO: Guarda o valor das devoluções
             let datasEncontradas = new Set();
-            let obsAutoPorChave = {};
+            
+            // FASE 1: Coleta e Agrupa por SOURCE_ID para achar estornos
+            let transacoesBrutas = [];
 
             results.data.forEach(function(row) {
                 let rawData = row['TRANSACTION_DATE'] || row['Data'] || row['Data da Venda']; 
                 let rawValor = row['TRANSACTION_AMOUNT'] || row['ValorBruto'] || row['Valor'];
                 let rawTipo = row['PAYMENT_METHOD_TYPE'] || row['Tipo'] || row['Modalidade'];
                 let rawTaxa = row['FEE_AMOUNT'] || row['Taxa'] || row['Tarifa'] || row['Fee'] || 0;
+                let sourceId = row['SOURCE_ID'] || row['Source ID'] || row['Id'] || Math.random().toString();
+                let transactionType = String(row['TRANSACTION_TYPE'] || '').toUpperCase();
 
                 if (rawData && rawValor) {
                     let dataTransacao = '';
@@ -165,29 +170,73 @@ function processarArquivo(file) {
                     }
 
                     if (dataTransacao && !isNaN(valor) && modalidade) {
-                        datasEncontradas.add(dataTransacao);
-                        const chave = `${dataTransacao}|${modalidade}`;
-                        
-                        if (!dadosCSVAgrupados[chave]) dadosCSVAgrupados[chave] = 0;
-                        dadosCSVAgrupados[chave] += valor;
-
-                        if (!taxasCSVAgrupadas[chave]) taxasCSVAgrupadas[chave] = 0;
-                        taxasCSVAgrupadas[chave] += taxa;
-
-                        if (!transacoesMaqPorChave[chave]) transacoesMaqPorChave[chave] = [];
-                        
                         let horaTransacao = '-';
                         if (String(rawData).includes('T')) {
                             horaTransacao = String(rawData).split('T')[1].substring(0,8);
                         }
 
-                        transacoesMaqPorChave[chave].push({
-                            hora: horaTransacao,
-                            valor: valor,
-                            taxa: taxa,
-                            isQRCredito: isQRCredito // Gravando a flag para a auditoria
+                        transacoesBrutas.push({ 
+                            sourceId: sourceId, 
+                            transactionType: transactionType, 
+                            dataTransacao: dataTransacao, 
+                            modalidade: modalidade, 
+                            valor: valor, 
+                            taxa: taxa, 
+                            hora: horaTransacao, 
+                            isQRCredito: isQRCredito,
+                            chave: `${dataTransacao}|${modalidade}`
                         });
+                        datasEncontradas.add(dataTransacao);
                     }
+                }
+            });
+
+            // FASE 2: O FILTRO DESTRUIDOR DE ESTORNOS
+            // Agrupamos por SOURCE_ID
+            let agrupadoPorId = {};
+            transacoesBrutas.forEach(t => {
+                if (!agrupadoPorId[t.sourceId]) agrupadoPorId[t.sourceId] = [];
+                agrupadoPorId[t.sourceId].push(t);
+            });
+
+            Object.keys(agrupadoPorId).forEach(id => {
+                let grupo = agrupadoPorId[id];
+                let refunds = grupo.filter(t => t.transactionType === 'REFUND' || t.valor < 0);
+                let vendas = grupo.filter(t => t.transactionType !== 'REFUND' && t.valor > 0);
+
+                refunds.forEach(ref => {
+                    // Se achar uma venda com o mesmo valor (absoluto) no mesmo ID, eles se anulam!
+                    let idx = vendas.findIndex(v => Math.abs(v.valor + ref.valor) < 0.01);
+                    if (idx !== -1) {
+                        ref.anulado = true;
+                        vendas[idx].anulado = true;
+                        
+                        // Registramos o valor devolvido para o Relatório, mas eles sumirão da auditoria!
+                        if (!devolucoesCSVAgrupadas[ref.chave]) devolucoesCSVAgrupadas[ref.chave] = 0;
+                        devolucoesCSVAgrupadas[ref.chave] += Math.abs(ref.valor);
+
+                        vendas.splice(idx, 1);
+                    }
+                });
+            });
+
+            // FASE 3: Montar os Acumuladores Finais e os Arrays da Auditoria
+            transacoesBrutas.forEach(t => {
+                if (!dadosCSVAgrupados[t.chave]) dadosCSVAgrupados[t.chave] = 0;
+                dadosCSVAgrupados[t.chave] += t.valor; // O valor líquido real (já abatido os estornos)
+
+                if (!taxasCSVAgrupadas[t.chave]) taxasCSVAgrupadas[t.chave] = 0;
+                taxasCSVAgrupadas[t.chave] += t.taxa;
+
+                // Se a transação FOI ANULADA, ela não vai aparecer na tela de Auditoria!
+                if (!t.anulado) {
+                    if (!transacoesMaqPorChave[t.chave]) transacoesMaqPorChave[t.chave] = [];
+                    transacoesMaqPorChave[t.chave].push({ 
+                        hora: t.hora, 
+                        valor: t.valor, 
+                        taxa: t.taxa, 
+                        isQRCredito: t.isQRCredito 
+                    });
                 }
             });
 
@@ -198,14 +247,14 @@ function processarArquivo(file) {
                 return;
             }
             
-            await cruzarComERP(codFilial, datasArray, dadosCSVAgrupados, taxasCSVAgrupadas);
+            await cruzarComERP(codFilial, datasArray, dadosCSVAgrupados, taxasCSVAgrupadas, devolucoesCSVAgrupadas);
         }
     });
 }
 
 // --- CRUZAMENTO DE DADOS COM O BANCO ---
 
-async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupadas) {
+async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupadas, devolucoesCSVAgrupadas) {
     try {
         const resVerifica = await fetch(`${API_BASE}/verificar`, {
             method: 'POST', 
@@ -291,6 +340,7 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
             const valorERP = erpAgrupado[chave];
             const valorMaq = dadosCSVAgrupados[chave] || 0;
             const taxaMaq = taxasCSVAgrupadas[chave] || 0; 
+            const devolucoes = devolucoesCSVAgrupadas[chave] || 0; // Trazendo as devoluções
             const dif = valorERP - valorMaq;
 
             totalERP += valorERP; 
@@ -310,6 +360,7 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
                 modalidade: mod, 
                 valor_erp: valorERP, 
                 valor_maq: valorMaq, 
+                devolucao_maq: devolucoes, // Incluindo no banco e na tela
                 diferenca: dif, 
                 taxa_maq: taxaMaq, 
                 status: statusConsolidado, 
@@ -324,6 +375,7 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
                 const [dataPura, mod] = chave.split('|');
                 const valorMaq = dadosCSVAgrupados[chave];
                 const taxaMaq = taxasCSVAgrupadas[chave] || 0;
+                const devolucoes = devolucoesCSVAgrupadas[chave] || 0;
 
                 totalMaq += valorMaq; 
                 totalDif -= valorMaq; 
@@ -336,6 +388,7 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
                     modalidade: mod, 
                     valor_erp: 0, 
                     valor_maq: valorMaq, 
+                    devolucao_maq: devolucoes, 
                     diferenca: 0 - valorMaq, 
                     taxa_maq: taxaMaq, 
                     status: 'Com Diferença', 
@@ -372,6 +425,7 @@ function initTablePrincipal() {
             { title: "Modalidade", field: "modalidade", width: 140 },
             { title: "Sistema", field: "valor_erp", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
             { title: "Mercado Pago", field: "valor_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
+            { title: "Devolvido MP", field: "devolucao_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, cssClass: "text-amber-600 font-medium" },
             { title: "Taxa MP", field: "taxa_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, cssClass: "text-red-600" },
             { 
                 title: "Diferença", 
@@ -418,17 +472,14 @@ function initTablePrincipal() {
                 formatter: function(cell) { 
                     let rowData = cell.getRow().getData();
                     
-                    // SE FOR DINHEIRO, MOSTRA O BOTÃO VERDE DA GAVETA
                     if (rowData.modalidade === 'Dinheiro') {
                         return `<button class="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 font-bold text-xs rounded-md hover:bg-green-100 border border-green-200 transition-colors w-full justify-center shadow-sm">💰 Gaveta</button>`;
                     }
                     
-                    // SE FOR CARTÃO/PIX, MOSTRA O BOTÃO NORMAL DE AUDITAR
                     return `<button class="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 font-bold text-xs rounded-md hover:bg-indigo-100 border border-indigo-200 transition-colors w-full justify-center shadow-sm">${searchIcon} Auditar</button>`; 
                 },
                 cellClick: function(e, cell) { 
                     let rowData = cell.getRow().getData();
-                    // SE FOR DINHEIRO, CHAMA A NOVA FUNÇÃO. SE NÃO, AUDITA O MP.
                     if (rowData.modalidade === 'Dinheiro') {
                         informarGaveta(rowData);
                     } else {
@@ -518,7 +569,6 @@ function renderizarTabelaAuditoria(chave) {
             iconeStatus = '<span class="text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded text-[11px] border border-blue-200">🔗 Manual</span>';
         }
 
-        // NOVO: Se casou, mas era QR Crédito, adiciona o alerta do lado do botão verde!
         if (m.maqItem && m.maqItem.isQRCredito) {
             iconeStatus = '<span class="text-white font-bold bg-red-600 px-2 py-1 rounded text-[11px] border border-red-800 shadow-sm mr-1">🚨 QR CRÉDITO</span>' + iconeStatus;
         }
@@ -536,7 +586,6 @@ function renderizarTabelaAuditoria(chave) {
     });
 
     state.sobrasMaq.forEach(function(m, idx) {
-        // Renderiza o alerta de QR Code se a flag existir
         let iconeStatus = '<span class="text-red-600 font-bold bg-red-50 px-2 py-1 rounded text-[11px] border border-red-200">✗ Falta no Sis</span>';
         
         if (m.isQRCredito) {
@@ -608,13 +657,9 @@ function conciliarManualmente() {
     let selMaq = selecionados.filter(function(d) { return d.tipo_sobra === 'maq'; });
     let selErp = selecionados.filter(function(d) { return d.tipo_sobra === 'erp'; });
 
+    // Permite conciliar caso tenha apenas MP ou ERP selecionado (ex: limpar estornos quebrados)
     if (selMaq.length === 0 && selErp.length === 0) {
         alert("Selecione os itens marcando a caixinha na primeira coluna.");
-        return;
-    }
-    
-    if (selMaq.length === 0 || selErp.length === 0) {
-        alert("Para forçar uma conciliação, selecione pelo menos 1 item do Mercado Pago e 1 item do Sistema.");
         return;
     }
 
@@ -734,6 +779,7 @@ async function salvarFechamentoFinal() {
             modalidade: row.modalidade,
             valor_erp: row.valor_erp,
             valor_maq: row.valor_maq,
+            devolucao_maq: row.devolucao_maq, // Enviando a devolução para a API
             diferenca: row.diferenca,
             taxa_maq: row.taxa_maq,
             status: row.status,

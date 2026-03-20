@@ -65,6 +65,15 @@ function initTabela(dadosParaCarregar = []) {
             },
             { title: "Fat. SEI", field: "valor_total_erp", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
             { title: "Proc. MP / Gaveta", field: "valor_total_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
+            { 
+                title: "Devoluções MP", 
+                field: "valor_devolucao_maq", 
+                formatter: function(cell) {
+                    let val = parseFloat(cell.getValue() || 0);
+                    if (val === 0) return `<span class="text-gray-300">-</span>`;
+                    return `<span class="text-orange-600 font-bold">R$ ${val.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>`;
+                }
+            },
             { title: "Taxas MP", field: "taxas_maq", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, cssClass: "text-red-600" },
             { 
                 title: "Diferença", 
@@ -119,6 +128,7 @@ function transformarEmLinhaUnica(dados) {
                 cod_filial: row.cod_filial,
                 valor_total_erp: 0,
                 valor_total_maq: 0,
+                valor_devolucao_maq: 0,
                 taxas_maq: 0,
                 diferenca_total: 0,
                 dif_pix: 0,
@@ -133,6 +143,7 @@ function transformarEmLinhaUnica(dados) {
         
         consolidados[chave].valor_total_erp += parseFloat(row.valor_total_erp || 0);
         consolidados[chave].valor_total_maq += parseFloat(row.valor_total_maq || 0);
+        consolidados[chave].valor_devolucao_maq += parseFloat(row.valor_devolucao_maq || 0);
         consolidados[chave].taxas_maq += parseFloat(row.taxas_maq || 0);
         consolidados[chave].diferenca_total += dif;
 
@@ -149,6 +160,7 @@ function transformarEmLinhaUnica(dados) {
             cod_filial: `↳ ${row.modalidade}`, // Ex: ↳ Pix
             valor_total_erp: row.valor_total_erp,
             valor_total_maq: row.valor_total_maq,
+            valor_devolucao_maq: row.valor_devolucao_maq,
             taxas_maq: row.taxas_maq,
             diferenca_total: row.diferenca, // Mostra a diferença EXATA daquela modalidade
             status: row.status,

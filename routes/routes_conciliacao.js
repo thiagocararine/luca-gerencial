@@ -112,6 +112,9 @@ router.post('/verificar', authenticateToken, async (req, res) => {
 // ---------------------------------------------------------
 // 3. ROTA DE SALVAMENTO DE CONCILIAÇÃO
 // ---------------------------------------------------------
+// ---------------------------------------------------------
+// 3. ROTA DE SALVAMENTO DE CONCILIAÇÃO
+// ---------------------------------------------------------
 router.post('/salvar', authenticateToken, async (req, res) => {
     const { fechamentos } = req.body;
     const nomeUsuario = req.user.nome;
@@ -123,14 +126,14 @@ router.post('/salvar', authenticateToken, async (req, res) => {
         for (const item of fechamentos) {
             const [capaResult] = await connection.execute(`
                 INSERT INTO conciliacao_fechamentos 
-                (data_venda, cod_filial, modalidade, valor_total_erp, valor_total_maq, taxas_maq, diferenca, status, observacao_geral, nome_usuario)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (data_venda, cod_filial, modalidade, valor_total_erp, valor_total_maq, taxas_maq, valor_devolucao_maq, diferenca, status, observacao_geral, nome_usuario)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE 
-                valor_total_erp=VALUES(valor_total_erp), valor_total_maq=VALUES(valor_total_maq), taxas_maq=VALUES(taxas_maq), diferenca=VALUES(diferenca), 
+                valor_total_erp=VALUES(valor_total_erp), valor_total_maq=VALUES(valor_total_maq), taxas_maq=VALUES(taxas_maq), valor_devolucao_maq=VALUES(valor_devolucao_maq), diferenca=VALUES(diferenca), 
                 status=VALUES(status), observacao_geral=VALUES(observacao_geral), nome_usuario=VALUES(nome_usuario)
             `, [
                 item.data_venda, item.cod_filial, item.modalidade, 
-                item.valor_erp, item.valor_maq, item.taxa_maq || 0, item.diferenca, 
+                item.valor_erp, item.valor_maq, item.taxa_maq || 0, item.devolucao_maq || 0, item.diferenca, 
                 item.status, item.observacao || null, nomeUsuario
             ]);
 
@@ -186,7 +189,7 @@ router.post('/relatorio', authenticateToken, async (req, res) => {
         let sqlCapa = `
             SELECT 
                 id, data_venda, cod_filial, modalidade, valor_total_erp, 
-                valor_total_maq, taxas_maq, diferenca, status, observacao_geral, nome_usuario, data_registro as data_fechamento
+                valor_total_maq, taxas_maq, valor_devolucao_maq, diferenca, status, observacao_geral, nome_usuario, data_registro as data_fechamento
             FROM conciliacao_fechamentos 
             WHERE data_venda BETWEEN ? AND ?
         `;
