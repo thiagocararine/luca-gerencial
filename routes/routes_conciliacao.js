@@ -29,8 +29,6 @@ router.post('/comparar', authenticateToken, async (req, res) => {
     }
 
     try {
-        // Mantemos o mapeamento curto apenas para a tabela cdavs (Dinheiro), 
-        // já que a tabela receber agora usará a sigla diretamente.
         const mapaFilialSeiShort = { 'TNASC': '2', 'LCMAT': '6', 'LUCAM': '7', 'VMNAF': '8' };
         const idFiliShort = mapaFilialSeiShort[filial_cod]; 
 
@@ -51,7 +49,7 @@ router.post('/comparar', authenticateToken, async (req, res) => {
             FROM receber
             WHERE rc_dtbaix IN (${placeholders})
             AND rc_status IN ('1', '2')
-            AND rc_indefi = ?  -- <--- NOVA REGRA: Filtra pela sigla da filial de origem (ex: LCMAT)
+            AND rc_indefi = ?  
             AND rc_formar IN ('11-Deposito Conta', '04-Cartao Credito', '05-Cartao Debito')
 
             UNION ALL
@@ -66,11 +64,10 @@ router.post('/comparar', authenticateToken, async (req, res) => {
             FROM cdavs
             WHERE cr_erec IN (${placeholders})
             AND cr_reca = '1'
-            AND cr_fili = ?    -- Mantido o código curto para a frente de caixa
+            AND cr_fili = ?    
             AND (cr_rece = '01-Dinheiro' OR (cr_rece = '20-Diversos' AND LENGTH(TRIM(cr_dinh)) > 0))
         `;
 
-        // Passamos 'filial_cod' (a sigla) direto para a primeira parte da query
         const params = [...datas, filial_cod, ...datas, idFiliShort];
         const [rows] = await seiPool.query(sql, params);
         res.json(rows);
@@ -109,9 +106,6 @@ router.post('/verificar', authenticateToken, async (req, res) => {
     }
 });
 
-// ---------------------------------------------------------
-// 3. ROTA DE SALVAMENTO DE CONCILIAÇÃO
-// ---------------------------------------------------------
 // ---------------------------------------------------------
 // 3. ROTA DE SALVAMENTO DE CONCILIAÇÃO
 // ---------------------------------------------------------
@@ -174,7 +168,7 @@ router.post('/salvar', authenticateToken, async (req, res) => {
 });
 
 // ---------------------------------------------------------
-// 4. NOVA ROTA: CONSULTAR HISTÓRICO DE FECHAMENTOS (RELATÓRIO)
+// 4. CONSULTAR HISTÓRICO DE FECHAMENTOS E DESPESAS (RELATÓRIO)
 // ---------------------------------------------------------
 router.post('/relatorio', authenticateToken, async (req, res) => {
     const { data_inicial, data_final, cod_filial, status } = req.body;
@@ -183,8 +177,9 @@ router.post('/relatorio', authenticateToken, async (req, res) => {
         return res.status(400).json({ error: 'Data inicial e final são obrigatórias.' });
     }
 
+    let connection;
     try {
-        const connection = await gerencialPool.getConnection();
+        connection = await gerencialPool.getConnection();
         
         let sqlCapa = `
             SELECT 
@@ -225,14 +220,13 @@ router.post('/relatorio', authenticateToken, async (req, res) => {
             });
         }
 
-        // NOVO: Busca as despesas ativas do mesmo período e filial
+        // Busca as despesas ativas (Com Filtro Inteligente de Filial)
         let sqlDesp = `SELECT dsp_datadesp, dsp_filial, dsp_grupo, dsp_tipo, dsp_descricao, dsp_valordsp, dsp_userlanc 
                        FROM despesa_caixa 
                        WHERE dsp_datadesp BETWEEN ? AND ? AND dsp_status = 1`;
         let paramsDesp = [data_inicial, data_final];
 
         if (cod_filial && cod_filial !== 'TODAS') {
-            // Mapeamento para garantir que encontra a despesa, quer esteja salva pela sigla ou pelo nome
             let nomeF = cod_filial;
             if (cod_filial === 'VMNAF') nomeF = 'Piabeta';
             if (cod_filial === 'LCMAT') nomeF = 'Campinas';
@@ -240,7 +234,6 @@ router.post('/relatorio', authenticateToken, async (req, res) => {
             if (cod_filial === 'LUCAM') nomeF = 'Cruz';
 
             sqlDesp += ` AND (dsp_filial = ? OR dsp_filial LIKE ? OR dsp_filial LIKE ?)`;
-            // Substitui acentos para apanhar "Piabetá" ou "Piabeta"
             paramsDesp.push(cod_filial, `%${nomeF}%`, `%${nomeF.replace('é','e').replace('á','a')}%`);
         }
 
@@ -249,6 +242,11 @@ router.post('/relatorio', authenticateToken, async (req, res) => {
         connection.release();
         
         res.json({ capas: capas, despesas: despesas });
+        
+    } catch (error) {
+        if (connection) connection.release();
+        console.error("Erro no relatório:", error);
+        res.status(500).json({ error: 'Erro ao gerar relatório.' });
     }
 });
 
