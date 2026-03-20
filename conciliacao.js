@@ -298,11 +298,17 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
             let dataIni = datasSort[0];
             let dataFim = datasSort[datasSort.length - 1];
             
-            const resDesp = await fetch(`/api/despesas?filial=${codFilial}&dataInicio=${dataIni}&dataFim=${dataFim}&status=1`, {
+            // Adicionámos o &export=true para a API devolver o Array puro e contornar a paginação
+            const resDesp = await fetch(`/api/despesas?filial=${codFilial}&dataInicio=${dataIni}&dataFim=${dataFim}&status=1&export=true`, {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
+            
             if (resDesp.ok) {
-                const despesasBrutas = await resDesp.json();
+                const jsonResponse = await resDesp.json();
+                
+                // Garantimos a leitura quer a API devolva um array puro ou o objeto de paginação
+                const despesasBrutas = Array.isArray(jsonResponse) ? jsonResponse : (jsonResponse.data || []);
+                
                 despesasDoDia = despesasBrutas.filter(d => {
                     if (!d.dsp_datadesp) return false;
                     let dataD = d.dsp_datadesp.split('T')[0];
