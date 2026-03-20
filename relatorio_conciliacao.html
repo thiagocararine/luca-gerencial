@@ -129,12 +129,6 @@
                 <div id="tabela-relatorio" class="w-full min-h-[300px] flex items-center justify-center text-gray-400 italic text-sm">
                     Preencha os filtros acima e clique em "Buscar Dados"
                 </div>
-                <div id="container-despesas" class="w-full bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col mt-6 hidden">
-                <div class="px-5 py-4 border-b border-gray-200 bg-white flex justify-between items-center">
-                    <h3 class="text-sm font-bold text-gray-800 flex items-center gap-2 uppercase tracking-wide">
-                        <i data-feather="shopping-bag" class="w-4 h-4 text-purple-600"></i> Detalhamento de Despesas (Sangria)
-                    </h3>
-                </div>
                 <div id="tabela-despesas-relatorio" class="w-full min-h-[150px]"></div>
             </div>
             </div>
@@ -163,8 +157,37 @@
             </div>
         </div>
     </div>
+    <div id="modal-despesas" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-50 flex items-center justify-center opacity-0 transition-opacity">
+        <div class="bg-white rounded-xl shadow-2xl w-[750px] max-h-[80vh] flex flex-col overflow-hidden transform scale-95 transition-transform duration-200" id="modal-despesas-content">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <i data-feather="shopping-bag" class="w-5 h-5 text-purple-600"></i> Detalhamento de Sangrias (Despesas)
+                    </h3>
+                    <p id="despesas-subtitulo" class="text-xs text-gray-500 mt-1 font-medium">Carregando...</p>
+                </div>
+                <button onclick="fecharModalDespesas()" class="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="flex-1 overflow-auto p-6 bg-white">
+                <div class="overflow-x-auto border border-gray-200 rounded-lg">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 border-b border-gray-200 text-[10px] uppercase text-gray-500 font-bold tracking-wider">
+                                <th class="py-3 px-4">Grupo / Tipo</th>
+                                <th class="py-3 px-4">Descrição</th>
+                                <th class="py-3 px-4">Lançado Por</th>
+                                <th class="py-3 px-4 text-right">Valor Retirado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lista-despesas">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="assets/global.js"></script>
-    <script src="relatorio_conciliacao.js?v=11"></script>
+    <script src="relatorio_conciliacao.js?v=12"></script>
 </body>
 </html>
