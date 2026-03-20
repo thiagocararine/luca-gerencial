@@ -281,7 +281,16 @@ function abrirModalDetalhes(rowData) {
                 if (isERP) totalFaltaERP += valor;
                 else totalFaltaMP += valor;
 
-                let hora = div.data_hora_transacao ? div.data_hora_transacao.split(' ')[1].substring(0,5) : '--:--';
+                // --- A CORREÇÃO DA HORA ESTÁ AQUI ---
+                let hora = '--:--';
+                if (div.data_hora_transacao) {
+                    // Divide o texto tanto se tiver um "T" quanto se tiver um espaço normal
+                    let partesTempo = String(div.data_hora_transacao).split(/[T ]/); 
+                    if (partesTempo.length > 1 && partesTempo[1]) {
+                        hora = partesTempo[1].substring(0,5);
+                    }
+                }
+                // ------------------------------------
                 
                 return `
                     <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
