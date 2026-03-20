@@ -101,6 +101,8 @@ function processarArquivo(file) {
         return;
     }
 
+    encolherAreaUpload(file.name);
+
     transacoesMaqPorChave = {};
     transacoesERPPorChave = {};
     estadoAuditoria = {}; 
@@ -930,4 +932,33 @@ function recalcularDashboards() {
             containerDesp.classList.add('hidden');
         }
     }
+}
+
+function encolherAreaUpload(nomeArquivo) {
+    const uploadZone = document.getElementById('upload-zone');
+    const dropArea = document.getElementById('drop-area');
+    const iconContainer = document.getElementById('upload-icon-container');
+    const uploadText = document.getElementById('upload-text');
+    const uploadSubtext = document.getElementById('upload-subtext');
+
+    // Reduz drasticamente o padding da caixa externa
+    uploadZone.className = "bg-white p-2 rounded-xl shadow-sm border border-gray-200 mb-2";
+    
+    // Transforma a área pontilhada gigante numa linha horizontal fininha
+    dropArea.className = "border border-dashed border-gray-300 rounded-lg bg-gray-50 flex flex-row items-center px-4 py-2 transition-colors cursor-pointer hover:bg-indigo-50 hover:border-indigo-400";
+    
+    // Ajusta o ícone
+    iconContainer.className = "p-1.5 bg-white rounded shadow-sm mr-3";
+    iconContainer.innerHTML = '<i data-feather="file-text" class="w-4 h-4 text-indigo-600"></i>';
+
+    // Alinha o texto à esquerda com o nome do ficheiro
+    uploadText.className = "text-sm font-bold text-gray-700 truncate flex-1 text-left mt-0";
+    uploadText.textContent = `Arquivo carregado: ${nomeArquivo}`;
+    
+    // Transforma o subtítulo num botão de ação à direita
+    uploadSubtext.className = "text-[11px] font-bold text-indigo-700 bg-indigo-100 border border-indigo-200 px-3 py-1 rounded shadow-sm whitespace-nowrap ml-4 mt-0 hover:bg-indigo-200 transition-colors";
+    uploadSubtext.textContent = "Trocar Arquivo";
+
+    // Redesenha o novo ícone 
+    if (typeof feather !== 'undefined') feather.replace();
 }
