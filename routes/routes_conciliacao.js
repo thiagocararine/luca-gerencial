@@ -232,21 +232,23 @@ router.post('/relatorio', authenticateToken, async (req, res) => {
         let paramsDesp = [data_inicial, data_final];
 
         if (cod_filial && cod_filial !== 'TODAS') {
-            sqlDesp += ` AND dsp_filial = ?`;
-            paramsDesp.push(cod_filial);
+            // Mapeamento para garantir que encontra a despesa, quer esteja salva pela sigla ou pelo nome
+            let nomeF = cod_filial;
+            if (cod_filial === 'VMNAF') nomeF = 'Piabeta';
+            if (cod_filial === 'LCMAT') nomeF = 'Campinas';
+            if (cod_filial === 'TNASC') nomeF = 'Angélica';
+            if (cod_filial === 'LUCAM') nomeF = 'Cruz';
+
+            sqlDesp += ` AND (dsp_filial = ? OR dsp_filial LIKE ? OR dsp_filial LIKE ?)`;
+            // Substitui acentos para apanhar "Piabetá" ou "Piabeta"
+            paramsDesp.push(cod_filial, `%${nomeF}%`, `%${nomeF.replace('é','e').replace('á','a')}%`);
         }
 
         const [despesas] = await connection.execute(sqlDesp, paramsDesp);
 
         connection.release();
         
-        // Agora a API devolve um PACOTE com as Capas de Fechamento E as Despesas!
         res.json({ capas: capas, despesas: despesas });
-        
-    } catch (error) {
-        if (connection) connection.release();
-        console.error("Erro no relatório:", error);
-        res.status(500).json({ error: 'Erro ao gerar relatório.' });
     }
 });
 
