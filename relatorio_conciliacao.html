@@ -81,23 +81,31 @@
                 </div>
             </div>
 
-            <div id="resumo-container" class="grid grid-cols-4 gap-4 hidden">
-                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-blue-500">
-                    <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Faturamento Sistema (Período)</p>
-                    <h2 id="resumo-erp" class="text-xl font-black text-gray-800">R$ 0,00</h2>
+            <div id="resumo-container" class="grid grid-cols-5 gap-4 hidden">
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-blue-500 relative overflow-hidden">
+                    <div class="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-blue-50 to-transparent"></div>
+                    <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1 relative z-10">Faturamento Sistema</p>
+                    <h2 id="resumo-erp" class="text-xl font-black text-gray-800 relative z-10">R$ 0,00</h2>
                 </div>
-                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-indigo-500">
-                    <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Processado MP (Período)</p>
-                    <h2 id="resumo-maq" class="text-xl font-black text-gray-800">R$ 0,00</h2>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-indigo-500 relative overflow-hidden">
+                    <div class="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-indigo-50 to-transparent"></div>
+                    <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1 relative z-10">Processado MP</p>
+                    <h2 id="resumo-maq" class="text-xl font-black text-gray-800 relative z-10">R$ 0,00</h2>
                 </div>
-                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-red-500">
-                    <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Custo de Taxas MP</p>
-                    <h2 id="resumo-taxas" class="text-xl font-black text-red-600">R$ 0,00</h2>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-orange-500 relative overflow-hidden">
+                    <div class="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-orange-50 to-transparent"></div>
+                    <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1 relative z-10">Devoluções MP</p>
+                    <h2 id="resumo-devolucao" class="text-xl font-black text-orange-600 relative z-10">R$ 0,00</h2>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-red-500 relative overflow-hidden">
+                    <div class="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-red-50 to-transparent"></div>
+                    <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1 relative z-10">Custo de Taxas MP</p>
+                    <h2 id="resumo-taxas" class="text-xl font-black text-red-600 relative z-10">R$ 0,00</h2>
                 </div>
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-yellow-500 relative overflow-hidden">
                     <div class="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-yellow-50 to-transparent"></div>
-                    <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1 z-10">Diferença Total Encontrada</p>
-                    <h2 id="resumo-diferenca" class="text-xl font-black text-yellow-600 z-10">R$ 0,00</h2>
+                    <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1 relative z-10">Diferença Total</p>
+                    <h2 id="resumo-diferenca" class="text-xl font-black text-yellow-600 relative z-10">R$ 0,00</h2>
                 </div>
             </div>
 
@@ -144,6 +152,6 @@
     </div>
 
     <script src="assets/global.js"></script>
-    <script src="relatorio_conciliacao.js?v=9"></script>
+    <script src="relatorio_conciliacao.js?v=10"></script>
 </body>
 </html>

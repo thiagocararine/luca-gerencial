@@ -223,18 +223,21 @@ async function buscarRelatorio() {
 
         document.getElementById('btn-exportar').classList.remove('hidden');
 
-        let totalErp = 0, totalMaq = 0, totalTaxas = 0, totalDif = 0;
+        let totalErp = 0, totalMaq = 0, totalDev = 0, totalTaxas = 0, totalDif = 0;
         dadosBrutos.forEach(row => {
             totalErp += parseFloat(row.valor_total_erp || 0);
             totalMaq += parseFloat(row.valor_total_maq || 0);
+            totalDev += parseFloat(row.valor_devolucao_maq || 0);
             totalTaxas += parseFloat(row.taxas_maq || 0);
             totalDif += parseFloat(row.diferenca || 0);
         });
 
         document.getElementById('resumo-erp').textContent = `R$ ${totalErp.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         document.getElementById('resumo-maq').textContent = `R$ ${totalMaq.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+        document.getElementById('resumo-devolucao').textContent = `R$ ${totalDev.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         document.getElementById('resumo-taxas').textContent = `R$ ${totalTaxas.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         document.getElementById('resumo-diferenca').textContent = `R$ ${totalDif.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+        
         document.getElementById('resumo-container').classList.remove('hidden');
 
     } catch (err) {
