@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', initRelatorio);
 const API_BASE = '/api/conciliacao';
 let tabelaRelatorio; 
 let dadosBrutos = []; 
+let dateRangePicker;
 
 function initRelatorio() {
     if (typeof feather !== 'undefined') feather.replace();
@@ -10,8 +11,17 @@ function initRelatorio() {
     const hoje = new Date();
     const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
     
-    document.getElementById('filtro-data-inicial').value = primeiroDia.toISOString().split('T')[0];
-    document.getElementById('filtro-data-final').value = hoje.toISOString().split('T')[0];
+    // Transforma o nosso input num calendário de intervalo (Range)
+    dateRangePicker = new Litepicker({
+        element: document.getElementById('filtro-data-range'),
+        singleMode: false,
+        format: 'DD/MM/YYYY',
+        lang: 'pt-BR',
+        startDate: primeiroDia,
+        endDate: hoje,
+        numberOfMonths: 2,
+        dropdowns: { minYear: 2020, maxYear: null, months: true, years: true }
+    });
 }
 
 function formatarDifParent(cell) {
@@ -33,6 +43,21 @@ function initTabela(dadosParaCarregar = []) {
         pagination: "local",
         paginationSize: 15,
         placeholder: "Nenhum dado encontrado para os filtros selecionados.",
+        locale: "pt-br",
+        langs: {
+            "pt-br": {
+                "pagination": {
+                    "first": "Primeira",
+                    "first_title": "Primeira Página",
+                    "last": "Última",
+                    "last_title": "Última Página",
+                    "prev": "Anterior",
+                    "prev_title": "Página Anterior",
+                    "next": "Próxima",
+                    "next_title": "Próxima Página",
+                }
+            }
+        },
         dataTree: true,
         dataTreeStartExpanded: false, 
         dataTreeChildField: "_children", 
@@ -186,12 +211,15 @@ function transformarEmLinhaUnica(dados, despesas = []) {
 }
 
 async function buscarRelatorio() {
-    const dataInicial = document.getElementById('filtro-data-inicial').value;
-    const dataFinal = document.getElementById('filtro-data-final').value;
+    const d1 = dateRangePicker.getStartDate();
+    const d2 = dateRangePicker.getEndDate();
+    
+    if (!d1 || !d2) return alert("Por favor, selecione o período no calendário.");
+
+    const dataInicial = d1.format('YYYY-MM-DD');
+    const dataFinal = d2.format('YYYY-MM-DD');
     const filial = document.getElementById('filtro-filial').value;
     const status = document.getElementById('filtro-status').value;
-
-    if (!dataInicial || !dataFinal) return alert("Por favor, preencha a data inicial e final.");
 
     const tabelaDiv = document.getElementById('tabela-relatorio');
     const loadingMsg = document.getElementById('loading-mensagem');
@@ -389,7 +417,7 @@ function abrirModalDespesas(rowData) {
                 </td>
                 <td class="py-2.5 px-4 text-xs font-medium text-gray-600">${d.dsp_descricao}</td>
                 <td class="py-2.5 px-4 text-xs text-gray-500">${d.dsp_userlanc}</td>
-                <td class="py-2.5 px-4 text-right text-sm font-black text-purple-700">R$ ${parseFloat(d.dsp_valordsp || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                <td class="py-2.5 px-4 text-right text-lg font-black text-purple-700">R$ ${parseFloat(d.dsp_valordsp || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
             </tr>
         `;
     });
