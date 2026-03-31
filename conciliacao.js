@@ -195,6 +195,22 @@ function processarArquivo(file) {
                 }
             });
 
+            // FASE 1.5: BLOQUEIO CONTRA LIXO DE DIAS ANTERIORES NO CSV
+            let arrayDatas = Array.from(datasEncontradas);
+            if (arrayDatas.length > 1) {
+                let freq = {};
+                arrayDatas.forEach(d => freq[d] = 0);
+                transacoesBrutas.forEach(t => freq[t.dataTransacao]++);
+                
+                let dataPrincipal = arrayDatas.sort((a, b) => freq[b] - freq[a])[0];
+                let dataFmt = dataPrincipal.split('-').reverse().join('/');
+
+                if(confirm(`⚠️ MÚLTIPLAS DATAS ENCONTRADAS!\n\nO Mercado Pago enviou lixo de transações perdidas de dias anteriores no meio deste arquivo.\nA data principal é: ${dataFmt}.\n\nDeseja filtrar automaticamente e considerar APENAS as vendas de ${dataFmt} para não estragar fechamentos passados?`)) {
+                    transacoesBrutas = transacoesBrutas.filter(t => t.dataTransacao === dataPrincipal);
+                    datasEncontradas = new Set([dataPrincipal]); 
+                }
+            }
+
             // FASE 2: O FILTRO DESTRUIDOR DE ESTORNOS
             let agrupadoPorId = {};
             transacoesBrutas.forEach(t => {
@@ -639,17 +655,19 @@ function renderizarTabelaAuditoria(chave) {
     });
 
     state.sobrasERP.forEach(function(e, idx) {
+        let iconeStatus = e.isTransferido ? '<span class="text-purple-600 font-bold bg-purple-50 px-2 py-1 rounded text-[11px] border border-purple-200">⬇️ Trazido</span>' : '<span class="text-yellow-600 font-bold bg-yellow-50 px-2 py-1 rounded text-[11px] border border-yellow-200">! Falta no MP</span>';
         resultado.push({ 
             selecionavel: true, 
             tipo_sobra: 'erp', 
             origem_idx: idx, 
-            status_icone: '<span class="text-yellow-600 font-bold bg-yellow-50 px-2 py-1 rounded text-[11px] border border-yellow-200">! Falta no MP</span>',
+            status_icone: iconeStatus,
             maq_hora: '-', 
             maq_valor: 0, 
             maq_taxa: 0, 
             erp_hora: e.hora, 
             erp_dav: e.dav, 
-            erp_valor: e.valor
+            erp_valor: e.valor, 
+            orig_chave: e.original_chave 
         });
     });
 
@@ -668,6 +686,11 @@ function abrirAuditoriaItemAItem(rowData) {
     
     prepararEstadoAuditoria(chave);
     renderizarTabelaAuditoria(chave);
+
+    const calcInput = document.getElementById('calc-input');
+    const calcResult = document.getElementById('calc-result');
+    if (calcInput) calcInput.value = '';
+    if (calcResult) calcResult.textContent = '0,00';
 
     const [ano, mes, dia] = rowData.data_venda.split('-');
     document.getElementById('auditoria-subtitulo').textContent = `Modalidade: ${rowData.modalidade} | Data: ${dia}/${mes}/${ano}`;
@@ -759,6 +782,56 @@ function fecharModalAuditoria() {
     setTimeout(function() { 
         document.getElementById('modal-auditoria').classList.add('hidden'); 
     }, 200);
+}
+
+// --- A MÁGICA DA TRANSFERÊNCIA DE MODALIDADES ---
+function puxarOutraModalidade() {
+    let [dataPura, modAtual] = linhaAtualAuditoria.chave_id.split('|');
+    let todasMods = ['Pix', 'Cartão de Crédito', 'Cartão de Débito', 'Dinheiro'];
+    let outrasMods = todasMods.filter(m => m !== modAtual);
+    
+    let modEscolhida = prompt(`VINCULAÇÃO CRUZADA DE MODALIDADES\n\nDe qual modalidade deseja "puxar" as transações do ERP que estão sobrando?\nDigite exatamente uma destas opções:\n\n- ${outrasMods.join('\n- ')}`);
+    if (!modEscolhida) return;
+    
+    let modFmt = outrasMods.find(m => m.toLowerCase() === modEscolhida.toLowerCase().trim());
+    if (!modFmt) return alert("Erro: Não digitou a modalidade corretamente.");
+    
+    let chaveBusca = `${dataPura}|${modFmt}`;
+    prepararEstadoAuditoria(chaveBusca); 
+    let estadoBusca = estadoAuditoria[chaveBusca];
+    
+    if (!estadoBusca || estadoBusca.sobrasERP.length === 0) {
+        return alert(`Não há sobras no sistema para ${modFmt} neste dia.`);
+    }
+    
+    estadoBusca.sobrasERP.forEach(e => {
+        let itemTransf = {...e, dav: `[${modFmt}] ${e.dav}`, original_chave: chaveBusca, isTransferido: true};
+        estadoAuditoria[linhaAtualAuditoria.chave_id].sobrasERP.push(itemTransf);
+    });
+    
+    estadoBusca.sobrasERP = []; 
+    alert(`Sucesso! As transações de ${modFmt} vieram para cá. Agora selecione as caixas para conciliar manualmente!`);
+    renderizarTabelaAuditoria(linhaAtualAuditoria.chave_id);
+}
+
+// --- A CALCULADORA INTELIGENTE ---
+function avaliarCalculadora(expressao) {
+    const resultSpan = document.getElementById('calc-result');
+    try {
+        let expLimpa = expressao.replace(/,/g, '.').replace(/[^0-9+\-*/.]/g, '');
+        if (!expLimpa) { 
+            resultSpan.textContent = '0,00'; 
+            return; 
+        }
+        let resultado = new Function('return ' + expLimpa)();
+        if (isFinite(resultado)) {
+            resultSpan.textContent = resultado.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        } else {
+            resultSpan.textContent = 'Erro';
+        }
+    } catch (e) { 
+        resultSpan.textContent = '...'; 
+    }
 }
 
 // --- SALVAMENTO FINAL NO BANCO DE DADOS ---

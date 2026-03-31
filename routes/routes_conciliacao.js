@@ -42,6 +42,7 @@ router.post('/comparar', authenticateToken, async (req, res) => {
                     WHEN rc_formar = '11-Deposito Conta' THEN 'Pix'
                     WHEN rc_formar = '04-Cartao Credito' THEN 'Cartão de Crédito'
                     WHEN rc_formar = '05-Cartao Debito' THEN 'Cartão de Débito'
+                    WHEN rc_formar = '01-Dinheiro' THEN 'Dinheiro'
                 END as modalidade,
                 rc_vlbaix as valor,
                 rc_ndocum as doc_original,
@@ -50,7 +51,7 @@ router.post('/comparar', authenticateToken, async (req, res) => {
             WHERE rc_dtbaix IN (${placeholders})
             AND rc_status IN ('1', '2')
             AND rc_indefi = ?  
-            AND rc_formar IN ('11-Deposito Conta', '04-Cartao Credito', '05-Cartao Debito')
+            AND rc_formar IN ('11-Deposito Conta', '04-Cartao Credito', '05-Cartao Debito', '01-Dinheiro')
 
             UNION ALL
 
