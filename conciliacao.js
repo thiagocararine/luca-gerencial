@@ -7,6 +7,7 @@ let tablePrincipal;
 let tableAuditoria; 
 let dadosConsolidados = [];
 let despesasDoDia = []; // NOVO: Guarda as despesas daquele dia
+let tabelaTransferencia;
 
 // Variáveis de Memória para a Auditoria
 let transacoesMaqPorChave = {}; 
@@ -21,6 +22,7 @@ function initPage() {
     setupDragAndDrop();
     initTablePrincipal();
     initTableAuditoria();
+    initTableTransferencia();
 }
 
 function setupDragAndDrop() {
@@ -541,31 +543,249 @@ function initTablePrincipal() {
 
 function initTableAuditoria() {
     tableAuditoria = new Tabulator("#tabela-itens-csv", {
-        data: [], 
-        layout: "fitColumns",
-        selectableRows: true, 
-        selectableRowsCheck: function(row) { 
-            return row.getData().selecionavel; 
-        },
+        data: [], layout: "fitColumns", selectableRows: true,
+        selectableRowsCheck: function(row) { return row.getData().selecionavel; },
         columns: [
             { formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40 },
-            { title: "Status", field: "status_icone", formatter: "html", width: 120, hozAlign: "center" },
-            { title: "Hora MP", field: "maq_hora", width: 100, hozAlign: "center" },
+            { title: "Status", field: "status_icone", formatter: "html", width: 140, hozAlign: "center" },
+            { title: "Hora MP", field: "maq_hora", width: 90, hozAlign: "center" },
             { title: "Valor MP", field: "maq_valor", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, bottomCalc: "sum", bottomCalcFormatter: "money", bottomCalcFormatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
-            { title: "Taxa MP", field: "maq_taxa", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, cssClass: "text-red-600", bottomCalc: "sum", bottomCalcFormatter: "money", bottomCalcFormatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } },
-            { title: "Hora Sis", field: "erp_hora", width: 100, hozAlign: "center" },
-            { 
-                title: "DAV Sis", 
-                field: "erp_dav", 
-                width: 100, 
-                hozAlign: "center", 
-                formatter: function(cell) { 
-                    return `<span class="font-bold text-gray-700">${cell.getValue()}</span>`; 
-                } 
-            },
+            { title: "Hora Sis", field: "erp_hora", width: 90, hozAlign: "center" },
+            { title: "DAV Sis", field: "erp_dav", width: 150, hozAlign: "left", formatter: cell => `<span class="font-bold text-gray-700">${cell.getValue()}</span>` },
             { title: "Valor Sis", field: "erp_valor", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." }, bottomCalc: "sum", bottomCalcFormatter: "money", bottomCalcFormatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } }
         ]
     });
+
+    // MAGIA 1: Escuta os cliques nas caixinhas para fazer a matemática ao vivo!
+    tableAuditoria.on("rowSelectionChanged", function(data, rows) {
+        atualizarResumoSelecao(data);
+    });
+}
+
+function atualizarResumoSelecao(selecionados) {
+    let sumMaq = 0; let sumErp = 0;
+
+    selecionados.forEach(d => {
+        if (d.tipo_sobra === 'maq') sumMaq += d.maq_valor;
+        if (d.tipo_sobra === 'erp') sumErp += d.erp_valor;
+    });
+
+    let dif = sumMaq - sumErp;
+    
+    document.getElementById('soma-maq').textContent = `R$ ${sumMaq.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    document.getElementById('soma-erp').textContent = `R$ ${sumErp.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    
+    const difSpan = document.getElementById('soma-dif');
+    const boxBg = document.getElementById('box-resumo-calc');
+    const btnConciliar = document.getElementById('btn-conciliar-manual');
+    
+    difSpan.textContent = `R$ ${Math.abs(dif).toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    
+    if (selecionados.length === 0) {
+        difSpan.className = "font-black text-gray-300 text-lg";
+        boxBg.classList.remove('bg-green-50', 'bg-red-50', 'border-green-200', 'border-red-200');
+        btnConciliar.classList.add('opacity-50', 'cursor-not-allowed');
+    } else if (Math.abs(dif) < 0.05) {
+        difSpan.className = "font-black text-green-600 text-lg";
+        boxBg.classList.remove('bg-red-50', 'border-red-200');
+        boxBg.classList.add('bg-green-50', 'border-green-200');
+        btnConciliar.classList.remove('opacity-50', 'cursor-not-allowed');
+    } else {
+        difSpan.className = "font-black text-red-600 text-lg";
+        boxBg.classList.remove('bg-green-50', 'border-green-200');
+        boxBg.classList.add('bg-red-50', 'border-red-200');
+        btnConciliar.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+}
+
+// MAGIA 2: A NOVA TABELA E MODAL DE TRANSFERÊNCIA
+function initTableTransferencia() {
+    tabelaTransferencia = new Tabulator("#tabela-transferencia", {
+        data: [], layout: "fitColumns", selectableRows: true,
+        placeholder: "Selecione a origem acima para ver as vendas disponíveis.",
+        columns: [
+            { formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40 },
+            { title: "Hora no Sistema", field: "hora", width: 130, hozAlign: "center" },
+            { title: "DAV / Documento", field: "dav", width: 250, hozAlign: "left", formatter: c => `<span class="font-bold text-gray-700">${c.getValue()}</span>` },
+            { title: "Valor da Venda", field: "valor", formatter: "money", formatterParams: { symbol: "R$ ", decimal: ",", thousand: "." } }
+        ]
+    });
+}
+
+function abrirModalTransferencia() {
+    let [dataPura, modAtual] = linhaAtualAuditoria.chave_id.split('|');
+    let todasMods = ['Pix', 'Cartão de Crédito', 'Cartão de Débito', 'Dinheiro'];
+    let outrasMods = todasMods.filter(m => m !== modAtual);
+    
+    let select = document.getElementById('select-mod-origem');
+    select.innerHTML = '<option value="">Selecione uma modalidade...</option>';
+    outrasMods.forEach(m => { select.innerHTML += `<option value="${m}">${m}</option>`; });
+
+    tabelaTransferencia.clearData();
+    
+    document.getElementById('modal-transferencia').classList.remove('hidden');
+    setTimeout(() => { 
+        document.getElementById('modal-transferencia').classList.remove('opacity-0'); 
+        document.getElementById('modal-transferencia-content').classList.remove('scale-95'); 
+        if (typeof feather !== 'undefined') feather.replace(); 
+    }, 10);
+}
+
+function carregarSobrasTransferencia() {
+    let modOrigem = document.getElementById('select-mod-origem').value;
+    if (!modOrigem) { tabelaTransferencia.clearData(); return; }
+
+    let [dataPura, modAtual] = linhaAtualAuditoria.chave_id.split('|');
+    let chaveBusca = `${dataPura}|${modOrigem}`;
+    
+    prepararEstadoAuditoria(chaveBusca);
+    let estadoBusca = estadoAuditoria[chaveBusca];
+    
+    if (!estadoBusca || estadoBusca.sobrasERP.length === 0) {
+        tabelaTransferencia.clearData();
+        return alert(`Não há vendas sobrando no sistema para ${modOrigem} neste dia.`);
+    }
+
+    let dadosParaTabela = estadoBusca.sobrasERP.map((e, idx) => {
+        return { ...e, id_original: idx, mod_origem: modOrigem, chave_origem: chaveBusca };
+    });
+
+    tabelaTransferencia.setData(dadosParaTabela);
+}
+
+function efetivarTransferencia() {
+    let selecionados = tabelaTransferencia.getSelectedData();
+    if (selecionados.length === 0) return alert("Marque pelo menos uma venda na tabela para trazer.");
+
+    let modOrigem = document.getElementById('select-mod-origem').value;
+    let chaveBusca = selecionados[0].chave_origem;
+    let estadoBusca = estadoAuditoria[chaveBusca];
+
+    selecionados.forEach(e => {
+        let itemTransf = { hora: e.hora, dav: `[${modOrigem}] ${e.dav}`, valor: e.valor, original_chave: chaveBusca, isTransferido: true };
+        estadoAuditoria[linhaAtualAuditoria.chave_id].sobrasERP.push(itemTransf);
+    });
+
+    let indicesParaRemover = selecionados.map(s => s.id_original).sort((a, b) => b - a);
+    indicesParaRemover.forEach(idx => { estadoBusca.sobrasERP.splice(idx, 1); });
+
+    fecharModalTransferencia();
+    renderizarTabelaAuditoria(linhaAtualAuditoria.chave_id);
+}
+
+function fecharModalTransferencia() {
+    document.getElementById('modal-transferencia').classList.add('opacity-0'); 
+    document.getElementById('modal-transferencia-content').classList.add('scale-95');
+    setTimeout(() => document.getElementById('modal-transferencia').classList.add('hidden'), 200);
+}
+
+function prepararEstadoAuditoria(chave) {
+    if (estadoAuditoria[chave]) return; 
+
+    let maq = JSON.parse(JSON.stringify(transacoesMaqPorChave[chave] || []));
+    let erp = JSON.parse(JSON.stringify(transacoesERPPorChave[chave] || []));
+    
+    maq.sort((a, b) => b.valor - a.valor); 
+    erp.sort((a, b) => b.valor - a.valor);
+
+    let matches = [];
+    for (let i = maq.length - 1; i >= 0; i--) {
+        let itemMaq = maq[i];
+        let indexERP = erp.findIndex(e => Math.abs(e.valor - itemMaq.valor) < 0.01);
+        if (indexERP !== -1) {
+            matches.push({ maqItem: itemMaq, erpItem: erp[indexERP], tipo: 'auto' });
+            erp.splice(indexERP, 1); 
+            maq.splice(i, 1);
+        }
+    }
+    estadoAuditoria[chave] = { matches, sobrasMaq: maq, sobrasERP: erp };
+}
+
+function renderizarTabelaAuditoria(chave) {
+    let state = estadoAuditoria[chave];
+    let resultado = [];
+
+    state.matches.forEach(m => {
+        let iconeStatus = m.tipo === 'manual' ? '<span class="text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded text-[10px] border border-blue-200">🔗 Manual</span>' : '<span class="text-green-600 font-bold bg-green-50 px-2 py-1 rounded text-[10px] border border-green-200">✓ Automático</span>';
+        if (m.maqItem && m.maqItem.isQRCredito) iconeStatus = '<span class="text-white font-bold bg-red-600 px-2 py-1 rounded text-[10px] border border-red-800 shadow-sm mr-1">🚨 QR CRÉDITO</span><br>' + iconeStatus;
+        resultado.push({ selecionavel: false, status_icone: iconeStatus, maq_hora: m.maqItem.hora, maq_valor: m.maqItem.valor, maq_taxa: m.maqItem.taxa, erp_hora: m.erpItem.hora, erp_dav: m.erpItem.dav, erp_valor: m.erpItem.valor });
+    });
+
+    state.sobrasMaq.forEach((m, idx) => {
+        let iconeStatus = m.isQRCredito ? '<span class="text-white font-bold bg-red-600 px-2 py-1 rounded text-[10px] border border-red-800 animate-pulse shadow-sm">🚨 QR NO CRÉDITO</span>' : '<span class="text-red-600 font-bold bg-red-50 px-2 py-1 rounded text-[10px] border border-red-200">✗ Falta no Sis</span>';
+        resultado.push({ selecionavel: true, tipo_sobra: 'maq', origem_idx: idx, status_icone: iconeStatus, maq_hora: m.hora, maq_valor: m.valor, maq_taxa: m.taxa, erp_hora: '-', erp_dav: '-', erp_valor: 0 });
+    });
+
+    state.sobrasERP.forEach((e, idx) => {
+        let iconeStatus = e.isTransferido ? '<span class="text-purple-600 font-bold bg-purple-50 px-2 py-1 rounded text-[10px] border border-purple-200">⬇️ Trazido</span>' : '<span class="text-yellow-600 font-bold bg-yellow-50 px-2 py-1 rounded text-[10px] border border-yellow-200">! Falta no MP</span>';
+        resultado.push({ selecionavel: true, tipo_sobra: 'erp', origem_idx: idx, status_icone: iconeStatus, maq_hora: '-', maq_valor: 0, maq_taxa: 0, erp_hora: e.hora, erp_dav: e.dav, erp_valor: e.valor, orig_chave: e.original_chave });
+    });
+
+    tableAuditoria.setData(resultado);
+    document.getElementById('btn-conciliar-manual').classList.remove('hidden');
+    atualizarResumoSelecao([]); // Zera a calculadora ao abrir/atualizar
+}
+
+function abrirAuditoriaItemAItem(rowData) {
+    if (rowData.modalidade === 'Dinheiro') return alert("Dinheiro é recebido fisicamente.");
+    linhaAtualAuditoria = rowData;
+    const chave = rowData.chave_id;
+    
+    prepararEstadoAuditoria(chave);
+    renderizarTabelaAuditoria(chave);
+
+    const [ano, mes, dia] = rowData.data_venda.split('-');
+    document.getElementById('auditoria-subtitulo').textContent = `Modalidade: ${rowData.modalidade} | Data: ${dia}/${mes}/${ano}`;
+    document.getElementById('modal-auditoria').classList.remove('hidden');
+    setTimeout(() => { 
+        document.getElementById('modal-auditoria').classList.remove('opacity-0'); 
+        document.getElementById('modal-auditoria-content').classList.remove('scale-95'); 
+        if (typeof feather !== 'undefined') feather.replace(); 
+    }, 10);
+}
+
+function conciliarManualmente() {
+    let selecionados = tableAuditoria.getSelectedData();
+    let selMaq = selecionados.filter(d => d.tipo_sobra === 'maq'); 
+    let selErp = selecionados.filter(d => d.tipo_sobra === 'erp');
+
+    if (selMaq.length === 0 && selErp.length === 0) return;
+    
+    let sumMaq = 0; selMaq.forEach(curr => sumMaq += curr.maq_valor);
+    let sumErp = 0; selErp.forEach(curr => sumErp += curr.erp_valor);
+
+    if (Math.abs(sumMaq - sumErp) > 0.05) {
+        if (!confirm(`⚠️ ATENÇÃO - VALORES DIFERENTES:\nMercado Pago: R$ ${sumMaq.toFixed(2)}\nSistema: R$ ${sumErp.toFixed(2)}\n\nDeseja forçar a conciliação mesmo com essa diferença?`)) return;
+    }
+
+    let chave = linhaAtualAuditoria.chave_id; 
+    let state = estadoAuditoria[chave];
+
+    let horasMaqFormatadas = selMaq.map(m => m.maq_hora).join(' / ');
+    let taxasMaqSomadas = 0; selMaq.forEach(c => taxasMaqSomadas += c.maq_taxa);
+    let horasErpFormatadas = selErp.map(e => e.erp_hora).join(' / ');
+    let davsErpFormatados = selErp.map(e => e.erp_dav).join(' / ');
+    
+    state.matches.push({ 
+        maqItem: { hora: horasMaqFormatadas, valor: sumMaq, taxa: taxasMaqSomadas }, 
+        erpItem: { hora: horasErpFormatadas, dav: davsErpFormatados, valor: sumErp }, 
+        tipo: 'manual' 
+    });
+
+    let maqIndices = selMaq.map(m => m.origem_idx).sort((a, b) => b - a); 
+    maqIndices.forEach(idx => state.sobrasMaq.splice(idx, 1));
+    
+    let erpIndices = selErp.map(e => e.origem_idx).sort((a, b) => b - a); 
+    erpIndices.forEach(idx => state.sobrasERP.splice(idx, 1));
+
+    tableAuditoria.deselectRow(); 
+    renderizarTabelaAuditoria(chave);
+}
+
+function fecharModalAuditoria() {
+    document.getElementById('modal-auditoria').classList.add('opacity-0'); 
+    document.getElementById('modal-auditoria-content').classList.add('scale-95');
+    setTimeout(() => document.getElementById('modal-auditoria').classList.add('hidden'), 200);
 }
 
 // --- CONTROLES DA AUDITORIA E DE-PARA MANUAL ---
@@ -675,106 +895,6 @@ function renderizarTabelaAuditoria(chave) {
     document.getElementById('btn-conciliar-manual').classList.remove('hidden');
 }
 
-function abrirAuditoriaItemAItem(rowData) {
-    if (rowData.modalidade === 'Dinheiro') {
-        alert("Dinheiro é recebido fisicamente. Não há transações digitais para auditar.");
-        return;
-    }
-
-    linhaAtualAuditoria = rowData;
-    const chave = rowData.chave_id;
-    
-    prepararEstadoAuditoria(chave);
-    renderizarTabelaAuditoria(chave);
-
-    const calcInput = document.getElementById('calc-input');
-    const calcResult = document.getElementById('calc-result');
-    if (calcInput) calcInput.value = '';
-    if (calcResult) calcResult.textContent = '0,00';
-
-    const [ano, mes, dia] = rowData.data_venda.split('-');
-    document.getElementById('auditoria-subtitulo').textContent = `Modalidade: ${rowData.modalidade} | Data: ${dia}/${mes}/${ano}`;
-    document.getElementById('modal-auditoria').classList.remove('hidden');
-    
-    setTimeout(function() { 
-        document.getElementById('modal-auditoria').classList.remove('opacity-0'); 
-        document.getElementById('modal-auditoria-content').classList.remove('scale-95'); 
-        
-        if (typeof feather !== 'undefined') {
-            feather.replace(); 
-        }
-    }, 10);
-}
-
-function conciliarManualmente() {
-    let selecionados = tableAuditoria.getSelectedData();
-    
-    let selMaq = selecionados.filter(function(d) { return d.tipo_sobra === 'maq'; });
-    let selErp = selecionados.filter(function(d) { return d.tipo_sobra === 'erp'; });
-
-    if (selMaq.length === 0 && selErp.length === 0) {
-        alert("Selecione os itens marcando a caixinha na primeira coluna.");
-        return;
-    }
-
-    let sumMaq = 0;
-    selMaq.forEach(function(curr) { sumMaq += curr.maq_valor; });
-    
-    let sumErp = 0;
-    selErp.forEach(function(curr) { sumErp += curr.erp_valor; });
-
-    if (Math.abs(sumMaq - sumErp) > 0.05) {
-        const mensagemAlerta = `⚠️ ATENÇÃO - VALORES DIFERENTES:\nMercado Pago: R$ ${sumMaq.toFixed(2)}\nSistema: R$ ${sumErp.toFixed(2)}\n\nDeseja forçar a conciliação mesmo com essa diferença de R$ ${Math.abs(sumMaq - sumErp).toFixed(2)}?`;
-        
-        if (!confirm(mensagemAlerta)) {
-            return;
-        }
-    }
-
-    let chave = linhaAtualAuditoria.chave_id;
-    let state = estadoAuditoria[chave];
-
-    let horasMaqFormatadas = selMaq.map(function(m) { return m.maq_hora; }).join(' / ');
-    let taxasMaqSomadas = 0;
-    selMaq.forEach(function(c) { taxasMaqSomadas += c.maq_taxa; });
-    
-    let maqCombo = { 
-        hora: horasMaqFormatadas, 
-        valor: sumMaq, 
-        taxa: taxasMaqSomadas 
-    };
-
-    let horasErpFormatadas = selErp.map(function(e) { return e.erp_hora; }).join(' / ');
-    let davsErpFormatados = selErp.map(function(e) { return e.erp_dav; }).join(' / ');
-    
-    let erpCombo = { 
-        hora: horasErpFormatadas, 
-        dav: davsErpFormatados, 
-        valor: sumErp 
-    };
-    
-    state.matches.push({ 
-        maqItem: maqCombo, 
-        erpItem: erpCombo, 
-        tipo: 'manual' 
-    });
-
-    let maqIndices = selMaq.map(function(m) { return m.origem_idx; });
-    maqIndices.sort(function(a, b) { return b - a; }); 
-    maqIndices.forEach(function(idx) { 
-        state.sobrasMaq.splice(idx, 1); 
-    });
-
-    let erpIndices = selErp.map(function(e) { return e.origem_idx; });
-    erpIndices.sort(function(a, b) { return b - a; }); 
-    erpIndices.forEach(function(idx) { 
-        state.sobrasERP.splice(idx, 1); 
-    });
-
-    tableAuditoria.deselectRow();
-    renderizarTabelaAuditoria(chave);
-}
-
 function fecharModalAuditoria() {
     document.getElementById('modal-auditoria').classList.add('opacity-0'); 
     document.getElementById('modal-auditoria-content').classList.add('scale-95');
@@ -782,56 +902,6 @@ function fecharModalAuditoria() {
     setTimeout(function() { 
         document.getElementById('modal-auditoria').classList.add('hidden'); 
     }, 200);
-}
-
-// --- A MÁGICA DA TRANSFERÊNCIA DE MODALIDADES ---
-function puxarOutraModalidade() {
-    let [dataPura, modAtual] = linhaAtualAuditoria.chave_id.split('|');
-    let todasMods = ['Pix', 'Cartão de Crédito', 'Cartão de Débito', 'Dinheiro'];
-    let outrasMods = todasMods.filter(m => m !== modAtual);
-    
-    let modEscolhida = prompt(`VINCULAÇÃO CRUZADA DE MODALIDADES\n\nDe qual modalidade deseja "puxar" as transações do ERP que estão sobrando?\nDigite exatamente uma destas opções:\n\n- ${outrasMods.join('\n- ')}`);
-    if (!modEscolhida) return;
-    
-    let modFmt = outrasMods.find(m => m.toLowerCase() === modEscolhida.toLowerCase().trim());
-    if (!modFmt) return alert("Erro: Não digitou a modalidade corretamente.");
-    
-    let chaveBusca = `${dataPura}|${modFmt}`;
-    prepararEstadoAuditoria(chaveBusca); 
-    let estadoBusca = estadoAuditoria[chaveBusca];
-    
-    if (!estadoBusca || estadoBusca.sobrasERP.length === 0) {
-        return alert(`Não há sobras no sistema para ${modFmt} neste dia.`);
-    }
-    
-    estadoBusca.sobrasERP.forEach(e => {
-        let itemTransf = {...e, dav: `[${modFmt}] ${e.dav}`, original_chave: chaveBusca, isTransferido: true};
-        estadoAuditoria[linhaAtualAuditoria.chave_id].sobrasERP.push(itemTransf);
-    });
-    
-    estadoBusca.sobrasERP = []; 
-    alert(`Sucesso! As transações de ${modFmt} vieram para cá. Agora selecione as caixas para conciliar manualmente!`);
-    renderizarTabelaAuditoria(linhaAtualAuditoria.chave_id);
-}
-
-// --- A CALCULADORA INTELIGENTE ---
-function avaliarCalculadora(expressao) {
-    const resultSpan = document.getElementById('calc-result');
-    try {
-        let expLimpa = expressao.replace(/,/g, '.').replace(/[^0-9+\-*/.]/g, '');
-        if (!expLimpa) { 
-            resultSpan.textContent = '0,00'; 
-            return; 
-        }
-        let resultado = new Function('return ' + expLimpa)();
-        if (isFinite(resultado)) {
-            resultSpan.textContent = resultado.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-        } else {
-            resultSpan.textContent = 'Erro';
-        }
-    } catch (e) { 
-        resultSpan.textContent = '...'; 
-    }
 }
 
 // --- SALVAMENTO FINAL NO BANCO DE DADOS ---
