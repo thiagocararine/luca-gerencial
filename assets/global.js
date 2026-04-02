@@ -24,12 +24,13 @@ function getUserData() {
 
 function getUserName() { 
     const userData = getUserData();
-    return userData?.nome || 'Utilizador'; 
+    // Tolerância: Lê 'nome_user' ou 'nome' consoante o que estiver no Token
+    return userData?.nome_user || userData?.nome || 'Utilizador'; 
 }
 
 function logout() { 
     localStorage.removeItem('lucaUserToken'); 
-    localStorage.removeItem('company_logo'); // Limpa a logo da memória também
+    localStorage.removeItem('company_logo'); // Limpa a logo da memória
     window.location.href = 'login.html'; 
 }
 
@@ -37,37 +38,68 @@ function logout() {
 // --- 2. Lógica do Modal "Meu Perfil" ---
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Procura o elemento do nome do usuário em qualquer tela que carregar
+    // Transforma o nome do utilizador num botão clicável
     const userNameElement = document.getElementById('user-name');
-    if(userNameElement) {
-        // Deixa com cara de botão
+    if(userNameElement && userNameElement.parentElement) {
         userNameElement.parentElement.classList.add('cursor-pointer', 'hover:bg-gray-200', 'p-2', 'rounded-md', 'transition-colors');
         userNameElement.parentElement.addEventListener('click', abrirModalPerfil);
     }
 });
 
 function abrirModalPerfil() {
-    const userData = getUserData();
+    const userData = getUserData() || {};
     
-    // Preenche os campos com os dados atuais (se o token tiver essa informação)
-    document.getElementById('perfil-email').value = userData?.email || '';
-    document.getElementById('perfil-cpf').value = userData?.cpf || '';
-    document.getElementById('perfil-senha').value = ''; 
+    // Ligações Seguras aos elementos HTML
+    const elNome = document.getElementById('perfil-nome');
+    const elEmail = document.getElementById('perfil-email');
+    const elCpf = document.getElementById('perfil-cpf');
+    const elSenha = document.getElementById('perfil-senha');
+    const elCargo = document.getElementById('perfil-cargo');
+    const elDept = document.getElementById('perfil-departamento');
+
+    // Preenche com segurança, tentando as duas nomenclaturas possíveis
+    if (elNome) elNome.value = userData.nome_user || userData.nome || '';
+    if (elEmail) elEmail.value = userData.email_user || userData.email || '';
+    if (elCpf) elCpf.value = userData.cpf_user || userData.cpf || '';
+    if (elSenha) elSenha.value = ''; 
+    if (elCargo) elCargo.textContent = userData.cargo_user || userData.cargo || 'Não Informado';
+    if (elDept) elDept.textContent = userData.depart_user || userData.departamento || 'Não Informado';
     
-    document.getElementById('meu-perfil-modal').classList.remove('hidden');
+    const modal = document.getElementById('meu-perfil-modal');
+    const content = document.getElementById('meu-perfil-content');
     
-    // Atualiza os ícones caso a tela use Feather Icons
+    if (modal) {
+        modal.classList.remove('hidden');
+        // Dispara a animação fluida (Scale & Opacity)
+        setTimeout(() => {
+            modal.classList.remove('opacity-0');
+            if (content) content.classList.remove('scale-95');
+        }, 10);
+    }
+    
     if(typeof feather !== 'undefined') feather.replace();
 }
 
 function fecharModalPerfil() {
-    document.getElementById('meu-perfil-modal').classList.add('hidden');
+    const modal = document.getElementById('meu-perfil-modal');
+    const content = document.getElementById('meu-perfil-content');
+    
+    if (modal) {
+        // Encolhe e esconde suavemente
+        modal.classList.add('opacity-0');
+        if (content) content.classList.add('scale-95');
+        setTimeout(() => {
+            modal.classList.add('hidden');
+        }, 200); 
+    }
 }
 
 async function salvarMeuPerfil() {
-    const email_user = document.getElementById('perfil-email').value;
-    const cpf_user = document.getElementById('perfil-cpf').value;
-    const nova_senha = document.getElementById('perfil-senha').value;
+    // Agora capturamos também o nome
+    const nome_user = document.getElementById('perfil-nome') ? document.getElementById('perfil-nome').value : '';
+    const email_user = document.getElementById('perfil-email') ? document.getElementById('perfil-email').value : '';
+    const cpf_user = document.getElementById('perfil-cpf') ? document.getElementById('perfil-cpf').value : '';
+    const nova_senha = document.getElementById('perfil-senha') ? document.getElementById('perfil-senha').value : '';
 
     try {
         const res = await fetch(`${apiUrlBase}/auth/me`, {
@@ -76,17 +108,21 @@ async function salvarMeuPerfil() {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${getToken()}`
             },
-            body: JSON.stringify({ email_user, cpf_user, nova_senha })
+            // Enviamos o nome_user na carga para o servidor
+            body: JSON.stringify({ nome_user, email_user, cpf_user, nova_senha })
         });
 
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Erro ao atualizar dados');
+        if (!res.ok) throw new Error(data.error || 'Erro ao atualizar os dados');
 
         alert(data.message);
         
-        // Se o usuário trocou a senha, força ele a logar de novo
-        if(nova_senha) {
-            alert("Como você alterou sua senha, por favor faça login novamente.");
+        // Se o utilizador trocou a senha OU o nome, forçamos um novo login
+        // para que o Token JWT seja recriado com o nome atualizado!
+        const nomeAntigo = getUserData().nome_user || getUserData().nome;
+        
+        if (nova_senha || (nome_user && nome_user !== nomeAntigo)) {
+            alert("Como alterou dados críticos (Nome ou Senha), por favor inicie sessão novamente para os atualizar em definitivo.");
             logout(); 
         } else {
             fecharModalPerfil();
