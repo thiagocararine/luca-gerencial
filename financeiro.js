@@ -38,13 +38,12 @@ function getUserName() {
 // --- 3. INICIALIZAÇÃO ---
 
 async function initPage() {
-    console.log("Iniciando página..."); // LOG
+    console.log("Iniciando página (Versão Atualizada)..."); 
     if (!getToken()) { window.location.href = 'login.html'; return; }
     
     const elUser = document.getElementById('user-name');
     if (elUser) elUser.textContent = getUserName();
     
-    // Configura Datas
     const hoje = new Date();
     const passado = new Date(); passado.setDate(hoje.getDate() - 30);
     const futuro = new Date(); futuro.setDate(hoje.getDate() + 30);
@@ -54,7 +53,6 @@ async function initPage() {
     if(elInicio) elInicio.value = passado.toISOString().split('T')[0];
     if(elFim) elFim.value = futuro.toISOString().split('T')[0];
 
-    // Popula Select
     const selectTipo = document.getElementById('filtro-tipo-doc');
     if (selectTipo) {
         while (selectTipo.options.length > 1) { selectTipo.remove(1); }
@@ -86,7 +84,6 @@ function setupEventListeners() {
         window.location.href = 'login.html'; 
     });
     
-    // Menu Colunas
     const btnColunas = document.getElementById('btn-colunas');
     if(btnColunas) {
         btnColunas.addEventListener('click', (e) => {
@@ -96,14 +93,10 @@ function setupEventListeners() {
         });
     }
 
-    // Botão Exportar Excel
     const btnExportar = document.getElementById('btn-exportar');
     if (btnExportar) {
         btnExportar.addEventListener('click', () => {
             if (!table) return;
-            
-            // O Tabulator já faz a mágica sozinho!
-            // Ele exporta as colunas que estão visíveis e respeita a busca/filtros atuais.
             table.download("xlsx", "Relatorio_Financeiro.xlsx", {sheetName:"Contas a Pagar"});
         });
     }
@@ -127,7 +120,7 @@ function setupEventListeners() {
 // --- 4. CONFIGURAÇÃO DA TABELA (TABULATOR) ---
 
 function initTable() {
-    console.log("Configurando Tabulator (Modo Data-Driven)...");
+    console.log("Configurando Tabulator V25...");
     table = new Tabulator("#tabela-financeiro", {
         layout: "fitDataFill", 
         height: "100%",        
@@ -135,10 +128,6 @@ function initTable() {
         reactiveData: false, 
         index: "id", 
         
-        // Removemos a seleção nativa bugada do Tabulator
-        // selectableRows: true, <-- REMOVIDO!
-        
-        // Evento de Clique na Linha: Inverte o nosso campo 'selecionado'
         rowClick: function(e, row){
             if(e.target.tagName !== 'INPUT') {
                 let isChecked = row.getData().selecionado || false;
@@ -148,13 +137,12 @@ function initTable() {
         },
         
         persistence: true, 
-        persistenceID: "financeiroConfigV23", // Atualizado para limpar cache
+        persistenceID: "financeiroConfigV25", // <-- ID NOVO PARA LIMPAR O ERRO DA MEMÓRIA
         
         columnDefaults: { resizable: false },
         movableColumns: true,    
 
         columns: [
-            // 1. NOSSO NOVO CHECKBOX BLINDADO (Com Select All)
             { 
                 title: "<input type='checkbox' id='check-all-rows' class='cursor-pointer w-3.5 h-3.5 text-indigo-600 rounded border-gray-300'>", 
                 field: "selecionado", 
@@ -164,12 +152,11 @@ function initTable() {
                 headerSort: false, 
                 frozen: true,
                 formatter: function(cell) {
-                    // Desenha o checkbox baseado no nosso dado manual
                     let checked = cell.getValue() ? "checked" : "";
                     return `<input type="checkbox" class="cursor-pointer w-3.5 h-3.5 text-indigo-600 rounded border-gray-300" ${checked}>`;
                 },
                 cellClick: function(e, cell){ 
-                    e.stopPropagation(); // Evita clicar duas vezes
+                    e.stopPropagation(); 
                     let isChecked = cell.getValue() || false;
                     cell.getRow().update({ selecionado: !isChecked });
                     atualizarRodape();
@@ -178,7 +165,6 @@ function initTable() {
                     e.stopPropagation();
                     if(e.target.tagName === 'INPUT') {
                         let isChecked = e.target.checked;
-                        // Pega apenas as linhas que estão visíveis após os filtros
                         let rows = table.getRows("active");
                         rows.forEach(row => row.update({ selecionado: isChecked }));
                         atualizarRodape();
@@ -188,7 +174,7 @@ function initTable() {
 
             { title: "ID", field: "id", visible: false, download: false, },
 
-            // Coluna Fixa Data
+            // COLUNA DE DATA DINÂMICA (RESOLVE O CONFLITO DOS FILTROS)
             { 
                 title: "Vencimento", 
                 field: "data_dinamica", 
@@ -201,11 +187,11 @@ function initTable() {
             },
             { 
                 title: "Prazo", 
-                field: "prazo_virtual", // <-- NOME ÚNICO AQUI
+                field: "prazo_virtual", 
                 formatter: prazoFormatter, 
                 width: 100, 
                 hozAlign: "center",
-                download: false // <-- Garante que não duplica no Excel
+                download: false 
             },
             { title: "Filial", field: "filial", formatter: filialFormatter, hozAlign: "center", width: 80 },
             { title: "Nº Controle", field: "controle_parcela", width: 130, visible: true, formatter: (cell) => `<span class="font-mono text-xs font-bold text-gray-600">${cell.getValue()}</span>` },
@@ -261,18 +247,9 @@ function initTable() {
             { title: "Obs Gerencial", field: "observacao", width: 200, formatter: "textarea", visible: false }
         ],
         
-        tableBuilt: function() {
-            popularMenuColunas();
-        },
-
-        // Chamado sempre que o usuário faz uma busca ou muda os filtros
-        dataFiltered: function(filters, rows) {
-             atualizarRodape();
-        },
-        
-        renderComplete: function() {
-            atualizarRodape();
-        }
+        tableBuilt: function() { popularMenuColunas(); },
+        dataFiltered: function(filters, rows) { atualizarRodape(); },
+        renderComplete: function() { atualizarRodape(); }
     });
 }
 
@@ -285,7 +262,6 @@ function dateFormatter(cell) {
     return isNaN(d) ? val : d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
-// Função exclusiva para formatar a data na hora de baixar o Excel
 function dateAccessorDownload(value, data, type, params, column) {
     if (!value) return "";
     const d = new Date(value);
@@ -299,37 +275,20 @@ function filialFormatter(cell) {
 }
 
 function prazoFormatter(cell) {
-    // Busca a data original da linha, independentemente do "field" da coluna
     const rowData = cell.getRow().getData();
     const val = rowData.vencimento; 
     
     if (!val) return "-";
     
-    const hoje = new Date();
-    hoje.setHours(0,0,0,0);
-    
-    const venc = new Date(val);
-    venc.setHours(0,0,0,0);
-    
-    // Calcula a diferença exata de dias
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    const venc = new Date(val); venc.setHours(0,0,0,0);
     const diffTime = venc - hoje;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
 
-    // Se já estiver pago ou cancelado, mostra apenas um traço
-    if (rowData.status_erp === 'PAGO' || rowData.status_erp === 'CANCELADO') {
-        return `<span class="text-gray-300 font-bold">-</span>`;
-    }
-
-    if (diffDays === 0) {
-        return `<span class="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">HOJE</span>`;
-    }
-    if (diffDays === 1) {
-        return `<span class="text-xs font-bold text-orange-500">AMANHÃ</span>`;
-    }
-    if (diffDays < 0) {
-        // AQUI ESTÁ A LÓGICA DE DIAS VENCIDOS!
-        return `<span class="text-[10px] font-bold text-red-700 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">${Math.abs(diffDays)} DIAS VENC.</span>`;
-    }
+    if (rowData.status_erp === 'PAGO' || rowData.status_erp === 'CANCELADO') return `<span class="text-gray-300 font-bold">-</span>`;
+    if (diffDays === 0) return `<span class="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">HOJE</span>`;
+    if (diffDays === 1) return `<span class="text-xs font-bold text-orange-500">AMANHÃ</span>`;
+    if (diffDays < 0) return `<span class="text-[10px] font-bold text-red-700 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">${Math.abs(diffDays)} DIAS VENC.</span>`;
     
     return `<span class="text-[10px] text-gray-500 font-medium">Em ${diffDays} dias</span>`;
 }
@@ -399,10 +358,11 @@ async function loadTitulos() {
         const dados = await res.json();
         
         const tipoData = document.getElementById('filtro-tipo-data').value;
-        const colData = table.getColumn("vencimento");
+        const colData = table.getColumn("data_dinamica");
+        
+        // AQUI ESTÁ A CORREÇÃO CRUCIAL QUE NÃO ESTAVA NO SEU CACHE
         if(colData) {
             colData.updateDefinition({ 
-                // Atualiza APENAS o texto visual do cabeçalho
                 title: tipoData === 'baixa' ? 'Data Baixa' : 
                        tipoData === 'lancamento' ? 'Lançamento' : 
                        tipoData === 'cancelamento' ? 'Cancelamento' : 'Vencimento'
@@ -428,15 +388,11 @@ async function loadTitulos() {
 // --- 7. NOVO RODAPÉ COM RASTREAMENTO ---
 
 function atualizarRodape() {
-    // Pega todos os dados que estão visíveis na tela (respeitando sua barra de busca/filtros)
     const dadosVisiveis = table ? table.getData("active") : [];
-    
-    // O grande segredo: Filtra apenas quem nós marcamos com 'selecionado: true'
     const selecionados = dadosVisiveis.filter(item => item.selecionado === true);
     
-    console.log(`[Rodapé Blindado] Total: ${dadosVisiveis.length} | Selecionados: ${selecionados.length}`);
+    console.log(`[Rodapé Atualizado] Total: ${dadosVisiveis.length} | Selecionados: ${selecionados.length}`);
     
-    // Função para somar
     const somar = (arr) => arr.reduce((acc, curr) => {
         const val = parseFloat(curr.valor_devido); 
         return acc + (isNaN(val) ? 0 : val);
@@ -445,23 +401,20 @@ function atualizarRodape() {
     const totalSelecao = somar(selecionados);
     const totalGeral = somar(dadosVisiveis);
 
-    // Atualização do HTML
     const elReg = document.getElementById('total-registros');
     const elTotalGeral = document.getElementById('total-valor-geral');
     const elTotalSelecao = document.getElementById('total-valor-selecao');
     const boxSelecao = document.getElementById('box-total-selecao');
 
-    // 1. Atualiza Geral
     if(elReg) elReg.textContent = `${dadosVisiveis.length} registros`;
     if(elTotalGeral) elTotalGeral.textContent = totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-    // 2. Atualiza a Caixa de Seleção (Esconde se for zero, mostra se for > 0)
     if (boxSelecao && elTotalSelecao) {
         if (selecionados.length > 0) {
-            boxSelecao.classList.remove('hidden'); // Exibe a div
+            boxSelecao.classList.remove('hidden'); 
             elTotalSelecao.textContent = totalSelecao.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         } else {
-            boxSelecao.classList.add('hidden'); // Oculta a div
+            boxSelecao.classList.add('hidden'); 
         }
     }
 }
@@ -542,7 +495,6 @@ window.openEditModal = function(idTitulo) {
     
     const row = rowObj.getData();
 
-    // 1. Campos de Leitura
     document.getElementById('modal-id-titulo').value = row.id;
     document.getElementById('modal-lancamento').value = row.controle_parcela || row.id; 
     document.getElementById('modal-filial').value = `${row.filial}`;
@@ -557,7 +509,6 @@ window.openEditModal = function(idTitulo) {
     document.getElementById('modal-valor-original').value = parseFloat(row.valor_devido).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
     document.getElementById('modal-historico-erp').value = row.historico || '';
 
-    // 2. Campos Editáveis
     let mod = row.modalidade || 'BOLETO';
     if(mod !== 'BOLETO' && mod !== 'CHEQUE') mod = 'BOLETO';
     
