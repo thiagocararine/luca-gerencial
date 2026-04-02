@@ -70,6 +70,29 @@ async function initPage() {
 }
 
 function setupEventListeners() {
+    const filtroTipoData = document.getElementById('filtro-tipo-data');
+    const filtroStatus = document.getElementById('filtro-status');
+
+    if (filtroTipoData && filtroStatus) {
+        // 1. Se mudar a Data, o sistema adivinha o Status
+        filtroTipoData.addEventListener('change', (e) => {
+            const tipo = e.target.value;
+            if (tipo === 'baixa') filtroStatus.value = 'pago';
+            else if (tipo === 'cancelamento') filtroStatus.value = 'cancelado';
+            else if (tipo === 'vencimento' && filtroStatus.value !== '') filtroStatus.value = 'aberto';
+        });
+
+        // 2. Se mudar o Status, o sistema adivinha a Data
+        filtroStatus.addEventListener('change', (e) => {
+            const status = e.target.value;
+            if (status === 'pago') filtroTipoData.value = 'baixa';
+            else if (status === 'cancelado') filtroTipoData.value = 'cancelamento';
+            else if (status === 'aberto') filtroTipoData.value = 'vencimento';
+        });
+    }
+
+    // --------------------------------------------
+    
     document.getElementById('btn-filtrar').addEventListener('click', loadTitulos);
     
     const inputBusca = document.getElementById('filtro-busca');
