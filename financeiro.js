@@ -148,7 +148,7 @@ function initTable() {
         },
         
         persistence: true, 
-        persistenceID: "financeiroConfigV22", // Atualizado para limpar cache
+        persistenceID: "financeiroConfigV23", // Atualizado para limpar cache
         
         columnDefaults: { resizable: false },
         movableColumns: true,    
