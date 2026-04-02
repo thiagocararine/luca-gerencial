@@ -209,6 +209,8 @@ router.get('/titulos', authenticateToken, checkPerm('fin_pagar_view'), async (re
 
             return {
                 id: t.ap_regist,
+
+                data_dinamica: t[colunaData],
                 
                 controle_parcela: `${t.ap_ctrlcm || ''}-${t.ap_parcel || ''}`,
 

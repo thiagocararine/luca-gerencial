@@ -191,7 +191,7 @@ function initTable() {
             // Coluna Fixa Data
             { 
                 title: "Vencimento", 
-                field: "vencimento", 
+                field: "data_dinamica", 
                 formatter: dateFormatter, 
                 accessorDownload: dateAccessorDownload, 
                 hozAlign: "center", 
@@ -401,10 +401,11 @@ async function loadTitulos() {
         const tipoData = document.getElementById('filtro-tipo-data').value;
         const colData = table.getColumn("vencimento");
         if(colData) {
-            const fieldMap = { 'vencimento': 'vencimento', 'lancamento': 'lancamento', 'baixa': 'baixa', 'cancelamento': 'cancelamento' };
             colData.updateDefinition({ 
-                title: tipoData.charAt(0).toUpperCase() + tipoData.slice(1), 
-                field: fieldMap[tipoData] || 'vencimento' 
+                // Atualiza APENAS o texto visual do cabeçalho
+                title: tipoData === 'baixa' ? 'Data Baixa' : 
+                       tipoData === 'lancamento' ? 'Lançamento' : 
+                       tipoData === 'cancelamento' ? 'Cancelamento' : 'Vencimento'
             });
         }
 
