@@ -378,7 +378,7 @@ router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
 
 router.get('/romaneios', authenticateToken, async (req, res) => {
     const { status, filial } = req.query; 
-    const { perfil } = req.user; // Verificamos o perfil
+    const { perfil } = req.user; 
 
     try {
         let query = `
@@ -494,7 +494,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
         const isUsuarioAdmin = (perfil === 'Administrador' || perfil === 'Financeiro');
         const dateColumn = tipoData === 'entrega' ? 'c.cr_entr' : 'c.cr_erec';
 
-        // 1. BUSCA CABEÇALHOS (Agora traz c.cr_udav = Vendedor)
+        // 1. BUSCA CABEÇALHOS
         let query = `
             SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde, c.cr_edav, c.cr_entr, c.cr_udav
             FROM cdavs c
@@ -572,7 +572,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
                         nome: item.it_nome,
                         unidade: item.it_unid,
                         saldo: saldo,
-                        entregue: entregue, // Retorna quantidade já entregue para frontend
+                        entregue: entregue, 
                         peso_unitario: pesoUnitario,
                         peso_total_item: pesoTotalItem,
                         filial_item: item.it_inde
@@ -583,7 +583,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
             return {
                 dav_numero: dav.cr_ndav,
                 cliente: dav.cr_nmcl,
-                vendedor: dav.cr_udav, // Mapeia o vendedor
+                vendedor: dav.cr_udav, 
                 bairro: dav.cr_ebai || 'Bairro Não Informado',
                 cidade: dav.cr_ecid || 'Cidade Não Informada',
                 filial: dav.cr_inde,
@@ -646,6 +646,7 @@ router.get('/romaneios/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// --- ROTA CORRIGIDA PARA INSERIR O CÓDIGO DO PRODUTO (pd_codi) ---
 router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => {
     const romaneioId = parseInt(req.params.id, 10);
     const itensParaAdicionar = req.body; 
@@ -669,7 +670,8 @@ router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => {
              throw new Error("Nenhum ID de item válido encontrado.");
         }
 
-        const [itemErpRows] = await seiPool.query(`SELECT it_regist, it_nome, it_quan, it_qent, it_qtdv FROM idavs WHERE it_regist IN (?)`, [allIdavsRegi]);
+        // CORREÇÃO AQUI: Adicionado it_codi na pesquisa
+        const [itemErpRows] = await seiPool.query(`SELECT it_regist, it_codi, it_nome, it_quan, it_qent, it_qtdv FROM idavs WHERE it_regist IN (?)`, [allIdavsRegi]);
         const itemErpMap = new Map(itemErpRows.map(i => [i.it_regist, i]));
 
         const [alocadoEmRomaneiosRows] = await gerencialPool.query(
@@ -697,9 +699,10 @@ router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => {
                  throw new Error(`Saldo insuficiente para ${itemErp.it_nome || `item ID ${idavsRegi}`} (DAV ${davNumero}). Saldo: ${saldoDisponivel}, Tentando: ${quantidadeAEntregar}.`);
             }
 
+            // CORREÇÃO AQUI: Inserção do pd_codi (it_codi do itemErp)
             await gerencialConnection.execute(
-                `INSERT INTO romaneio_itens (id_romaneio, dav_numero, idavs_regi, quantidade_a_entregar) VALUES (?, ?, ?, ?)`,
-                [romaneioId, davNumero, idavsRegi, quantidadeAEntregar]
+                `INSERT INTO romaneio_itens (id_romaneio, dav_numero, idavs_regi, pd_codi, quantidade_a_entregar) VALUES (?, ?, ?, ?, ?)`,
+                [romaneioId, davNumero, idavsRegi, itemErp.it_codi, quantidadeAEntregar]
             );
         }
 
