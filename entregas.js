@@ -696,6 +696,42 @@ async function showRomaneioDetailView(romaneioId) {
         else if (romaneioData.status === 'Cancelado') statusColorClasses = 'bg-red-100 text-red-800';
         statusSpan.className = `px-2 py-0.5 text-xs font-semibold rounded-full ${statusColorClasses}`;
 
+        // --- INÍCIO DA LÓGICA DE PESO E CAPACIDADE ---
+        const capacidadeKg = parseFloat(romaneioData.capacidade_kg) || 0;
+        let pesoTotal = 0;
+        
+        romaneioData.itens.forEach(item => {
+            const qtd = parseFloat(item.quantidade_a_entregar) || 0;
+            const pesoUnitario = parseFloat(item.peso_bruto_unitario) || 0;
+            pesoTotal += (qtd * pesoUnitario);
+        });
+
+        const percentual = capacidadeKg > 0 ? (pesoTotal / capacidadeKg) * 100 : 0;
+        
+        // Atualiza os textos
+        document.getElementById('detail-romaneio-peso-texto').textContent = 
+            `${pesoTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})} kg / ${capacidadeKg.toLocaleString('pt-BR', {minimumFractionDigits: 2})} kg (${percentual.toFixed(1)}%)`;
+        
+        // Atualiza a barra de progresso
+        const barra = document.getElementById('detail-romaneio-peso-bar');
+        barra.style.width = `${Math.min(percentual, 100)}%`; // Trava visualmente em 100%
+        
+        // Muda a cor da barra se passar de 100%
+        const alertaPeso = document.getElementById('peso-alerta');
+        if (percentual > 100) {
+            barra.classList.replace('bg-indigo-600', 'bg-red-600');
+            alertaPeso.classList.remove('hidden');
+        } else if (percentual > 85) {
+            barra.classList.replace('bg-indigo-600', 'bg-yellow-500');
+            barra.classList.replace('bg-red-600', 'bg-yellow-500');
+            alertaPeso.classList.add('hidden');
+        } else {
+            barra.classList.replace('bg-red-600', 'bg-indigo-600');
+            barra.classList.replace('bg-yellow-500', 'bg-indigo-600');
+            alertaPeso.classList.add('hidden');
+        }
+        // --- FIM DA LÓGICA DE PESO ---
+        
         renderCurrentRomaneioItems(romaneioData.itens);
         feather.replace();
 

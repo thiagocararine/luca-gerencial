@@ -488,6 +488,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
             WHERE c.cr_reca = '1'
               AND DATE(${dateColumn}) = ?
               AND (i.it_quan - (i.it_qent - i.it_qtdv)) > 0
+              AND i.it_qtdv <= i.it_qent
         `;
         const params = [data];
 
@@ -541,7 +542,8 @@ router.get('/romaneios/:id', authenticateToken, async (req, res) => {
     try {
         const [romaneioDetails] = await gerencialPool.execute(
             `SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, r.status,
-                    v.modelo as modelo_veiculo, v.placa as placa_veiculo
+                    v.modelo as modelo_veiculo, v.placa as placa_veiculo, 
+                    IFNULL(v.capacidade_kg, 0) as capacidade_kg /* <-- NOVO CAMPO */
              FROM romaneios r
              JOIN veiculos v ON r.id_veiculo = v.id
              WHERE r.id = ?`,
@@ -556,10 +558,12 @@ router.get('/romaneios/:id', authenticateToken, async (req, res) => {
         const [items] = await gerencialPool.execute(
             `SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar,
                     idavs_sei.it_nome as produto_nome, idavs_sei.it_unid as produto_unidade,
-                    cdavs_sei.cr_nmcl as cliente_nome
+                    cdavs_sei.cr_nmcl as cliente_nome,
+                    IFNULL(produtos_sei.pd_pesb, 0) as peso_bruto_unitario /* <-- BUSCA O PESO BRUTO NO SEI */
              FROM romaneio_itens ri
              LEFT JOIN ${dbConfigSei.database}.idavs idavs_sei ON ri.idavs_regi = idavs_sei.it_regist
              LEFT JOIN ${dbConfigSei.database}.cdavs cdavs_sei ON ri.dav_numero = cdavs_sei.cr_ndav
+             LEFT JOIN ${dbConfigSei.database}.produtos produtos_sei ON idavs_sei.it_codi = produtos_sei.pd_codi
              WHERE ri.id_romaneio = ?
              ORDER BY ri.dav_numero ASC, idavs_sei.it_nome ASC`,
             [romaneioId]
