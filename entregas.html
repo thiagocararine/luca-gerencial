@@ -36,6 +36,11 @@
         .cart-item { animation: slideIn 0.2s ease-out; }
         @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
         
+        /* Animação para a Gaveta de Itens */
+        .item-gaveta { display: none; }
+        .item-gaveta.open { display: block; animation: slideDown 0.2s ease-out; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
         /* Scrollbar customizada para as listas */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -177,18 +182,28 @@
                                 <button id="btn-voltar-lista" class="text-xs font-bold text-gray-500 hover:text-indigo-600 transition-colors">Cancelar / Voltar</button>
                             </div>
                             
-                            <div class="p-3 border-b bg-white shrink-0 grid grid-cols-2 gap-3 text-xs">
+                            <div class="p-3 border-b bg-white shrink-0 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                                 <div>
-                                    <label class="font-bold text-gray-600 uppercase text-[10px]">Data de Entrega</label>
+                                    <label class="font-bold text-gray-600 uppercase text-[10px]">Data de Agendamento</label>
                                     <input type="date" id="filter-data" class="w-full border-gray-300 rounded p-1.5 mt-1 focus:ring-indigo-500 shadow-sm">
                                 </div>
                                 <div>
-                                    <label class="font-bold text-gray-600 uppercase text-[10px]">Bairro</label>
+                                    <label class="font-bold text-gray-600 uppercase text-[10px]">Bairro (Destino)</label>
                                     <select id="filter-bairro" class="w-full border-gray-300 rounded p-1.5 mt-1 focus:ring-indigo-500 shadow-sm">
                                         <option value="">Todos</option>
                                     </select>
                                 </div>
-                                <div class="col-span-2 flex justify-end mt-1">
+                                <div id="filial-filter-container" class="hidden">
+                                    <label class="font-bold text-gray-600 uppercase text-[10px]">Filial da Venda</label>
+                                    <select id="filter-filial-dav" class="w-full border-gray-300 rounded p-1.5 mt-1 focus:ring-indigo-500 shadow-sm">
+                                        <option value="">Todas as Filiais</option>
+                                        <option value="Santa Cruz da Serra">Santa Cruz da Serra</option>
+                                        <option value="Piabetá">Piabetá</option>
+                                        <option value="Parada Angélica">Parada Angélica</option>
+                                        <option value="Nova Campinas">Nova Campinas</option>
+                                    </select>
+                                </div>
+                                <div class="col-span-1 sm:col-span-3 flex justify-end mt-1">
                                     <button id="btn-buscar-pendentes" class="action-btn bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-xs flex items-center gap-1.5 shadow-sm">
                                         <span data-feather="search" class="w-3 h-3"></span> Buscar Pedidos
                                     </button>
@@ -198,7 +213,7 @@
                             <div id="lista-pendentes" class="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50/50">
                                 <div class="h-full flex flex-col items-center justify-center text-gray-400">
                                     <span data-feather="search" class="w-8 h-8 mb-2 opacity-50"></span>
-                                    <p class="text-xs">Selecione uma data e clique em Buscar.</p>
+                                    <p class="text-xs">Selecione os filtros acima e clique em Buscar.</p>
                                 </div>
                             </div>
                         </div>
@@ -230,7 +245,7 @@
 
                             <div class="p-4 bg-gray-50 border-t border-gray-200 shrink-0">
                                 <div class="flex justify-between items-end mb-1">
-                                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Capacidade de Carga (Peso Bruto)</span>
+                                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Capacidade de Carga (Peso Bruto/Líquido)</span>
                                     <span class="text-sm font-black text-gray-800" id="peso-texto">0 kg / 0 kg (0%)</span>
                                 </div>
                                 <div class="w-full bg-gray-200 rounded-full h-3 mb-4 overflow-hidden shadow-inner">
@@ -287,57 +302,8 @@
     </div>
 </div>
 
-<div id="meu-perfil-modal" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
-    <div class="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden transform scale-95 transition-transform duration-200" id="meu-perfil-content">
-        <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200 bg-indigo-50">
-            <h3 class="text-lg font-bold text-indigo-900 flex items-center gap-2">
-                <i data-feather="user" class="w-5 h-5 text-indigo-600"></i> Meu Perfil
-            </h3>
-            <button onclick="fecharModalPerfil()" class="text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
-        </div>
-        <div class="p-6 space-y-6 bg-white">
-            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 flex flex-col md:flex-row gap-4 shadow-inner">
-                <div class="flex-1">
-                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Cargo Atual</label>
-                    <p class="text-sm font-black text-slate-800" id="perfil-cargo">Carregando...</p>
-                </div>
-                <div class="w-px bg-slate-200 hidden md:block"></div>
-                <div class="flex-1">
-                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Departamento</label>
-                    <p class="text-sm font-black text-slate-800" id="perfil-departamento">Carregando...</p>
-                </div>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="col-span-2">
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">Nome Completo</label>
-                    <input type="text" id="perfil-nome" class="w-full border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-none transition-shadow placeholder-gray-400">
-                </div>
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">E-mail de Acesso</label>
-                    <input type="email" id="perfil-email" class="w-full border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-none transition-shadow">
-                </div>
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">CPF</label>
-                    <input type="text" id="perfil-cpf" class="w-full border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-none transition-shadow" placeholder="000.000.000-00">
-                </div>
-            </div>
-            <div class="pt-4 border-t border-gray-100">
-                <label class="block text-sm font-semibold text-gray-700 mb-1 text-indigo-700">Nova Senha</label>
-                <p class="text-[10px] text-gray-500 mb-2 font-medium">Deixe este campo em branco se não quiser alterar a sua senha.</p>
-                <input type="password" id="perfil-senha" class="w-full border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-none transition-shadow" placeholder="Digite uma senha segura">
-            </div>
-        </div>
-        <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3 shrink-0">
-            <button onclick="fecharModalPerfil()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm transition-colors">Cancelar</button>
-            <button onclick="salvarMeuPerfil()" class="px-4 py-2 text-sm font-bold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 shadow-sm transition-colors flex items-center gap-2">
-                <i data-feather="save" class="w-4 h-4"></i> Salvar Alterações
-            </button>
-        </div>
-    </div>
-</div>
-
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script src="entregas.js?v=3.0" defer></script>
+<script src="entregas.js?v=4.0" defer></script>
 <script src="assets/global.js"></script>
 <script>
     function toggleSubmenu(id) {

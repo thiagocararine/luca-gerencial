@@ -3,7 +3,9 @@ document.addEventListener('DOMContentLoaded', initEntregasPage);
 // ==========================================================
 //               VARIÁVEIS GLOBAIS
 // ==========================================================
-//const apiUrlBase = '/api';
+// A linha abaixo FOI COMENTADA pois o apiUrlBase já é declarado no assets/global.js
+// const apiUrlBase = '/api';  
+
 let currentRomaneioId = null;     
 let veiculosDisp = []; 
 
@@ -54,6 +56,7 @@ function initEntregasPage() {
 
     loadCompanyLogo();
     setupEventListeners();
+    verificarPermissoesAdmin(); // Mostra o filtro de filial se for Admin
     
     // Define a data de hoje por padrão no filtro
     const inputData = document.getElementById('filter-data');
@@ -76,6 +79,17 @@ function loadCompanyLogo() {
     }
 }
 
+function verificarPermissoesAdmin() {
+    const userData = getUserData();
+    const adminFiliais = ['escritorio', 'escritório (lojas)'];
+    const filialNormalizada = (userData && userData.unidade) ? userData.unidade.trim().toLowerCase() : '';
+    
+    if (adminFiliais.includes(filialNormalizada)) {
+        const container = document.getElementById('filial-filter-container');
+        if(container) container.classList.remove('hidden');
+    }
+}
+
 // ==========================================================
 //               SETUP DE EVENT LISTENERS
 // ==========================================================
@@ -85,7 +99,7 @@ function setupEventListeners() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('delivery-tabs')?.addEventListener('click', handleTabSwitch);
 
-    // --- Aba 1: Retirada Balcão (Mantida Original) ---
+    // --- Aba 1: Retirada Balcão ---
     document.getElementById('search-dav-btn')?.addEventListener('click', handleSearchDav);
     document.getElementById('dav-search-input')?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleSearchDav();
@@ -116,6 +130,7 @@ function setupEventListeners() {
     document.getElementById('btn-voltar-lista')?.addEventListener('click', fecharTorreDeControle);
     document.getElementById('btn-buscar-pendentes')?.addEventListener('click', buscarPedidosPendentes);
     document.getElementById('filter-bairro')?.addEventListener('change', renderPendingList);
+    document.getElementById('filter-filial-dav')?.addEventListener('change', renderPendingList); // Novo filtro
     document.getElementById('select-veiculo')?.addEventListener('change', atualizarBarraDePeso);
     document.getElementById('btn-finalizar-carga')?.addEventListener('click', finalizarCarga);
 }
@@ -145,7 +160,6 @@ function handleTabSwitch(event) {
         document.getElementById('romaneio-detail-view').classList.add('hidden');
         document.getElementById('romaneio-list-view').classList.remove('hidden');
         
-        // Verifica permissão admin para mostrar o filtro de filiais
         const userData = getUserData();
         const adminFiliais = ['escritorio', 'escritório (lojas)'];
         const filialNormalizada = (userData && userData.unidade) ? userData.unidade.trim().toLowerCase() : '';
@@ -164,8 +178,6 @@ function handleTabSwitch(event) {
 // ==========================================================
 //               ABA 1: RETIRADA RÁPIDA (BALCÃO)
 // ==========================================================
-// [NOTA: A lógica original da retirada foi integralmente mantida aqui]
-
 async function handleSearchDav() {
     const davNumber = document.getElementById('dav-search-input').value;
     const resultsContainer = document.getElementById('dav-results-container');
@@ -206,15 +218,8 @@ async function handleSearchDav() {
 }
 
 function renderDavResults(data) {
-    const { cliente, endereco, itens, data_hora_pedido, vendedor, valor_total, status_caixa, filial_pedido_nome, filial_pedido_codigo, caixa_info, fiscal_info, cancelamento_info } = data;
+    const { cliente, itens, valor_total, status_caixa } = data;
     const resultsContainer = document.getElementById('dav-results-container');
-
-    const formatDateTime = (dateString) => {
-        if (!dateString) return 'N/A';
-        const date = new Date(dateString);
-        if (isNaN(date.getTime())) return 'Data inválida';
-        return date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-    };
     
     const formatCurrency = (value) => (parseFloat(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -234,7 +239,7 @@ function renderDavResults(data) {
 
     if (status_caixa === '2' || status_caixa === '3') {
         resultsContainer.innerHTML = `
-            <div class="bg-white/90 backdrop-blur-sm p-6 rounded-lg shadow-lg">
+            <div class="bg-white/90 backdrop-blur-sm p-6 rounded-lg shadow-lg max-w-xl mx-auto mt-4">
                 <div class="border-b pb-4 mb-4">
                     <div class="flex justify-between items-start">
                         <div>
@@ -277,7 +282,7 @@ function renderDavResults(data) {
         }
 
         resultsContainer.innerHTML = `
-            <div class="bg-white/90 backdrop-blur-sm p-6 rounded-lg shadow-lg">
+            <div class="bg-white/90 backdrop-blur-sm p-6 rounded-lg shadow-lg max-w-xl mx-auto mt-4">
                 <div class="border-b pb-4 mb-4">
                     <div class="flex justify-between items-start">
                         <div>
@@ -287,12 +292,12 @@ function renderDavResults(data) {
                     </div>
                 </div>
                 <div class="space-y-4">
-                    <h4 class="font-semibold">Itens do Pedido</h4>
-                    <div class="overflow-x-auto rounded-lg border">${itemsHtml}</div>
+                    <h4 class="font-semibold text-gray-700">Itens do Pedido</h4>
+                    <div class="overflow-x-auto rounded-lg border border-gray-200">${itemsHtml}</div>
                     ${itemsComSaldoDisponivel.length > 0 ? `
                     <div class="flex justify-end pt-4 border-t gap-4">
                         <button id="confirm-retirada-btn" class="action-btn bg-green-600 text-white hover:bg-green-700 flex items-center gap-2">
-                            <i data-feather="check-circle"></i>Confirmar Retirada
+                            <i data-feather="check-circle"></i> Confirmar Retirada
                         </button>
                     </div>
                     ` : ''}
@@ -341,6 +346,7 @@ async function handleConfirmRetirada(davNumber) {
         handleSearchDav(); 
     } catch (error) {
         alert(`Erro: ${error.message}`);
+        btn.disabled = false;
     } finally {
         hideLoader();
     }
@@ -378,18 +384,39 @@ async function loadRomaneiosAtivos() {
             return;
         }
 
-        container.innerHTML = romaneios.map(r => `
-            <div class="border p-4 rounded-md bg-white hover:border-indigo-300 transition-colors cursor-pointer mb-3 shadow-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2" data-romaneio-id="${r.id}">
-                <div>
-                    <h4 class="font-bold text-gray-800 text-base">Carga #${r.id} <span class="bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 rounded-full ml-2 font-bold uppercase tracking-wider">${r.status}</span></h4>
-                    <p class="text-sm text-gray-600 mt-1"><i data-feather="user" class="w-3 h-3 inline"></i> ${r.nome_motorista} &nbsp;|&nbsp; <i data-feather="truck" class="w-3 h-3 inline"></i> ${r.modelo_veiculo} (${r.placa_veiculo})</p>
-                    <p class="text-xs text-gray-400 mt-1"><i data-feather="map-pin" class="w-3 h-3 inline"></i> Filial: ${r.filial_origem}</p>
-                </div>
-                <button class="text-indigo-600 text-sm font-bold hover:bg-indigo-50 px-3 py-1.5 rounded transition-colors flex items-center gap-1 shrink-0">
+        container.innerHTML = romaneios.map(r => {
+            let actionButtons = `
+                <button onclick="showRomaneioDetailView(${r.id})" class="text-indigo-600 text-sm font-bold hover:bg-indigo-50 border border-transparent hover:border-indigo-200 px-3 py-1.5 rounded transition-colors flex items-center gap-1 shrink-0">
                     Consultar Carga <i data-feather="chevron-right" class="w-4 h-4"></i>
                 </button>
+            `;
+
+            // Botão de excluir só aparece se o status for "Em montagem"
+            if (r.status === 'Em montagem') {
+                actionButtons = `
+                    <div class="flex items-center gap-2">
+                        <button onclick="excluirRomaneio(${r.id})" class="text-red-500 hover:text-white bg-white hover:bg-red-500 border border-red-200 text-xs font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-1 shadow-sm" title="Cancelar e Excluir Carga">
+                            <i data-feather="trash-2" class="w-3 h-3"></i> Excluir
+                        </button>
+                        ${actionButtons}
+                    </div>
+                `;
+            }
+
+            return `
+            <div class="border p-4 rounded-md bg-white hover:border-indigo-300 transition-colors cursor-pointer mb-3 shadow-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2" data-romaneio-id="${r.id}">
+                <div class="flex-1">
+                    <h4 class="font-bold text-gray-800 text-base flex items-center gap-2">
+                        Carga #${r.id} 
+                        <span class="bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">${r.status}</span>
+                    </h4>
+                    <p class="text-sm text-gray-600 mt-1"><i data-feather="user" class="w-3 h-3 inline"></i> ${r.nome_motorista} &nbsp;|&nbsp; <i data-feather="truck" class="w-3 h-3 inline"></i> ${r.modelo_veiculo} (${r.placa_veiculo})</p>
+                    <p class="text-xs text-gray-400 mt-1"><i data-feather="map-pin" class="w-3 h-3 inline"></i> Filial Origem: ${r.filial_origem}</p>
+                </div>
+                ${actionButtons}
             </div>
-        `).join('');
+            `;
+        }).join('');
         if(typeof feather !== 'undefined') feather.replace();
 
     } catch (error) {
@@ -397,8 +424,11 @@ async function loadRomaneiosAtivos() {
     }
 }
 
-// Quando clica num romaneio na lista, abre a "Vista 3" (Detalhes/Consulta)
+// Ação de Clique na Linha Inteira (ignora se clicou no botão excluir)
 function handleRomaneioClick(event) {
+    // Se o click partiu de um botão de exclusão, ignoramos (para não abrir a view)
+    if(event.target.closest('button[onclick^="excluirRomaneio"]')) return;
+
     const romaneioDiv = event.target.closest('[data-romaneio-id]');
     if (romaneioDiv) {
         const id = parseInt(romaneioDiv.dataset.romaneioId, 10);
@@ -407,7 +437,6 @@ function handleRomaneioClick(event) {
         }
     }
 }
-
 
 // ==========================================================
 //               A NOVA "TORRE DE CONTROLE" (CARRINHO)
@@ -418,7 +447,6 @@ async function abrirTorreDeControle() {
     document.getElementById('romaneio-detail-view').classList.add('hidden');
     document.getElementById('romaneio-split-view').classList.remove('hidden');
     
-    // Limpa estado anterior
     cartDavs = [];
     pendingDavs = [];
     document.getElementById('input-motorista').value = '';
@@ -426,7 +454,6 @@ async function abrirTorreDeControle() {
     renderPendingList();
     renderCartList();
 
-    // Carrega Veículos disponíveis no Select do Carrinho
     const select = document.getElementById('select-veiculo');
     if (select.options.length <= 1) {
         select.innerHTML = '<option value="">Carregando...</option>';
@@ -454,13 +481,17 @@ function fecharTorreDeControle() {
     loadRomaneiosAtivos();
 }
 
-// 1. Busca todos os pedidos elegíveis (O "Eager Loading" em ação)
 async function buscarPedidosPendentes() {
     const data = document.getElementById('filter-data').value;
     if (!data) {
-        alert("Por favor, selecione uma data.");
+        alert("Por favor, selecione a data de agendamento.");
         return;
     }
+
+    // Se o filtro de filial estiver visível, pega o valor dele
+    const filialInput = document.getElementById('filter-filial-dav');
+    const filialStr = (filialInput && !document.getElementById('filial-filter-container').classList.contains('hidden') && filialInput.value) 
+                        ? `&filialDav=${filialInput.value}` : '';
 
     const btn = document.getElementById('btn-buscar-pendentes');
     const originalText = btn.innerHTML;
@@ -469,14 +500,13 @@ async function buscarPedidosPendentes() {
     if(typeof feather !== 'undefined') feather.replace();
 
     try {
-        const res = await fetch(`${apiUrlBase}/entregas/eligible-davs?data=${data}&tipoData=entrega&apenasEntregaMarcada=true`, { 
+        const res = await fetch(`${apiUrlBase}/entregas/eligible-davs?data=${data}&tipoData=entrega&apenasEntregaMarcada=true${filialStr}`, { 
             headers: { 'Authorization': `Bearer ${getToken()}` } 
         });
         
         if (!res.ok) throw new Error("Falha ao buscar pedidos.");
         const davs = await res.json();
         
-        // Remove da lista da esquerda os pedidos que já foram movidos para a direita (Carrinho)
         const cartIds = cartDavs.map(c => String(c.dav_numero));
         pendingDavs = davs.filter(d => !cartIds.includes(String(d.dav_numero)));
 
@@ -497,7 +527,7 @@ async function buscarPedidosPendentes() {
     }
 }
 
-// 2. Desenha a lista da ESQUERDA
+// 2. Desenha a lista da ESQUERDA (Prateleira de DAVs)
 function renderPendingList() {
     const container = document.getElementById('lista-pendentes');
     const filtroBairro = document.getElementById('filter-bairro').value;
@@ -517,26 +547,62 @@ function renderPendingList() {
         return;
     }
 
-    container.innerHTML = davsVisiveis.map(dav => `
-        <div class="bg-white p-3 rounded border border-gray-200 flex justify-between items-center hover:border-indigo-400 hover:shadow-md transition-all group">
-            <div class="flex-1 min-w-0 pr-3">
-                <p class="font-bold text-gray-800 text-sm truncate">
-                    DAV #${dav.dav_numero} 
-                    <span class="text-xs font-medium text-gray-500 ml-1">- ${dav.cliente}</span>
-                </p>
-                <div class="flex gap-2 mt-1.5 items-center flex-wrap">
-                    <span class="bg-gray-100 text-gray-600 text-[10px] px-2 py-0.5 rounded font-bold border border-gray-200">${dav.bairro}</span>
-                    <span class="text-[10px] text-indigo-500 font-bold bg-indigo-50 px-1.5 py-0.5 rounded"><i data-feather="package" class="w-3 h-3 inline"></i> ${dav.itens.length} itens</span>
-                    <span class="text-[10px] text-orange-600 font-bold bg-orange-50 px-1.5 py-0.5 rounded"><i data-feather="anchor" class="w-3 h-3 inline"></i> ${dav.peso_total_dav.toLocaleString('pt-BR', {minimumFractionDigits: 1})} kg</span>
+    container.innerHTML = davsVisiveis.map(dav => {
+        const dataVenda = dav.data_venda ? new Date(dav.data_venda).toLocaleDateString('pt-BR') : '-';
+        const dataAgendada = dav.data_agendada ? new Date(dav.data_agendada).toLocaleDateString('pt-BR') : '-';
+        
+        // Constrói as linhas da Gaveta de Itens
+        const itensHtml = dav.itens.map(item => `
+            <div class="flex justify-between items-center border-b border-indigo-100/50 py-1.5 last:border-0 hover:bg-indigo-100/30 px-1 rounded transition-colors">
+                <span class="text-[10px] text-gray-700 truncate flex-1 pr-2" title="${item.nome}">${item.codigo} - ${item.nome}</span>
+                <span class="text-[10px] font-bold text-indigo-700 w-16 text-right">${item.saldo} ${item.unidade}</span>
+            </div>
+        `).join('');
+
+        return `
+        <div class="bg-white rounded border border-gray-200 hover:border-indigo-400 hover:shadow-md transition-all group mb-2 overflow-hidden">
+            <div class="p-3 flex justify-between items-start">
+                <div class="flex-1 min-w-0 pr-3 cursor-pointer" onclick="toggleGavetaItens('${dav.dav_numero}')" title="Clique para ver os itens">
+                    <p class="font-bold text-gray-800 text-sm truncate flex items-center gap-1.5">
+                        <i data-feather="chevron-down" id="icon-gaveta-${dav.dav_numero}" class="w-4 h-4 text-gray-400 transition-transform duration-200"></i>
+                        DAV #${dav.dav_numero} 
+                        <span class="text-xs font-medium text-gray-500 ml-1">- ${dav.cliente}</span>
+                    </p>
+                    <div class="flex gap-2 mt-1.5 items-center flex-wrap">
+                        <span class="text-[9px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200"><i data-feather="map-pin" class="w-3 h-3 inline"></i> ${dav.bairro}</span>
+                        <span class="text-[9px] text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100" title="Venda vs Agendamento">Vendido: ${dataVenda} | Agend.: ${dataAgendada}</span>
+                        <span class="text-[9px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded"><i data-feather="package" class="w-3 h-3 inline"></i> ${dav.itens.length} itens</span>
+                        <span class="text-[9px] text-orange-600 font-bold bg-orange-50 px-1.5 py-0.5 rounded"><i data-feather="anchor" class="w-3 h-3 inline"></i> ${dav.peso_total_dav.toLocaleString('pt-BR', {minimumFractionDigits: 1})} kg</span>
+                    </div>
+                </div>
+                <button onclick="adicionarAoCarrinho('${dav.dav_numero}')" class="bg-indigo-50 border border-indigo-200 text-indigo-600 hover:bg-indigo-600 hover:text-white p-2.5 rounded transition-colors shrink-0 shadow-sm" title="Adicionar Pedido à Carga">
+                    <i data-feather="plus" class="w-4 h-4"></i>
+                </button>
+            </div>
+            
+            <div id="gaveta-${dav.dav_numero}" class="item-gaveta bg-indigo-50/40 px-3 py-2 border-t border-indigo-100">
+                <p class="text-[9px] font-bold text-indigo-400 uppercase tracking-wider mb-1">Conteúdo do Pedido</p>
+                <div class="space-y-0.5">
+                    ${itensHtml}
                 </div>
             </div>
-            <button onclick="adicionarAoCarrinho('${dav.dav_numero}')" class="bg-indigo-50 border border-indigo-200 text-indigo-600 hover:bg-indigo-600 hover:text-white p-2.5 rounded transition-colors shrink-0 shadow-sm" title="Adicionar Pedido Inteiro à Carga">
-                <i data-feather="plus" class="w-4 h-4"></i>
-            </button>
         </div>
-    `).join('');
+        `;
+    }).join('');
     if(typeof feather !== 'undefined') feather.replace();
 }
+
+// Ação de Expandir a Gaveta de Itens
+window.toggleGavetaItens = function(davNumero) {
+    const gaveta = document.getElementById(`gaveta-${davNumero}`);
+    const icon = document.getElementById(`icon-gaveta-${davNumero}`);
+    if (gaveta) {
+        gaveta.classList.toggle('open');
+        if (icon) {
+            icon.style.transform = gaveta.classList.contains('open') ? 'rotate(180deg)' : 'rotate(0deg)';
+        }
+    }
+};
 
 // 3. Desenha a lista da DIREITA (Carrinho)
 function renderCartList() {
@@ -556,7 +622,7 @@ function renderCartList() {
     }
 
     container.innerHTML = cartDavs.map(dav => `
-        <div class="bg-indigo-50/70 p-2.5 rounded border border-indigo-200 flex justify-between items-center cart-item shadow-sm">
+        <div class="bg-indigo-50/70 p-2.5 rounded border border-indigo-200 flex justify-between items-center cart-item shadow-sm mb-2">
             <div class="flex-1 min-w-0 pr-2">
                 <p class="font-bold text-indigo-900 text-xs truncate">DAV #${dav.dav_numero} <span class="font-medium text-gray-600">- ${dav.cliente}</span></p>
                 <p class="text-[10px] text-gray-500 font-medium mt-0.5 truncate"><i data-feather="map-pin" class="w-3 h-3 inline"></i> ${dav.bairro} (${dav.cidade})</p>
@@ -577,14 +643,12 @@ function renderCartList() {
     atualizarBarraDePeso();
 }
 
-// 4. Ações de mover itens
 window.adicionarAoCarrinho = function(davNumero) {
     const strId = String(davNumero);
     const idx = pendingDavs.findIndex(d => String(d.dav_numero) === strId);
     if (idx > -1) {
-        cartDavs.push(pendingDavs[idx]); // Joga pro caminhão
-        pendingDavs.splice(idx, 1);      // Tira da prateleira
-        
+        cartDavs.push(pendingDavs[idx]);
+        pendingDavs.splice(idx, 1);
         renderPendingList();
         renderCartList();
     }
@@ -594,10 +658,9 @@ window.removerDoCarrinho = function(davNumero) {
     const strId = String(davNumero);
     const idx = cartDavs.findIndex(d => String(d.dav_numero) === strId);
     if (idx > -1) {
-        pendingDavs.push(cartDavs[idx]); // Devolve pra prateleira
-        cartDavs.splice(idx, 1);         // Tira do caminhão
+        pendingDavs.push(cartDavs[idx]);
+        cartDavs.splice(idx, 1);
         
-        // Reordena para ficar bonito na tela (alfabético por bairro e depois cliente)
         pendingDavs.sort((a,b) => {
             if(a.bairro === b.bairro) return a.cliente.localeCompare(b.cliente);
             return a.bairro.localeCompare(b.bairro);
@@ -608,7 +671,6 @@ window.removerDoCarrinho = function(davNumero) {
     }
 };
 
-// 5. Calcula o peso vivo da carga
 function atualizarBarraDePeso() {
     const pesoTotal = cartDavs.reduce((acc, dav) => acc + dav.peso_total_dav, 0);
     
@@ -618,7 +680,6 @@ function atualizarBarraDePeso() {
 
     const btnFinalizar = document.getElementById('btn-finalizar-carga');
     
-    // Habilita o botão se tiver item E caminhão selecionado
     if (cartDavs.length === 0 || !veiculo) {
         btnFinalizar.disabled = true;
     } else {
@@ -652,7 +713,6 @@ function atualizarBarraDePeso() {
     }
 }
 
-// 6. O Grande Final: Despachar a Carga Completa
 async function finalizarCarga() {
     const idVeiculo = document.getElementById('select-veiculo').value;
     const motorista = document.getElementById('input-motorista').value;
@@ -662,7 +722,6 @@ async function finalizarCarga() {
         return;
     }
 
-    // Calcula o peso novamente só para travar se for maior que 100% (Opcional, mas recomendado)
     const veiculo = veiculosDisp.find(v => String(v.id) === String(idVeiculo));
     const capMaxima = veiculo ? parseFloat(veiculo.capacidade_kg || 0) : 0;
     const pesoTotal = cartDavs.reduce((acc, dav) => acc + dav.peso_total_dav, 0);
@@ -680,7 +739,6 @@ async function finalizarCarga() {
     if(typeof feather !== 'undefined') feather.replace();
 
     try {
-        // Passo A: Criar o cabeçalho do romaneio no banco
         const resCabecalho = await fetch(`${apiUrlBase}/entregas/romaneios`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -691,7 +749,6 @@ async function finalizarCarga() {
         if (!resCabecalho.ok) throw new Error(dataCab.error || "Falha ao criar o cabeçalho da carga.");
         const romaneioId = dataCab.romaneioId;
 
-        // Passo B: Montar a lista plana de todos os itens de todos os DAVs do carrinho
         const payloadItens = [];
         cartDavs.forEach(dav => {
             dav.itens.forEach(item => {
@@ -703,7 +760,6 @@ async function finalizarCarga() {
             });
         });
 
-        // Passo C: Enviar tudo numa única requisição para o novo romaneio
         const resItens = await fetch(`${apiUrlBase}/entregas/romaneios/${romaneioId}/itens`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -715,7 +771,6 @@ async function finalizarCarga() {
             throw new Error(erroItem.error || "O romaneio foi criado, mas houve erro ao anexar os itens.");
         }
 
-        // Sucesso Total!
         alert(`Carga #${romaneioId} montada e despachada com sucesso!`);
         fecharTorreDeControle();
 
@@ -727,6 +782,30 @@ async function finalizarCarga() {
     }
 }
 
+// 7. Ação de EXCLUIR ROMANEIO
+window.excluirRomaneio = async function(id) {
+    if (!confirm(`TEM CERTEZA? Deseja realmente cancelar e EXCLUIR a carga #${id}?\n\nEsta ação apagará todos os itens do caminhão e voltará os pedidos para a prateleira. Não pode ser desfeita.`)) {
+        return;
+    }
+
+    showLoader();
+    try {
+        const res = await fetch(`${apiUrlBase}/entregas/romaneios/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        const data = await res.json();
+        
+        if (!res.ok) throw new Error(data.error || 'Falha ao excluir romaneio.');
+        
+        alert("Carga cancelada e excluída com sucesso.");
+        loadRomaneiosAtivos(); // Recarrega a lista
+    } catch (e) {
+        alert(`Erro: ${e.message}`);
+    } finally {
+        hideLoader();
+    }
+};
 
 // ==========================================================
 //               VISTA 3: DETALHES DE UMA CARGA SALVA
@@ -751,14 +830,12 @@ async function showRomaneioDetailView(romaneioId) {
         
         const romaneioData = await response.json();
 
-        // Preenche o Cabeçalho
         document.getElementById('detail-romaneio-id').textContent = romaneioData.id;
         document.getElementById('detail-romaneio-motorista').textContent = romaneioData.nome_motorista;
         document.getElementById('detail-romaneio-veiculo').textContent = `${romaneioData.modelo_veiculo} (${romaneioData.placa_veiculo})`;
         document.getElementById('detail-romaneio-data').textContent = new Date(romaneioData.data_criacao).toLocaleString('pt-BR');
         document.getElementById('detail-romaneio-filial').textContent = romaneioData.filial_origem || 'N/A';
 
-        // Preenche Status
         const statusSpan = document.getElementById('detail-romaneio-status');
         statusSpan.textContent = romaneioData.status || 'Desconhecido';
         let statusColorClasses = 'bg-gray-200 text-gray-800';
@@ -766,7 +843,6 @@ async function showRomaneioDetailView(romaneioId) {
         else if (romaneioData.status === 'Concluído') statusColorClasses = 'bg-green-100 text-green-800';
         statusSpan.className = `px-2 py-0.5 text-xs font-bold uppercase rounded-full ${statusColorClasses}`;
 
-        // Lógica de Peso para Carga Salva
         const capacidadeKg = parseFloat(romaneioData.capacidade_kg) || 0;
         let pesoTotal = 0;
         
@@ -792,7 +868,6 @@ async function showRomaneioDetailView(romaneioId) {
             alertaPeso.classList.add('hidden');
         }
 
-        // Renderiza Itens Agrupados por DAV
         if (!romaneioData.itens || romaneioData.itens.length === 0) {
             containerItens.innerHTML = '<p class="text-center text-gray-500 py-10">Esta carga não possui itens.</p>';
         } else {
