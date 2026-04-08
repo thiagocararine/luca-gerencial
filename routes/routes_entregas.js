@@ -481,6 +481,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
 
         const dateColumn = tipoData === 'entrega' ? 'c.cr_entr' : 'c.cr_erec';
 
+        // 1. BUSCA APENAS OS CABEÇALHOS DOS DAVS ELEGÍVEIS
         let query = `
             SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde
             FROM cdavs c
@@ -488,44 +489,101 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
             WHERE c.cr_reca = '1'
               AND DATE(${dateColumn}) = ?
               AND (i.it_quan - (i.it_qent - i.it_qtdv)) > 0
-              AND i.it_qtdv <= i.it_qent
+              AND i.it_qtdv <= i.it_qent /* Trava de Devolução */
         `;
         const params = [data];
 
-        if (apenasEntregaMarcada === 'true') {
-            query += ` AND c.cr_entr != '0000-00-00'`;
-        }
-
+        if (apenasEntregaMarcada === 'true') { query += ` AND c.cr_entr != '0000-00-00'`; }
         if (bairro) { query += ' AND c.cr_ebai LIKE ?'; params.push(`%${bairro}%`); }
         if (cidade) { query += ' AND c.cr_ecid LIKE ?'; params.push(`%${cidade}%`); }
         if (davNumero) { query += ' AND CAST(c.cr_ndav AS UNSIGNED) = ?'; params.push(parseInt(davNumero, 10)); }
 
-        // --- LÓGICA DE FILTRO DE FILIAL ---
+        // Filtro de Filial
         if (isUsuarioAdmin) {
             if (filialDav) {
                 const filialCode = filialMap[filialDav];
-                if (filialCode) {
-                    query += ' AND c.cr_inde = ?';
-                    params.push(filialCode);
-                } else {
-                    console.warn(`[ELIGIBLE DAVs] Admin filtrou por filial "${filialDav}" não mapeada.`);
-                }
+                if (filialCode) { query += ' AND c.cr_inde = ?'; params.push(filialCode); }
             }
         } else {
             const filialCode = filialMap[filialUsuario];
-            if (!filialCode) {
-                console.warn(`[ELIGIBLE DAVs] Usuário da filial "${filialUsuario}" não mapeada.`);
-                return res.json([]);
-            }
+            if (!filialCode) return res.json([]);
             query += ' AND c.cr_inde = ?';
             params.push(filialCode);
         }
 
         query += ' ORDER BY c.cr_ebai, c.cr_nmcl';
+        
+        const [davsRaw] = await seiPool.execute(query, params);
 
-        console.log(`[ELIGIBLE DAVs] Query: ${query.replace(/\s+/g, ' ')} | Params: ${JSON.stringify(params)}`);
-        const [davs] = await seiPool.execute(query, params);
-        res.json(davs);
+        if (davsRaw.length === 0) {
+            return res.json([]); // Retorna vazio imediatamente se não houver pedidos
+        }
+
+        // 2. EXTRAI OS NÚMEROS DOS DAVS PARA BUSCAR OS ITENS DE UMA SÓ VEZ
+        const numerosDav = davsRaw.map(d => parseInt(d.cr_ndav, 10));
+
+        // 3. BUSCA OS ITENS E PESOS (EAGER LOADING)
+        const [itensRaw] = await seiPool.query(
+            `SELECT i.it_regist, i.it_ndav, i.it_codi, i.it_nome, i.it_unid,
+                    i.it_quan, i.it_qent, i.it_qtdv, i.it_inde,
+                    IFNULL(p.pd_pesb, 0) as peso_bruto_unitario
+             FROM idavs i
+             LEFT JOIN produtos p ON i.it_codi = p.pd_codi
+             WHERE i.it_ndav IN (?) AND (i.it_canc IS NULL OR i.it_canc <> 1)`,
+            [numerosDav]
+        );
+
+        // 4. BUSCA O HISTÓRICO DE ENTREGAS E ROMANEIOS NO GERENCIAL
+        const [retiradasManuais] = await gerencialPool.query('SELECT idavs_regi, SUM(quantidade_retirada) as total FROM entregas_manuais_log WHERE dav_numero IN (?) GROUP BY idavs_regi', [numerosDav]);
+        const [entregasRomaneio] = await gerencialPool.query('SELECT idavs_regi, SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE dav_numero IN (?) GROUP BY idavs_regi', [numerosDav]);
+
+        const retiradasMap = new Map(retiradasManuais.map(r => [r.idavs_regi, r]));
+        const romaneiosMap = new Map(entregasRomaneio.map(r => [r.idavs_regi, r]));
+
+        // 5. AGRUPA TUDO NUMA ESTRUTURA RICA PARA O FRONTEND
+        const davsFormatados = davsRaw.map(dav => {
+            const itensDoDav = itensRaw.filter(i => i.it_ndav == dav.cr_ndav);
+            const itensComSaldo = [];
+            let pesoTotalDav = 0;
+
+            for (const item of itensDoDav) {
+                const idavsRegi = item.it_regist;
+                const retirada = retiradasMap.get(idavsRegi);
+                const noCaminhao = romaneiosMap.get(idavsRegi);
+
+                // Utiliza a função calcularSaldosItem já existente no seu código
+                const { saldo } = calcularSaldosItem(item, retirada, noCaminhao);
+
+                if (saldo > 0) {
+                    const pesoUnitario = parseFloat(item.peso_bruto_unitario);
+                    const pesoTotalItem = saldo * pesoUnitario;
+                    pesoTotalDav += pesoTotalItem;
+
+                    itensComSaldo.push({
+                        idavs_regi: idavsRegi,
+                        codigo: item.it_codi,
+                        nome: item.it_nome,
+                        unidade: item.it_unid,
+                        saldo: saldo,
+                        peso_unitario: pesoUnitario,
+                        peso_total_item: pesoTotalItem,
+                        filial_item: item.it_inde
+                    });
+                }
+            }
+
+            return {
+                dav_numero: dav.cr_ndav,
+                cliente: dav.cr_nmcl,
+                bairro: dav.cr_ebai || 'Bairro Não Informado',
+                cidade: dav.cr_ecid || 'Cidade Não Informada',
+                filial: dav.cr_inde,
+                peso_total_dav: pesoTotalDav,
+                itens: itensComSaldo
+            };
+        }).filter(dav => dav.itens.length > 0); // Remove DAVs que ficaram sem saldo após o cálculo
+
+        res.json(davsFormatados);
 
     } catch (error) {
         console.error("Erro ao buscar DAVs elegíveis:", error);
