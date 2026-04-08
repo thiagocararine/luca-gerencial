@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', initPage);
 
 const API_BASE = '/api/financeiro';
 let table; // Instância global da tabela Tabulator
+let dataPicker; // Instância global do calendário
 
 // --- 1. CONSTANTES E MAPEAMENTOS ---
 
@@ -38,21 +39,78 @@ function getUserName() {
 // --- 3. INICIALIZAÇÃO ---
 
 async function initPage() {
-    console.log("Iniciando página (Versão Atualizada)..."); 
+    console.log("Iniciando página com Novo Date Picker..."); 
     if (!getToken()) { window.location.href = 'login.html'; return; }
     
     const elUser = document.getElementById('user-name');
     if (elUser) elUser.textContent = getUserName();
     
-    const hoje = new Date();
-    const passado = new Date(); passado.setDate(hoje.getDate() - 30);
-    const futuro = new Date(); futuro.setDate(hoje.getDate() + 30);
-    
-    const elInicio = document.getElementById('filtro-inicio');
-    const elFim = document.getElementById('filtro-fim');
-    if(elInicio) elInicio.value = passado.toISOString().split('T')[0];
-    if(elFim) elFim.value = futuro.toISOString().split('T')[0];
+    // 1. Configura o Flatpickr (Modo Range)
+    dataPicker = flatpickr("#filtro-data-range", {
+        mode: "range",
+        dateFormat: "Y-m-d",
+        altInput: true,
+        altFormat: "d/m/Y",
+        locale: "pt",
+        onChange: function(selectedDates) {
+            // Se o utilizador escolher manualmente no calendário, muda o atalho para "Personalizado"
+            if (selectedDates.length === 2) {
+                document.getElementById('filtro-atalhos-data').value = 'custom';
+            }
+        }
+    });
 
+    // 2. Lógica Matemática dos Atalhos
+    const selectAtalhos = document.getElementById('filtro-atalhos-data');
+    
+    const aplicarAtalho = () => {
+        const atalho = selectAtalhos.value;
+        if (atalho === 'custom') return; // Deixa o utilizador livre
+
+        const hoje = new Date();
+        let inicio = new Date();
+        let fim = new Date();
+
+        switch (atalho) {
+            case 'hoje':
+                // Mantém as datas de hoje
+                break;
+            case 'esta_semana':
+                inicio.setDate(hoje.getDate() - hoje.getDay()); // Domingo
+                fim.setDate(inicio.getDate() + 6); // Sábado
+                break;
+            case 'proxima_semana':
+                inicio.setDate(hoje.getDate() + (7 - hoje.getDay()));
+                fim.setDate(inicio.getDate() + 6);
+                break;
+            case 'este_mes':
+                inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+                fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+                break;
+            case 'mes_passado':
+                inicio = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+                fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+                break;
+            case 'proximo_mes':
+                inicio = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
+                fim = new Date(hoje.getFullYear(), hoje.getMonth() + 2, 0);
+                break;
+            case 'ultimos_30':
+                inicio.setDate(hoje.getDate() - 30);
+                break;
+        }
+        
+        // Aplica as datas ao calendário
+        dataPicker.setDate([inicio, fim]);
+    };
+
+    // Escuta mudanças nos atalhos
+    selectAtalhos.addEventListener('change', aplicarAtalho);
+    
+    // Dispara o atalho padrão (Últimos 30 dias) ao carregar a página
+    aplicarAtalho();
+
+    // 3. Popula Select de Tipos de Despesa
     const selectTipo = document.getElementById('filtro-tipo-doc');
     if (selectTipo) {
         while (selectTipo.options.length > 1) { selectTipo.remove(1); }
@@ -360,9 +418,22 @@ async function loadTitulos() {
     btnRefresh.innerHTML = '<i data-feather="loader" class="w-3.5 h-3.5 animate-spin"></i> Buscando...';
     if(typeof feather !== 'undefined') feather.replace();
 
+    const datasSelecionadas = dataPicker.selectedDates;
+    if (datasSelecionadas.length !== 2) {
+        alert("Por favor, selecione um período de data inicial e final.");
+        btnRefresh.disabled = false;
+        btnRefresh.innerHTML = originalText;
+        return;
+    }
+
+    // Formata as datas para YYYY-MM-DD para o banco de dados
+    const formatarData = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const dataIniFormatada = formatarData(datasSelecionadas[0]);
+    const dataFimFormatada = formatarData(datasSelecionadas[1]);
+
     const params = new URLSearchParams({
-        dataInicio: document.getElementById('filtro-inicio').value,
-        dataFim: document.getElementById('filtro-fim').value,
+        dataInicio: dataIniFormatada,
+        dataFim: dataFimFormatada,
         status: document.getElementById('filtro-status').value,
         filial: document.getElementById('filtro-filial').value,
         busca: document.getElementById('filtro-busca').value,
