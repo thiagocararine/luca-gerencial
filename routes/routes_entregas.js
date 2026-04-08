@@ -81,7 +81,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
     if (isNaN(davNumber)) {
         return res.status(400).json({ error: 'Número do DAV inválido.' });
     }
-    console.log(`[LOG] Iniciando busca para DAV: ${davNumber} pelo utilizador da filial: ${filialUsuario}`);
 
     try {
         const filialMap = {
@@ -95,7 +94,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         const filialUsuarioNormalizada = filialUsuario ? filialUsuario.trim().toLowerCase() : '';
         const needsFilialFilter = !adminFiliais.includes(filialUsuarioNormalizada);
 
-        // 1. Busca dados do cabeçalho do DAV (cdavs)
         let davQuery = `
             SELECT 
                 c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, 
@@ -114,7 +112,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         if (needsFilialFilter) {
             const filialCode = filialMap[filialUsuario];
             if (!filialCode) {
-                console.warn(`[SECURITY] Utilizador da filial "${filialUsuario}" tentou acesso não permitido.`);
                 return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado ou acesso não permitido para a sua filial.` });
             }
             davQuery += ' AND c.cr_inde = ?';
@@ -381,7 +378,7 @@ router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
 
 router.get('/romaneios', authenticateToken, async (req, res) => {
     const { status, filial } = req.query; 
-    const { unidade: filialUsuario } = req.user;
+    const { perfil } = req.user; // Verificamos o perfil
 
     try {
         let query = `
@@ -398,9 +395,7 @@ router.get('/romaneios', authenticateToken, async (req, res) => {
             params.push(status);
         }
 
-        const adminFiliais = ['escritorio', 'escritório (lojas)'];
-        const filialUsuarioNormalizada = filialUsuario ? filialUsuario.trim().toLowerCase() : '';
-        const isUsuarioAdmin = adminFiliais.includes(filialUsuarioNormalizada);
+        const isUsuarioAdmin = (perfil === 'Administrador' || perfil === 'Financeiro');
 
         if (isUsuarioAdmin) {
             if (filial) {
@@ -409,7 +404,7 @@ router.get('/romaneios', authenticateToken, async (req, res) => {
             }
         } else {
             conditions.push('r.filial_origem = ?');
-            params.push(filialUsuario); 
+            params.push(req.user.unidade); 
         }
 
         if (conditions.length > 0) {
@@ -445,7 +440,6 @@ router.post('/romaneios', authenticateToken, async (req, res) => {
     }
 });
 
-// NOVA ROTA DE EXCLUSÃO (CANCELAMENTO) DE ROMANEIO
 router.delete('/romaneios/:id', authenticateToken, async (req, res) => {
     const romaneioId = parseInt(req.params.id, 10);
     if (isNaN(romaneioId)) {
@@ -456,7 +450,6 @@ router.delete('/romaneios/:id', authenticateToken, async (req, res) => {
     try {
         await gerencialConnection.beginTransaction();
 
-        // 1. Verifica se o romaneio existe e se está 'Em montagem'
         const [rows] = await gerencialConnection.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [romaneioId]);
         if (rows.length === 0) {
             throw new Error('Carga (Romaneio) não encontrada.');
@@ -465,10 +458,7 @@ router.delete('/romaneios/:id', authenticateToken, async (req, res) => {
             throw new Error('Apenas cargas "Em montagem" podem ser excluídas. Cargas já concluídas são bloqueadas por segurança.');
         }
 
-        // 2. Apaga os itens vinculados primeiro (Foreign Key constraint)
         await gerencialConnection.execute('DELETE FROM romaneio_itens WHERE id_romaneio = ?', [romaneioId]);
-
-        // 3. Apaga o cabeçalho do romaneio
         await gerencialConnection.execute('DELETE FROM romaneios WHERE id = ?', [romaneioId]);
 
         await gerencialConnection.commit();
@@ -484,17 +474,14 @@ router.delete('/romaneios/:id', authenticateToken, async (req, res) => {
 });
 
 // ==========================================================
-// ROTA EAGER LOADING (Traz DAVs + Itens + Peso + Datas)
+// ROTA EAGER LOADING (Traz DAVs + Itens + Peso + Vendedor)
 // ==========================================================
 router.get('/eligible-davs', authenticateToken, async (req, res) => {
     const { data, tipoData, apenasEntregaMarcada, bairro, cidade, davNumero, filialDav } = req.query;
-    const { unidade: filialUsuario } = req.user;
+    const { perfil } = req.user;
 
     if (!data || !tipoData) {
         return res.status(400).json({ error: "Os filtros de data e tipo de data são obrigatórios." });
-    }
-    if (tipoData !== 'recebimento' && tipoData !== 'entrega') {
-        return res.status(400).json({ error: "O tipo de data deve ser 'recebimento' ou 'entrega'." });
     }
 
     try {
@@ -504,15 +491,12 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
             'Parada Angélica': 'TNASC',
             'Nova Campinas': 'LCMAT'
         };
-        const adminFiliais = ['escritorio', 'escritório (lojas)'];
-        const filialUsuarioNormalizada = filialUsuario ? filialUsuario.trim().toLowerCase() : '';
-        const isUsuarioAdmin = adminFiliais.includes(filialUsuarioNormalizada);
-
+        const isUsuarioAdmin = (perfil === 'Administrador' || perfil === 'Financeiro');
         const dateColumn = tipoData === 'entrega' ? 'c.cr_entr' : 'c.cr_erec';
 
-        // 1. BUSCA CABEÇALHOS (Agora traz data de emissão e data de entrega também)
+        // 1. BUSCA CABEÇALHOS (Agora traz c.cr_udav = Vendedor)
         let query = `
-            SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde, c.cr_edav, c.cr_entr
+            SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde, c.cr_edav, c.cr_entr, c.cr_udav
             FROM cdavs c
             JOIN idavs i ON c.cr_ndav = i.it_ndav
             WHERE c.cr_reca = '1'
@@ -527,14 +511,13 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
         if (cidade) { query += ' AND c.cr_ecid LIKE ?'; params.push(`%${cidade}%`); }
         if (davNumero) { query += ' AND CAST(c.cr_ndav AS UNSIGNED) = ?'; params.push(parseInt(davNumero, 10)); }
 
-        // Adicionada a lógica para o Filtro de Filial selecionado na interface
         if (isUsuarioAdmin) {
             if (filialDav) {
                 const filialCode = filialMap[filialDav];
                 if (filialCode) { query += ' AND c.cr_inde = ?'; params.push(filialCode); }
             }
         } else {
-            const filialCode = filialMap[filialUsuario];
+            const filialCode = filialMap[req.user.unidade];
             if (!filialCode) return res.json([]);
             query += ' AND c.cr_inde = ?';
             params.push(filialCode);
@@ -550,7 +533,6 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
 
         const numerosDav = davsRaw.map(d => parseInt(d.cr_ndav, 10));
 
-        // 3. BUSCA OS ITENS E PESOS (Truque do COALESCE para Peso Bruto zerado)
         const [itensRaw] = await seiPool.query(
             `SELECT i.it_regist, i.it_ndav, i.it_codi, i.it_nome, i.it_unid,
                     i.it_quan, i.it_qent, i.it_qtdv, i.it_inde,
@@ -561,14 +543,12 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
             [numerosDav]
         );
 
-        // 4. BUSCA O HISTÓRICO GERENCIAL
         const [retiradasManuais] = await gerencialPool.query('SELECT idavs_regi, SUM(quantidade_retirada) as total FROM entregas_manuais_log WHERE dav_numero IN (?) GROUP BY idavs_regi', [numerosDav]);
         const [entregasRomaneio] = await gerencialPool.query('SELECT idavs_regi, SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE dav_numero IN (?) GROUP BY idavs_regi', [numerosDav]);
 
         const retiradasMap = new Map(retiradasManuais.map(r => [r.idavs_regi, r]));
         const romaneiosMap = new Map(entregasRomaneio.map(r => [r.idavs_regi, r]));
 
-        // 5. AGRUPA TUDO NUMA ESTRUTURA RICA
         const davsFormatados = davsRaw.map(dav => {
             const itensDoDav = itensRaw.filter(i => i.it_ndav == dav.cr_ndav);
             const itensComSaldo = [];
@@ -579,7 +559,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
                 const retirada = retiradasMap.get(idavsRegi);
                 const noCaminhao = romaneiosMap.get(idavsRegi);
 
-                const { saldo } = calcularSaldosItem(item, retirada, noCaminhao);
+                const { saldo, entregue } = calcularSaldosItem(item, retirada, noCaminhao);
 
                 if (saldo > 0) {
                     const pesoUnitario = parseFloat(item.peso_bruto_unitario);
@@ -592,6 +572,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
                         nome: item.it_nome,
                         unidade: item.it_unid,
                         saldo: saldo,
+                        entregue: entregue, // Retorna quantidade já entregue para frontend
                         peso_unitario: pesoUnitario,
                         peso_total_item: pesoTotalItem,
                         filial_item: item.it_inde
@@ -602,6 +583,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
             return {
                 dav_numero: dav.cr_ndav,
                 cliente: dav.cr_nmcl,
+                vendedor: dav.cr_udav, // Mapeia o vendedor
                 bairro: dav.cr_ebai || 'Bairro Não Informado',
                 cidade: dav.cr_ecid || 'Cidade Não Informada',
                 filial: dav.cr_inde,
@@ -642,7 +624,6 @@ router.get('/romaneios/:id', authenticateToken, async (req, res) => {
         }
         const romaneioData = romaneioDetails[0];
 
-        // Melhoria do Peso também na visualização do detalhe da carga
         const [items] = await gerencialPool.execute(
             `SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar,
                     idavs_sei.it_nome as produto_nome, idavs_sei.it_unid as produto_unidade,
@@ -735,7 +716,6 @@ router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => {
     }
 });
 
-// A Rota de apagar um item individual da carga antiga foi mantida para segurança.
 router.delete('/romaneios/:id/itens/:itemId', authenticateToken, async (req, res) => {
     const romaneioId = parseInt(req.params.id, 10);
     const romaneioItemId = parseInt(req.params.itemId, 10);

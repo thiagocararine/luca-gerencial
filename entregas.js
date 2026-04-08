@@ -3,7 +3,6 @@ document.addEventListener('DOMContentLoaded', initEntregasPage);
 // ==========================================================
 //               VARIÁVEIS GLOBAIS
 // ==========================================================
-// A linha abaixo FOI COMENTADA pois o apiUrlBase já é declarado no assets/global.js
 // const apiUrlBase = '/api';  
 
 let currentRomaneioId = null;     
@@ -56,17 +55,14 @@ function initEntregasPage() {
 
     loadCompanyLogo();
     setupEventListeners();
-    verificarPermissoesAdmin(); // Mostra o filtro de filial se for Admin
+    verificarPermissoesAdmin(); // Habilita filtros de admin se for o caso
     
-    // Define a data de hoje por padrão no filtro
     const inputData = document.getElementById('filter-data');
     if (inputData) {
         inputData.value = new Date().toISOString().split('T')[0];
     }
     
-    // Mostra a primeira aba por padrão
     document.getElementById('retirada-content').classList.remove('hidden');
-    
     gerenciarAcessoModulos();
 }
 
@@ -81,10 +77,8 @@ function loadCompanyLogo() {
 
 function verificarPermissoesAdmin() {
     const userData = getUserData();
-    const adminFiliais = ['escritorio', 'escritório (lojas)'];
-    const filialNormalizada = (userData && userData.unidade) ? userData.unidade.trim().toLowerCase() : '';
-    
-    if (adminFiliais.includes(filialNormalizada)) {
+    // Verifica pelo Perfil de acesso em vez de Unidade
+    if (userData && (userData.perfil === 'Administrador' || userData.perfil === 'Financeiro' || userData.perfil === 'Gerente')) {
         const container = document.getElementById('filial-filter-container');
         if(container) container.classList.remove('hidden');
     }
@@ -95,11 +89,9 @@ function verificarPermissoesAdmin() {
 // ==========================================================
 
 function setupEventListeners() {
-    // --- Globais e Abas ---
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('delivery-tabs')?.addEventListener('click', handleTabSwitch);
 
-    // --- Aba 1: Retirada Balcão ---
     document.getElementById('search-dav-btn')?.addEventListener('click', handleSearchDav);
     document.getElementById('dav-search-input')?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleSearchDav();
@@ -116,7 +108,6 @@ function setupEventListeners() {
         }
     });
 
-    // --- Aba 2: Gestão de Romaneios (Listagem) ---
     document.getElementById('romaneio-main-filter-btn')?.addEventListener('click', loadRomaneiosAtivos);
     document.getElementById('btn-nova-carga')?.addEventListener('click', abrirTorreDeControle);
     document.getElementById('romaneios-list-container')?.addEventListener('click', handleRomaneioClick);
@@ -126,11 +117,10 @@ function setupEventListeners() {
         loadRomaneiosAtivos();
     });
 
-    // --- Aba 2: Torre de Controle (Montagem) ---
     document.getElementById('btn-voltar-lista')?.addEventListener('click', fecharTorreDeControle);
     document.getElementById('btn-buscar-pendentes')?.addEventListener('click', buscarPedidosPendentes);
     document.getElementById('filter-bairro')?.addEventListener('change', renderPendingList);
-    document.getElementById('filter-filial-dav')?.addEventListener('change', renderPendingList); // Novo filtro
+    document.getElementById('filter-filial-dav')?.addEventListener('change', renderPendingList); 
     document.getElementById('select-veiculo')?.addEventListener('change', atualizarBarraDePeso);
     document.getElementById('btn-finalizar-carga')?.addEventListener('click', finalizarCarga);
 }
@@ -161,9 +151,7 @@ function handleTabSwitch(event) {
         document.getElementById('romaneio-list-view').classList.remove('hidden');
         
         const userData = getUserData();
-        const adminFiliais = ['escritorio', 'escritório (lojas)'];
-        const filialNormalizada = (userData && userData.unidade) ? userData.unidade.trim().toLowerCase() : '';
-        if (adminFiliais.includes(filialNormalizada)) {
+        if (userData && (userData.perfil === 'Administrador' || userData.perfil === 'Financeiro' || userData.perfil === 'Gerente')) {
             document.getElementById('romaneio-main-filter-container').classList.remove('hidden');
             if (document.getElementById('romaneio-main-filial-filter').options.length <= 1) {
                 popularSelect(document.getElementById('romaneio-main-filial-filter'), 'Unidades', getToken(), 'Todas as Filiais');
@@ -426,7 +414,6 @@ async function loadRomaneiosAtivos() {
 
 // Ação de Clique na Linha Inteira (ignora se clicou no botão excluir)
 function handleRomaneioClick(event) {
-    // Se o click partiu de um botão de exclusão, ignoramos (para não abrir a view)
     if(event.target.closest('button[onclick^="excluirRomaneio"]')) return;
 
     const romaneioDiv = event.target.closest('[data-romaneio-id]');
@@ -437,6 +424,7 @@ function handleRomaneioClick(event) {
         }
     }
 }
+
 
 // ==========================================================
 //               A NOVA "TORRE DE CONTROLE" (CARRINHO)
@@ -488,7 +476,6 @@ async function buscarPedidosPendentes() {
         return;
     }
 
-    // Se o filtro de filial estiver visível, pega o valor dele
     const filialInput = document.getElementById('filter-filial-dav');
     const filialStr = (filialInput && !document.getElementById('filial-filter-container').classList.contains('hidden') && filialInput.value) 
                         ? `&filialDav=${filialInput.value}` : '';
@@ -510,10 +497,11 @@ async function buscarPedidosPendentes() {
         const cartIds = cartDavs.map(c => String(c.dav_numero));
         pendingDavs = davs.filter(d => !cartIds.includes(String(d.dav_numero)));
 
-        // Preenche o filtro de Bairro automaticamente
+        // Popula o Filtro de Bairros garantindo que os nomes venham sem espaços extras para evitar duplicação
         const selectBairro = document.getElementById('filter-bairro');
         const bairroAtual = selectBairro.value;
-        const bairros = [...new Set(pendingDavs.map(d => d.bairro))].sort();
+        const bairros = [...new Set(pendingDavs.map(d => d.bairro.trim()))].sort();
+        
         selectBairro.innerHTML = '<option value="">Todos os Bairros</option>' + bairros.map(b => `<option value="${b}">${b}</option>`).join('');
         if (bairros.includes(bairroAtual)) selectBairro.value = bairroAtual;
 
@@ -534,7 +522,7 @@ function renderPendingList() {
     
     let davsVisiveis = pendingDavs;
     if (filtroBairro) {
-        davsVisiveis = davsVisiveis.filter(d => d.bairro === filtroBairro);
+        davsVisiveis = davsVisiveis.filter(d => d.bairro.trim() === filtroBairro);
     }
 
     if (davsVisiveis.length === 0) {
@@ -550,14 +538,18 @@ function renderPendingList() {
     container.innerHTML = davsVisiveis.map(dav => {
         const dataVenda = dav.data_venda ? new Date(dav.data_venda).toLocaleDateString('pt-BR') : '-';
         const dataAgendada = dav.data_agendada ? new Date(dav.data_agendada).toLocaleDateString('pt-BR') : '-';
+        const vendedorNome = dav.vendedor || 'Não informado';
         
-        // Constrói as linhas da Gaveta de Itens
-        const itensHtml = dav.itens.map(item => `
+        // Constrói as linhas da Gaveta de Itens (Trazendo o "Já entregue")
+        const itensHtml = dav.itens.map(item => {
+            const tagEntregue = item.entregue > 0 ? `<span class="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded text-[9px] ml-2 font-bold border border-orange-200">Já entregue: ${item.entregue}</span>` : '';
+            return `
             <div class="flex justify-between items-center border-b border-indigo-100/50 py-1.5 last:border-0 hover:bg-indigo-100/30 px-1 rounded transition-colors">
-                <span class="text-[10px] text-gray-700 truncate flex-1 pr-2" title="${item.nome}">${item.codigo} - ${item.nome}</span>
+                <span class="text-[10px] text-gray-700 truncate flex-1 pr-2" title="${item.nome}">${item.codigo} - ${item.nome} ${tagEntregue}</span>
                 <span class="text-[10px] font-bold text-indigo-700 w-16 text-right">${item.saldo} ${item.unidade}</span>
             </div>
-        `).join('');
+            `;
+        }).join('');
 
         return `
         <div class="bg-white rounded border border-gray-200 hover:border-indigo-400 hover:shadow-md transition-all group mb-2 overflow-hidden">
@@ -566,11 +558,13 @@ function renderPendingList() {
                     <p class="font-bold text-gray-800 text-sm truncate flex items-center gap-1.5">
                         <i data-feather="chevron-down" id="icon-gaveta-${dav.dav_numero}" class="w-4 h-4 text-gray-400 transition-transform duration-200"></i>
                         DAV #${dav.dav_numero} 
+                        <span class="bg-gray-800 text-white text-[9px] px-1.5 py-0.5 rounded shadow-sm">${dav.filial}</span>
                         <span class="text-xs font-medium text-gray-500 ml-1">- ${dav.cliente}</span>
                     </p>
                     <div class="flex gap-2 mt-1.5 items-center flex-wrap">
-                        <span class="text-[9px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200"><i data-feather="map-pin" class="w-3 h-3 inline"></i> ${dav.bairro}</span>
-                        <span class="text-[9px] text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100" title="Venda vs Agendamento">Vendido: ${dataVenda} | Agend.: ${dataAgendada}</span>
+                        <span class="text-[9px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200"><i data-feather="map-pin" class="w-3 h-3 inline"></i> ${dav.bairro.trim()}</span>
+                        <span class="text-[9px] text-teal-700 font-bold bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100" title="Vendedor"><i data-feather="user" class="w-3 h-3 inline"></i> ${vendedorNome}</span>
+                        <span class="text-[9px] text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100" title="Data da Venda x Data Agendada para Entrega">Vendido: ${dataVenda} | Agend.: ${dataAgendada}</span>
                         <span class="text-[9px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded"><i data-feather="package" class="w-3 h-3 inline"></i> ${dav.itens.length} itens</span>
                         <span class="text-[9px] text-orange-600 font-bold bg-orange-50 px-1.5 py-0.5 rounded"><i data-feather="anchor" class="w-3 h-3 inline"></i> ${dav.peso_total_dav.toLocaleString('pt-BR', {minimumFractionDigits: 1})} kg</span>
                     </div>
@@ -624,8 +618,8 @@ function renderCartList() {
     container.innerHTML = cartDavs.map(dav => `
         <div class="bg-indigo-50/70 p-2.5 rounded border border-indigo-200 flex justify-between items-center cart-item shadow-sm mb-2">
             <div class="flex-1 min-w-0 pr-2">
-                <p class="font-bold text-indigo-900 text-xs truncate">DAV #${dav.dav_numero} <span class="font-medium text-gray-600">- ${dav.cliente}</span></p>
-                <p class="text-[10px] text-gray-500 font-medium mt-0.5 truncate"><i data-feather="map-pin" class="w-3 h-3 inline"></i> ${dav.bairro} (${dav.cidade})</p>
+                <p class="font-bold text-indigo-900 text-xs truncate">DAV #${dav.dav_numero} <span class="bg-gray-800 text-white text-[9px] px-1.5 py-0.5 rounded ml-1">${dav.filial}</span> <span class="font-medium text-gray-600">- ${dav.cliente}</span></p>
+                <p class="text-[10px] text-gray-500 font-medium mt-0.5 truncate"><i data-feather="map-pin" class="w-3 h-3 inline"></i> ${dav.bairro.trim()} (${dav.cidade})</p>
             </div>
             <div class="flex items-center gap-3 shrink-0 border-l border-indigo-200 pl-3">
                 <div class="text-right">
