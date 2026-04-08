@@ -44,7 +44,7 @@ function parseRetiradasAnteriores(it_reti) {
 }
 
 /**
- * FUNÇÃO DE CÁLCULO DE SALDO - VERSÃO FINAL CORRETA
+ * FUNÇÃO DE CÁLCULO DE SALDO
  */
 function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem) {
     const quantidadeTotalPedido = parseFloat(itemErp.it_quan) || 0;
@@ -81,7 +81,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
     if (isNaN(davNumber)) {
         return res.status(400).json({ error: 'Número do DAV inválido.' });
     }
-    console.log(`[LOG] Iniciando busca para DAV: ${davNumber} pelo usuário da filial: ${filialUsuario}`);
+    console.log(`[LOG] Iniciando busca para DAV: ${davNumber} pelo utilizador da filial: ${filialUsuario}`);
 
     try {
         const filialMap = {
@@ -114,20 +114,18 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         if (needsFilialFilter) {
             const filialCode = filialMap[filialUsuario];
             if (!filialCode) {
-                console.warn(`[SECURITY] Usuário da filial "${filialUsuario}" (não mapeada) tentou acesso. Acesso negado.`);
-                return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado ou acesso não permitido para sua filial.` });
+                console.warn(`[SECURITY] Utilizador da filial "${filialUsuario}" tentou acesso não permitido.`);
+                return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado ou acesso não permitido para a sua filial.` });
             }
             davQuery += ' AND c.cr_inde = ?';
             queryParams.push(filialCode);
-        } else {
-             console.log(`[LOG] Usuário da filial "${filialUsuario}" tem acesso irrestrito.`);
         }
 
         console.log('[LOG] Passo 1: Buscando dados do DAV (cdavs)...');
         const [davs] = await seiPool.execute(davQuery, queryParams);
 
         if (davs.length === 0) {
-            return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado` + (needsFilialFilter ? ` para sua filial.` : '.') });
+            return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado` + (needsFilialFilter ? ` para a sua filial.` : '.') });
         }
         const davData = davs[0];
 
@@ -253,8 +251,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         console.error(`\n--- [ERRO FATAL] ---`);
         console.error(`Falha crítica ao processar a rota /dav/${davNumber}`);
         console.error(`Mensagem: ${error.message}`);
-        console.error(`Stack Trace:`, error);
-        console.error(`--- [FIM DO ERRO] ---\n`);
         res.status(500).json({ error: 'Erro interno no servidor ao processar o pedido.' });
     }
 });
@@ -266,7 +262,7 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
     const dav_numero = parseInt(davNumeroStr, 10);
 
     if (isNaN(dav_numero) || !itens || !Array.isArray(itens) || itens.length === 0) {
-        return res.status(400).json({ error: 'Dados inválidos para registrar a retirada.' });
+        return res.status(400).json({ error: 'Dados inválidos para registar a retirada.' });
     }
 
     const gerencialConnection = await gerencialPool.getConnection();
@@ -354,7 +350,7 @@ Retirado..: Retirada no Balcão via App`;
         await gerencialConnection.commit();
         await seiConnection.commit();
 
-        res.status(201).json({ message: 'Retirada registrada e atualizada no ERP com sucesso!' });
+        res.status(201).json({ message: 'Retirada registada e atualizada no ERP com sucesso!' });
 
     } catch (error) {
         await gerencialConnection.rollback();
@@ -367,8 +363,8 @@ Retirado..: Retirada no Balcão via App`;
             await Promise.all(updatePromises);
         }
 
-        console.error("Erro ao registrar retirada manual:", error);
-        res.status(error.message.includes('Saldo insuficiente') ? 400 : 500).json({ error: error.message || 'Erro interno ao salvar a retirada.' });
+        console.error("Erro ao registar retirada manual:", error);
+        res.status(error.message.includes('Saldo insuficiente') ? 400 : 500).json({ error: error.message || 'Erro interno ao guardar a retirada.' });
     } finally {
         gerencialConnection.release();
         seiConnection.release();
@@ -382,7 +378,7 @@ Retirado..: Retirada no Balcão via App`;
 router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
     try {
         const [veiculos] = await gerencialPool.execute(
-            "SELECT id, modelo, placa FROM veiculos WHERE status = 'Ativo' ORDER BY modelo ASC"
+            "SELECT id, modelo, placa, capacidade_kg FROM veiculos WHERE status = 'Ativo' ORDER BY modelo ASC"
         );
         res.json(veiculos);
     } catch (error) {
@@ -397,7 +393,7 @@ router.get('/romaneios', authenticateToken, async (req, res) => {
 
     try {
         let query = `
-            SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, 
+            SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, r.status,
                    v.modelo as modelo_veiculo, v.placa as placa_veiculo 
             FROM romaneios r
             JOIN veiculos v ON r.id_veiculo = v.id
@@ -457,6 +453,9 @@ router.post('/romaneios', authenticateToken, async (req, res) => {
     }
 });
 
+// ==========================================================
+// ROTA EAGER LOADING (Traz DAVs + Itens de uma vez)
+// ==========================================================
 router.get('/eligible-davs', authenticateToken, async (req, res) => {
     const { data, tipoData, apenasEntregaMarcada, bairro, cidade, davNumero, filialDav } = req.query;
     const { unidade: filialUsuario } = req.user;
@@ -481,7 +480,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
 
         const dateColumn = tipoData === 'entrega' ? 'c.cr_entr' : 'c.cr_erec';
 
-        // 1. BUSCA APENAS OS CABEÇALHOS DOS DAVS ELEGÍVEIS
+        // 1. BUSCA APENAS OS CABEÇALHOS DOS DAVS ELEGÍVEIS (Adicionada a trava de devolução)
         let query = `
             SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde
             FROM cdavs c
@@ -489,7 +488,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
             WHERE c.cr_reca = '1'
               AND DATE(${dateColumn}) = ?
               AND (i.it_quan - (i.it_qent - i.it_qtdv)) > 0
-              AND i.it_qtdv <= i.it_qent /* Trava de Devolução */
+              AND i.it_qtdv <= i.it_qent /* Trava de Devolução: Bloqueia devoluções maiores que a entrega */
         `;
         const params = [data];
 
@@ -516,10 +515,10 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
         const [davsRaw] = await seiPool.execute(query, params);
 
         if (davsRaw.length === 0) {
-            return res.json([]); // Retorna vazio imediatamente se não houver pedidos
+            return res.json([]); 
         }
 
-        // 2. EXTRAI OS NÚMEROS DOS DAVS PARA BUSCAR OS ITENS DE UMA SÓ VEZ
+        // 2. EXTRAI OS NÚMEROS DOS DAVS PARA BUSCAR OS ITENS
         const numerosDav = davsRaw.map(d => parseInt(d.cr_ndav, 10));
 
         // 3. BUSCA OS ITENS E PESOS (EAGER LOADING)
@@ -551,7 +550,6 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
                 const retirada = retiradasMap.get(idavsRegi);
                 const noCaminhao = romaneiosMap.get(idavsRegi);
 
-                // Utiliza a função calcularSaldosItem já existente no seu código
                 const { saldo } = calcularSaldosItem(item, retirada, noCaminhao);
 
                 if (saldo > 0) {
@@ -581,7 +579,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
                 peso_total_dav: pesoTotalDav,
                 itens: itensComSaldo
             };
-        }).filter(dav => dav.itens.length > 0); // Remove DAVs que ficaram sem saldo após o cálculo
+        }).filter(dav => dav.itens.length > 0); 
 
         res.json(davsFormatados);
 
@@ -598,10 +596,11 @@ router.get('/romaneios/:id', authenticateToken, async (req, res) => {
     }
 
     try {
+        // Agora inclui a capacidade_kg do veículo na consulta
         const [romaneioDetails] = await gerencialPool.execute(
             `SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, r.status,
                     v.modelo as modelo_veiculo, v.placa as placa_veiculo, 
-                    IFNULL(v.capacidade_kg, 0) as capacidade_kg /* <-- NOVO CAMPO */
+                    IFNULL(v.capacidade_kg, 0) as capacidade_kg
              FROM romaneios r
              JOIN veiculos v ON r.id_veiculo = v.id
              WHERE r.id = ?`,
@@ -613,11 +612,12 @@ router.get('/romaneios/:id', authenticateToken, async (req, res) => {
         }
         const romaneioData = romaneioDetails[0];
 
+        // Traz também o peso bruto do ERP (pd_pesb)
         const [items] = await gerencialPool.execute(
             `SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar,
                     idavs_sei.it_nome as produto_nome, idavs_sei.it_unid as produto_unidade,
                     cdavs_sei.cr_nmcl as cliente_nome,
-                    IFNULL(produtos_sei.pd_pesb, 0) as peso_bruto_unitario /* <-- BUSCA O PESO BRUTO NO SEI */
+                    IFNULL(produtos_sei.pd_pesb, 0) as peso_bruto_unitario
              FROM romaneio_itens ri
              LEFT JOIN ${dbConfigSei.database}.idavs idavs_sei ON ri.idavs_regi = idavs_sei.it_regist
              LEFT JOIN ${dbConfigSei.database}.cdavs cdavs_sei ON ri.dav_numero = cdavs_sei.cr_ndav
@@ -658,11 +658,9 @@ router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => {
              throw new Error("Nenhum ID de item válido encontrado.");
         }
 
-        // CORREÇÃO AQUI: Use .query para IN (?)
         const [itemErpRows] = await seiPool.query(`SELECT it_regist, it_nome, it_quan, it_qent, it_qtdv FROM idavs WHERE it_regist IN (?)`, [allIdavsRegi]);
         const itemErpMap = new Map(itemErpRows.map(i => [i.it_regist, i]));
 
-        // CORREÇÃO AQUI: Use .query para IN (?)
         const [alocadoEmRomaneiosRows] = await gerencialPool.query(
             'SELECT idavs_regi, SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE idavs_regi IN (?) AND id_romaneio != ? GROUP BY idavs_regi',
             [allIdavsRegi, romaneioId]
