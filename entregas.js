@@ -3,7 +3,6 @@ document.addEventListener('DOMContentLoaded', initEntregasPage);
 // ==========================================================
 //               VARIÁVEIS GLOBAIS
 // ==========================================================
-// A linha abaixo está comentada pois o apiUrlBase já é declarado no assets/global.js
 // const apiUrlBase = '/api';  
 
 let currentRomaneioId = null;     
@@ -50,7 +49,7 @@ function initEntregasPage() {
     if (inputData) inputData.value = new Date().toISOString().split('T')[0];
     
     document.getElementById('retirada-content').classList.remove('hidden');
-    gerenciarAcessoModulos();
+    gerenciarAcessoModulos(); // <-- A função agora está lá no final!
 }
 
 function loadCompanyLogo() {
@@ -76,7 +75,7 @@ function verificarPermissoesAdmin() {
 
 function showToast(message, type = 'success') {
     const container = document.getElementById('toast-container');
-    if (!container) return alert(message); // Fallback de segurança
+    if (!container) return alert(message); 
     
     const toast = document.createElement('div');
     const bgColor = type === 'success' ? 'bg-green-600' : (type === 'error' ? 'bg-red-600' : 'bg-blue-600');
@@ -138,7 +137,7 @@ function setupEventListeners() {
         if (e.key === 'Enter') handleSearchDav();
     });
 
-    document.getElementById('romaneio-main-filter-btn')?.addEventListener('click', loadRomaneiosAtivos);
+    // Removi o evento do romaneio-main-filter-btn, pois excluímos ele da interface
     document.getElementById('btn-nova-carga')?.addEventListener('click', () => abrirTorreDeControle(null));
     document.getElementById('romaneios-list-container')?.addEventListener('click', handleRomaneioClick);
     
@@ -177,14 +176,7 @@ function handleTabSwitch(event) {
         document.getElementById('romaneio-detail-view').classList.add('hidden');
         document.getElementById('romaneio-list-view').classList.remove('hidden');
         
-        const userData = getUserData();
-        if (userData && (userData.perfil === 'Administrador' || userData.perfil === 'Financeiro' || userData.perfil === 'Gerente')) {
-            document.getElementById('romaneio-main-filter-container').classList.remove('hidden');
-            if (document.getElementById('romaneio-main-filial-filter').options.length <= 1) {
-                popularSelect(document.getElementById('romaneio-main-filial-filter'), 'Unidades', getToken(), 'Todas as Filiais');
-            }
-        }
-        loadRomaneiosAtivos();
+        loadRomaneiosAtivos(); // <-- ERRO CORRIGIDO: Retirado o código que procurava o filtro HTML antigo
     }
 }
 
@@ -327,11 +319,9 @@ async function loadRomaneiosAtivos() {
     container.innerHTML = '<p class="text-center text-gray-500 py-10 font-bold"><i data-feather="loader" class="animate-spin inline-block mr-2"></i>Buscando cargas ativas...</p>';
     if(typeof feather !== 'undefined') feather.replace();
 
-    const filialInput = document.getElementById('romaneio-main-filial-filter');
-    const filialStr = (filialInput && filialInput.offsetParent !== null && filialInput.value) ? `&filial=${filialInput.value}` : '';
-
     try {
-        const res = await fetch(`${apiUrlBase}/entregas/romaneios?status=Em montagem${filialStr}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        // A busca é simplificada e controlada pelo backend baseado no perfil
+        const res = await fetch(`${apiUrlBase}/entregas/romaneios?status=Em montagem`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!res.ok) throw new Error("Falha ao buscar cargas.");
         const romaneios = await res.json();
         
@@ -386,7 +376,6 @@ async function loadRomaneiosAtivos() {
 
 function handleRomaneioClick(event) {
     if(event.target.closest('button')) return; 
-    // Se clicar fora dos botões, não faz nada para evitar conflito com a edição
 }
 
 window.excluirRomaneio = function(id) {
@@ -434,7 +423,6 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
     }
 
     if (currentRomaneioId) {
-        // MODO EDIÇÃO
         document.getElementById('titulo-carrinho').innerHTML = `Editando Carga #${currentRomaneioId}`;
         document.getElementById('texto-btn-finalizar').textContent = 'Salvar Alterações';
         document.getElementById('select-veiculo').disabled = true;
@@ -447,7 +435,6 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
             document.getElementById('select-veiculo').value = veiculosDisp.find(v => v.placa === data.placa_veiculo)?.id || '';
             document.getElementById('input-motorista').value = data.nome_motorista;
 
-            // Agrupa itens do BD para o formato do carrinho
             const grouped = data.itens.reduce((acc, item) => {
                 if(!acc[item.dav_numero]) {
                     acc[item.dav_numero] = {
@@ -457,7 +444,7 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
                 const peso = parseFloat(item.peso_bruto_unitario) * parseFloat(item.quantidade_a_entregar);
                 acc[item.dav_numero].peso_total_dav += peso;
                 acc[item.dav_numero].itens.push({
-                    romaneio_item_id: item.romaneio_item_id, // Para poder deletar depois
+                    romaneio_item_id: item.romaneio_item_id, 
                     idavs_regi: item.idavs_regi, nome: item.produto_nome, unidade: item.produto_unidade, saldo: parseFloat(item.quantidade_a_entregar)
                 });
                 return acc;
@@ -467,7 +454,6 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
             showToast("Erro ao carregar dados da carga.", "error");
         }
     } else {
-        // MODO NOVO
         document.getElementById('titulo-carrinho').innerHTML = `Montar Nova Carga`;
         document.getElementById('texto-btn-finalizar').textContent = 'Finalizar e Despachar Carga';
         document.getElementById('select-veiculo').disabled = false;
@@ -646,7 +632,6 @@ window.removerDoCarrinho = function(davNumero) {
     if (idx > -1) {
         const dav = cartDavs[idx];
         
-        // Se for um DAV que já estava salvo no banco, deleta via API imediatamente
         if (dav.is_existing) {
             showCustomConfirm("Excluir Item do Banco?", `O DAV #${davNumero} já está salvo no Romaneio #${currentRomaneioId}. Deseja deletá-lo definitivamente desta carga?`, async () => {
                 lockUI();
@@ -663,7 +648,6 @@ window.removerDoCarrinho = function(davNumero) {
             return;
         }
 
-        // Se foi apenas adicionado visualmente agora, volta pra prateleira normalmente
         pendingDavs.push(dav);
         cartDavs.splice(idx, 1);
         pendingDavs.sort((a,b) => a.bairro.localeCompare(b.bairro));
@@ -678,7 +662,6 @@ function atualizarBarraDePeso() {
     const capMaxima = veiculo ? parseFloat(veiculo.capacidade_kg || 0) : 0;
     const btnFinalizar = document.getElementById('btn-finalizar-carga');
     
-    // Na edição o veículo é desativado, mas ainda validamos se o cart tem itens
     if (cartDavs.length === 0 || (!veiculo && !currentRomaneioId)) {
         btnFinalizar.disabled = true;
     } else {
@@ -735,7 +718,6 @@ async function finalizarCarga() {
     try {
         let romaneioId = currentRomaneioId;
 
-        // Se for carga NOVA, cria o cabeçalho primeiro
         if (!romaneioId) {
             const resCabecalho = await fetch(`${apiUrlBase}/entregas/romaneios`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -746,7 +728,6 @@ async function finalizarCarga() {
             romaneioId = dataCab.romaneioId;
         }
 
-        // Filtra só os itens novos que ainda não foram salvos no banco (is_existing = false)
         const payloadItens = [];
         cartDavs.filter(dav => !dav.is_existing).forEach(dav => {
             dav.itens.forEach(item => {
@@ -754,7 +735,6 @@ async function finalizarCarga() {
             });
         });
 
-        // Só envia o POST de itens se tiver item novo adicionado no caminhão
         if (payloadItens.length > 0) {
             const resItens = await fetch(`${apiUrlBase}/entregas/romaneios/${romaneioId}/itens`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -768,7 +748,6 @@ async function finalizarCarga() {
 
         showToast(`Carga #${romaneioId} gravada com sucesso!`, 'success');
         
-        // Zera tudo e volta pra listagem de modo limpo
         cartDavs = [];
         document.getElementById('romaneio-split-view').classList.add('hidden');
         document.getElementById('romaneio-list-view').classList.remove('hidden');
@@ -780,5 +759,56 @@ async function finalizarCarga() {
         if(typeof feather !== 'undefined') feather.replace();
     } finally {
         unlockUI();
+    }
+}
+
+// ==========================================================
+//               FUNÇÕES DE UTILIDADE RESTAURADAS
+// ==========================================================
+function gerenciarAcessoModulos() {
+    const userData = getUserData();
+    if (!userData || !userData.permissoes) return;
+
+    const mapaModulos = {
+        'lancamentos': 'despesas.html',
+        'logistica': 'logistica.html',
+        'entregas': 'entregas.html',
+        'checklist': 'checklist.html',
+        'produtos': 'produtos.html',
+        'configuracoes': 'settings.html'
+    };
+
+    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
+        const permissao = userData.permissoes.find(p => p.nome_modulo === nomeModulo);
+        if (!permissao || !permissao.permitido) {
+            const link = document.querySelector(`#sidebar a[href="${href}"]`);
+            if (link && link.parentElement) link.parentElement.style.display = 'none';
+        }
+    }
+}
+
+async function popularSelect(selectElement, codParametro, token, placeholderText) {
+    if (!selectElement) return [];
+    try {
+        const response = await fetch(`${apiUrlBase}/settings/parametros?cod=${codParametro}`, { 
+            headers: { 'Authorization': `Bearer ${token}` } 
+        });
+        if (!response.ok) throw new Error("Falha ao carregar.");
+        const data = await response.json();
+        selectElement.innerHTML = `<option value="">${placeholderText}</option>` + 
+            data.map(p => `<option value="${p.NOME_PARAMETRO}">${p.NOME_PARAMETRO}</option>`).join('');
+        return data;
+    } catch (error) {
+        selectElement.innerHTML = `<option value="">Erro</option>`;
+        return [];
+    }
+}
+
+function handleApiError(response) {
+    if (response.status === 401 || response.status === 403) {
+        showToast("Sessão expirada. Faça login novamente.", "error");
+        setTimeout(logout, 2000);
+    } else {
+        response.json().then(data => showToast(`Erro: ${data.error || response.statusText}`, "error")).catch(() => showToast('Erro na API.', "error"));
     }
 }
