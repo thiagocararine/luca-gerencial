@@ -49,7 +49,7 @@ function initEntregasPage() {
     if (inputData) inputData.value = new Date().toISOString().split('T')[0];
     
     document.getElementById('retirada-content').classList.remove('hidden');
-    gerenciarAcessoModulos(); // <-- A função agora está lá no final!
+    gerenciarAcessoModulos(); 
 }
 
 function loadCompanyLogo() {
@@ -137,7 +137,6 @@ function setupEventListeners() {
         if (e.key === 'Enter') handleSearchDav();
     });
 
-    // Removi o evento do romaneio-main-filter-btn, pois excluímos ele da interface
     document.getElementById('btn-nova-carga')?.addEventListener('click', () => abrirTorreDeControle(null));
     document.getElementById('romaneios-list-container')?.addEventListener('click', handleRomaneioClick);
     
@@ -175,8 +174,7 @@ function handleTabSwitch(event) {
         document.getElementById('romaneio-split-view').classList.add('hidden');
         document.getElementById('romaneio-detail-view').classList.add('hidden');
         document.getElementById('romaneio-list-view').classList.remove('hidden');
-        
-        loadRomaneiosAtivos(); // <-- ERRO CORRIGIDO: Retirado o código que procurava o filtro HTML antigo
+        loadRomaneiosAtivos(); 
     }
 }
 
@@ -320,7 +318,6 @@ async function loadRomaneiosAtivos() {
     if(typeof feather !== 'undefined') feather.replace();
 
     try {
-        // A busca é simplificada e controlada pelo backend baseado no perfil
         const res = await fetch(`${apiUrlBase}/entregas/romaneios?status=Em montagem`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!res.ok) throw new Error("Falha ao buscar cargas.");
         const romaneios = await res.json();
@@ -410,7 +407,6 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
     cartDavs = [];
     pendingDavs = [];
     
-    // Carrega Veículos
     const select = document.getElementById('select-veiculo');
     if (select.options.length <= 1) {
         select.innerHTML = '<option value="">Carregando...</option>';
@@ -542,10 +538,13 @@ function renderPendingList() {
         const vendedorNome = dav.vendedor || 'Não informado';
         
         const itensHtml = dav.itens.map(item => {
-            const tagEntregue = item.entregue > 0 ? `<span class="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded text-[9px] ml-2 font-bold border border-orange-200">Já entregue: ${item.entregue}</span>` : '';
+            const tagEntregue = item.entregue > 0 ? `<span class="bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded text-[9px] ml-2 font-bold border border-teal-200">Já Entregue: ${item.entregue}</span>` : '';
+            // TAG VERMELHA DA DEVOLUÇÃO!
+            const tagDevolvido = item.devolvido > 0 ? `<span class="bg-red-100 text-red-700 px-1.5 py-0.5 rounded text-[9px] ml-2 font-bold border border-red-200">Devolvido: ${item.devolvido}</span>` : '';
+            
             return `
             <div class="flex justify-between items-center border-b border-indigo-100/50 py-1.5 last:border-0 hover:bg-indigo-50 px-1 rounded transition-colors">
-                <span class="text-[10px] font-medium text-gray-700 truncate flex-1 pr-2">${item.codigo} - ${item.nome} ${tagEntregue}</span>
+                <span class="text-[10px] font-medium text-gray-700 truncate flex-1 pr-2">${item.codigo} - ${item.nome} ${tagEntregue} ${tagDevolvido}</span>
                 <span class="text-[10px] font-black text-indigo-700 w-16 text-right">${item.saldo} ${item.unidade}</span>
             </div>`;
         }).join('');

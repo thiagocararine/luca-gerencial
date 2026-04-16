@@ -2,9 +2,8 @@ const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2/promise');
 const { authenticateToken } = require('../middlewares');
-const dbConfig = require('../dbConfig'); // Conexão com gerencial_lucamat
+const dbConfig = require('../dbConfig');
 
-// Configuração de conexão para o banco de dados do ERP (SEI)
 const dbConfigSei = {
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -13,27 +12,43 @@ const dbConfigSei = {
     charset: 'utf8mb4'
 };
 
-// --- Pools de Conexão ---
 const seiPool = mysql.createPool(dbConfigSei);
 const gerencialPool = mysql.createPool(dbConfig);
 
+// ==========================================================
+//               FUNÇÃO DE CÁLCULO DE SALDO (CORRIGIDA)
+// ==========================================================
 
-// ==========================================================
-//               FUNÇÕES AUXILIARES
-// ==========================================================
+function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem) {
+    const quantidadeComprada = parseFloat(itemErp.it_quan) || 0;
+    const totalEntregueErp = parseFloat(itemErp.it_qent) || 0;
+    const totalDevolvido = parseFloat(itemErp.it_qtdv) || 0; 
+
+    // 1. A quantidade real que o cliente tem direito de levar (Tira a devolução)
+    const quantidadeLiquidaDireito = quantidadeComprada - totalDevolvido;
+
+    // 2. O que já está fisicamente fora da loja (Entregue no ERP + Em Rota no App)
+    const totalEmRomaneioApp = parseFloat(entregaRomaneioDoItem?.total) || 0;
+    const totalJaDespachado = totalEntregueErp + totalEmRomaneioApp;
+
+    // 3. O Saldo final a entregar agora
+    const saldo = quantidadeLiquidaDireito - totalJaDespachado;
+
+    return {
+        saldo: Math.max(0, saldo), 
+        entregue: totalJaDespachado,
+        devolvido: totalDevolvido // Exportado para exibir na Retirada de Balcão e Romaneio
+    };
+}
 
 function parseUsuarioLiberacao(it_entr) {
-    if (!it_entr || typeof it_entr !== 'string') {
-        return 'N/A';
-    }
+    if (!it_entr || typeof it_entr !== 'string') return 'N/A';
     const parts = it_entr.split(' ');
     return parts[parts.length - 1] || 'N/A';
 }
 
 function parseRetiradasAnteriores(it_reti) {
-    if (!it_reti || typeof it_reti !== 'string') {
-        return 0;
-    }
+    if (!it_reti || typeof it_reti !== 'string') return 0;
     let totalRetirado = 0;
     const regex = /Retirada\.\.:\s*(\d+[\.,]?\d*)/g;
     let match;
@@ -41,32 +56,6 @@ function parseRetiradasAnteriores(it_reti) {
         totalRetirado += parseFloat(match[1].replace(',', '.'));
     }
     return totalRetirado;
-}
-
-/**
- * FUNÇÃO DE CÁLCULO DE SALDO
- */
-function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem) {
-    const quantidadeTotalPedido = parseFloat(itemErp.it_quan) || 0;
-    const totalEntregueBruto = parseFloat(itemErp.it_qent) || 0; // Total que já saiu
-    const totalDevolvido = parseFloat(itemErp.it_qtdv) || 0;    // Total que já voltou
-
-    // 1. Calcula o que está efetivamente com o cliente (Entregue Líquido).
-    const entregueLiquido = totalEntregueBruto - totalDevolvido;
-
-    // 2. Soma qualquer quantidade que esteja em rota de entrega pelo nosso app.
-    const totalEmRomaneioApp = parseFloat(entregaRomaneioDoItem?.total) || 0;
-
-    // 3. O total indisponível é a soma do que está com o cliente + o que está em rota.
-    const totalIndisponivel = entregueLiquido + totalEmRomaneioApp;
-    
-    // 4. O saldo a retirar é o total do pedido menos o que está indisponível.
-    const saldo = quantidadeTotalPedido - totalIndisponivel;
-
-    return {
-        saldo: Math.max(0, saldo), 
-        entregue: Math.max(0, totalIndisponivel)
-    };
 }
 
 // ==========================================================
@@ -78,9 +67,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
     const davNumber = parseInt(davNumberStr, 10);
     const { unidade: filialUsuario } = req.user;
 
-    if (isNaN(davNumber)) {
-        return res.status(400).json({ error: 'Número do DAV inválido.' });
-    }
+    if (isNaN(davNumber)) return res.status(400).json({ error: 'Número do DAV inválido.' });
 
     try {
         const filialMap = {
@@ -111,48 +98,25 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
 
         if (needsFilialFilter) {
             const filialCode = filialMap[filialUsuario];
-            if (!filialCode) {
-                return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado ou acesso não permitido para a sua filial.` });
-            }
+            if (!filialCode) return res.status(404).json({ error: `Acesso negado para a sua filial.` });
             davQuery += ' AND c.cr_inde = ?';
             queryParams.push(filialCode);
         }
 
         const [davs] = await seiPool.execute(davQuery, queryParams);
-
-        if (davs.length === 0) {
-            return res.status(404).json({ error: `Pedido (DAV) com número ${davNumber} não encontrado` + (needsFilialFilter ? ` para a sua filial.` : '.') });
-        }
+        if (davs.length === 0) return res.status(404).json({ error: `Pedido não encontrado.` });
+        
         const davData = davs[0];
-
-        if (davData.cr_tipo != 1) {
-            return res.status(400).json({ error: `O DAV ${davNumber} é um orçamento e não pode ser faturado.` });
-        }
+        if (davData.cr_tipo != 1) return res.status(400).json({ error: `O DAV ${davNumber} é orçamento.` });
 
         const combineDateTime = (date, time) => {
             if (!date || (typeof date === 'string' && date.startsWith('0000-00-00'))) return null;
             const dateObject = new Date(date);
             if (isNaN(dateObject.getTime())) return null;
-            const validTime = time || '00:00:00';
-            const datePart = dateObject.toISOString().split('T')[0];
-            return new Date(`${datePart}T${validTime}`);
+            return new Date(`${dateObject.toISOString().split('T')[0]}T${time || '00:00:00'}`);
         };
 
         const nfemParts = (davData.cr_nfem || '').split(' ');
-        const fiscalInfo = {
-            data_emissao: nfemParts[0] && nfemParts[1] ? combineDateTime(nfemParts[0], nfemParts[1]) : null,
-            protocolo: nfemParts[2] || null,
-            usuario: nfemParts[3] || null,
-            chave: davData.cr_chnf,
-            serie: davData.cr_seri,
-            tipo: davData.cr_tnfs,
-            numero_nf: davData.cr_nota
-        };
-        const cancelamentoInfo = {
-            data_hora: combineDateTime(davData.cr_ecan, davData.cr_hcan),
-            usuario: davData.cr_usac
-        };
-
         const responseData = {
             dav_numero: davData.cr_ndav,
             data_hora_pedido: combineDateTime(davData.cr_edav, davData.cr_hdav),
@@ -169,38 +133,23 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 cep: davData.cr_ecep,
                 referencia: davData.cr_refe
             },
-            caixa_info: {
-                usuario: davData.cr_urec,
-                data_hora: combineDateTime(davData.cr_erec, davData.cr_hrec)
-            },
-            fiscal_info: fiscalInfo,
-            cancelamento_info: cancelamentoInfo,
+            caixa_info: { usuario: davData.cr_urec, data_hora: combineDateTime(davData.cr_erec, davData.cr_hrec) },
+            fiscal_info: { chave: davData.cr_chnf, numero_nf: davData.cr_nota },
             itens: []
         };
 
-        if (davData.cr_reca !== '1') {
-            return res.json(responseData);
-        }
+        if (davData.cr_reca !== '1') return res.json(responseData);
         
         const historicoQuery = `
             (SELECT e.idavs_regi, e.data_retirada as data, e.quantidade_retirada as quantidade, u.nome_user COLLATE utf8mb4_unicode_ci as responsavel, 'Retirada no Balcão' as tipo
-             FROM entregas_manuais_log e 
-             JOIN cad_user u ON e.id_usuario_conferencia = u.ID 
-             WHERE e.dav_numero = ?)
+             FROM entregas_manuais_log e JOIN cad_user u ON e.id_usuario_conferencia = u.ID WHERE e.dav_numero = ?)
              UNION ALL
              (SELECT ri.idavs_regi, r.data_criacao as data, ri.quantidade_a_entregar as quantidade, r.nome_motorista COLLATE utf8mb4_unicode_ci as responsavel, 'Saída em Romaneio' as tipo
-             FROM romaneio_itens ri 
-             JOIN romaneios r ON ri.id_romaneio = r.id 
-             WHERE ri.dav_numero = ?)
+             FROM romaneio_itens ri JOIN romaneios r ON ri.id_romaneio = r.id WHERE ri.dav_numero = ?)
              ORDER BY data DESC`;
 
         const allResults = await Promise.all([
-            seiPool.execute(
-                `SELECT it_regist, it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti, it_inde 
-                 FROM idavs 
-                 WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`,
-                [davNumber]
-            ),
+            seiPool.execute(`SELECT it_regist, it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti, it_inde FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`, [davNumber]),
             gerencialPool.execute('SELECT idavs_regi, SUM(quantidade_retirada) as total FROM entregas_manuais_log WHERE dav_numero = ? GROUP BY idavs_regi', [davNumber]),
             gerencialPool.execute('SELECT idavs_regi, SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE dav_numero = ? GROUP BY idavs_regi', [davNumber]),
             gerencialPool.execute(historicoQuery, [davNumber, davNumber])
@@ -208,19 +157,16 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
 
         const [itensDav, retiradasManuais, entregasRomaneio, historicoCompleto] = [allResults[0][0], allResults[1][0], allResults[2][0], allResults[3][0]];
 
-        if (itensDav.length === 0) {
-            return res.status(404).json({ error: 'Nenhum item válido encontrado para este pedido.' });
-        }
+        if (itensDav.length === 0) return res.status(404).json({ error: 'Nenhum item válido encontrado.' });
         
-        const itensComSaldo = [];
         for (const item of itensDav) {
             const idavsRegi = item.it_regist;
-            const retiradaManualDoItem = retiradasManuais.find(r => r.idavs_regi == idavsRegi);
-            const entregaRomaneioDoItem = entregasRomaneio.find(r => r.idavs_regi == idavsRegi);
-            const { saldo, entregue } = calcularSaldosItem(item, retiradaManualDoItem, entregaRomaneioDoItem);
-            const historicoDoItem = historicoCompleto.filter(h => h.idavs_regi == idavsRegi);
-
-            itensComSaldo.push({
+            const retManual = retiradasManuais.find(r => r.idavs_regi == idavsRegi);
+            const retRomaneio = entregasRomaneio.find(r => r.idavs_regi == idavsRegi);
+            
+            const { saldo, entregue, devolvido } = calcularSaldosItem(item, retManual, retRomaneio);
+            
+            responseData.itens.push({
                 idavs_regi: idavsRegi,
                 pd_codi: item.it_codi,
                 pd_nome: item.it_nome,
@@ -228,22 +174,16 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 quantidade_total: parseFloat(item.it_quan) || 0,
                 quantidade_entregue: entregue,
                 quantidade_saldo: saldo,
-                quantidade_devolvida: parseFloat(item.it_qtdv) || 0,
-                quantidade_entregue_bruta: parseFloat(item.it_qent) || 0,
+                quantidade_devolvida: devolvido,
                 item_filial_codigo: item.it_inde,
                 responsavel_caixa: parseUsuarioLiberacao(item.it_entr),
-                historico: historicoDoItem
+                historico: historicoCompleto.filter(h => h.idavs_regi == idavsRegi)
             });
         }
-        
-        responseData.itens = itensComSaldo;
         res.json(responseData);
 
-    } catch (error) {
-        res.status(500).json({ error: 'Erro interno no servidor ao processar o pedido.' });
-    }
+    } catch (error) { res.status(500).json({ error: 'Erro interno no servidor.' }); }
 });
-
 
 router.post('/retirada-manual', authenticateToken, async (req, res) => {
     const { dav_numero: davNumeroStr, itens } = req.body;
@@ -251,7 +191,7 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
     const dav_numero = parseInt(davNumeroStr, 10);
 
     if (isNaN(dav_numero) || !itens || !Array.isArray(itens) || itens.length === 0) {
-        return res.status(400).json({ error: 'Dados inválidos para registar a retirada.' });
+        return res.status(400).json({ error: 'Dados inválidos.' });
     }
 
     const gerencialConnection = await gerencialPool.getConnection();
@@ -266,97 +206,48 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
             const idavsRegiNum = parseInt(item.idavs_regi, 10);
             const quantidadeRetiradaNum = parseFloat(item.quantidade_retirada);
 
-            if (isNaN(idavsRegiNum) || isNaN(quantidadeRetiradaNum) || quantidadeRetiradaNum <= 0) {
-                throw new Error(`Dados inválidos para o item ${item.pd_nome}.`);
-            }
-
-            const [itemErpParaSaldoRows] = await seiPool.execute(`SELECT * FROM idavs WHERE it_regist = ? FOR UPDATE`, [idavsRegiNum]);
-            if(itemErpParaSaldoRows.length === 0) {
-                throw new Error(`Item ${item.pd_nome} (ID: ${idavsRegiNum}) não encontrado no ERP.`);
-            }
-            const itemErpParaSaldo = itemErpParaSaldoRows[0];
+            const [itemErpRows] = await seiPool.execute(`SELECT * FROM idavs WHERE it_regist = ? FOR UPDATE`, [idavsRegiNum]);
+            if(itemErpRows.length === 0) throw new Error(`Item ID: ${idavsRegiNum} não encontrado.`);
+            const itemErp = itemErpRows[0];
             
-            const [retiradaManualParaSaldo] = await gerencialPool.execute('SELECT SUM(quantidade_retirada) as total FROM entregas_manuais_log WHERE dav_numero = ? AND idavs_regi = ?', [dav_numero, idavsRegiNum]);
-            const [entregaRomaneioParaSaldo] = await gerencialPool.execute('SELECT SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE dav_numero = ? AND idavs_regi = ?', [dav_numero, idavsRegiNum]);
+            const [retManuais] = await gerencialPool.execute('SELECT SUM(quantidade_retirada) as total FROM entregas_manuais_log WHERE dav_numero = ? AND idavs_regi = ?', [dav_numero, idavsRegiNum]);
+            const [retRomaneio] = await gerencialPool.execute('SELECT SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE dav_numero = ? AND idavs_regi = ?', [dav_numero, idavsRegiNum]);
 
-            const { saldo } = calcularSaldosItem(
-                itemErpParaSaldo,
-                retiradaManualParaSaldo[0],
-                entregaRomaneioParaSaldo[0]
-            );
+            const { saldo } = calcularSaldosItem(itemErp, retManuais[0], retRomaneio[0]);
 
             if (quantidadeRetiradaNum > saldo) {
-                throw new Error(`Saldo insuficiente para o item ${itemErpParaSaldo.it_nome}. Saldo disponível: ${saldo}, Tentando retirar: ${quantidadeRetiradaNum}.`);
+                throw new Error(`Saldo insuficiente para ${itemErp.it_nome}. Tentando retirar: ${quantidadeRetiradaNum}.`);
             }
 
             const [logResult] = await gerencialConnection.execute(
                 `INSERT INTO entregas_manuais_log (dav_numero, idavs_regi, quantidade_retirada, id_usuario_conferencia) VALUES (?, ?, ?, ?)`,
                 [dav_numero, idavsRegiNum, quantidadeRetiradaNum, userId]
             );
-            const newLogId = logResult.insertId;
-            logsCriados.push(newLogId);
+            logsCriados.push(logResult.insertId);
             
-            await seiConnection.execute(
-                `UPDATE idavs SET it_qent = it_qent + ? WHERE it_regist = ?`,
-                [quantidadeRetiradaNum, idavsRegiNum]
-            );
+            await seiConnection.execute(`UPDATE idavs SET it_qent = it_qent + ? WHERE it_regist = ?`, [quantidadeRetiradaNum, idavsRegiNum]);
 
-            const [itemErpRows] = await seiConnection.execute(
-                `SELECT it_reti, it_codi, it_nome, it_unid, it_quan FROM idavs WHERE it_regist = ?`,
-                [idavsRegiNum]
-            );
-            
-            const itemErp = itemErpRows[0];
             const textoAntigo = itemErp.it_reti || '';
             const now = new Date();
-            const dataHoraERP = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+            const dStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
             
-            const novoTexto = `Lançamento: ${dataHoraERP}  {${nomeUsuario}}
-Codigo....: ${itemErp.it_codi}
-Descrição.: ${itemErp.it_nome}
-Quantidade: ${parseFloat(itemErp.it_quan)}
-Unidade...: ${itemErp.it_unid}
-QT Entrega: ${quantidadeRetiradaNum}
-Saldo.....: Baixa via App Gerencial
-Retirada..: ${quantidadeRetiradaNum}
-Lançamento: App Gerencial ID ${newLogId}
-Portador..: App
-Retirado..: Retirada no Balcão via App`;
+            const novoTexto = `Lançamento: ${dStr}  {${nomeUsuario}}\nCodigo....: ${itemErp.it_codi}\nDescrição.: ${itemErp.it_nome}\nQuantidade: ${parseFloat(itemErp.it_quan)}\nUnidade...: ${itemErp.it_unid}\nQT Entrega: ${quantidadeRetiradaNum}\nSaldo.....: Baixa via App Gerencial\nRetirada..: ${quantidadeRetiradaNum}\nLançamento: App Gerencial ID ${logResult.insertId}\nPortador..: App\nRetirado..: Retirada no Balcão via App`;
 
-            const textoFinal = textoAntigo ? (textoAntigo + '\n' + novoTexto).trim() : novoTexto.trim();
-
-            await seiConnection.execute(
-                `UPDATE idavs SET it_reti = ? WHERE it_regist = ?`,
-                [textoFinal, idavsRegiNum]
-            );
-
-            await gerencialConnection.execute(
-                `UPDATE entregas_manuais_log SET erp_writeback_status = 'Sucesso' WHERE id = ?`,
-                [newLogId]
-            );
+            await seiConnection.execute(`UPDATE idavs SET it_reti = ? WHERE it_regist = ?`, [textoAntigo ? (textoAntigo + '\n' + novoTexto).trim() : novoTexto.trim(), idavsRegiNum]);
+            await gerencialConnection.execute(`UPDATE entregas_manuais_log SET erp_writeback_status = 'Sucesso' WHERE id = ?`, [logResult.insertId]);
         }
 
         await gerencialConnection.commit();
         await seiConnection.commit();
-
-        res.status(201).json({ message: 'Retirada registada e atualizada no ERP com sucesso!' });
+        res.status(201).json({ message: 'Retirada efetuada com sucesso!' });
 
     } catch (error) {
         await gerencialConnection.rollback();
         await seiConnection.rollback();
-        
-        if (logsCriados.length > 0) {
-            const updatePromises = logsCriados.map(logId => 
-                gerencialPool.execute(`UPDATE entregas_manuais_log SET erp_writeback_status = 'Falha' WHERE id = ?`, [logId])
-            );
-            await Promise.all(updatePromises);
-        }
-
-        console.error("Erro ao registar retirada manual:", error);
-        res.status(error.message.includes('Saldo insuficiente') ? 400 : 500).json({ error: error.message || 'Erro interno ao guardar a retirada.' });
+        console.error("Erro na retirada:", error);
+        res.status(error.message.includes('Saldo') ? 400 : 500).json({ error: error.message || 'Erro interno.' });
     } finally {
-        gerencialConnection.release();
-        seiConnection.release();
+        gerencialConnection.release(); seiConnection.release();
     }
 });
 
@@ -366,14 +257,9 @@ Retirado..: Retirada no Balcão via App`;
 
 router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
     try {
-        const [veiculos] = await gerencialPool.execute(
-            "SELECT id, modelo, placa, capacidade_kg FROM veiculos WHERE status = 'Ativo' ORDER BY modelo ASC"
-        );
+        const [veiculos] = await gerencialPool.execute("SELECT id, modelo, placa, capacidade_kg FROM veiculos WHERE status = 'Ativo' ORDER BY modelo ASC");
         res.json(veiculos);
-    } catch (error) {
-        console.error("Erro ao buscar veículos disponíveis:", error);
-        res.status(500).json({ error: 'Erro ao buscar veículos.' });
-    }
+    } catch (error) { res.status(500).json({ error: 'Erro ao buscar veículos.' }); }
 });
 
 router.get('/romaneios', authenticateToken, async (req, res) => {
@@ -381,155 +267,93 @@ router.get('/romaneios', authenticateToken, async (req, res) => {
     const { perfil } = req.user; 
 
     try {
-        let query = `
-            SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, r.status,
-                   v.modelo as modelo_veiculo, v.placa as placa_veiculo 
-            FROM romaneios r
-            JOIN veiculos v ON r.id_veiculo = v.id
-        `;
+        let query = `SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, r.status, v.modelo as modelo_veiculo, v.placa as placa_veiculo FROM romaneios r JOIN veiculos v ON r.id_veiculo = v.id`;
         const params = [];
         const conditions = [];
 
-        if (status) {
-            conditions.push('r.status = ?');
-            params.push(status);
-        }
+        if (status) { conditions.push('r.status = ?'); params.push(status); }
 
-        const isUsuarioAdmin = (perfil === 'Administrador' || perfil === 'Financeiro');
-
-        if (isUsuarioAdmin) {
-            if (filial) {
-                conditions.push('r.filial_origem = ?');
-                params.push(filial);
-            }
+        if (perfil === 'Administrador' || perfil === 'Financeiro') {
+            if (filial) { conditions.push('r.filial_origem = ?'); params.push(filial); }
         } else {
-            conditions.push('r.filial_origem = ?');
-            params.push(req.user.unidade); 
+            conditions.push('r.filial_origem = ?'); params.push(req.user.unidade); 
         }
 
-        if (conditions.length > 0) {
-            query += ' WHERE ' + conditions.join(' AND ');
-        }
-
+        if (conditions.length > 0) query += ' WHERE ' + conditions.join(' AND ');
         query += ' ORDER BY r.data_criacao DESC';
 
         const [romaneios] = await gerencialPool.execute(query, params);
         res.json(romaneios);
-    } catch (error) {
-        console.error("Erro ao buscar romaneios:", error);
-        res.status(500).json({ error: 'Erro ao buscar romaneios.' });
-    }
+    } catch (error) { res.status(500).json({ error: 'Erro ao buscar romaneios.' }); }
 });
 
 router.post('/romaneios', authenticateToken, async (req, res) => {
     const { id_veiculo, nome_motorista } = req.body;
-    const { userId, unidade: filialUsuario } = req.user;
-
-    if (!id_veiculo || !nome_motorista) {
-        return res.status(400).json({ error: 'Veículo e nome do motorista são obrigatórios.' });
-    }
+    if (!id_veiculo || !nome_motorista) return res.status(400).json({ error: 'Veículo e motorista obrigatórios.' });
+    
     try {
-        const [result] = await gerencialPool.execute(
-            'INSERT INTO romaneios (id_veiculo, nome_motorista, id_usuario_criacao, filial_origem) VALUES (?, ?, ?, ?)',
-            [id_veiculo, nome_motorista, userId, filialUsuario]
-        );
-        res.status(201).json({ message: "Romaneio criado com sucesso!", romaneioId: result.insertId });
-    } catch (error) {
-        console.error("Erro ao criar romaneio:", error);
-        res.status(500).json({ error: 'Erro interno ao criar o romaneio.' });
-    }
+        const [result] = await gerencialPool.execute('INSERT INTO romaneios (id_veiculo, nome_motorista, id_usuario_criacao, filial_origem) VALUES (?, ?, ?, ?)', [id_veiculo, nome_motorista, req.user.userId, req.user.unidade]);
+        res.status(201).json({ romaneioId: result.insertId });
+    } catch (error) { res.status(500).json({ error: 'Erro interno.' }); }
 });
 
 router.delete('/romaneios/:id', authenticateToken, async (req, res) => {
     const romaneioId = parseInt(req.params.id, 10);
-    if (isNaN(romaneioId)) {
-        return res.status(400).json({ error: 'ID do Romaneio inválido.' });
-    }
-
     const gerencialConnection = await gerencialPool.getConnection();
     try {
         await gerencialConnection.beginTransaction();
-
         const [rows] = await gerencialConnection.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [romaneioId]);
-        if (rows.length === 0) {
-            throw new Error('Carga (Romaneio) não encontrada.');
-        }
-        if (rows[0].status !== 'Em montagem') {
-            throw new Error('Apenas cargas "Em montagem" podem ser excluídas. Cargas já concluídas são bloqueadas por segurança.');
-        }
+        if (rows.length === 0) throw new Error('Carga não encontrada.');
+        if (rows[0].status !== 'Em montagem') throw new Error('Apenas cargas "Em montagem" podem ser excluídas.');
 
         await gerencialConnection.execute('DELETE FROM romaneio_itens WHERE id_romaneio = ?', [romaneioId]);
         await gerencialConnection.execute('DELETE FROM romaneios WHERE id = ?', [romaneioId]);
-
         await gerencialConnection.commit();
-        res.json({ message: 'Carga excluída com sucesso!' });
-
+        res.json({ message: 'Carga excluída.' });
     } catch (error) {
         await gerencialConnection.rollback();
-        console.error(`Erro ao excluir romaneio ${romaneioId}:`, error);
-        res.status(400).json({ error: error.message || 'Erro interno ao excluir o romaneio.' });
-    } finally {
-        gerencialConnection.release();
-    }
+        res.status(400).json({ error: error.message });
+    } finally { gerencialConnection.release(); }
 });
 
 // ==========================================================
-// ROTA EAGER LOADING (Traz DAVs + Itens + Peso + Vendedor)
+// ROTA EAGER LOADING (Traz DAVs + Itens + Peso + Vendedor + Devolução)
 // ==========================================================
 router.get('/eligible-davs', authenticateToken, async (req, res) => {
     const { data, tipoData, apenasEntregaMarcada, bairro, cidade, davNumero, filialDav } = req.query;
     const { perfil } = req.user;
 
-    if (!data || !tipoData) {
-        return res.status(400).json({ error: "Os filtros de data e tipo de data são obrigatórios." });
-    }
+    if (!data || !tipoData) return res.status(400).json({ error: "Data obrigatória." });
 
     try {
-        const filialMap = {
-            'Santa Cruz da Serra': 'LUCAM',
-            'Piabetá': 'VMNAF',
-            'Parada Angélica': 'TNASC',
-            'Nova Campinas': 'LCMAT'
-        };
-        const isUsuarioAdmin = (perfil === 'Administrador' || perfil === 'Financeiro');
+        const filialMap = { 'Santa Cruz da Serra': 'LUCAM', 'Piabetá': 'VMNAF', 'Parada Angélica': 'TNASC', 'Nova Campinas': 'LCMAT' };
         const dateColumn = tipoData === 'entrega' ? 'c.cr_entr' : 'c.cr_erec';
 
-        // 1. BUSCA CABEÇALHOS
+        // Correção MATEMÁTICA BRUTA direto no SQL: Comprado - Devolvido - Entregue > 0
         let query = `
             SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde, c.cr_edav, c.cr_entr, c.cr_udav
             FROM cdavs c
             JOIN idavs i ON c.cr_ndav = i.it_ndav
             WHERE c.cr_reca = '1'
               AND DATE(${dateColumn}) = ?
-              AND (i.it_quan - (i.it_qent - i.it_qtdv)) > 0
-              AND i.it_qtdv <= i.it_qent 
+              AND (i.it_quan - i.it_qtdv - i.it_qent) > 0 
         `;
         const params = [data];
 
-        if (apenasEntregaMarcada === 'true') { query += ` AND c.cr_entr != '0000-00-00'`; }
+        if (apenasEntregaMarcada === 'true') query += ` AND c.cr_entr != '0000-00-00'`; 
         if (bairro) { query += ' AND c.cr_ebai LIKE ?'; params.push(`%${bairro}%`); }
-        if (cidade) { query += ' AND c.cr_ecid LIKE ?'; params.push(`%${cidade}%`); }
         if (davNumero) { query += ' AND CAST(c.cr_ndav AS UNSIGNED) = ?'; params.push(parseInt(davNumero, 10)); }
 
-        if (isUsuarioAdmin) {
-            if (filialDav) {
-                const filialCode = filialMap[filialDav];
-                if (filialCode) { query += ' AND c.cr_inde = ?'; params.push(filialCode); }
-            }
+        if (perfil === 'Administrador' || perfil === 'Financeiro') {
+            if (filialDav) { query += ' AND c.cr_inde = ?'; params.push(filialMap[filialDav]); }
         } else {
-            const filialCode = filialMap[req.user.unidade];
-            if (!filialCode) return res.json([]);
-            query += ' AND c.cr_inde = ?';
-            params.push(filialCode);
+            query += ' AND c.cr_inde = ?'; params.push(filialMap[req.user.unidade]);
         }
 
         query += ' ORDER BY c.cr_ebai, c.cr_nmcl';
-        
         const [davsRaw] = await seiPool.execute(query, params);
 
-        if (davsRaw.length === 0) {
-            return res.json([]); 
-        }
+        if (davsRaw.length === 0) return res.json([]); 
 
         const numerosDav = davsRaw.map(d => parseInt(d.cr_ndav, 10));
 
@@ -537,10 +361,8 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
             `SELECT i.it_regist, i.it_ndav, i.it_codi, i.it_nome, i.it_unid,
                     i.it_quan, i.it_qent, i.it_qtdv, i.it_inde,
                     COALESCE(NULLIF(p.pd_pesb, 0), NULLIF(p.pd_pesl, 0), 0) as peso_bruto_unitario
-             FROM idavs i
-             LEFT JOIN produtos p ON i.it_codi = p.pd_codi
-             WHERE i.it_ndav IN (?) AND (i.it_canc IS NULL OR i.it_canc <> 1)`,
-            [numerosDav]
+             FROM idavs i LEFT JOIN produtos p ON i.it_codi = p.pd_codi
+             WHERE i.it_ndav IN (?) AND (i.it_canc IS NULL OR i.it_canc <> 1)`, [numerosDav]
         );
 
         const [retiradasManuais] = await gerencialPool.query('SELECT idavs_regi, SUM(quantidade_retirada) as total FROM entregas_manuais_log WHERE dav_numero IN (?) GROUP BY idavs_regi', [numerosDav]);
@@ -556,205 +378,96 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
 
             for (const item of itensDoDav) {
                 const idavsRegi = item.it_regist;
-                const retirada = retiradasMap.get(idavsRegi);
-                const noCaminhao = romaneiosMap.get(idavsRegi);
-
-                const { saldo, entregue } = calcularSaldosItem(item, retirada, noCaminhao);
+                const { saldo, entregue, devolvido } = calcularSaldosItem(item, retiradasMap.get(idavsRegi), romaneiosMap.get(idavsRegi));
 
                 if (saldo > 0) {
-                    const pesoUnitario = parseFloat(item.peso_bruto_unitario);
-                    const pesoTotalItem = saldo * pesoUnitario;
+                    const pesoTotalItem = saldo * parseFloat(item.peso_bruto_unitario);
                     pesoTotalDav += pesoTotalItem;
 
                     itensComSaldo.push({
-                        idavs_regi: idavsRegi,
-                        codigo: item.it_codi,
-                        nome: item.it_nome,
-                        unidade: item.it_unid,
-                        saldo: saldo,
-                        entregue: entregue, 
-                        peso_unitario: pesoUnitario,
-                        peso_total_item: pesoTotalItem,
-                        filial_item: item.it_inde
+                        idavs_regi: idavsRegi, codigo: item.it_codi, nome: item.it_nome, unidade: item.it_unid,
+                        saldo: saldo, entregue: entregue, devolvido: devolvido, peso_total_item: pesoTotalItem, filial_item: item.it_inde
                     });
                 }
             }
 
             return {
-                dav_numero: dav.cr_ndav,
-                cliente: dav.cr_nmcl,
-                vendedor: dav.cr_udav, 
-                bairro: dav.cr_ebai || 'Bairro Não Informado',
-                cidade: dav.cr_ecid || 'Cidade Não Informada',
-                filial: dav.cr_inde,
-                data_venda: dav.cr_edav,
-                data_agendada: dav.cr_entr,
-                peso_total_dav: pesoTotalDav,
-                itens: itensComSaldo
+                dav_numero: dav.cr_ndav, cliente: dav.cr_nmcl, vendedor: dav.cr_udav, 
+                bairro: dav.cr_ebai || 'N/I', cidade: dav.cr_ecid || 'N/I', filial: dav.cr_inde,
+                data_venda: dav.cr_edav, data_agendada: dav.cr_entr, peso_total_dav: pesoTotalDav, itens: itensComSaldo
             };
         }).filter(dav => dav.itens.length > 0); 
 
         res.json(davsFormatados);
 
-    } catch (error) {
-        console.error("Erro ao buscar DAVs elegíveis:", error);
-        res.status(500).json({ error: 'Erro interno ao buscar DAVs.' });
-    }
+    } catch (error) { res.status(500).json({ error: 'Erro interno.' }); }
 });
 
 router.get('/romaneios/:id', authenticateToken, async (req, res) => {
     const romaneioId = parseInt(req.params.id, 10);
-    if (isNaN(romaneioId)) {
-        return res.status(400).json({ error: 'ID do Romaneio inválido.' });
-    }
-
     try {
-        const [romaneioDetails] = await gerencialPool.execute(
-            `SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, r.status,
-                    v.modelo as modelo_veiculo, v.placa as placa_veiculo, 
-                    IFNULL(v.capacidade_kg, 0) as capacidade_kg
-             FROM romaneios r
-             JOIN veiculos v ON r.id_veiculo = v.id
-             WHERE r.id = ?`,
-            [romaneioId]
-        );
+        const [romaneioDetails] = await gerencialPool.execute(`SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, r.status, v.modelo as modelo_veiculo, v.placa as placa_veiculo, IFNULL(v.capacidade_kg, 0) as capacidade_kg FROM romaneios r JOIN veiculos v ON r.id_veiculo = v.id WHERE r.id = ?`, [romaneioId]);
+        if (romaneioDetails.length === 0) return res.status(404).json({ error: 'Romaneio não encontrado.' });
 
-        if (romaneioDetails.length === 0) {
-            return res.status(404).json({ error: 'Romaneio não encontrado.' });
-        }
-        const romaneioData = romaneioDetails[0];
-
-        const [items] = await gerencialPool.execute(
-            `SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar,
-                    idavs_sei.it_nome as produto_nome, idavs_sei.it_unid as produto_unidade,
-                    cdavs_sei.cr_nmcl as cliente_nome,
-                    COALESCE(NULLIF(produtos_sei.pd_pesb, 0), NULLIF(produtos_sei.pd_pesl, 0), 0) as peso_bruto_unitario
-             FROM romaneio_itens ri
-             LEFT JOIN ${dbConfigSei.database}.idavs idavs_sei ON ri.idavs_regi = idavs_sei.it_regist
-             LEFT JOIN ${dbConfigSei.database}.cdavs cdavs_sei ON ri.dav_numero = cdavs_sei.cr_ndav
-             LEFT JOIN ${dbConfigSei.database}.produtos produtos_sei ON idavs_sei.it_codi = produtos_sei.pd_codi
-             WHERE ri.id_romaneio = ?
-             ORDER BY ri.dav_numero ASC, idavs_sei.it_nome ASC`,
-            [romaneioId]
-        );
-
-        res.json({ ...romaneioData, itens: items });
-
-    } catch (error) {
-        console.error(`Erro ao buscar detalhes do romaneio ${romaneioId}:`, error);
-        res.status(500).json({ error: 'Erro interno ao buscar detalhes do romaneio.' });
-    }
+        const [items] = await gerencialPool.execute(`SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar, i.it_nome as produto_nome, i.it_unid as produto_unidade, c.cr_nmcl as cliente_nome, COALESCE(NULLIF(p.pd_pesb, 0), NULLIF(p.pd_pesl, 0), 0) as peso_bruto_unitario FROM romaneio_itens ri LEFT JOIN ${dbConfigSei.database}.idavs i ON ri.idavs_regi = i.it_regist LEFT JOIN ${dbConfigSei.database}.cdavs c ON ri.dav_numero = c.cr_ndav LEFT JOIN ${dbConfigSei.database}.produtos p ON i.it_codi = p.pd_codi WHERE ri.id_romaneio = ? ORDER BY ri.dav_numero ASC`, [romaneioId]);
+        
+        res.json({ ...romaneioDetails[0], itens: items });
+    } catch (error) { res.status(500).json({ error: 'Erro interno.' }); }
 });
 
-// --- ROTA CORRIGIDA PARA INSERIR O CÓDIGO DO PRODUTO (pd_codi) ---
 router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => {
     const romaneioId = parseInt(req.params.id, 10);
-    const itensParaAdicionar = req.body; 
-
-    if (isNaN(romaneioId) || !Array.isArray(itensParaAdicionar) || itensParaAdicionar.length === 0) {
-        return res.status(400).json({ error: 'Dados inválidos. É esperado um array de itens.' });
-    }
-
+    const itens = req.body; 
     const gerencialConnection = await gerencialPool.getConnection();
+    
     try {
         await gerencialConnection.beginTransaction();
+        const [statusRows] = await gerencialConnection.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [romaneioId]);
+        if (statusRows.length === 0 || statusRows[0].status !== 'Em montagem') throw new Error('Romaneio não está em montagem.');
 
-        const [romaneioStatusRows] = await gerencialConnection.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [romaneioId]);
-        if (romaneioStatusRows.length === 0 || romaneioStatusRows[0].status !== 'Em montagem') {
-            await gerencialConnection.rollback();
-            return res.status(400).json({ error: 'Romaneio não encontrado ou não está mais em montagem.' });
-        }
-
-        const allIdavsRegi = [...new Set(itensParaAdicionar.map(item => parseInt(item.idavs_regi, 10)))].filter(id => !isNaN(id));
-        if (allIdavsRegi.length === 0) {
-             throw new Error("Nenhum ID de item válido encontrado.");
-        }
-
-        // CORREÇÃO AQUI: Adicionado it_codi na pesquisa
-        const [itemErpRows] = await seiPool.query(`SELECT it_regist, it_codi, it_nome, it_quan, it_qent, it_qtdv FROM idavs WHERE it_regist IN (?)`, [allIdavsRegi]);
+        const idavsArray = [...new Set(itens.map(i => parseInt(i.idavs_regi, 10)))];
+        const [itemErpRows] = await seiPool.query(`SELECT it_regist, it_codi, it_nome, it_quan, it_qent, it_qtdv FROM idavs WHERE it_regist IN (?)`, [idavsArray]);
         const itemErpMap = new Map(itemErpRows.map(i => [i.it_regist, i]));
 
-        const [alocadoEmRomaneiosRows] = await gerencialPool.query(
-            'SELECT idavs_regi, SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE idavs_regi IN (?) AND id_romaneio != ? GROUP BY idavs_regi',
-            [allIdavsRegi, romaneioId]
-        );
-        const alocadoMap = new Map(alocadoEmRomaneiosRows.map(i => [i.idavs_regi, i.total]));
+        const [alocadoRows] = await gerencialPool.query('SELECT idavs_regi, SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE idavs_regi IN (?) AND id_romaneio != ? GROUP BY idavs_regi', [idavsArray, romaneioId]);
+        const alocadoMap = new Map(alocadoRows.map(i => [i.idavs_regi, i.total]));
 
-        for (const item of itensParaAdicionar) {
+        for (const item of itens) {
             const idavsRegi = parseInt(item.idavs_regi, 10);
-            const quantidadeAEntregar = parseFloat(item.quantidade_a_entregar);
+            const qtd = parseFloat(item.quantidade_a_entregar);
             const davNumero = parseInt(item.dav_numero, 10);
 
-            if (isNaN(idavsRegi) || isNaN(quantidadeAEntregar) || quantidadeAEntregar <= 0 || isNaN(davNumero)) {
-                throw new Error(`Dados inválidos para o item ID ${item.idavs_regi} do DAV ${item.dav_numero}.`);
-            }
-
             const itemErp = itemErpMap.get(idavsRegi);
-            if (!itemErp) { throw new Error(`Item ${idavsRegi} não encontrado no ERP.`); }
+            const { saldo } = calcularSaldosItem(itemErp, null, { total: alocadoMap.get(idavsRegi) || 0 });
 
-            const alocadoEmOutros = alocadoMap.get(idavsRegi) || 0;
-            const { saldo: saldoDisponivel } = calcularSaldosItem(itemErp, null, { total: alocadoEmOutros });
+            if (qtd > saldo) throw new Error(`Saldo insuficiente para ${itemErp.it_nome}.`);
 
-            if (quantidadeAEntregar > saldoDisponivel) {
-                 throw new Error(`Saldo insuficiente para ${itemErp.it_nome || `item ID ${idavsRegi}`} (DAV ${davNumero}). Saldo: ${saldoDisponivel}, Tentando: ${quantidadeAEntregar}.`);
-            }
-
-            // CORREÇÃO AQUI: Inserção do pd_codi (it_codi do itemErp)
-            await gerencialConnection.execute(
-                `INSERT INTO romaneio_itens (id_romaneio, dav_numero, idavs_regi, pd_codi, quantidade_a_entregar) VALUES (?, ?, ?, ?, ?)`,
-                [romaneioId, davNumero, idavsRegi, itemErp.it_codi, quantidadeAEntregar]
-            );
+            await gerencialConnection.execute(`INSERT INTO romaneio_itens (id_romaneio, dav_numero, idavs_regi, pd_codi, quantidade_a_entregar) VALUES (?, ?, ?, ?, ?)`, [romaneioId, davNumero, idavsRegi, itemErp.it_codi, qtd]);
         }
 
         await gerencialConnection.commit();
-        res.status(201).json({ message: 'Itens adicionados ao romaneio com sucesso!' });
-
+        res.status(201).json({ message: 'Sucesso!' });
     } catch (error) {
         await gerencialConnection.rollback();
-        console.error(`Erro ao adicionar itens ao romaneio ${romaneioId}:`, error);
-        res.status(error.message.includes('Saldo') || error.message.includes('inválidos') || error.message.includes('encontrado') ? 400 : 500)
-           .json({ error: error.message || 'Erro interno ao adicionar itens.' });
-    } finally {
-        gerencialConnection.release();
-    }
+        res.status(400).json({ error: error.message });
+    } finally { gerencialConnection.release(); }
 });
 
 router.delete('/romaneios/:id/itens/:itemId', authenticateToken, async (req, res) => {
-    const romaneioId = parseInt(req.params.id, 10);
-    const romaneioItemId = parseInt(req.params.itemId, 10);
-
-    if (isNaN(romaneioId) || isNaN(romaneioItemId)) {
-        return res.status(400).json({ error: 'IDs inválidos.' });
-    }
-
-    const gerencialConnection = await gerencialPool.getConnection();
+    const rId = parseInt(req.params.id, 10);
+    const iId = parseInt(req.params.itemId, 10);
+    const gc = await gerencialPool.getConnection();
     try {
-        await gerencialConnection.beginTransaction();
+        await gc.beginTransaction();
+        const [status] = await gc.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [rId]);
+        if (status.length === 0 || status[0].status !== 'Em montagem') throw new Error('Não editável.');
 
-        const [romaneioStatusRows] = await gerencialConnection.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [romaneioId]);
-         if (romaneioStatusRows.length === 0 || romaneioStatusRows[0].status !== 'Em montagem') {
-            throw new Error('Romaneio não encontrado ou não está mais em montagem.');
-        }
+        const [del] = await gc.execute('DELETE FROM romaneio_itens WHERE id = ? AND id_romaneio = ?', [iId, rId]);
+        if (del.affectedRows === 0) throw new Error('Item não achado.');
 
-        const [deleteResult] = await gerencialConnection.execute(
-            'DELETE FROM romaneio_itens WHERE id = ? AND id_romaneio = ?',
-            [romaneioItemId, romaneioId]
-        );
-
-        if (deleteResult.affectedRows === 0) {
-            throw new Error('Item não encontrado neste romaneio ou já removido.');
-        }
-
-        await gerencialConnection.commit();
-        res.json({ message: 'Item removido do romaneio com sucesso.' });
-
-    } catch (error) {
-        await gerencialConnection.rollback();
-        console.error(`Erro ao remover item ${romaneioItemId} do romaneio ${romaneioId}:`, error);
-        res.status(500).json({ error: error.message || 'Erro interno ao remover item.' });
-    } finally {
-        gerencialConnection.release();
-    }
+        await gc.commit();
+        res.json({ message: 'Removido.' });
+    } catch (e) { await gc.rollback(); res.status(400).json({ error: e.message }); } finally { gc.release(); }
 });
 
 module.exports = router;
