@@ -379,20 +379,23 @@ router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => {
         for (const item of itens) {
             const idavsRegi = parseInt(item.idavs_regi, 10);
             const qtd = parseFloat(item.quantidade_a_entregar);
-            const davNumeroStr = item.dav_numero.toString().padStart(13, '0'); // Padroniza igual ao ERP
+            const davNumeroStr = item.dav_numero.toString().padStart(13, '0'); 
 
             const itemErp = itemErpMap.get(idavsRegi);
             const { saldo } = calcularSaldosItem(itemErp, null, { total: alocadoMap.get(idavsRegi) || 0 });
 
             if (qtd > saldo) throw new Error(`Saldo insuficiente para ${itemErp.it_nome}.`);
 
-            // 1. Grava no nosso BD
-            await gc.execute(`INSERT INTO romaneio_itens (id_romaneio, dav_numero, idavs_regi, pd_codi, quantidade_a_entregar) VALUES (?, ?, ?, ?, ?)`, [romaneioId, item.dav_numero, idavsRegi, itemErp.it_codi, qtd]);
+            // 1. Grava no nosso BD (CORREÇÃO DO pd_nome APLICADA AQUI)
+            await gc.execute(
+                `INSERT INTO romaneio_itens (id_romaneio, dav_numero, idavs_regi, pd_codi, pd_nome, quantidade_a_entregar) VALUES (?, ?, ?, ?, ?, ?)`, 
+                [romaneioId, item.dav_numero, idavsRegi, itemErp.it_codi, itemErp.it_nome, qtd]
+            );
             
-            // 2. Grava no SEI: O Cabeçalho (linha 690 expedicao.py)
+            // 2. Grava no SEI: O Cabeçalho
             await sc.execute(`UPDATE cdavs SET cr_roma=?, cr_dado=? WHERE cr_ndav=?`, [romaneioId.toString(), strDate, davNumeroStr]);
             
-            // 3. Grava no SEI: O Saldo Físico do Item (linha 852 expedicao.py)
+            // 3. Grava no SEI: O Saldo Físico do Item
             await sc.execute(`UPDATE idavs SET it_logi=? WHERE it_regist=?`, [qtd.toString(), idavsRegi]);
         }
 
