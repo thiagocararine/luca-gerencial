@@ -408,7 +408,7 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
     pendingDavs = [];
     
     const select = document.getElementById('select-veiculo');
-    if (select.options.length <= 1) {
+    if (select && select.options.length <= 1) {
         select.innerHTML = '<option value="">Carregando...</option>';
         try {
             const res = await fetch(`${apiUrlBase}/entregas/veiculos-disponiveis`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
@@ -418,18 +418,23 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
         } catch (e) { select.innerHTML = '<option value="">Erro ao carregar</option>'; }
     }
 
+    const tituloCarrinho = document.getElementById('titulo-carrinho');
+    const textoBtnFinalizar = document.getElementById('texto-btn-finalizar');
+
     if (currentRomaneioId) {
-        document.getElementById('titulo-carrinho').innerHTML = `Editando Carga #${currentRomaneioId}`;
-        document.getElementById('texto-btn-finalizar').textContent = 'Salvar Alterações';
-        document.getElementById('select-veiculo').disabled = true;
-        document.getElementById('input-motorista').disabled = true;
+        // MODO EDIÇÃO (Com travas de segurança caso o HTML não tenha os IDs)
+        if (tituloCarrinho) tituloCarrinho.innerHTML = `Editando Carga #${currentRomaneioId}`;
+        if (textoBtnFinalizar) textoBtnFinalizar.textContent = 'Salvar Alterações';
+        
+        if (document.getElementById('select-veiculo')) document.getElementById('select-veiculo').disabled = true;
+        if (document.getElementById('input-motorista')) document.getElementById('input-motorista').disabled = true;
         
         try {
             const res = await fetch(`${apiUrlBase}/entregas/romaneios/${currentRomaneioId}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
             const data = await res.json();
             
-            document.getElementById('select-veiculo').value = veiculosDisp.find(v => v.placa === data.placa_veiculo)?.id || '';
-            document.getElementById('input-motorista').value = data.nome_motorista;
+            if (document.getElementById('select-veiculo')) document.getElementById('select-veiculo').value = veiculosDisp.find(v => v.placa === data.placa_veiculo)?.id || '';
+            if (document.getElementById('input-motorista')) document.getElementById('input-motorista').value = data.nome_motorista;
 
             const grouped = data.itens.reduce((acc, item) => {
                 if(!acc[item.dav_numero]) {
@@ -450,12 +455,18 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
             showToast("Erro ao carregar dados da carga.", "error");
         }
     } else {
-        document.getElementById('titulo-carrinho').innerHTML = `Montar Nova Carga`;
-        document.getElementById('texto-btn-finalizar').textContent = 'Finalizar e Despachar Carga';
-        document.getElementById('select-veiculo').disabled = false;
-        document.getElementById('input-motorista').disabled = false;
-        document.getElementById('select-veiculo').value = '';
-        document.getElementById('input-motorista').value = '';
+        // MODO NOVO
+        if (tituloCarrinho) tituloCarrinho.innerHTML = `Montar Nova Carga`;
+        if (textoBtnFinalizar) textoBtnFinalizar.textContent = 'Finalizar e Despachar Carga';
+        
+        if (document.getElementById('select-veiculo')) {
+            document.getElementById('select-veiculo').disabled = false;
+            document.getElementById('select-veiculo').value = '';
+        }
+        if (document.getElementById('input-motorista')) {
+            document.getElementById('input-motorista').disabled = false;
+            document.getElementById('input-motorista').value = '';
+        }
     }
 
     renderPendingList();
@@ -710,7 +721,9 @@ async function finalizarCarga() {
 
     lockUI();
     const btn = document.getElementById('btn-finalizar-carga');
-    const textoOriginal = document.getElementById('texto-btn-finalizar').textContent;
+    const textoBtnFinalizar = document.getElementById('texto-btn-finalizar');
+    const textoOriginal = textoBtnFinalizar ? textoBtnFinalizar.textContent : 'Finalizar e Despachar Carga';
+    
     btn.innerHTML = '<i data-feather="loader" class="animate-spin w-5 h-5"></i> Processando BD...';
     if(typeof feather !== 'undefined') feather.replace();
 
