@@ -23,12 +23,10 @@
         .page-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
         .abstract-background { width: 100%; height: 100%; border-radius: 0; aspect-ratio: auto; }
         
-        .tab-button.active { border-color: #4f46e5; color: #4f46e5; }
-
         .action-btn { 
             padding: 0.5rem 1rem; border-radius: 0.375rem; color: white; 
             font-size: 0.875rem; font-weight: 600; border: none; cursor: pointer;
-            transition: background-color 0.2s;
+            transition: background-color 0.2s, transform 0.1s;
         }
         .action-btn:disabled { background-color: #9ca3af; cursor: not-allowed; opacity: 0.7; }
 
@@ -137,22 +135,42 @@
         </header>
 
         <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col">
-            <div class="flex justify-between items-end mb-6 shrink-0">
-                <h2 class="text-2xl font-bold text-gray-900">Módulo de Entregas e Expedição</h2>
-            </div>
             
-            <div class="border-b border-gray-200 shrink-0">
-                <nav id="delivery-tabs" class="-mb-px flex space-x-6" aria-label="Tabs">
-                    <button class="tab-button active whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-indigo-600 border-indigo-500 transition-colors" data-tab="retirada">Retirada Rápida (Balcão)</button>
-                    <button class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-gray-500 border-transparent hover:text-gray-700 transition-colors" data-tab="romaneios">Gestão de Romaneios (Cargas)</button>
-                    <button class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-gray-500 border-transparent hover:text-gray-700 hidden transition-colors" id="tab-acerto" data-tab="acerto">Acerto de Retorno</button>
-                </nav>
+            <div class="flex flex-col sm:flex-row sm:justify-between sm:items-end mb-6 shrink-0 gap-4 border-b border-gray-200/60 pb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">Gestão de Cargas e Expedição</h2>
+                    <p class="text-sm font-medium text-gray-500 mt-1">Controle de romaneios, acertos e balcão.</p>
+                </div>
+                <button id="btn-open-retirada" class="action-btn bg-indigo-100 text-indigo-700 hover:bg-indigo-200 flex items-center gap-2 shadow-sm transition-colors transform active:scale-95">
+                    <i data-feather="shopping-bag" class="w-4 h-4"></i> Retirada Rápida (Balcão)
+                </button>
             </div>
 
-            <div class="mt-6 flex-1 flex flex-col min-h-0">
+            <div class="flex-1 flex flex-col min-h-0 relative">
                 
-                <div id="retirada-content" class="tab-content space-y-6">
-                    <div class="bg-white/80 backdrop-blur-sm p-5 rounded-lg shadow-sm border border-gray-200 max-w-xl mx-auto">
+                <div id="romaneio-list-view" class="flex-1 flex flex-col h-full">
+                    <div class="flex justify-between items-center bg-white/90 backdrop-blur-sm p-4 rounded-t-lg shadow-sm border border-gray-200 border-b-0 shrink-0">
+                        <div>
+                            <h3 class="text-lg font-bold text-gray-800">Cargas em Andamento</h3>
+                            <p class="text-xs font-medium text-gray-500">Acompanhe as cargas atuais ou inicie uma nova.</p>
+                        </div>
+                        <button id="btn-nova-carga" class="action-btn bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-2 shadow-sm transition-colors transform hover:scale-[1.02]">
+                            <span data-feather="plus-circle" class="w-4 h-4"></span> Montar Nova Carga
+                        </button>
+                    </div>
+                    <div class="bg-white/60 backdrop-blur-sm p-4 rounded-b-lg shadow-sm border border-gray-200 flex-1 overflow-y-auto">
+                        <div id="romaneios-list-container" class="space-y-3">
+                            <p class="text-center text-gray-500 p-4 font-medium"><i data-feather="loader" class="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-500"></i> Carregando...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="retirada-view" class="hidden flex-1 flex flex-col h-full space-y-4">
+                    <button id="btn-voltar-retirada" class="text-sm font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors px-3 py-1.5 hover:bg-indigo-50 rounded w-max mb-2">
+                        <i data-feather="arrow-left" class="w-4 h-4"></i> Voltar para Lista de Cargas
+                    </button>
+                    
+                    <div class="bg-white/80 backdrop-blur-sm p-5 rounded-lg shadow-sm border border-gray-200 max-w-xl mx-auto w-full">
                         <label for="dav-search-input" class="block text-sm font-bold text-gray-700 uppercase tracking-wide">Conferência de Pedido para Retirada</label>
                         <div class="mt-3 flex rounded-md shadow-sm">
                             <input type="number" id="dav-search-input" class="block w-full rounded-none rounded-l-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 p-2.5 font-bold text-gray-700" placeholder="Digite o número do DAV">
@@ -161,128 +179,125 @@
                             </button>
                         </div>
                     </div>
-                    <div id="dav-results-container" class="hidden"></div>
+                    <div id="dav-results-container" class="hidden pb-10"></div>
                 </div>
 
-                <div id="romaneios-content" class="tab-content flex-1 flex flex-col min-h-0 hidden">
-
-                    <div id="romaneio-list-view" class="flex-1 flex flex-col">
-                        <div class="flex justify-between items-center bg-white/90 backdrop-blur-sm p-4 rounded-t-lg shadow-sm border border-gray-200 border-b-0 shrink-0 mt-4">
-                            <div>
-                                <h3 class="text-lg font-bold text-gray-800">Cargas em Andamento</h3>
-                                <p class="text-xs font-medium text-gray-500">Acompanhe as cargas atuais ou inicie uma nova.</p>
-                            </div>
-                            <button id="btn-nova-carga" class="action-btn bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-2 shadow-sm transition-colors transform hover:scale-[1.02]">
-                                <span data-feather="plus-circle" class="w-4 h-4"></span> Montar Nova Carga
-                            </button>
+                <div id="romaneio-split-view" class="hidden flex-1 flex flex-col lg:flex-row gap-4 h-full pb-6">
+                    
+                    <div class="w-full lg:w-1/2 bg-white/95 backdrop-blur-md rounded-lg shadow-md border border-gray-200 flex flex-col overflow-hidden h-full">
+                        <div class="bg-gray-100/80 p-3 border-b border-gray-200 flex justify-between items-center shrink-0">
+                            <h3 class="font-bold text-gray-800 flex items-center gap-2"><span data-feather="inbox" class="w-4 h-4 text-indigo-600"></span> 1. Prateleira de Pedidos</h3>
+                            <button id="btn-voltar-lista" class="text-[11px] font-bold text-gray-500 uppercase tracking-wider hover:text-indigo-600 transition-colors px-2 py-1 rounded hover:bg-gray-200">Voltar à Lista</button>
                         </div>
-                        <div class="bg-white/60 backdrop-blur-sm p-4 rounded-b-lg shadow-sm border border-gray-200 flex-1 overflow-y-auto">
-                            <div id="romaneios-list-container" class="space-y-3">
-                                <p class="text-center text-gray-500 p-4 font-medium"><i data-feather="loader" class="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-500"></i> Carregando...</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="romaneio-split-view" class="hidden flex-1 flex flex-col lg:flex-row gap-4 min-h-[600px]">
                         
-                        <div class="w-full lg:w-1/2 bg-white/95 backdrop-blur-md rounded-lg shadow-md border border-gray-200 flex flex-col overflow-hidden">
-                            <div class="bg-gray-100/80 p-3 border-b border-gray-200 flex justify-between items-center shrink-0">
-                                <h3 class="font-bold text-gray-800 flex items-center gap-2"><span data-feather="inbox" class="w-4 h-4 text-indigo-600"></span> 1. Prateleira de Pedidos</h3>
-                                <button id="btn-voltar-lista" class="text-[11px] font-bold text-gray-500 uppercase tracking-wider hover:text-indigo-600 transition-colors px-2 py-1 rounded hover:bg-gray-200">Voltar à Lista</button>
+                        <div class="p-4 border-b border-gray-200 bg-white shrink-0 flex flex-col gap-4 text-sm shadow-inner">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center gap-4 bg-gray-50 p-1.5 rounded-lg border border-gray-200">
+                                    <label class="inline-flex items-center cursor-pointer group">
+                                        <input type="radio" name="tipo-data" value="recebimento" class="form-radio text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5">
+                                        <span class="ml-1.5 font-bold text-gray-600 text-xs group-hover:text-indigo-600 transition-colors">Data Venda</span>
+                                    </label>
+                                    <div class="w-px h-4 bg-gray-300"></div>
+                                    <label class="inline-flex items-center cursor-pointer group">
+                                        <input type="radio" name="tipo-data" value="entrega" class="form-radio text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5" checked>
+                                        <span class="ml-1.5 font-bold text-gray-600 text-xs group-hover:text-indigo-600 transition-colors">Data Agendamento</span>
+                                    </label>
+                                </div>
+                                <input type="date" id="filter-data" class="border border-gray-300 rounded-md p-1.5 text-xs font-bold text-gray-700 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm flex-1 sm:max-w-[150px]">
                             </div>
                             
-                            <div class="p-4 border-b border-gray-200 bg-white shrink-0 flex flex-col gap-4 text-sm shadow-inner">
-                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                    <div class="flex items-center gap-4 bg-gray-50 p-1.5 rounded-lg border border-gray-200">
-                                        <label class="inline-flex items-center cursor-pointer group">
-                                            <input type="radio" name="tipo-data" value="recebimento" class="form-radio text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5">
-                                            <span class="ml-1.5 font-bold text-gray-600 text-xs group-hover:text-indigo-600 transition-colors">Data Venda</span>
-                                        </label>
-                                        <div class="w-px h-4 bg-gray-300"></div>
-                                        <label class="inline-flex items-center cursor-pointer group">
-                                            <input type="radio" name="tipo-data" value="entrega" class="form-radio text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5" checked>
-                                            <span class="ml-1.5 font-bold text-gray-600 text-xs group-hover:text-indigo-600 transition-colors">Data Agendamento</span>
-                                        </label>
-                                    </div>
-                                    <input type="date" id="filter-data" class="border border-gray-300 rounded-md p-1.5 text-xs font-bold text-gray-700 focus:ring-indigo-500 shadow-sm flex-1 sm:max-w-[150px]">
+                            <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+                                <div class="flex items-center gap-4 w-full sm:w-auto">
+                                    <label class="inline-flex items-center cursor-pointer">
+                                        <div class="relative">
+                                            <input type="checkbox" id="filter-somente-agendado" class="sr-only" checked>
+                                            <div class="block bg-gray-300 w-9 h-5 rounded-full toggle-bg transition-colors shadow-inner"></div>
+                                            <div class="dot absolute left-1 top-1 bg-white w-3 h-3 rounded-full transition-transform shadow-sm"></div>
+                                        </div>
+                                        <span class="ml-2 font-bold text-gray-500 text-[10px] uppercase tracking-wider">Apenas c/ Entrega Marcada</span>
+                                    </label>
                                 </div>
-                                <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
-                                    <div class="flex items-center gap-4 w-full sm:w-auto">
-                                        <label class="inline-flex items-center cursor-pointer">
-                                            <div class="relative">
-                                                <input type="checkbox" id="filter-somente-agendado" class="sr-only" checked>
-                                                <div class="block bg-gray-300 w-9 h-5 rounded-full toggle-bg transition-colors shadow-inner"></div>
-                                                <div class="dot absolute left-1 top-1 bg-white w-3 h-3 rounded-full transition-transform shadow-sm"></div>
-                                            </div>
-                                            <span class="ml-2 font-bold text-gray-500 text-[10px] uppercase tracking-wider">Apenas c/ Entrega Marcada</span>
-                                        </label>
-                                    </div>
-                                    <button id="btn-buscar-pendentes" class="action-btn bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-md text-xs flex items-center justify-center gap-1.5 shadow-sm w-full sm:w-auto transition-transform active:scale-95">
-                                        <span data-feather="search" class="w-3.5 h-3.5"></span> Buscar Pedidos
-                                    </button>
-                                </div>
-                                <div class="flex gap-2 pt-3 border-t border-gray-100">
-                                    <div class="flex-1">
-                                        <select id="filter-bairro" class="w-full border-gray-300 rounded p-1.5 text-[11px] font-bold text-gray-600 focus:ring-indigo-500 shadow-sm bg-gray-50">
-                                            <option value="">Filtro: Todos os Bairros</option>
-                                        </select>
-                                    </div>
-                                    <div id="filial-filter-container" class="hidden flex-1">
-                                        <select id="filter-filial-dav" class="w-full border-gray-300 rounded p-1.5 text-[11px] font-bold text-gray-600 focus:ring-indigo-500 shadow-sm bg-gray-50">
-                                            <option value="">Filtro: Todas Filiais</option>
-                                            <option value="Santa Cruz da Serra">Santa Cruz</option>
-                                            <option value="Piabetá">Piabetá</option>
-                                            <option value="Parada Angélica">Parada Angélica</option>
-                                            <option value="Nova Campinas">Nova Campinas</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div id="lista-pendentes" class="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50/50"></div>
-                        </div>
-
-                        <div class="w-full lg:w-1/2 bg-white/95 backdrop-blur-md rounded-lg shadow-lg border-2 border-indigo-200 flex flex-col overflow-hidden relative">
-                            <div class="bg-indigo-50/80 p-3 border-b border-indigo-200 flex justify-between items-center shrink-0">
-                                <h3 class="font-bold text-indigo-900 flex items-center gap-2"><span data-feather="truck" class="w-4 h-4"></span> <span id="titulo-carrinho">2. Montar Carga</span></h3>
-                                <span class="text-xs font-bold bg-indigo-600 text-white px-2.5 py-1 rounded-full shadow-sm" id="cart-counter">0 Pedidos</span>
-                            </div>
-                            <div class="p-4 border-b border-gray-200 bg-white shrink-0 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
-                                    <label class="text-[10px] font-bold text-indigo-800 uppercase mb-1 block">Veículo</label>
-                                    <select id="select-veiculo" class="w-full border-gray-300 rounded-md text-sm p-2 focus:ring-indigo-500 bg-indigo-50/30 font-semibold text-gray-700"></select>
-                                </div>
-                                <div>
-                                    <label class="text-[10px] font-bold text-indigo-800 uppercase mb-1 block">Motorista</label>
-                                    <input type="text" id="input-motorista" class="w-full border-gray-300 rounded-md text-sm p-2 focus:ring-indigo-500 font-semibold text-gray-700">
-                                </div>
-                            </div>
-                            <div id="lista-carrinho" class="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-50"></div>
-                            <div class="p-4 bg-white border-t border-gray-200 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-                                <div class="flex justify-between items-end mb-1.5">
-                                    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Peso Bruto</span>
-                                    <span class="text-sm font-black text-gray-800" id="peso-texto">0 kg / 0 kg (0%)</span>
-                                </div>
-                                <div class="w-full bg-gray-200 rounded-full h-3 mb-5 overflow-hidden shadow-inner">
-                                    <div id="peso-bar" class="bg-indigo-600 h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
-                                </div>
-                                <button id="btn-finalizar-carga" class="w-full action-btn bg-green-600 hover:bg-green-700 shadow-lg text-base py-3.5 flex justify-center items-center gap-2 transition-all transform active:scale-[0.98]">
-                                    <span data-feather="check-circle" class="w-5 h-5"></span> <span id="texto-btn-finalizar">Finalizar e Despachar</span>
+                                <button id="btn-buscar-pendentes" class="action-btn bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-md text-xs flex items-center justify-center gap-1.5 shadow-sm w-full sm:w-auto transition-transform active:scale-95">
+                                    <span data-feather="search" class="w-3.5 h-3.5"></span> Buscar Pedidos
                                 </button>
                             </div>
+                            
+                            <div class="flex gap-2 pt-3 border-t border-gray-100">
+                                <div class="flex-1">
+                                    <select id="filter-bairro" class="w-full border-gray-300 rounded p-1.5 text-[11px] font-bold text-gray-600 focus:ring-indigo-500 shadow-sm bg-gray-50 cursor-pointer">
+                                        <option value="">Filtro: Todos os Bairros</option>
+                                    </select>
+                                </div>
+                                <div id="filial-filter-container" class="hidden flex-1">
+                                    <select id="filter-filial-dav" class="w-full border-gray-300 rounded p-1.5 text-[11px] font-bold text-gray-600 focus:ring-indigo-500 shadow-sm bg-gray-50 cursor-pointer">
+                                        <option value="">Filtro: Todas as Filiais</option>
+                                        <option value="Santa Cruz da Serra">Vendido em: Santa Cruz</option>
+                                        <option value="Piabetá">Vendido em: Piabetá</option>
+                                        <option value="Parada Angélica">Vendido em: Parada Angélica</option>
+                                        <option value="Nova Campinas">Vendido em: Nova Campinas</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="lista-pendentes" class="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50/50">
+                            <div class="h-full flex flex-col items-center justify-center text-gray-400">
+                                <div class="p-4 bg-gray-100 rounded-full mb-3"><span data-feather="filter" class="w-8 h-8 opacity-60"></span></div>
+                                <p class="text-sm font-semibold text-gray-500">Prateleira Vazia</p>
+                                <p class="text-[11px] mt-1 text-center max-w-[200px]">Ajuste os filtros acima e clique em "Buscar" para listar os pedidos.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="w-full lg:w-1/2 bg-white/95 backdrop-blur-md rounded-lg shadow-lg border-2 border-indigo-200 flex flex-col overflow-hidden relative h-full">
+                        <div class="bg-indigo-50/80 p-3 border-b border-indigo-200 flex justify-between items-center shrink-0">
+                            <h3 class="font-bold text-indigo-900 flex items-center gap-2"><span data-feather="truck" class="w-4 h-4"></span> <span id="titulo-carrinho">2. Montar Carga</span></h3>
+                            <span class="text-xs font-bold bg-indigo-600 text-white px-2.5 py-1 rounded-full shadow-sm" id="cart-counter">0 Pedidos</span>
+                        </div>
+
+                        <div class="p-4 border-b border-gray-200 bg-white shrink-0 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-[10px] font-bold text-indigo-800 uppercase tracking-wider mb-1 block">Veículo Alocado</label>
+                                <select id="select-veiculo" class="w-full border-gray-300 rounded-md text-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm bg-indigo-50/30 font-semibold text-gray-700"></select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold text-indigo-800 uppercase tracking-wider mb-1 block">Nome do Motorista</label>
+                                <input type="text" id="input-motorista" class="w-full border-gray-300 rounded-md text-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm font-semibold text-gray-700 placeholder-gray-400" placeholder="Quem fará a rota?">
+                            </div>
+                        </div>
+
+                        <div id="lista-carrinho" class="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-50">
+                            <div class="h-full flex flex-col items-center justify-center text-gray-400">
+                                <div class="p-4 bg-white rounded-full mb-3 shadow-sm border border-gray-100"><span data-feather="package" class="w-8 h-8 opacity-40 text-indigo-400"></span></div>
+                                <p class="text-sm font-semibold text-gray-500">Caminhão Vazio</p>
+                                <p class="text-[11px] mt-1 text-center">Clique no '+' nos pedidos ao lado para carregar o caminhão.</p>
+                            </div>
+                        </div>
+
+                        <div class="p-4 bg-white border-t border-gray-200 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                            <div class="flex justify-between items-end mb-1.5">
+                                <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Peso Bruto da Carga</span>
+                                <span class="text-sm font-black text-gray-800" id="peso-texto">0 kg / 0 kg (0%)</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-3 mb-5 overflow-hidden shadow-inner">
+                                <div id="peso-bar" class="bg-indigo-600 h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                            <button id="btn-finalizar-carga" class="w-full action-btn bg-green-600 hover:bg-green-700 shadow-lg text-base py-3.5 flex justify-center items-center gap-2 transition-all transform active:scale-[0.98]">
+                                <span data-feather="check-circle" class="w-5 h-5"></span> <span id="texto-btn-finalizar">Finalizar e Despachar Carga</span>
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <div id="acerto-content" class="tab-content flex-1 flex flex-col min-h-0 hidden">
-                    <div class="bg-white/95 backdrop-blur-md rounded-lg shadow-sm border border-gray-200 flex flex-col h-full overflow-hidden mt-4">
+                <div id="acerto-view" class="hidden flex-1 flex flex-col h-full pb-6">
+                    <div class="bg-white/95 backdrop-blur-md rounded-lg shadow-sm border border-gray-200 flex flex-col h-full overflow-hidden">
                         
                         <div class="bg-blue-50 p-4 border-b border-blue-100 flex justify-between items-center shrink-0">
                             <div>
                                 <h3 class="text-lg font-black text-blue-900 flex items-center gap-2"><i data-feather="clipboard" class="text-blue-600"></i> Acerto de Contas do Romaneio #<span id="acerto-romaneio-id">000</span></h3>
                                 <p class="text-xs font-bold text-blue-700 mt-1 uppercase tracking-wider">Motorista: <span id="acerto-motorista"></span> | Veículo: <span id="acerto-veiculo"></span></p>
                             </div>
-                            <button id="btn-cancelar-acerto" class="text-xs font-bold text-gray-500 hover:text-red-600 bg-white border border-gray-200 px-3 py-1.5 rounded shadow-sm transition-colors">Voltar</button>
+                            <button id="btn-cancelar-acerto" class="text-xs font-bold text-gray-500 hover:text-red-600 bg-white border border-gray-200 px-4 py-2 rounded shadow-sm transition-colors">Voltar para Cargas</button>
                         </div>
                         
                         <div class="p-3 bg-gray-50 border-b border-gray-200 text-xs text-gray-500 flex gap-4 justify-center shrink-0 shadow-inner">
@@ -309,7 +324,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script src="entregas.js?v=6.1" defer></script>
+<script src="entregas.js?v=7.0" defer></script>
 <script src="assets/global.js"></script>
 <script>
     function toggleSubmenu(id) {

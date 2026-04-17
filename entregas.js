@@ -3,14 +3,13 @@ document.addEventListener('DOMContentLoaded', initEntregasPage);
 // ==========================================================
 //               VARIÁVEIS GLOBAIS
 // ==========================================================
-// const apiUrlBase = '/api';  // Descomente se não usar global.js
+// const apiUrlBase = '/api';  
 
 let currentRomaneioId = null;     
 let veiculosDisp = []; 
 let pendingDavs = []; 
 let cartDavs = [];    
 
-// Variáveis para a tela de Acerto
 let acertoRomaneioId = null;
 let acertoItensOriginal = [];
 let acertoChecklist = {}; 
@@ -35,7 +34,9 @@ function initEntregasPage() {
     }
     
     if (document.getElementById('filter-data')) document.getElementById('filter-data').value = new Date().toISOString().split('T')[0];
-    document.getElementById('retirada-content').classList.remove('hidden');
+    
+    // Inicia sempre na tela principal de Romaneios
+    switchView('romaneio-list-view');
     gerenciarAcessoModulos();
 }
 
@@ -80,56 +81,48 @@ function hideLoader() { const l = document.getElementById('global-loader'); if(l
 
 
 // ==========================================================
-//               EVENT LISTENERS & ABAS
+//               NAVEGAÇÃO (SEM ABAS)
 // ==========================================================
+function switchView(viewId) {
+    const views = ['romaneio-list-view', 'retirada-view', 'romaneio-split-view', 'acerto-view'];
+    views.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+    });
+    
+    const target = document.getElementById(viewId);
+    if (target) target.classList.remove('hidden');
+
+    if (viewId === 'romaneio-list-view') {
+        loadRomaneiosAtivos();
+    }
+}
+
 function setupEventListeners() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
-    document.getElementById('delivery-tabs')?.addEventListener('click', handleTabSwitch);
 
+    // Botões de Navegação Global
+    document.getElementById('btn-open-retirada')?.addEventListener('click', () => switchView('retirada-view'));
+    document.getElementById('btn-voltar-retirada')?.addEventListener('click', () => switchView('romaneio-list-view'));
+    document.getElementById('btn-cancelar-acerto')?.addEventListener('click', () => switchView('romaneio-list-view'));
+    document.getElementById('btn-voltar-lista')?.addEventListener('click', fecharTorreDeControle);
+
+    // Retirada
     document.getElementById('search-dav-btn')?.addEventListener('click', handleSearchDav);
     document.getElementById('dav-search-input')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSearchDav(); });
 
+    // Romaneio
     document.getElementById('btn-nova-carga')?.addEventListener('click', () => abrirTorreDeControle(null));
     document.getElementById('romaneios-list-container')?.addEventListener('click', handleRomaneioClick);
     
-    document.getElementById('btn-voltar-lista')?.addEventListener('click', fecharTorreDeControle);
     document.getElementById('btn-buscar-pendentes')?.addEventListener('click', buscarPedidosPendentes);
     document.getElementById('filter-bairro')?.addEventListener('change', renderPendingList);
     document.getElementById('filter-filial-dav')?.addEventListener('change', renderPendingList); 
     document.getElementById('select-veiculo')?.addEventListener('change', atualizarBarraDePeso);
     document.getElementById('btn-finalizar-carga')?.addEventListener('click', finalizarCarga);
-
-    // CORREÇÃO: Usa a simulação de clique na aba para evitar sobreposição
-    document.getElementById('btn-cancelar-acerto')?.addEventListener('click', () => {
-        const tabRomaneios = document.querySelector('.tab-button[data-tab="romaneios"]');
-        if (tabRomaneios) tabRomaneios.click();
-    });
     
     document.getElementById('btn-fechar-romaneio')?.addEventListener('click', finalizarAcertoRomaneio);
 }
-
-function handleTabSwitch(event) {
-    const button = event.target.closest('.tab-button');
-    if (!button) return;
-
-    document.querySelectorAll('#delivery-tabs .tab-button').forEach(btn => {
-        btn.classList.remove('active', 'text-indigo-600', 'border-indigo-500');
-        btn.classList.add('text-gray-500', 'border-transparent');
-    });
-    button.classList.add('active', 'text-indigo-600', 'border-indigo-500');
-    
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-    const targetContent = document.getElementById(`${button.dataset.tab}-content`);
-    if (targetContent) targetContent.classList.remove('hidden');
-
-    if (button.dataset.tab === 'romaneios') {
-        document.getElementById('romaneio-split-view').classList.add('hidden');
-        document.getElementById('tab-acerto').classList.add('hidden'); 
-        document.getElementById('romaneio-list-view').classList.remove('hidden');
-        loadRomaneiosAtivos(); 
-    }
-}
-
 
 // ==========================================================
 //               ABA 1: RETIRADA RÁPIDA (BALCÃO)
@@ -168,7 +161,7 @@ function renderDavResults(data) {
 
     if (status_caixa === '2' || status_caixa === '3') {
         resultsContainer.innerHTML = `
-            <div class="bg-white p-6 rounded-lg shadow-lg max-w-xl mx-auto mt-4">
+            <div class="bg-white p-6 rounded-lg shadow-lg max-w-xl mx-auto mt-4 border border-gray-200">
                 <div class="flex justify-between items-start border-b pb-4">
                     <div>
                         <h3 class="text-xl font-bold text-gray-900 flex items-center">${cliente.nome} ${statusTagHtml}</h3>
@@ -182,14 +175,14 @@ function renderDavResults(data) {
         if (itens.length > 0) {
             itemsHtml = `
                 <table class="min-w-full text-sm">
-                    <thead class="bg-gray-50">
-                        <tr><th class="px-4 py-2 text-left font-medium text-gray-500">Produto</th><th class="px-2 py-2 text-center font-medium text-gray-500">Saldo</th><th class="px-4 py-2 text-center font-medium text-gray-500">Retirar</th></tr>
+                    <thead class="bg-gray-50 border-b border-gray-200">
+                        <tr><th class="px-4 py-2 text-left font-bold text-gray-600">Produto</th><th class="px-2 py-2 text-center font-bold text-gray-600">Saldo</th><th class="px-4 py-2 text-center font-bold text-gray-600">Retirar</th></tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
                         ${itens.map(item => `
-                            <tr class="expandable-row" data-idavs-regi="${item.idavs_regi}">
-                                <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome} (${item.unidade}) ${item.quantidade_devolvida > 0 ? `<span class="bg-red-100 text-red-700 px-1 py-0.5 rounded text-[9px] font-bold ml-1">Devolvido: ${item.quantidade_devolvida}</span>` : ''}</td>
-                                <td class="px-2 py-3 text-center font-bold ${item.quantidade_saldo > 0 ? 'text-blue-600' : 'text-green-600'}">${item.quantidade_saldo}</td>
+                            <tr class="expandable-row hover:bg-gray-50 transition-colors" data-idavs-regi="${item.idavs_regi}">
+                                <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome} <span class="text-gray-400 text-xs">(${item.unidade})</span> ${item.quantidade_devolvida > 0 ? `<span class="bg-red-100 text-red-700 px-1.5 py-0.5 rounded text-[10px] font-bold ml-1">Devolvido: ${item.quantidade_devolvida}</span>` : ''}</td>
+                                <td class="px-2 py-3 text-center font-black ${item.quantidade_saldo > 0 ? 'text-indigo-600' : 'text-green-600'}">${item.quantidade_saldo}</td>
                                 <td class="px-4 py-3 text-center">
                                     <input type="number" class="w-20 text-center rounded-md border-gray-300 focus:ring-indigo-500 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" ${item.quantidade_saldo > 0 ? '' : 'disabled'}>
                                 </td>
@@ -200,17 +193,17 @@ function renderDavResults(data) {
 
         resultsContainer.innerHTML = `
             <div class="bg-white p-6 rounded-lg shadow-lg max-w-xl mx-auto mt-4 border border-gray-200">
-                <div class="flex justify-between items-start border-b pb-4 mb-4">
-                    <h3 class="text-xl font-bold text-gray-900">${cliente.nome} ${statusTagHtml}</h3>
-                    <p class="font-black text-2xl text-indigo-600">${formatCurrency(valor_total)}</p>
+                <div class="flex justify-between items-start border-b border-gray-100 pb-4 mb-4">
+                    <h3 class="text-lg font-black text-gray-900">${cliente.nome} ${statusTagHtml}</h3>
+                    <p class="font-black text-xl text-indigo-600">${formatCurrency(valor_total)}</p>
                 </div>
                 <div class="space-y-4">
                     <h4 class="font-bold text-gray-700 uppercase tracking-wider text-[11px]">Itens do Pedido</h4>
-                    <div class="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">${itemsHtml}</div>
+                    <div class="overflow-hidden rounded-lg border border-gray-200 shadow-sm">${itemsHtml}</div>
                     ${itemsComSaldoDisponivel.length > 0 ? `
                     <div class="flex justify-end pt-4 border-t border-gray-100">
-                        <button id="confirm-retirada-btn" class="action-btn bg-green-600 hover:bg-green-700 flex items-center gap-2 shadow-sm">
-                            <i data-feather="check-circle" class="w-4 h-4"></i> Confirmar Retirada
+                        <button id="confirm-retirada-btn" class="action-btn bg-green-600 hover:bg-green-700 flex items-center gap-2 shadow-md transform active:scale-95">
+                            <i data-feather="check-circle" class="w-4 h-4"></i> Confirmar Retirada no Balcão
                         </button>
                     </div>` : ''}
                 </div>
@@ -347,13 +340,12 @@ window.excluirRomaneio = function(id) {
 };
 
 // ==========================================================
-//               TORRE DE CONTROLE (MONTAGEM & EDIÇÃO)
+//               TORRE DE CONTROLE (MONTAGEM E EDIÇÃO)
 // ==========================================================
 
 async function abrirTorreDeControle(romaneioIdParaEditar = null) {
     showLoader();
-    document.getElementById('romaneio-list-view').classList.add('hidden');
-    document.getElementById('romaneio-split-view').classList.remove('hidden');
+    switchView('romaneio-split-view');
     
     currentRomaneioId = romaneioIdParaEditar;
     cartDavs = [];
@@ -425,14 +417,10 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
 function fecharTorreDeControle() {
     if (cartDavs.length > 0) {
         showCustomConfirm("Sair da Montagem?", "Você tem pedidos no caminhão. Se sair agora, perderá o progresso não salvo.", () => {
-            document.getElementById('romaneio-split-view').classList.add('hidden');
-            document.getElementById('romaneio-list-view').classList.remove('hidden');
-            loadRomaneiosAtivos();
+            switchView('romaneio-list-view');
         });
     } else {
-        document.getElementById('romaneio-split-view').classList.add('hidden');
-        document.getElementById('romaneio-list-view').classList.remove('hidden');
-        loadRomaneiosAtivos();
+        switchView('romaneio-list-view');
     }
 }
 
@@ -805,11 +793,8 @@ async function finalizarCarga() {
         }
 
         showToast(`Carga #${romaneioId} gravada com sucesso!`, 'success');
-        
         cartDavs = [];
-        document.getElementById('romaneio-split-view').classList.add('hidden');
-        document.getElementById('romaneio-list-view').classList.remove('hidden');
-        loadRomaneiosAtivos();
+        switchView('romaneio-list-view');
 
     } catch (e) {
         showToast(e.message, "error");
@@ -827,13 +812,7 @@ async function finalizarCarga() {
 async function abrirAcertoContas(romaneioId) {
     showLoader();
     acertoRomaneioId = romaneioId;
-    
-    // CORREÇÃO APLICADA: Chama o clique nativo da aba para alinhar o Flexbox perfeitamente
-    const tabAcerto = document.getElementById('tab-acerto');
-    if (tabAcerto) {
-        tabAcerto.classList.remove('hidden');
-        tabAcerto.click();
-    }
+    switchView('acerto-view');
     
     try {
         const res = await fetch(`${apiUrlBase}/entregas/romaneios/${romaneioId}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
@@ -991,7 +970,7 @@ async function finalizarAcertoRomaneio() {
             }
 
             showToast("Romaneio encerrado e arquivado com sucesso!", "success");
-            document.getElementById('btn-cancelar-acerto').click(); 
+            switchView('romaneio-list-view');
 
         } catch (e) {
             showToast(e.message, "error");
