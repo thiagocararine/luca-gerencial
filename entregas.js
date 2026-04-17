@@ -1036,7 +1036,7 @@ async function buscarHistorico() {
     if(typeof feather !== 'undefined') feather.replace();
 
     try {
-        let url = `${apiUrlBase}/entregas/romaneios?status=Concluido`;
+        let url = `${apiUrlBase}/entregas/romaneios?status=Concluído`;
         if (dataInicio) url += `&data_inicio=${dataInicio}`;
         if (dataFim) url += `&data_fim=${dataFim}`;
         if (motorista) url += `&motorista=${motorista}`;
