@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', initEntregasPage);
 // ==========================================================
 //               VARIÁVEIS GLOBAIS
 // ==========================================================
-// const apiUrlBase = '/api';  
+// const apiUrlBase = '/api';  // Descomente se não usar global.js
 
 let currentRomaneioId = null;     
 let veiculosDisp = []; 
@@ -74,17 +74,51 @@ function showCustomConfirm(title, message, onConfirmCallback) {
     btnCancel.addEventListener('click', handleCancel);
 }
 
+function showCustomPrompt(title, message, maxVal, onConfirmCallback) {
+    const modal = document.getElementById('custom-prompt-modal');
+    document.getElementById('prompt-title').textContent = title;
+    document.getElementById('prompt-message').textContent = message;
+    
+    const input = document.getElementById('prompt-input');
+    input.value = '';
+    input.max = maxVal;
+    
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        input.focus();
+    }, 10);
+    
+    const btnYes = document.getElementById('btn-prompt-confirm');
+    const btnCancel = document.getElementById('btn-prompt-cancel');
+    
+    const cleanup = () => {
+        modal.classList.add('opacity-0');
+        setTimeout(() => modal.classList.add('hidden'), 200);
+        btnYes.removeEventListener('click', handleYes);
+        btnCancel.removeEventListener('click', handleCancel);
+    };
+    
+    const handleYes = () => { 
+        cleanup(); 
+        onConfirmCallback(input.value); 
+    };
+    const handleCancel = () => { cleanup(); };
+    
+    btnYes.addEventListener('click', handleYes);
+    btnCancel.addEventListener('click', handleCancel);
+}
+
 function lockUI() { document.getElementById('ui-lock-overlay').classList.remove('hidden'); }
 function unlockUI() { document.getElementById('ui-lock-overlay').classList.add('hidden'); }
 function showLoader() { const l = document.getElementById('global-loader'); if(l) l.style.display = 'flex'; }
 function hideLoader() { const l = document.getElementById('global-loader'); if(l) l.style.display = 'none'; }
 
-
 // ==========================================================
-//               NAVEGAÇÃO (SEM ABAS)
+//               NAVEGAÇÃO (SPA - SINGLE PAGE)
 // ==========================================================
 function switchView(viewId) {
-    const views = ['romaneio-list-view', 'retirada-view', 'romaneio-split-view', 'acerto-view'];
+    const views = ['romaneio-list-view', 'retirada-view', 'romaneio-split-view', 'acerto-view', 'historico-view'];
     views.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
@@ -93,9 +127,8 @@ function switchView(viewId) {
     const target = document.getElementById(viewId);
     if (target) target.classList.remove('hidden');
 
-    if (viewId === 'romaneio-list-view') {
-        loadRomaneiosAtivos();
-    }
+    if (viewId === 'romaneio-list-view') loadRomaneiosAtivos();
+    if (viewId === 'historico-view') loadVeiculosHistorico();
 }
 
 function setupEventListeners() {
@@ -103,25 +136,30 @@ function setupEventListeners() {
 
     // Botões de Navegação Global
     document.getElementById('btn-open-retirada')?.addEventListener('click', () => switchView('retirada-view'));
-    document.getElementById('btn-voltar-retirada')?.addEventListener('click', () => switchView('romaneio-list-view'));
-    document.getElementById('btn-cancelar-acerto')?.addEventListener('click', () => switchView('romaneio-list-view'));
-    document.getElementById('btn-voltar-lista')?.addEventListener('click', fecharTorreDeControle);
+    document.getElementById('btn-open-historico')?.addEventListener('click', () => switchView('historico-view'));
+    
+    document.querySelectorAll('.btn-voltar-home').forEach(btn => {
+        btn.addEventListener('click', () => switchView('romaneio-list-view'));
+    });
 
-    // Retirada
+    // Retirada Balcão
     document.getElementById('search-dav-btn')?.addEventListener('click', handleSearchDav);
     document.getElementById('dav-search-input')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSearchDav(); });
 
-    // Romaneio
+    // Romaneios Lista
     document.getElementById('btn-nova-carga')?.addEventListener('click', () => abrirTorreDeControle(null));
     document.getElementById('romaneios-list-container')?.addEventListener('click', handleRomaneioClick);
     
+    // Romaneio Montagem
     document.getElementById('btn-buscar-pendentes')?.addEventListener('click', buscarPedidosPendentes);
     document.getElementById('filter-bairro')?.addEventListener('change', renderPendingList);
     document.getElementById('filter-filial-dav')?.addEventListener('change', renderPendingList); 
     document.getElementById('select-veiculo')?.addEventListener('change', atualizarBarraDePeso);
     document.getElementById('btn-finalizar-carga')?.addEventListener('click', finalizarCarga);
     
+    // Acerto e Histórico
     document.getElementById('btn-fechar-romaneio')?.addEventListener('click', finalizarAcertoRomaneio);
+    document.getElementById('btn-buscar-hist')?.addEventListener('click', buscarHistorico);
 }
 
 // ==========================================================
@@ -275,19 +313,16 @@ async function loadRomaneiosAtivos() {
         }
 
         container.innerHTML = romaneios.map(r => {
-            let actionButtons = `
-                <button onclick="abrirTorreDeControle(${r.id})" class="text-indigo-600 bg-indigo-50 border border-indigo-200 text-[10px] font-bold hover:bg-indigo-600 hover:text-white px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm shrink-0">
-                    <i data-feather="edit-2" class="w-3.5 h-3.5"></i> Editar Carga
-                </button>
-            `;
-
+            let actionButtons = '';
             if (r.status === 'Em montagem') {
                 actionButtons = `
                     <div class="flex flex-col sm:flex-row items-end sm:items-center gap-2 mt-3 sm:mt-0">
                         <button onclick="excluirRomaneio(${r.id})" class="text-red-600 hover:text-white bg-white hover:bg-red-600 border border-red-200 text-[10px] font-bold px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm" title="Cancelar e Excluir">
                             <i data-feather="trash-2" class="w-3.5 h-3.5"></i> Excluir
                         </button>
-                        ${actionButtons}
+                        <button onclick="abrirTorreDeControle(${r.id})" class="text-indigo-600 bg-indigo-50 border border-indigo-200 text-[10px] font-bold hover:bg-indigo-600 hover:text-white px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm shrink-0">
+                            <i data-feather="edit-2" class="w-3.5 h-3.5"></i> Editar Carga
+                        </button>
                         <button onclick="abrirAcertoContas(${r.id})" class="text-blue-600 bg-blue-50 border border-blue-200 text-[10px] font-bold hover:bg-blue-600 hover:text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
                             <i data-feather="check-square" class="w-4 h-4"></i> Acerto de Retorno
                         </button>
@@ -342,7 +377,6 @@ window.excluirRomaneio = function(id) {
 // ==========================================================
 //               TORRE DE CONTROLE (MONTAGEM E EDIÇÃO)
 // ==========================================================
-
 async function abrirTorreDeControle(romaneioIdParaEditar = null) {
     showLoader();
     switchView('romaneio-split-view');
@@ -412,16 +446,6 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
     renderPendingList();
     renderCartList();
     hideLoader();
-}
-
-function fecharTorreDeControle() {
-    if (cartDavs.length > 0) {
-        showCustomConfirm("Sair da Montagem?", "Você tem pedidos no caminhão. Se sair agora, perderá o progresso não salvo.", () => {
-            switchView('romaneio-list-view');
-        });
-    } else {
-        switchView('romaneio-list-view');
-    }
 }
 
 async function buscarPedidosPendentes() {
@@ -749,59 +773,61 @@ async function finalizarCarga() {
     const capMaxima = veiculo ? parseFloat(veiculo.capacidade_kg || 0) : 0;
     const pesoTotal = cartDavs.reduce((acc, dav) => acc + dav.peso_total_dav, 0);
     
-    if (capMaxima > 0 && pesoTotal > capMaxima) {
-        if(!confirm(`ALERTA: A carga excede a capacidade do veículo em ${(pesoTotal - capMaxima).toLocaleString('pt-BR')}kg. Forçar despacho?`)) return;
-    }
-
-    lockUI();
-    const btn = document.getElementById('btn-finalizar-carga');
-    const textoBtnFinalizar = document.getElementById('texto-btn-finalizar');
-    const textoOriginal = textoBtnFinalizar ? textoBtnFinalizar.textContent : 'Finalizar e Despachar Carga';
-    
-    btn.innerHTML = '<i data-feather="loader" class="animate-spin w-5 h-5"></i> Processando BD...';
-    if(typeof feather !== 'undefined') feather.replace();
-
-    try {
-        let romaneioId = currentRomaneioId;
-
-        if (!romaneioId) {
-            const resCabecalho = await fetch(`${apiUrlBase}/entregas/romaneios`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-                body: JSON.stringify({ id_veiculo: idVeiculo, nome_motorista: motorista.trim() })
-            });
-            const dataCab = await resCabecalho.json();
-            if (!resCabecalho.ok) throw new Error(dataCab.error);
-            romaneioId = dataCab.romaneioId;
-        }
-
-        const payloadItens = [];
-        cartDavs.filter(dav => !dav.is_existing).forEach(dav => {
-            dav.itens.forEach(item => {
-                payloadItens.push({ dav_numero: dav.dav_numero, idavs_regi: item.idavs_regi, quantidade_a_entregar: item.saldo });
-            });
-        });
-
-        if (payloadItens.length > 0) {
-            const resItens = await fetch(`${apiUrlBase}/entregas/romaneios/${romaneioId}/itens`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-                body: JSON.stringify(payloadItens)
-            });
-            if (!resItens.ok) {
-                const erroItem = await resItens.json();
-                throw new Error(erroItem.error);
-            }
-        }
-
-        showToast(`Carga #${romaneioId} gravada com sucesso!`, 'success');
-        cartDavs = [];
-        switchView('romaneio-list-view');
-
-    } catch (e) {
-        showToast(e.message, "error");
-        btn.innerHTML = `<i data-feather="check-circle" class="w-5 h-5"></i> <span id="texto-btn-finalizar">${textoOriginal}</span>`;
+    const executaFinalizacao = async () => {
+        lockUI();
+        const btn = document.getElementById('btn-finalizar-carga');
+        const textoOriginal = document.getElementById('texto-btn-finalizar').textContent;
+        btn.innerHTML = '<i data-feather="loader" class="animate-spin w-5 h-5"></i> Processando BD...';
         if(typeof feather !== 'undefined') feather.replace();
-    } finally {
-        unlockUI();
+
+        try {
+            let romaneioId = currentRomaneioId;
+
+            if (!romaneioId) {
+                const resCabecalho = await fetch(`${apiUrlBase}/entregas/romaneios`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+                    body: JSON.stringify({ id_veiculo: idVeiculo, nome_motorista: motorista.trim() })
+                });
+                const dataCab = await resCabecalho.json();
+                if (!resCabecalho.ok) throw new Error(dataCab.error);
+                romaneioId = dataCab.romaneioId;
+            }
+
+            const payloadItens = [];
+            cartDavs.filter(dav => !dav.is_existing).forEach(dav => {
+                dav.itens.forEach(item => {
+                    payloadItens.push({ dav_numero: dav.dav_numero, idavs_regi: item.idavs_regi, quantidade_a_entregar: item.saldo });
+                });
+            });
+
+            if (payloadItens.length > 0) {
+                const resItens = await fetch(`${apiUrlBase}/entregas/romaneios/${romaneioId}/itens`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+                    body: JSON.stringify(payloadItens)
+                });
+                if (!resItens.ok) {
+                    const erroItem = await resItens.json();
+                    throw new Error(erroItem.error);
+                }
+            }
+
+            showToast(`Carga #${romaneioId} gravada com sucesso!`, 'success');
+            cartDavs = [];
+            switchView('romaneio-list-view');
+
+        } catch (e) {
+            showToast(e.message, "error");
+            btn.innerHTML = `<i data-feather="check-circle" class="w-5 h-5"></i> <span id="texto-btn-finalizar">${textoOriginal}</span>`;
+            if(typeof feather !== 'undefined') feather.replace();
+        } finally {
+            unlockUI();
+        }
+    };
+
+    if (capMaxima > 0 && pesoTotal > capMaxima) {
+        showCustomConfirm("Capacidade Excedida!", `A carga excede a capacidade do veículo em ${(pesoTotal - capMaxima).toLocaleString('pt-BR')}kg. Forçar o despacho mesmo assim?`, executaFinalizacao);
+    } else {
+        executaFinalizacao();
     }
 }
 
@@ -911,25 +937,28 @@ window.setAcertoStatus = function(itemId, acao) {
 
 window.abrirAcertoParcial = function(itemId) {
     const state = acertoChecklist[itemId];
-    const qtdDevolvida = prompt(`Quantidade TOTAL ENVIADA: ${state.qtd_enviada}.\n\nQuantas unidades VOLTARAM (Devolução)?`);
-    
-    if (qtdDevolvida === null) return; 
-    const val = parseFloat(qtdDevolvida);
-    
-    if (isNaN(val) || val < 0 || val > state.qtd_enviada) {
-        return showToast("Quantidade inválida. A devolução não pode ser maior que o enviado.", "error");
-    }
+    showCustomPrompt(
+        "Devolução Parcial", 
+        `Quantidade TOTAL ENVIADA: ${state.qtd_enviada}.\nQuantas unidades VOLTARAM (Devolução)?`, 
+        state.qtd_enviada, 
+        (qtdDevolvida) => {
+            const val = parseFloat(qtdDevolvida);
+            if (isNaN(val) || val < 0 || val > state.qtd_enviada) {
+                return showToast("Quantidade inválida. A devolução não pode ser maior que o enviado.", "error");
+            }
 
-    if (val === 0) {
-        setAcertoStatus(itemId, 'entregue_total');
-    } else if (val === state.qtd_enviada) {
-        setAcertoStatus(itemId, 'devolvido_total');
-    } else {
-        state.status = 'parcial';
-        state.qtd_devolvida = val;
-        state.qtd_entregue = state.qtd_enviada - val;
-        renderAcertoChecklist();
-    }
+            if (val === 0) {
+                setAcertoStatus(itemId, 'entregue_total');
+            } else if (val === state.qtd_enviada) {
+                setAcertoStatus(itemId, 'devolvido_total');
+            } else {
+                state.status = 'parcial';
+                state.qtd_devolvida = val;
+                state.qtd_entregue = state.qtd_enviada - val;
+                renderAcertoChecklist();
+            }
+        }
+    );
 };
 
 async function finalizarAcertoRomaneio() {
@@ -982,6 +1011,70 @@ async function finalizarAcertoRomaneio() {
     });
 }
 
+// ==========================================================
+//               MÓDULO: HISTÓRICO E RELATÓRIOS
+// ==========================================================
+async function loadVeiculosHistorico() {
+    const select = document.getElementById('hist-veiculo');
+    if (select && select.options.length <= 1) {
+        try {
+            const res = await fetch(`${apiUrlBase}/entregas/veiculos-disponiveis`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+            const veiculos = await res.json();
+            select.innerHTML = '<option value="">Todos os Veículos</option>' + veiculos.map(v => `<option value="${v.id}">${v.placa} - ${v.modelo}</option>`).join('');
+        } catch (e) { }
+    }
+}
+
+async function buscarHistorico() {
+    const dataInicio = document.getElementById('hist-data-inicio').value;
+    const dataFim = document.getElementById('hist-data-fim').value;
+    const motorista = document.getElementById('hist-motorista').value;
+    const veiculo = document.getElementById('hist-veiculo').value;
+    
+    const container = document.getElementById('historico-list-container');
+    container.innerHTML = '<p class="text-center text-gray-500 py-10 font-bold"><i data-feather="loader" class="animate-spin inline-block mr-2"></i>Buscando relatório...</p>';
+    if(typeof feather !== 'undefined') feather.replace();
+
+    try {
+        let url = `${apiUrlBase}/entregas/romaneios?status=Concluído`;
+        if (dataInicio) url += `&data_inicio=${dataInicio}`;
+        if (dataFim) url += `&data_fim=${dataFim}`;
+        if (motorista) url += `&motorista=${motorista}`;
+        if (veiculo) url += `&veiculo=${veiculo}`;
+
+        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!res.ok) throw new Error("Falha ao buscar relatório.");
+        const romaneios = await res.json();
+
+        document.getElementById('hist-resumo-cargas').textContent = romaneios.length;
+
+        if (romaneios.length === 0) {
+            container.innerHTML = `<div class="flex flex-col items-center justify-center py-10 text-gray-400"><i data-feather="file-text" class="w-12 h-12 mb-3 opacity-50"></i><p class="font-bold">Nenhum histórico encontrado para os filtros.</p></div>`;
+            if(typeof feather !== 'undefined') feather.replace(); return;
+        }
+
+        container.innerHTML = romaneios.map(r => `
+            <div class="border border-gray-200 p-4 rounded-lg bg-gray-50 mb-3 shadow-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                <div class="flex-1">
+                    <h4 class="font-black text-gray-800 text-base flex items-center gap-2 mb-1">
+                        <i data-feather="archive" class="w-4 h-4 text-indigo-500"></i> Carga #${r.id} 
+                        <span class="bg-gray-200 text-gray-600 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest">${new Date(r.data_criacao).toLocaleDateString('pt-BR')}</span>
+                    </h4>
+                    <p class="text-xs text-gray-600 font-medium ml-6"><i data-feather="user" class="w-3 h-3 inline text-gray-400"></i> ${r.nome_motorista} &nbsp;&bull;&nbsp; <i data-feather="truck" class="w-3 h-3 inline text-gray-400"></i> ${r.modelo_veiculo} (${r.placa_veiculo})</p>
+                </div>
+                <div class="text-right">
+                    <span class="bg-green-100 text-green-800 text-[10px] px-3 py-1 rounded font-black uppercase shadow-sm border border-green-200">${r.status}</span>
+                </div>
+            </div>`).join('');
+        if(typeof feather !== 'undefined') feather.replace();
+    } catch (e) {
+        container.innerHTML = `<p class="text-center text-red-500 font-bold py-10">${e.message}</p>`;
+    }
+}
+
+// ==========================================================
+//               FUNÇÕES DE UTILIDADE (FOOTER)
+// ==========================================================
 function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) return;

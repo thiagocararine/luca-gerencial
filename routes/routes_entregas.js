@@ -15,10 +15,6 @@ const dbConfigSei = {
 const seiPool = mysql.createPool(dbConfigSei);
 const gerencialPool = mysql.createPool(dbConfig);
 
-// ==========================================================
-//               FUNÇÕES AUXILIARES E MATEMÁTICA
-// ==========================================================
-
 function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem) {
     const quantidadeComprada = parseFloat(itemErp.it_quan) || 0;
     const totalEntregueErp = parseFloat(itemErp.it_qent) || 0;
@@ -40,10 +36,6 @@ function parseUsuarioLiberacao(it_entr) {
     if (!it_entr || typeof it_entr !== 'string') return 'N/A';
     return it_entr.split(' ').pop() || 'N/A';
 }
-
-// ==========================================================
-//               ROTAS DE RETIRADA RÁPIDA (BALCÃO)
-// ==========================================================
 
 router.get('/dav/:numero', authenticateToken, async (req, res) => {
     const davNumber = parseInt(req.params.numero, 10);
@@ -174,7 +166,7 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
 });
 
 // ==========================================================
-//               ROTAS DE GESTÃO DE ROMANEIOS E ACERTO
+//               ROTAS DE GESTÃO DE ROMANEIOS E RELATÓRIOS
 // ==========================================================
 
 router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
@@ -185,7 +177,8 @@ router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
 });
 
 router.get('/romaneios', authenticateToken, async (req, res) => {
-    const { status, filial } = req.query; 
+    // Adicionado os novos campos de filtro para o Relatório Histórico
+    const { status, filial, data_inicio, data_fim, motorista, veiculo } = req.query; 
     const { perfil } = req.user; 
 
     try {
@@ -193,12 +186,17 @@ router.get('/romaneios', authenticateToken, async (req, res) => {
         const params = [];
         const conditions = [];
 
-        // Permite buscar multiplos status separados por vírgula (ex: status=Em montagem,Concluído)
         if (status) { 
             const statusArray = status.split(',');
             conditions.push(`r.status IN (${statusArray.map(() => '?').join(',')})`);
             params.push(...statusArray);
         }
+        
+        // Filtros do Histórico
+        if (data_inicio) { conditions.push('DATE(r.data_criacao) >= ?'); params.push(data_inicio); }
+        if (data_fim) { conditions.push('DATE(r.data_criacao) <= ?'); params.push(data_fim); }
+        if (motorista) { conditions.push('r.nome_motorista LIKE ?'); params.push(`%${motorista}%`); }
+        if (veiculo) { conditions.push('r.id_veiculo = ?'); params.push(veiculo); }
 
         if (perfil === 'Administrador' || perfil === 'Financeiro') {
             if (filial) { conditions.push('r.filial_origem = ?'); params.push(filial); }
@@ -261,7 +259,6 @@ router.delete('/romaneios/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// NOVA ROTA: O ACERTO DE CONTAS (RETORNO DO CAMINHÃO)
 router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
     const romaneioId = parseInt(req.params.id, 10);
     const { itens_acerto } = req.body; 
