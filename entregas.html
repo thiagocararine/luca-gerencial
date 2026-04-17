@@ -33,11 +33,6 @@
         .action-btn:disabled { background-color: #9ca3af; cursor: not-allowed; opacity: 0.7; }
 
         .expandable-row { cursor: pointer; }
-        .history-row { display: none; }
-        .history-row.expanded { display: table-row; }
-
-        .cart-item { animation: slideIn 0.2s ease-out; }
-        @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
         
         .item-gaveta { display: none; }
         .item-gaveta.open { display: block; animation: slideDown 0.2s ease-out; }
@@ -122,6 +117,12 @@
                     <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
                 </ul>
             </div>
+            <div class="p-2 border-t border-gray-200/50">
+                <button id="sidebar-toggle" class="w-full hidden md:flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none">
+                    <svg id="toggle-icon-collapse" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" /></svg>
+                    <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
+                </button>
+            </div>
         </div>
     </nav>
 
@@ -203,9 +204,8 @@
                                             <span class="ml-1.5 font-bold text-gray-600 text-xs group-hover:text-indigo-600 transition-colors">Data Agendamento</span>
                                         </label>
                                     </div>
-                                    <input type="date" id="filter-data" class="border border-gray-300 rounded-md p-1.5 text-xs font-bold text-gray-700 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm flex-1 sm:max-w-[150px]">
+                                    <input type="date" id="filter-data" class="border border-gray-300 rounded-md p-1.5 text-xs font-bold text-gray-700 focus:ring-indigo-500 shadow-sm flex-1 sm:max-w-[150px]">
                                 </div>
-                                
                                 <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
                                     <div class="flex items-center gap-4 w-full sm:w-auto">
                                         <label class="inline-flex items-center cursor-pointer">
@@ -221,32 +221,25 @@
                                         <span data-feather="search" class="w-3.5 h-3.5"></span> Buscar Pedidos
                                     </button>
                                 </div>
-                                
                                 <div class="flex gap-2 pt-3 border-t border-gray-100">
                                     <div class="flex-1">
-                                        <select id="filter-bairro" class="w-full border-gray-300 rounded p-1.5 text-[11px] font-bold text-gray-600 focus:ring-indigo-500 shadow-sm bg-gray-50 cursor-pointer">
+                                        <select id="filter-bairro" class="w-full border-gray-300 rounded p-1.5 text-[11px] font-bold text-gray-600 focus:ring-indigo-500 shadow-sm bg-gray-50">
                                             <option value="">Filtro: Todos os Bairros</option>
                                         </select>
                                     </div>
                                     <div id="filial-filter-container" class="hidden flex-1">
-                                        <select id="filter-filial-dav" class="w-full border-gray-300 rounded p-1.5 text-[11px] font-bold text-gray-600 focus:ring-indigo-500 shadow-sm bg-gray-50 cursor-pointer">
-                                            <option value="">Filtro: Todas as Filiais</option>
-                                            <option value="Santa Cruz da Serra">Vendido em: Santa Cruz</option>
-                                            <option value="Piabetá">Vendido em: Piabetá</option>
-                                            <option value="Parada Angélica">Vendido em: Parada Angélica</option>
-                                            <option value="Nova Campinas">Vendido em: Nova Campinas</option>
+                                        <select id="filter-filial-dav" class="w-full border-gray-300 rounded p-1.5 text-[11px] font-bold text-gray-600 focus:ring-indigo-500 shadow-sm bg-gray-50">
+                                            <option value="">Filtro: Todas Filiais</option>
+                                            <option value="Santa Cruz da Serra">Santa Cruz</option>
+                                            <option value="Piabetá">Piabetá</option>
+                                            <option value="Parada Angélica">Parada Angélica</option>
+                                            <option value="Nova Campinas">Nova Campinas</option>
                                         </select>
                                     </div>
                                 </div>
                             </div>
 
-                            <div id="lista-pendentes" class="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50/50">
-                                <div class="h-full flex flex-col items-center justify-center text-gray-400">
-                                    <div class="p-4 bg-gray-100 rounded-full mb-3"><span data-feather="filter" class="w-8 h-8 opacity-60"></span></div>
-                                    <p class="text-sm font-semibold text-gray-500">Prateleira Vazia</p>
-                                    <p class="text-[11px] mt-1 text-center max-w-[200px]">Ajuste os filtros acima e clique em "Buscar" para listar os pedidos.</p>
-                                </div>
-                            </div>
+                            <div id="lista-pendentes" class="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50/50"></div>
                         </div>
 
                         <div class="w-full lg:w-1/2 bg-white/95 backdrop-blur-md rounded-lg shadow-lg border-2 border-indigo-200 flex flex-col overflow-hidden relative">
@@ -254,42 +247,31 @@
                                 <h3 class="font-bold text-indigo-900 flex items-center gap-2"><span data-feather="truck" class="w-4 h-4"></span> <span id="titulo-carrinho">2. Montar Carga</span></h3>
                                 <span class="text-xs font-bold bg-indigo-600 text-white px-2.5 py-1 rounded-full shadow-sm" id="cart-counter">0 Pedidos</span>
                             </div>
-
                             <div class="p-4 border-b border-gray-200 bg-white shrink-0 grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label class="text-[10px] font-bold text-indigo-800 uppercase tracking-wider mb-1 block">Veículo Alocado</label>
-                                    <select id="select-veiculo" class="w-full border-gray-300 rounded-md text-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm bg-indigo-50/30 font-semibold text-gray-700"></select>
+                                    <label class="text-[10px] font-bold text-indigo-800 uppercase mb-1 block">Veículo</label>
+                                    <select id="select-veiculo" class="w-full border-gray-300 rounded-md text-sm p-2 focus:ring-indigo-500 bg-indigo-50/30 font-semibold text-gray-700"></select>
                                 </div>
                                 <div>
-                                    <label class="text-[10px] font-bold text-indigo-800 uppercase tracking-wider mb-1 block">Nome do Motorista</label>
-                                    <input type="text" id="input-motorista" class="w-full border-gray-300 rounded-md text-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm font-semibold text-gray-700 placeholder-gray-400" placeholder="Quem fará a rota?">
+                                    <label class="text-[10px] font-bold text-indigo-800 uppercase mb-1 block">Motorista</label>
+                                    <input type="text" id="input-motorista" class="w-full border-gray-300 rounded-md text-sm p-2 focus:ring-indigo-500 font-semibold text-gray-700">
                                 </div>
                             </div>
-
-                            <div id="lista-carrinho" class="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-50">
-                                <div class="h-full flex flex-col items-center justify-center text-gray-400">
-                                    <div class="p-4 bg-white rounded-full mb-3 shadow-sm border border-gray-100"><span data-feather="package" class="w-8 h-8 opacity-40 text-indigo-400"></span></div>
-                                    <p class="text-sm font-semibold text-gray-500">Caminhão Vazio</p>
-                                    <p class="text-[11px] mt-1 text-center">Clique no '+' nos pedidos ao lado para carregar o caminhão.</p>
-                                </div>
-                            </div>
-
+                            <div id="lista-carrinho" class="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-50"></div>
                             <div class="p-4 bg-white border-t border-gray-200 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
                                 <div class="flex justify-between items-end mb-1.5">
-                                    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Peso Bruto da Carga</span>
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Peso Bruto</span>
                                     <span class="text-sm font-black text-gray-800" id="peso-texto">0 kg / 0 kg (0%)</span>
                                 </div>
                                 <div class="w-full bg-gray-200 rounded-full h-3 mb-5 overflow-hidden shadow-inner">
                                     <div id="peso-bar" class="bg-indigo-600 h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
                                 </div>
                                 <button id="btn-finalizar-carga" class="w-full action-btn bg-green-600 hover:bg-green-700 shadow-lg text-base py-3.5 flex justify-center items-center gap-2 transition-all transform active:scale-[0.98]">
-                                    <span data-feather="check-circle" class="w-5 h-5"></span> <span id="texto-btn-finalizar">Finalizar e Despachar Carga</span>
+                                    <span data-feather="check-circle" class="w-5 h-5"></span> <span id="texto-btn-finalizar">Finalizar e Despachar</span>
                                 </button>
                             </div>
                         </div>
-
                     </div>
-
                 </div>
 
                 <div id="acerto-content" class="tab-content flex-1 flex flex-col min-h-0 hidden">
@@ -327,7 +309,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script src="entregas.js?v=6.0" defer></script>
+<script src="entregas.js?v=6.1" defer></script>
 <script src="assets/global.js"></script>
 <script>
     function toggleSubmenu(id) {

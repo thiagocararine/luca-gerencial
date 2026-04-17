@@ -99,11 +99,12 @@ function setupEventListeners() {
     document.getElementById('select-veiculo')?.addEventListener('change', atualizarBarraDePeso);
     document.getElementById('btn-finalizar-carga')?.addEventListener('click', finalizarCarga);
 
+    // CORREÇÃO: Usa a simulação de clique na aba para evitar sobreposição
     document.getElementById('btn-cancelar-acerto')?.addEventListener('click', () => {
-        document.getElementById('acerto-content').classList.add('hidden');
-        document.getElementById('romaneio-list-view').classList.remove('hidden');
-        document.getElementById('tab-acerto').classList.add('hidden');
+        const tabRomaneios = document.querySelector('.tab-button[data-tab="romaneios"]');
+        if (tabRomaneios) tabRomaneios.click();
     });
+    
     document.getElementById('btn-fechar-romaneio')?.addEventListener('click', finalizarAcertoRomaneio);
 }
 
@@ -123,8 +124,7 @@ function handleTabSwitch(event) {
 
     if (button.dataset.tab === 'romaneios') {
         document.getElementById('romaneio-split-view').classList.add('hidden');
-        document.getElementById('acerto-content').classList.add('hidden');
-        document.getElementById('tab-acerto').classList.add('hidden');
+        document.getElementById('tab-acerto').classList.add('hidden'); 
         document.getElementById('romaneio-list-view').classList.remove('hidden');
         loadRomaneiosAtivos(); 
     }
@@ -256,7 +256,6 @@ async function handleConfirmRetirada(davNumber) {
         } finally { unlockUI(); }
     });
 }
-
 
 // ==========================================================
 //               ABA 2: LISTAGEM DE ROMANEIOS ATIVOS
@@ -829,9 +828,12 @@ async function abrirAcertoContas(romaneioId) {
     showLoader();
     acertoRomaneioId = romaneioId;
     
-    document.getElementById('romaneio-list-view').classList.add('hidden');
-    document.getElementById('tab-acerto').classList.remove('hidden');
-    document.getElementById('acerto-content').classList.remove('hidden');
+    // CORREÇÃO APLICADA: Chama o clique nativo da aba para alinhar o Flexbox perfeitamente
+    const tabAcerto = document.getElementById('tab-acerto');
+    if (tabAcerto) {
+        tabAcerto.classList.remove('hidden');
+        tabAcerto.click();
+    }
     
     try {
         const res = await fetch(`${apiUrlBase}/entregas/romaneios/${romaneioId}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
