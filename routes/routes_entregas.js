@@ -274,7 +274,7 @@ router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
         const [statusRows] = await gc.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [romaneioId]);
         // REMOVIDO O ACENTO AQUI ↓
         if (statusRows.length === 0 || statusRows[0].status === 'Concluido') {
-            throw new Error('Romaneio não encontrado ou já está Concluído.');
+            throw new Error('Romaneio não encontrado ou já está Concluido.');
         }
 
         const now = new Date();
