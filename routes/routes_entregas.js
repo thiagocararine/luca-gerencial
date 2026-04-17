@@ -272,7 +272,8 @@ router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
         await sc.beginTransaction();
 
         const [statusRows] = await gc.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [romaneioId]);
-        if (statusRows.length === 0 || statusRows[0].status === 'Concluído') {
+        // REMOVIDO O ACENTO AQUI ↓
+        if (statusRows.length === 0 || statusRows[0].status === 'Concluido') {
             throw new Error('Romaneio não encontrado ou já está Concluído.');
         }
 
@@ -312,7 +313,8 @@ router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
             await sc.execute("UPDATE cdavs SET cr_roma='', cr_dado='' WHERE cr_ndav=?", [davStr]);
         }
 
-        await gc.execute(`UPDATE romaneios SET status = 'Concluído' WHERE id = ?`, [romaneioId]);
+        // REMOVIDO O ACENTO AQUI (Gravação no BD) ↓
+        await gc.execute(`UPDATE romaneios SET status = 'Concluido' WHERE id = ?`, [romaneioId]);
 
         await gc.commit();
         await sc.commit();
