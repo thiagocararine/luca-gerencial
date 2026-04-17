@@ -15,10 +15,6 @@ const dbConfigSei = {
 const seiPool = mysql.createPool(dbConfigSei);
 const gerencialPool = mysql.createPool(dbConfig);
 
-// ==========================================================
-//               FUNÇÕES AUXILIARES E MATEMÁTICA
-// ==========================================================
-
 function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem) {
     const quantidadeComprada = parseFloat(itemErp.it_quan) || 0;
     const totalEntregueErp = parseFloat(itemErp.it_qent) || 0;
@@ -40,10 +36,6 @@ function parseUsuarioLiberacao(it_entr) {
     if (!it_entr || typeof it_entr !== 'string') return 'N/A';
     return it_entr.split(' ').pop() || 'N/A';
 }
-
-// ==========================================================
-//               ROTAS DE RETIRADA RÁPIDA (BALCÃO)
-// ==========================================================
 
 router.get('/dav/:numero', authenticateToken, async (req, res) => {
     const davNumber = parseInt(req.params.numero, 10);
@@ -173,10 +165,6 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
     }
 });
 
-// ==========================================================
-//               ROTAS DE GESTÃO DE ROMANEIOS
-// ==========================================================
-
 router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
     try {
         const [veiculos] = await gerencialPool.execute("SELECT id, modelo, placa, capacidade_kg FROM veiculos WHERE status = 'Ativo' ORDER BY modelo ASC");
@@ -219,30 +207,26 @@ router.post('/romaneios', authenticateToken, async (req, res) => {
     } catch (error) { res.status(500).json({ error: 'Erro interno.' }); }
 });
 
-// AQUI ESTÁ A CORREÇÃO CRÍTICA DO PYTHON 1: EXCLUIR ROMANEIO FAZ ROLLBACK NO ERP
 router.delete('/romaneios/:id', authenticateToken, async (req, res) => {
     const romaneioId = parseInt(req.params.id, 10);
     const gc = await gerencialPool.getConnection();
-    const sc = await seiPool.getConnection(); // Precisamos do banco SEI agora
+    const sc = await seiPool.getConnection(); 
 
     try {
         await gc.beginTransaction();
-        await sc.beginTransaction(); // Trava o SEI também
+        await sc.beginTransaction(); 
 
         const [rows] = await gc.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [romaneioId]);
         if (rows.length === 0) throw new Error('Carga não encontrada.');
         if (rows[0].status !== 'Em montagem') throw new Error('Apenas cargas "Em montagem" podem ser excluídas.');
 
-        // Busca todos os itens que estavam nessa carga para fazer rollback no ERP
         const [itensNaCarga] = await gc.execute('SELECT dav_numero, idavs_regi FROM romaneio_itens WHERE id_romaneio = ?', [romaneioId]);
         
         for (const item of itensNaCarga) {
-            // Remove as marcações logísticas do SEI (Equivalente à linha 1040 do expedicao.py)
             await sc.execute("UPDATE cdavs SET cr_roma='', cr_dado='' WHERE cr_ndav=?", [item.dav_numero.toString().padStart(13, '0')]);
             await sc.execute("UPDATE idavs SET it_logi='0' WHERE it_regist=?", [item.idavs_regi]);
         }
 
-        // Apaga do nosso banco local
         await gc.execute('DELETE FROM romaneio_itens WHERE id_romaneio = ?', [romaneioId]);
         await gc.execute('DELETE FROM romaneios WHERE id = ?', [romaneioId]);
 
@@ -260,9 +244,6 @@ router.delete('/romaneios/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// ==========================================================
-// ROTA EAGER LOADING (Busca)
-// ==========================================================
 router.get('/eligible-davs', authenticateToken, async (req, res) => {
     const { data, tipoData, apenasEntregaMarcada, bairro, davNumero, filialDav } = req.query;
     const { perfil } = req.user;
@@ -276,7 +257,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
         let query = `
             SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde, c.cr_edav, c.cr_entr, c.cr_udav
             FROM cdavs c JOIN idavs i ON c.cr_ndav = i.it_ndav
-            WHERE c.cr_reca = '1' AND DATE(${dateColumn}) = ? AND (i.it_quan - i.it_qtdv - i.it_qent) > 0 AND c.cr_roma = '' /* Só traz se não estiver em outro romaneio! */
+            WHERE c.cr_reca = '1' AND DATE(${dateColumn}) = ? AND (i.it_quan - i.it_qtdv - i.it_qent) > 0 AND c.cr_roma = '' 
         `;
         const params = [data];
 
@@ -323,7 +304,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
 
                     itensComSaldo.push({
                         idavs_regi: idavsRegi, codigo: item.it_codi, nome: item.it_nome, unidade: item.it_unid,
-                        saldo: saldo, entregue: entregue, devolvido: devolvido, peso_total_item: pesoTotalItem, filial_item: item.it_inde
+                        saldo: saldo, entregue: entregue, devolvido: devolvido, peso_unitario: item.peso_bruto_unitario, peso_total_item: pesoTotalItem, filial_item: item.it_inde
                     });
                 }
             }
@@ -350,18 +331,17 @@ router.get('/romaneios/:id', authenticateToken, async (req, res) => {
     } catch (error) { res.status(500).json({ error: 'Erro interno.' }); }
 });
 
-// AQUI ESTÁ A CORREÇÃO CRÍTICA DO PYTHON 2: SALVAR O ROMANEIO ESCREVE NO ERP
 router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => {
     const romaneioId = parseInt(req.params.id, 10);
     const itens = req.body; 
     const { nome: nomeUsuario } = req.user;
 
     const gc = await gerencialPool.getConnection();
-    const sc = await seiPool.getConnection(); // Liga a conexão ao SEI
+    const sc = await seiPool.getConnection(); 
     
     try {
         await gc.beginTransaction();
-        await sc.beginTransaction(); // Trava o SEI para escrita segura
+        await sc.beginTransaction(); 
 
         const [statusRows] = await gc.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [romaneioId]);
         if (statusRows.length === 0 || statusRows[0].status !== 'Em montagem') throw new Error('Romaneio não está em montagem.');
@@ -374,25 +354,25 @@ router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => {
         const alocadoMap = new Map(alocadoRows.map(i => [i.idavs_regi, i.total]));
 
         const now = new Date();
-        const strDate = `1 ${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')} ${nomeUsuario}`;
+        // AQUI ESTÁ A TAG [WEB] PROTEGENDO A IDENTIDADE DO SEU SISTEMA NO ERP
+        const strDate = `1 ${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')} ${nomeUsuario} [WEB]`;
 
         for (const item of itens) {
             const idavsRegi = parseInt(item.idavs_regi, 10);
             const qtd = parseFloat(item.quantidade_a_entregar);
-            const davNumeroStr = item.dav_numero.toString().padStart(13, '0'); // Padroniza igual ao ERP
+            const davNumeroStr = item.dav_numero.toString().padStart(13, '0'); 
 
             const itemErp = itemErpMap.get(idavsRegi);
             const { saldo } = calcularSaldosItem(itemErp, null, { total: alocadoMap.get(idavsRegi) || 0 });
 
             if (qtd > saldo) throw new Error(`Saldo insuficiente para ${itemErp.it_nome}.`);
 
-            // 1. Grava no nosso BD
-            await gc.execute(`INSERT INTO romaneio_itens (id_romaneio, dav_numero, idavs_regi, pd_codi, quantidade_a_entregar) VALUES (?, ?, ?, ?, ?)`, [romaneioId, item.dav_numero, idavsRegi, itemErp.it_codi, qtd]);
+            await gc.execute(
+                `INSERT INTO romaneio_itens (id_romaneio, dav_numero, idavs_regi, pd_codi, pd_nome, quantidade_a_entregar) VALUES (?, ?, ?, ?, ?, ?)`, 
+                [romaneioId, item.dav_numero, idavsRegi, itemErp.it_codi, itemErp.it_nome, qtd]
+            );
             
-            // 2. Grava no SEI: O Cabeçalho (linha 690 expedicao.py)
             await sc.execute(`UPDATE cdavs SET cr_roma=?, cr_dado=? WHERE cr_ndav=?`, [romaneioId.toString(), strDate, davNumeroStr]);
-            
-            // 3. Grava no SEI: O Saldo Físico do Item (linha 852 expedicao.py)
             await sc.execute(`UPDATE idavs SET it_logi=? WHERE it_regist=?`, [qtd.toString(), idavsRegi]);
         }
 
@@ -423,14 +403,12 @@ router.delete('/romaneios/:id/itens/:itemId', authenticateToken, async (req, res
         const [status] = await gc.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [rId]);
         if (status.length === 0 || status[0].status !== 'Em montagem') throw new Error('Não editável.');
 
-        // Busca o item antes de apagar para limpar no ERP
         const [itemData] = await gc.execute('SELECT dav_numero, idavs_regi FROM romaneio_itens WHERE id = ?', [iId]);
         if (itemData.length === 0) throw new Error('Item não achado.');
 
         const davNum = itemData[0].dav_numero.toString().padStart(13, '0');
         const idavsReg = itemData[0].idavs_regi;
 
-        // Verifica se é o ÚLTIMO item deste DAV no romaneio. Se for, limpa o cr_roma inteiro.
         const [outrosItens] = await gc.execute('SELECT count(*) as qtd FROM romaneio_itens WHERE id_romaneio = ? AND dav_numero = ? AND id != ?', [rId, itemData[0].dav_numero, iId]);
         
         if (outrosItens[0].qtd === 0) {

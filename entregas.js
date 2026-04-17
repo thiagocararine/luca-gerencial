@@ -235,7 +235,7 @@ function renderDavResults(data) {
                     <tbody class="divide-y divide-gray-100">
                         ${itens.map(item => `
                             <tr class="expandable-row" data-idavs-regi="${item.idavs_regi}">
-                                <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome} (${item.unidade})</td>
+                                <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome} (${item.unidade}) ${item.quantidade_devolvida > 0 ? `<span class="bg-red-100 text-red-700 px-1 py-0.5 rounded text-[9px] font-bold ml-1">Devolvido: ${item.quantidade_devolvida}</span>` : ''}</td>
                                 <td class="px-2 py-3 text-center font-bold ${item.quantidade_saldo > 0 ? 'text-blue-600' : 'text-green-600'}">${item.quantidade_saldo}</td>
                                 <td class="px-4 py-3 text-center">
                                     <input type="number" class="w-20 text-center rounded-md border-gray-300 focus:ring-indigo-500 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" ${item.quantidade_saldo > 0 ? '' : 'disabled'}>
@@ -408,7 +408,7 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
     pendingDavs = [];
     
     const select = document.getElementById('select-veiculo');
-    if (select.options.length <= 1) {
+    if (select && select.options.length <= 1) {
         select.innerHTML = '<option value="">Carregando...</option>';
         try {
             const res = await fetch(`${apiUrlBase}/entregas/veiculos-disponiveis`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
@@ -418,18 +418,22 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
         } catch (e) { select.innerHTML = '<option value="">Erro ao carregar</option>'; }
     }
 
+    const tituloCarrinho = document.getElementById('titulo-carrinho');
+    const textoBtnFinalizar = document.getElementById('texto-btn-finalizar');
+
     if (currentRomaneioId) {
-        document.getElementById('titulo-carrinho').innerHTML = `Editando Carga #${currentRomaneioId}`;
-        document.getElementById('texto-btn-finalizar').textContent = 'Salvar Alterações';
-        document.getElementById('select-veiculo').disabled = true;
-        document.getElementById('input-motorista').disabled = true;
+        if (tituloCarrinho) tituloCarrinho.innerHTML = `Editando Carga #${currentRomaneioId}`;
+        if (textoBtnFinalizar) textoBtnFinalizar.textContent = 'Salvar Alterações';
+        
+        if (document.getElementById('select-veiculo')) document.getElementById('select-veiculo').disabled = true;
+        if (document.getElementById('input-motorista')) document.getElementById('input-motorista').disabled = true;
         
         try {
             const res = await fetch(`${apiUrlBase}/entregas/romaneios/${currentRomaneioId}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
             const data = await res.json();
             
-            document.getElementById('select-veiculo').value = veiculosDisp.find(v => v.placa === data.placa_veiculo)?.id || '';
-            document.getElementById('input-motorista').value = data.nome_motorista;
+            if (document.getElementById('select-veiculo')) document.getElementById('select-veiculo').value = veiculosDisp.find(v => v.placa === data.placa_veiculo)?.id || '';
+            if (document.getElementById('input-motorista')) document.getElementById('input-motorista').value = data.nome_motorista;
 
             const grouped = data.itens.reduce((acc, item) => {
                 if(!acc[item.dav_numero]) {
@@ -441,7 +445,7 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
                 acc[item.dav_numero].peso_total_dav += peso;
                 acc[item.dav_numero].itens.push({
                     romaneio_item_id: item.romaneio_item_id, 
-                    idavs_regi: item.idavs_regi, nome: item.produto_nome, unidade: item.produto_unidade, saldo: parseFloat(item.quantidade_a_entregar)
+                    idavs_regi: item.idavs_regi, nome: item.produto_nome, unidade: item.produto_unidade, peso_unitario: parseFloat(item.peso_bruto_unitario), saldo: parseFloat(item.quantidade_a_entregar)
                 });
                 return acc;
             }, {});
@@ -450,12 +454,17 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
             showToast("Erro ao carregar dados da carga.", "error");
         }
     } else {
-        document.getElementById('titulo-carrinho').innerHTML = `Montar Nova Carga`;
-        document.getElementById('texto-btn-finalizar').textContent = 'Finalizar e Despachar Carga';
-        document.getElementById('select-veiculo').disabled = false;
-        document.getElementById('input-motorista').disabled = false;
-        document.getElementById('select-veiculo').value = '';
-        document.getElementById('input-motorista').value = '';
+        if (tituloCarrinho) tituloCarrinho.innerHTML = `Montar Nova Carga`;
+        if (textoBtnFinalizar) textoBtnFinalizar.textContent = 'Finalizar e Despachar Carga';
+        
+        if (document.getElementById('select-veiculo')) {
+            document.getElementById('select-veiculo').disabled = false;
+            document.getElementById('select-veiculo').value = '';
+        }
+        if (document.getElementById('input-motorista')) {
+            document.getElementById('input-motorista').disabled = false;
+            document.getElementById('input-motorista').value = '';
+        }
     }
 
     renderPendingList();
@@ -501,8 +510,33 @@ async function buscarPedidosPendentes() {
         if (!res.ok) throw new Error("Falha ao buscar pedidos.");
         const davs = await res.json();
         
-        const cartIds = cartDavs.map(c => String(c.dav_numero));
-        pendingDavs = davs.filter(d => !cartIds.includes(String(d.dav_numero)));
+        // Remove da pesquisa inicial o que já está no carrinho (ou abate o saldo)
+        pendingDavs = [];
+        davs.forEach(novoDav => {
+            const cartDav = cartDavs.find(c => String(c.dav_numero) === String(novoDav.dav_numero));
+            if (!cartDav) {
+                pendingDavs.push(novoDav);
+            } else {
+                // Abate os saldos dos itens se o DAV já está parcialmente no carrinho
+                const itensRestantes = [];
+                novoDav.itens.forEach(novoItem => {
+                    const cartItem = cartDav.itens.find(ci => String(ci.idavs_regi) === String(novoItem.idavs_regi));
+                    if (cartItem) {
+                        novoItem.saldo -= cartItem.saldo;
+                        novoItem.peso_total_item = novoItem.saldo * parseFloat(novoItem.peso_unitario);
+                    }
+                    if (novoItem.saldo > 0) {
+                        itensRestantes.push(novoItem);
+                    }
+                });
+                
+                if (itensRestantes.length > 0) {
+                    novoDav.itens = itensRestantes;
+                    novoDav.peso_total_dav = itensRestantes.reduce((sum, i) => sum + i.peso_total_item, 0);
+                    pendingDavs.push(novoDav);
+                }
+            }
+        });
 
         const selectBairro = document.getElementById('filter-bairro');
         const bairroAtual = selectBairro.value;
@@ -537,15 +571,18 @@ function renderPendingList() {
         const dataAgendada = dav.data_agendada ? new Date(dav.data_agendada).toLocaleDateString('pt-BR') : '-';
         const vendedorNome = dav.vendedor || 'Não informado';
         
+        // A MÁGICA FRACIONADA: O Input para escolher quantos enviar para o caminhão!
         const itensHtml = dav.itens.map(item => {
-            const tagEntregue = item.entregue > 0 ? `<span class="bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded text-[9px] ml-2 font-bold border border-teal-200">Já Entregue: ${item.entregue}</span>` : '';
-            // TAG VERMELHA DA DEVOLUÇÃO!
-            const tagDevolvido = item.devolvido > 0 ? `<span class="bg-red-100 text-red-700 px-1.5 py-0.5 rounded text-[9px] ml-2 font-bold border border-red-200">Devolvido: ${item.devolvido}</span>` : '';
-            
+            const tagEntregue = item.entregue > 0 ? `<span class="bg-teal-100 text-teal-800 px-1 py-0.5 rounded text-[8px] font-bold">Já Entregue: ${item.entregue}</span>` : '';
+            const tagDevolvido = item.devolvido > 0 ? `<span class="bg-red-100 text-red-700 px-1 py-0.5 rounded text-[8px] font-bold">Devolvido: ${item.devolvido}</span>` : '';
             return `
             <div class="flex justify-between items-center border-b border-indigo-100/50 py-1.5 last:border-0 hover:bg-indigo-50 px-1 rounded transition-colors">
-                <span class="text-[10px] font-medium text-gray-700 truncate flex-1 pr-2">${item.codigo} - ${item.nome} ${tagEntregue} ${tagDevolvido}</span>
-                <span class="text-[10px] font-black text-indigo-700 w-16 text-right">${item.saldo} ${item.unidade}</span>
+                <span class="text-[10px] font-medium text-gray-700 truncate flex-1 pr-2">${item.codigo} - ${item.nome} <br> <span class="flex gap-1 mt-0.5">${tagEntregue} ${tagDevolvido}</span></span>
+                <div class="flex items-center gap-1.5 shrink-0 bg-white p-1 rounded shadow-sm border border-gray-100">
+                    <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider" title="Saldo na Prateleira">Disp: ${item.saldo}</span>
+                    <input type="number" id="frac-${dav.dav_numero}-${item.idavs_regi}" value="${item.saldo}" min="0.001" max="${item.saldo}" step="any" class="w-14 text-[10px] p-1 border border-indigo-300 rounded text-center font-bold text-indigo-700 focus:ring-indigo-500">
+                    <button onclick="adicionarItemFracionado('${dav.dav_numero}', '${item.idavs_regi}')" class="bg-indigo-100 hover:bg-indigo-500 hover:text-white text-indigo-600 p-1.5 rounded transition-colors" title="Adicionar quantidade informada à carga"><i data-feather="plus" class="w-3 h-3"></i></button>
+                </div>
             </div>`;
         }).join('');
 
@@ -561,17 +598,19 @@ function renderPendingList() {
                     </p>
                     <div class="flex gap-2 mt-2 items-center flex-wrap">
                         <span class="text-[9px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 shadow-sm"><i data-feather="map-pin" class="w-3 h-3 inline"></i> ${dav.bairro.trim()}</span>
-                        <span class="text-[9px] text-teal-800 font-bold bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 shadow-sm"><i data-feather="user" class="w-3 h-3 inline"></i> ${vendedorNome}</span>
                         <span class="text-[9px] text-blue-800 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 shadow-sm">Ven: ${dataVenda} | Ent: ${dataAgendada}</span>
                         <span class="text-[9px] text-orange-700 font-bold bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 shadow-sm"><i data-feather="anchor" class="w-3 h-3 inline"></i> ${dav.peso_total_dav.toLocaleString('pt-BR', {minimumFractionDigits: 1})} kg</span>
                     </div>
                 </div>
-                <button onclick="adicionarAoCarrinho('${dav.dav_numero}')" class="bg-indigo-50 border border-indigo-200 text-indigo-600 hover:bg-indigo-600 hover:text-white p-3 rounded-lg transition-colors shrink-0 shadow-sm transform active:scale-95" title="Adicionar à Carga">
-                    <i data-feather="plus" class="w-5 h-5"></i>
+                <button onclick="adicionarAoCarrinhoCompleto('${dav.dav_numero}')" class="bg-indigo-50 border border-indigo-200 text-indigo-600 hover:bg-indigo-600 hover:text-white p-3 rounded-lg transition-colors shrink-0 shadow-sm transform active:scale-95" title="Adicionar TODOS os itens à Carga">
+                    <i data-feather="chevrons-right" class="w-5 h-5"></i>
                 </button>
             </div>
-            <div id="gaveta-${dav.dav_numero}" class="item-gaveta bg-indigo-50/30 px-4 py-2 border-t border-indigo-100">
-                <p class="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mb-1.5">Conteúdo do Pedido</p>
+            <div id="gaveta-${dav.dav_numero}" class="item-gaveta bg-indigo-50/40 px-4 py-2 border-t border-indigo-100">
+                <p class="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                    <span>Conteúdo do Pedido (Adição Fracionada)</span>
+                    <span class="text-[8px] text-gray-400">Altere a quantidade na caixa para fracionar</span>
+                </p>
                 <div class="space-y-0.5">${itensHtml}</div>
             </div>
         </div>`;
@@ -597,61 +636,156 @@ function renderCartList() {
         if(typeof feather !== 'undefined') feather.replace(); atualizarBarraDePeso(); return;
     }
 
-    container.innerHTML = cartDavs.map(dav => `
-        <div class="bg-white p-3 rounded-lg border ${dav.is_existing ? 'border-gray-300' : 'border-indigo-300 bg-indigo-50/50'} flex justify-between items-center cart-item shadow-sm mb-2">
-            <div class="flex-1 min-w-0 pr-2">
-                <p class="font-black ${dav.is_existing ? 'text-gray-800' : 'text-indigo-900'} text-xs truncate">DAV #${dav.dav_numero} <span class="bg-gray-800 text-white text-[9px] px-1.5 py-0.5 rounded ml-1 tracking-widest uppercase">${dav.filial}</span></p>
-                <p class="text-[10px] text-gray-500 font-medium mt-1 truncate"><i data-feather="map-pin" class="w-3 h-3 inline"></i> ${dav.cliente} - ${dav.bairro.trim()}</p>
+    container.innerHTML = cartDavs.map(dav => {
+        const itensCartHtml = dav.itens.map(item => `
+            <div class="flex justify-between items-center mt-1 border-t border-gray-100 pt-1.5">
+                <span class="text-[9px] font-bold text-gray-700 truncate flex-1">${item.codigo} - ${item.nome}</span>
+                <span class="text-[10px] font-black text-indigo-700 w-16 text-right mr-3">${item.saldo} ${item.unidade}</span>
+                <button onclick="removerItemDoCarrinho('${dav.dav_numero}', '${item.idavs_regi}', ${dav.is_existing}, ${item.romaneio_item_id || null})" class="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded transition-colors" title="Retirar do Caminhão"><i data-feather="x" class="w-3 h-3"></i></button>
             </div>
-            <div class="flex items-center gap-3 shrink-0 border-l border-gray-200 pl-3">
+        `).join('');
+
+        return `
+        <div class="bg-white p-3 rounded-lg border ${dav.is_existing ? 'border-gray-300' : 'border-indigo-300 bg-indigo-50/20'} shadow-sm mb-3">
+            <div class="flex justify-between items-start mb-2">
+                <div class="flex-1 min-w-0 pr-2">
+                    <p class="font-black ${dav.is_existing ? 'text-gray-800' : 'text-indigo-900'} text-xs truncate">DAV #${dav.dav_numero} <span class="bg-gray-800 text-white text-[8px] px-1.5 py-0.5 rounded ml-1 uppercase">${dav.filial}</span></p>
+                    <p class="text-[9px] text-gray-500 font-bold mt-1 truncate uppercase tracking-wider">${dav.cliente}</p>
+                </div>
                 <div class="text-right">
                     <span class="text-xs font-black ${dav.is_existing ? 'text-gray-700' : 'text-indigo-700'} block">${dav.peso_total_dav.toLocaleString('pt-BR', {minimumFractionDigits: 1})} kg</span>
-                    <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider block">${dav.itens.length} itens</span>
                 </div>
-                <button onclick="removerDoCarrinho('${dav.dav_numero}')" class="text-red-500 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200 rounded-lg p-2 transition-colors shadow-sm transform active:scale-95" title="Remover da Carga">
-                    <i data-feather="trash-2" class="w-4 h-4"></i>
-                </button>
+            </div>
+            <div class="bg-gray-50 p-2 rounded border border-gray-100">
+                ${itensCartHtml}
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
+    
     if(typeof feather !== 'undefined') feather.replace(); atualizarBarraDePeso();
 }
 
-window.adicionarAoCarrinho = function(davNumero) {
-    const idx = pendingDavs.findIndex(d => String(d.dav_numero) === String(davNumero));
-    if (idx > -1) {
-        cartDavs.push(pendingDavs[idx]);
-        pendingDavs.splice(idx, 1);
-        renderPendingList(); renderCartList();
-    }
+// ADICIONAR TUDO (Botão grande)
+window.adicionarAoCarrinhoCompleto = function(davNumero) {
+    const pDavIdx = pendingDavs.findIndex(d => String(d.dav_numero) === String(davNumero));
+    if (pDavIdx === -1) return;
+    const pDav = pendingDavs[pDavIdx];
+    
+    // Adiciona item por item (para manter o fracionamento correto)
+    // Usamos slice(0) para não quebrar o array enquanto iteramos e ele é modificado
+    const itensParaAdd = pDav.itens.slice(0); 
+    itensParaAdd.forEach(item => {
+        adicionarItemFracionadoLogica(davNumero, item.idavs_regi, item.saldo);
+    });
+    
+    renderPendingList(); renderCartList();
 };
 
-window.removerDoCarrinho = function(davNumero) {
-    const idx = cartDavs.findIndex(d => String(d.dav_numero) === String(davNumero));
-    if (idx > -1) {
-        const dav = cartDavs[idx];
-        
-        if (dav.is_existing) {
-            showCustomConfirm("Excluir Item do Banco?", `O DAV #${davNumero} já está salvo no Romaneio #${currentRomaneioId}. Deseja deletá-lo definitivamente desta carga?`, async () => {
-                lockUI();
-                try {
-                    for(const item of dav.itens) {
-                        await fetch(`${apiUrlBase}/entregas/romaneios/${currentRomaneioId}/itens/${item.romaneio_item_id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getToken()}` } });
-                    }
-                    cartDavs.splice(idx, 1);
-                    renderCartList();
-                    showToast(`DAV #${davNumero} retirado do caminhão com sucesso.`, 'success');
-                } catch(e) { showToast("Erro ao remover item do banco.", 'error'); } 
-                finally { unlockUI(); }
-            });
-            return;
-        }
+// ADICIONAR FRACIONADO (Botão pequeno dentro da gaveta)
+window.adicionarItemFracionado = function(davNumero, idavsRegi) {
+    const input = document.getElementById(`frac-${davNumero}-${idavsRegi}`);
+    if (!input) return;
+    const qtdDesejada = parseFloat(input.value);
+    
+    if (isNaN(qtdDesejada) || qtdDesejada <= 0) return showToast("Quantidade inválida.", "error");
+    
+    adicionarItemFracionadoLogica(davNumero, idavsRegi, qtdDesejada);
+    renderPendingList(); renderCartList();
+};
 
-        pendingDavs.push(dav);
-        cartDavs.splice(idx, 1);
-        pendingDavs.sort((a,b) => a.bairro.localeCompare(b.bairro));
-        renderPendingList(); renderCartList();
+// O Motor da Quebra de Carga
+function adicionarItemFracionadoLogica(davNumero, idavsRegi, qtdDesejada) {
+    const pDavIdx = pendingDavs.findIndex(d => String(d.dav_numero) === String(davNumero));
+    if (pDavIdx === -1) return;
+    const pDav = pendingDavs[pDavIdx];
+    
+    const pItemIdx = pDav.itens.findIndex(i => String(i.idavs_regi) === String(idavsRegi));
+    if (pItemIdx === -1) return;
+    const pItem = pDav.itens[pItemIdx];
+    
+    if (qtdDesejada > pItem.saldo) {
+        return showToast(`Só existem ${pItem.saldo} unidades de ${pItem.nome}.`, "error");
     }
+
+    // Procura ou Cria o DAV no Caminhão
+    let cDav = cartDavs.find(d => String(d.dav_numero) === String(davNumero));
+    if (!cDav) {
+        cDav = { ...pDav, itens: [], peso_total_dav: 0, is_existing: false };
+        cartDavs.push(cDav);
+    }
+    
+    // Procura ou Cria o Item no Caminhão
+    let cItem = cDav.itens.find(i => String(i.idavs_regi) === String(idavsRegi));
+    if (!cItem) {
+        cItem = { ...pItem, saldo: 0, romaneio_item_id: null };
+        cDav.itens.push(cItem);
+    }
+    
+    // Faz a transferência de peso e quantidade
+    cItem.saldo += qtdDesejada;
+    const pesoAdd = qtdDesejada * parseFloat(pItem.peso_unitario);
+    cDav.peso_total_dav += pesoAdd;
+    
+    pItem.saldo -= qtdDesejada;
+    pDav.peso_total_dav -= pesoAdd;
+    
+    // Limpa se esvaziar
+    if (pItem.saldo <= 0) pDav.itens.splice(pItemIdx, 1);
+    if (pDav.itens.length === 0) pendingDavs.splice(pDavIdx, 1);
+}
+
+// REMOVER ITEM INDIVIDUAL DO CAMINHÃO
+window.removerItemDoCarrinho = function(davNumero, idavsRegi, isExisting, romaneioItemId) {
+    
+    // Se o item já estava salvo no banco, usamos a rota de exclusão de BD
+    if (isExisting && romaneioItemId) {
+        showCustomConfirm("Remover do Romaneio?", `Este item já está gravado no Caminhão. Deseja remover do banco de dados e devolver para a prateleira?`, async () => {
+            lockUI();
+            try {
+                await fetch(`${apiUrlBase}/entregas/romaneios/${currentRomaneioId}/itens/${romaneioItemId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getToken()}` } });
+                showToast(`Item removido do caminhão com sucesso.`, 'success');
+                // Recarrega tudo do banco para garantir integridade matemática perfeita
+                abrirTorreDeControle(currentRomaneioId);
+            } catch(e) { showToast("Erro ao remover item.", 'error'); } 
+            finally { unlockUI(); }
+        });
+        return;
+    }
+
+    // Se é um item que acabamos de colocar (só memória), devolvemos para a prateleira
+    const cDavIdx = cartDavs.findIndex(d => String(d.dav_numero) === String(davNumero));
+    if (cDavIdx === -1) return;
+    const cDav = cartDavs[cDavIdx];
+    
+    const cItemIdx = cDav.itens.findIndex(i => String(i.idavs_regi) === String(idavsRegi));
+    if (cItemIdx === -1) return;
+    const cItem = cDav.itens[cItemIdx];
+    
+    const qtdDevolvida = cItem.saldo;
+    const pesoRemovido = qtdDevolvida * parseFloat(cItem.peso_unitario);
+    
+    let pDav = pendingDavs.find(d => String(d.dav_numero) === String(davNumero));
+    if (!pDav) {
+        pDav = { ...cDav, itens: [], peso_total_dav: 0 };
+        pendingDavs.push(pDav);
+        pendingDavs.sort((a,b) => a.bairro.localeCompare(b.bairro));
+    }
+    
+    let pItem = pDav.itens.find(i => String(i.idavs_regi) === String(idavsRegi));
+    if (!pItem) {
+        pItem = { ...cItem, saldo: 0 };
+        pDav.itens.push(pItem);
+    }
+    
+    pItem.saldo += qtdDevolvida;
+    pDav.peso_total_dav += pesoRemovido;
+    
+    cDav.itens.splice(cItemIdx, 1);
+    cDav.peso_total_dav -= pesoRemovido;
+    if (cDav.itens.length === 0) cartDavs.splice(cDavIdx, 1);
+    
+    renderPendingList(); renderCartList();
 };
 
 function atualizarBarraDePeso() {
@@ -710,7 +844,9 @@ async function finalizarCarga() {
 
     lockUI();
     const btn = document.getElementById('btn-finalizar-carga');
-    const textoOriginal = document.getElementById('texto-btn-finalizar').textContent;
+    const textoBtnFinalizar = document.getElementById('texto-btn-finalizar');
+    const textoOriginal = textoBtnFinalizar ? textoBtnFinalizar.textContent : 'Finalizar e Despachar Carga';
+    
     btn.innerHTML = '<i data-feather="loader" class="animate-spin w-5 h-5"></i> Processando BD...';
     if(typeof feather !== 'undefined') feather.replace();
 
@@ -730,6 +866,7 @@ async function finalizarCarga() {
         const payloadItens = [];
         cartDavs.filter(dav => !dav.is_existing).forEach(dav => {
             dav.itens.forEach(item => {
+                // AQUI usamos o item.saldo porque no carrinho ele representa a quantidade!
                 payloadItens.push({ dav_numero: dav.dav_numero, idavs_regi: item.idavs_regi, quantidade_a_entregar: item.saldo });
             });
         });
@@ -758,56 +895,5 @@ async function finalizarCarga() {
         if(typeof feather !== 'undefined') feather.replace();
     } finally {
         unlockUI();
-    }
-}
-
-// ==========================================================
-//               FUNÇÕES DE UTILIDADE RESTAURADAS
-// ==========================================================
-function gerenciarAcessoModulos() {
-    const userData = getUserData();
-    if (!userData || !userData.permissoes) return;
-
-    const mapaModulos = {
-        'lancamentos': 'despesas.html',
-        'logistica': 'logistica.html',
-        'entregas': 'entregas.html',
-        'checklist': 'checklist.html',
-        'produtos': 'produtos.html',
-        'configuracoes': 'settings.html'
-    };
-
-    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
-        const permissao = userData.permissoes.find(p => p.nome_modulo === nomeModulo);
-        if (!permissao || !permissao.permitido) {
-            const link = document.querySelector(`#sidebar a[href="${href}"]`);
-            if (link && link.parentElement) link.parentElement.style.display = 'none';
-        }
-    }
-}
-
-async function popularSelect(selectElement, codParametro, token, placeholderText) {
-    if (!selectElement) return [];
-    try {
-        const response = await fetch(`${apiUrlBase}/settings/parametros?cod=${codParametro}`, { 
-            headers: { 'Authorization': `Bearer ${token}` } 
-        });
-        if (!response.ok) throw new Error("Falha ao carregar.");
-        const data = await response.json();
-        selectElement.innerHTML = `<option value="">${placeholderText}</option>` + 
-            data.map(p => `<option value="${p.NOME_PARAMETRO}">${p.NOME_PARAMETRO}</option>`).join('');
-        return data;
-    } catch (error) {
-        selectElement.innerHTML = `<option value="">Erro</option>`;
-        return [];
-    }
-}
-
-function handleApiError(response) {
-    if (response.status === 401 || response.status === 403) {
-        showToast("Sessão expirada. Faça login novamente.", "error");
-        setTimeout(logout, 2000);
-    } else {
-        response.json().then(data => showToast(`Erro: ${data.error || response.statusText}`, "error")).catch(() => showToast('Erro na API.', "error"));
     }
 }
