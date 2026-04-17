@@ -15,6 +15,10 @@ const dbConfigSei = {
 const seiPool = mysql.createPool(dbConfigSei);
 const gerencialPool = mysql.createPool(dbConfig);
 
+// ==========================================================
+//               FUNÇÕES AUXILIARES E MATEMÁTICA
+// ==========================================================
+
 function calcularSaldosItem(itemErp, retiradaManualDoItem, entregaRomaneioDoItem) {
     const quantidadeComprada = parseFloat(itemErp.it_quan) || 0;
     const totalEntregueErp = parseFloat(itemErp.it_qent) || 0;
@@ -36,6 +40,10 @@ function parseUsuarioLiberacao(it_entr) {
     if (!it_entr || typeof it_entr !== 'string') return 'N/A';
     return it_entr.split(' ').pop() || 'N/A';
 }
+
+// ==========================================================
+//               ROTAS DE RETIRADA RÁPIDA (BALCÃO)
+// ==========================================================
 
 router.get('/dav/:numero', authenticateToken, async (req, res) => {
     const davNumber = parseInt(req.params.numero, 10);
@@ -147,7 +155,7 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
             const textoAntigo = itemErp.it_reti || '';
             const now = new Date();
             const dStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-            const novoTexto = `Lançamento: ${dStr}  {${nomeUsuario}}\nCodigo....: ${itemErp.it_codi}\nDescrição.: ${itemErp.it_nome}\nQuantidade: ${parseFloat(itemErp.it_quan)}\nUnidade...: ${itemErp.it_unid}\nQT Entrega: ${qtd}\nSaldo.....: Baixa via App Gerencial\nRetirada..: ${qtd}\nLançamento: App Gerencial ID ${logResult.insertId}\nPortador..: App\nRetirado..: Retirada no Balcão via App`;
+            const novoTexto = `Lançamento: ${dStr}  {${nomeUsuario}}\nCodigo....: ${itemErp.it_codi}\nDescrição.: ${itemErp.it_nome}\nQuantidade: ${parseFloat(itemErp.it_quan)}\nUnidade...: ${itemErp.it_unid}\nQT Entrega: ${qtd}\nSaldo.....: Baixa via App Gerencial\nRetirada..: ${qtd}\nLançamento: App Gerencial ID ${logResult.insertId}\nPortador..: App\nRetirado..: Retirada no Balcão via App [WEB]`;
 
             await sc.execute(`UPDATE idavs SET it_reti = ? WHERE it_regist = ?`, [textoAntigo ? (textoAntigo + '\n' + novoTexto).trim() : novoTexto.trim(), idavsRegiNum]);
             await gc.execute(`UPDATE entregas_manuais_log SET erp_writeback_status = 'Sucesso' WHERE id = ?`, [logResult.insertId]);
@@ -165,6 +173,10 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
     }
 });
 
+// ==========================================================
+//               ROTAS DE GESTÃO DE ROMANEIOS E ACERTO
+// ==========================================================
+
 router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
     try {
         const [veiculos] = await gerencialPool.execute("SELECT id, modelo, placa, capacidade_kg FROM veiculos WHERE status = 'Ativo' ORDER BY modelo ASC");
@@ -181,7 +193,12 @@ router.get('/romaneios', authenticateToken, async (req, res) => {
         const params = [];
         const conditions = [];
 
-        if (status) { conditions.push('r.status = ?'); params.push(status); }
+        // Permite buscar multiplos status separados por vírgula (ex: status=Em montagem,Concluído)
+        if (status) { 
+            const statusArray = status.split(',');
+            conditions.push(`r.status IN (${statusArray.map(() => '?').join(',')})`);
+            params.push(...statusArray);
+        }
 
         if (perfil === 'Administrador' || perfil === 'Financeiro') {
             if (filial) { conditions.push('r.filial_origem = ?'); params.push(filial); }
@@ -190,7 +207,7 @@ router.get('/romaneios', authenticateToken, async (req, res) => {
         }
 
         if (conditions.length > 0) query += ' WHERE ' + conditions.join(' AND ');
-        query += ' ORDER BY r.data_criacao DESC';
+        query += ' ORDER BY r.id DESC';
 
         const [romaneios] = await gerencialPool.execute(query, params);
         res.json(romaneios);
@@ -243,6 +260,77 @@ router.delete('/romaneios/:id', authenticateToken, async (req, res) => {
         if(sc) sc.release(); 
     }
 });
+
+// NOVA ROTA: O ACERTO DE CONTAS (RETORNO DO CAMINHÃO)
+router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
+    const romaneioId = parseInt(req.params.id, 10);
+    const { itens_acerto } = req.body; 
+    const { nome: nomeUsuario } = req.user;
+
+    const gc = await gerencialPool.getConnection();
+    const sc = await seiPool.getConnection();
+
+    try {
+        await gc.beginTransaction();
+        await sc.beginTransaction();
+
+        const [statusRows] = await gc.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [romaneioId]);
+        if (statusRows.length === 0 || statusRows[0].status === 'Concluído') {
+            throw new Error('Romaneio não encontrado ou já está Concluído.');
+        }
+
+        const now = new Date();
+        const dStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+        for (const item of itens_acerto) {
+            const idavs_regi = parseInt(item.idavs_regi, 10);
+            const qtd_entregue = parseFloat(item.qtd_entregue) || 0;
+            const qtd_devolvida = parseFloat(item.qtd_devolvida) || 0;
+
+            const [itemErpRows] = await sc.execute(`SELECT * FROM idavs WHERE it_regist = ? FOR UPDATE`, [idavs_regi]);
+            if (itemErpRows.length === 0) continue;
+            const itemErp = itemErpRows[0];
+
+            if (qtd_entregue > 0) {
+                await sc.execute(`UPDATE idavs SET it_qent = it_qent + ? WHERE it_regist = ?`, [qtd_entregue, idavs_regi]);
+                const textoAntigo = itemErp.it_reti || '';
+                const novoTexto = `Lançamento: ${dStr}  {${nomeUsuario}}\nCodigo....: ${itemErp.it_codi}\nDescrição.: ${itemErp.it_nome}\nQuantidade: ${parseFloat(itemErp.it_quan)}\nUnidade...: ${itemErp.it_unid}\nQT Entrega: ${qtd_entregue}\nSaldo.....: Entrega de Romaneio #${romaneioId}\nLançamento: App Gerencial [WEB]\nPortador..: Motorista\nRetirado..: Entrega via Romaneio`;
+                await sc.execute(`UPDATE idavs SET it_reti = ? WHERE it_regist = ?`, [textoAntigo ? (textoAntigo + '\n' + novoTexto).trim() : novoTexto.trim(), idavs_regi]);
+            }
+
+            if (qtd_devolvida > 0) {
+                await sc.execute(`UPDATE idavs SET it_qtdv = it_qtdv + ? WHERE it_regist = ?`, [qtd_devolvida, idavs_regi]);
+                const [itemErpRowsAtualizado] = await sc.execute(`SELECT it_reti FROM idavs WHERE it_regist = ?`, [idavs_regi]);
+                const textoAntigoDev = itemErpRowsAtualizado[0].it_reti || '';
+                const novoTextoDev = `Lançamento: ${dStr}  {${nomeUsuario}}\nCodigo....: ${itemErp.it_codi}\nDescrição.: ${itemErp.it_nome}\nQT Devoluc.: ${qtd_devolvida}\nMotivo....: Retorno de Romaneio #${romaneioId} [WEB]`;
+                await sc.execute(`UPDATE idavs SET it_reti = ? WHERE it_regist = ?`, [textoAntigoDev ? (textoAntigoDev + '\n' + novoTextoDev).trim() : novoTextoDev.trim(), idavs_regi]);
+            }
+
+            await sc.execute("UPDATE idavs SET it_logi='0' WHERE it_regist=?", [idavs_regi]);
+        }
+
+        const [davsUnicos] = await gc.execute('SELECT DISTINCT dav_numero FROM romaneio_itens WHERE id_romaneio = ?', [romaneioId]);
+        for (const row of davsUnicos) {
+            const davStr = row.dav_numero.toString().padStart(13, '0');
+            await sc.execute("UPDATE cdavs SET cr_roma='', cr_dado='' WHERE cr_ndav=?", [davStr]);
+        }
+
+        await gc.execute(`UPDATE romaneios SET status = 'Concluído' WHERE id = ?`, [romaneioId]);
+
+        await gc.commit();
+        await sc.commit();
+        res.json({ message: 'Romaneio fechado e baixado no ERP com sucesso!' });
+
+    } catch (error) {
+        await gc.rollback();
+        if (sc) await sc.rollback();
+        res.status(400).json({ error: error.message });
+    } finally {
+        gc.release();
+        if (sc) sc.release();
+    }
+});
+
 
 router.get('/eligible-davs', authenticateToken, async (req, res) => {
     const { data, tipoData, apenasEntregaMarcada, bairro, davNumero, filialDav } = req.query;
@@ -325,7 +413,7 @@ router.get('/romaneios/:id', authenticateToken, async (req, res) => {
         const [romaneioDetails] = await gerencialPool.execute(`SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, r.status, v.modelo as modelo_veiculo, v.placa as placa_veiculo, IFNULL(v.capacidade_kg, 0) as capacidade_kg FROM romaneios r JOIN veiculos v ON r.id_veiculo = v.id WHERE r.id = ?`, [romaneioId]);
         if (romaneioDetails.length === 0) return res.status(404).json({ error: 'Romaneio não encontrado.' });
 
-        const [items] = await gerencialPool.execute(`SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar, i.it_nome as produto_nome, i.it_unid as produto_unidade, c.cr_nmcl as cliente_nome, COALESCE(NULLIF(p.pd_pesb, 0), NULLIF(p.pd_pesl, 0), 0) as peso_bruto_unitario FROM romaneio_itens ri LEFT JOIN ${dbConfigSei.database}.idavs i ON ri.idavs_regi = i.it_regist LEFT JOIN ${dbConfigSei.database}.cdavs c ON ri.dav_numero = c.cr_ndav LEFT JOIN ${dbConfigSei.database}.produtos p ON i.it_codi = p.pd_codi WHERE ri.id_romaneio = ? ORDER BY ri.dav_numero ASC`, [romaneioId]);
+        const [items] = await gerencialPool.execute(`SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar, ri.pd_codi as produto_codigo, ri.pd_nome as produto_nome, i.it_unid as produto_unidade, c.cr_nmcl as cliente_nome, COALESCE(NULLIF(p.pd_pesb, 0), NULLIF(p.pd_pesl, 0), 0) as peso_bruto_unitario FROM romaneio_itens ri LEFT JOIN ${dbConfigSei.database}.idavs i ON ri.idavs_regi = i.it_regist LEFT JOIN ${dbConfigSei.database}.cdavs c ON ri.dav_numero = c.cr_ndav LEFT JOIN ${dbConfigSei.database}.produtos p ON ri.pd_codi = p.pd_codi WHERE ri.id_romaneio = ? ORDER BY ri.dav_numero ASC`, [romaneioId]);
         
         res.json({ ...romaneioDetails[0], itens: items });
     } catch (error) { res.status(500).json({ error: 'Erro interno.' }); }
@@ -354,7 +442,6 @@ router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => {
         const alocadoMap = new Map(alocadoRows.map(i => [i.idavs_regi, i.total]));
 
         const now = new Date();
-        // AQUI ESTÁ A TAG [WEB] PROTEGENDO A IDENTIDADE DO SEU SISTEMA NO ERP
         const strDate = `1 ${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')} ${nomeUsuario} [WEB]`;
 
         for (const item of itens) {

@@ -3,117 +3,72 @@ document.addEventListener('DOMContentLoaded', initEntregasPage);
 // ==========================================================
 //               VARIÁVEIS GLOBAIS
 // ==========================================================
-// const apiUrlBase = '/api';  
+// const apiUrlBase = '/api';  // Descomente se não usar global.js
 
 let currentRomaneioId = null;     
 let veiculosDisp = []; 
 let pendingDavs = []; 
 let cartDavs = [];    
 
-// ==========================================================
-//               INICIALIZAÇÃO E AUTENTICAÇÃO
-// ==========================================================
+// Variáveis para a tela de Acerto
+let acertoRomaneioId = null;
+let acertoItensOriginal = [];
+let acertoChecklist = {}; 
 
+// ==========================================================
+//               INICIALIZAÇÃO E UTILIDADES
+// ==========================================================
 function getToken() { return localStorage.getItem('lucaUserToken'); }
-
 function getUserData() { 
-    const token = getToken(); 
-    if (!token) return null;
-    try { return JSON.parse(atob(token.split('.')[1])); } 
-    catch (e) { return null; } 
+    try { return JSON.parse(atob(getToken().split('.')[1])); } catch (e) { return null; } 
 }
-
-function getUserName() {
-    const userData = getUserData();
-    return userData?.nome || 'Utilizador';
-}
-
-function logout() { 
-    localStorage.removeItem('lucaUserToken'); 
-    localStorage.removeItem('company_logo');
-    window.location.href = 'login.html'; 
-}
+function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html'; }
 
 function initEntregasPage() {
     if (!getToken()) return window.location.href = 'login.html';
+    if (document.getElementById('user-name')) document.getElementById('user-name').textContent = getUserData()?.nome || 'Utilizador';
     
-    if (document.getElementById('user-name')) {
-        document.getElementById('user-name').textContent = getUserName();
-    }
-
-    loadCompanyLogo();
     setupEventListeners();
-    verificarPermissoesAdmin(); 
-    
-    const inputData = document.getElementById('filter-data');
-    if (inputData) inputData.value = new Date().toISOString().split('T')[0];
-    
-    document.getElementById('retirada-content').classList.remove('hidden');
-    gerenciarAcessoModulos(); 
-}
-
-function loadCompanyLogo() {
-    const companyLogo = document.getElementById('company-logo');
-    const logoBase64 = localStorage.getItem('company_logo');
-    if (logoBase64 && companyLogo) {
-        companyLogo.src = logoBase64;
-        companyLogo.style.display = 'block';
-    }
-}
-
-function verificarPermissoesAdmin() {
     const userData = getUserData();
-    if (userData && (userData.perfil === 'Administrador' || userData.perfil === 'Financeiro' || userData.perfil === 'Gerente')) {
-        const container = document.getElementById('filial-filter-container');
-        if(container) container.classList.remove('hidden');
+    if (userData && ['Administrador', 'Financeiro', 'Gerente'].includes(userData.perfil)) {
+        if(document.getElementById('filial-filter-container')) document.getElementById('filial-filter-container').classList.remove('hidden');
     }
+    
+    if (document.getElementById('filter-data')) document.getElementById('filter-data').value = new Date().toISOString().split('T')[0];
+    document.getElementById('retirada-content').classList.remove('hidden');
+    gerenciarAcessoModulos();
 }
-
-// ==========================================================
-//               UI COMPONENTES (MODAIS, TOASTS E LOCKS)
-// ==========================================================
 
 function showToast(message, type = 'success') {
     const container = document.getElementById('toast-container');
     if (!container) return alert(message); 
-    
     const toast = document.createElement('div');
     const bgColor = type === 'success' ? 'bg-green-600' : (type === 'error' ? 'bg-red-600' : 'bg-blue-600');
     const icon = type === 'success' ? 'check-circle' : (type === 'error' ? 'alert-triangle' : 'info');
-    
     toast.className = `toast flex items-center gap-3 ${bgColor} text-white px-4 py-3 rounded-lg shadow-xl pointer-events-auto border border-white/20`;
     toast.innerHTML = `<i data-feather="${icon}" class="w-5 h-5 shrink-0"></i><p class="text-sm font-bold shadow-sm">${message}</p>`;
-    
     container.appendChild(toast);
     if(typeof feather !== 'undefined') feather.replace();
-    
-    setTimeout(() => {
-        toast.classList.add('fade-out');
-        setTimeout(() => toast.remove(), 300);
-    }, 4000);
+    setTimeout(() => { toast.classList.add('fade-out'); setTimeout(() => toast.remove(), 300); }, 4000);
 }
 
 function showCustomConfirm(title, message, onConfirmCallback) {
     const modal = document.getElementById('custom-confirm-modal');
     document.getElementById('confirm-title').textContent = title;
     document.getElementById('confirm-message').textContent = message;
-    
     modal.classList.remove('hidden');
     setTimeout(() => modal.classList.remove('opacity-0'), 10);
     
     const btnYes = document.getElementById('btn-confirm-yes');
     const btnCancel = document.getElementById('btn-confirm-cancel');
-    
     const cleanup = () => {
         modal.classList.add('opacity-0');
         setTimeout(() => modal.classList.add('hidden'), 200);
         btnYes.removeEventListener('click', handleYes);
         btnCancel.removeEventListener('click', handleCancel);
     };
-    
     const handleYes = () => { cleanup(); onConfirmCallback(); };
     const handleCancel = () => { cleanup(); };
-    
     btnYes.addEventListener('click', handleYes);
     btnCancel.addEventListener('click', handleCancel);
 }
@@ -125,33 +80,31 @@ function hideLoader() { const l = document.getElementById('global-loader'); if(l
 
 
 // ==========================================================
-//               SETUP DE EVENT LISTENERS
+//               EVENT LISTENERS & ABAS
 // ==========================================================
-
 function setupEventListeners() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('delivery-tabs')?.addEventListener('click', handleTabSwitch);
 
     document.getElementById('search-dav-btn')?.addEventListener('click', handleSearchDav);
-    document.getElementById('dav-search-input')?.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleSearchDav();
-    });
+    document.getElementById('dav-search-input')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSearchDav(); });
 
     document.getElementById('btn-nova-carga')?.addEventListener('click', () => abrirTorreDeControle(null));
     document.getElementById('romaneios-list-container')?.addEventListener('click', handleRomaneioClick);
     
-    document.getElementById('back-to-romaneio-list-btn')?.addEventListener('click', () => {
-        document.getElementById('romaneio-detail-view').classList.add('hidden');
-        document.getElementById('romaneio-list-view').classList.remove('hidden');
-        loadRomaneiosAtivos();
-    });
-
     document.getElementById('btn-voltar-lista')?.addEventListener('click', fecharTorreDeControle);
     document.getElementById('btn-buscar-pendentes')?.addEventListener('click', buscarPedidosPendentes);
     document.getElementById('filter-bairro')?.addEventListener('change', renderPendingList);
     document.getElementById('filter-filial-dav')?.addEventListener('change', renderPendingList); 
     document.getElementById('select-veiculo')?.addEventListener('change', atualizarBarraDePeso);
     document.getElementById('btn-finalizar-carga')?.addEventListener('click', finalizarCarga);
+
+    document.getElementById('btn-cancelar-acerto')?.addEventListener('click', () => {
+        document.getElementById('acerto-content').classList.add('hidden');
+        document.getElementById('romaneio-list-view').classList.remove('hidden');
+        document.getElementById('tab-acerto').classList.add('hidden');
+    });
+    document.getElementById('btn-fechar-romaneio')?.addEventListener('click', finalizarAcertoRomaneio);
 }
 
 function handleTabSwitch(event) {
@@ -163,20 +116,20 @@ function handleTabSwitch(event) {
         btn.classList.add('text-gray-500', 'border-transparent');
     });
     button.classList.add('active', 'text-indigo-600', 'border-indigo-500');
-    button.classList.remove('text-gray-500', 'border-transparent');
-
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
     
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
     const targetContent = document.getElementById(`${button.dataset.tab}-content`);
     if (targetContent) targetContent.classList.remove('hidden');
 
     if (button.dataset.tab === 'romaneios') {
         document.getElementById('romaneio-split-view').classList.add('hidden');
-        document.getElementById('romaneio-detail-view').classList.add('hidden');
+        document.getElementById('acerto-content').classList.add('hidden');
+        document.getElementById('tab-acerto').classList.add('hidden');
         document.getElementById('romaneio-list-view').classList.remove('hidden');
         loadRomaneiosAtivos(); 
     }
 }
+
 
 // ==========================================================
 //               ABA 1: RETIRADA RÁPIDA (BALCÃO)
@@ -281,9 +234,7 @@ async function handleConfirmRetirada(davNumber) {
         }
     });
 
-    if (itemsParaRetirar.length === 0) {
-        return showToast("Aumente a quantidade de pelo menos 1 item para retirar.", "error");
-    }
+    if (itemsParaRetirar.length === 0) return showToast("Aumente a quantidade de pelo menos 1 item para retirar.", "error");
 
     showCustomConfirm("Confirmar Retirada", `Deseja registrar a retirada no balcão de ${itemsParaRetirar.length} produto(s)? Esta ação vai dar baixa no ERP.`, async () => {
         lockUI();
@@ -302,11 +253,10 @@ async function handleConfirmRetirada(davNumber) {
             handleSearchDav(); 
         } catch (error) {
             showToast(`Erro: ${error.message}`, 'error');
-        } finally {
-            unlockUI();
-        }
+        } finally { unlockUI(); }
     });
 }
+
 
 // ==========================================================
 //               ABA 2: LISTAGEM DE ROMANEIOS ATIVOS
@@ -334,7 +284,7 @@ async function loadRomaneiosAtivos() {
 
         container.innerHTML = romaneios.map(r => {
             let actionButtons = `
-                <button onclick="abrirTorreDeControle(${r.id})" class="text-indigo-600 bg-indigo-50 border border-indigo-200 text-xs font-bold hover:bg-indigo-600 hover:text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm shrink-0">
+                <button onclick="abrirTorreDeControle(${r.id})" class="text-indigo-600 bg-indigo-50 border border-indigo-200 text-[10px] font-bold hover:bg-indigo-600 hover:text-white px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm shrink-0">
                     <i data-feather="edit-2" class="w-3.5 h-3.5"></i> Editar Carga
                 </button>
             `;
@@ -342,10 +292,21 @@ async function loadRomaneiosAtivos() {
             if (r.status === 'Em montagem') {
                 actionButtons = `
                     <div class="flex flex-col sm:flex-row items-end sm:items-center gap-2 mt-3 sm:mt-0">
-                        <button onclick="excluirRomaneio(${r.id})" class="text-red-600 hover:text-white bg-white hover:bg-red-600 border border-red-200 text-xs font-bold px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm" title="Cancelar e Excluir">
+                        <button onclick="excluirRomaneio(${r.id})" class="text-red-600 hover:text-white bg-white hover:bg-red-600 border border-red-200 text-[10px] font-bold px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm" title="Cancelar e Excluir">
                             <i data-feather="trash-2" class="w-3.5 h-3.5"></i> Excluir
                         </button>
                         ${actionButtons}
+                        <button onclick="abrirAcertoContas(${r.id})" class="text-blue-600 bg-blue-50 border border-blue-200 text-[10px] font-bold hover:bg-blue-600 hover:text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+                            <i data-feather="check-square" class="w-4 h-4"></i> Acerto de Retorno
+                        </button>
+                    </div>
+                `;
+            } else {
+                 actionButtons = `
+                    <div class="flex items-center gap-2 mt-3 sm:mt-0">
+                        <button onclick="abrirAcertoContas(${r.id})" class="text-blue-600 bg-blue-50 border border-blue-200 text-[10px] font-bold hover:bg-blue-600 hover:text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+                            <i data-feather="check-square" class="w-4 h-4"></i> Acerto de Retorno
+                        </button>
                     </div>
                 `;
             }
@@ -371,31 +332,23 @@ async function loadRomaneiosAtivos() {
     }
 }
 
-function handleRomaneioClick(event) {
-    if(event.target.closest('button')) return; 
-}
+function handleRomaneioClick(event) { if(event.target.closest('button')) return; }
 
 window.excluirRomaneio = function(id) {
-    showCustomConfirm(
-        "Excluir Carga?",
-        `Deseja realmente excluir a carga #${id}? Os pedidos voltarão para a prateleira.`,
-        async () => {
-            lockUI();
-            try {
-                const res = await fetch(`${apiUrlBase}/entregas/romaneios/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getToken()}` }});
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error);
-                showToast("Carga excluída com sucesso.", "success");
-                loadRomaneiosAtivos(); 
-            } catch (e) {
-                showToast(e.message, "error");
-            } finally { unlockUI(); }
-        }
-    );
+    showCustomConfirm("Excluir Carga?", `Deseja realmente excluir a carga #${id}? Os pedidos voltarão para a prateleira.`, async () => {
+        lockUI();
+        try {
+            const res = await fetch(`${apiUrlBase}/entregas/romaneios/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getToken()}` }});
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            showToast("Carga excluída com sucesso.", "success");
+            loadRomaneiosAtivos(); 
+        } catch (e) { showToast(e.message, "error"); } finally { unlockUI(); }
+    });
 };
 
 // ==========================================================
-//               TORRE DE CONTROLE (NOVO & EDIÇÃO)
+//               TORRE DE CONTROLE (MONTAGEM & EDIÇÃO)
 // ==========================================================
 
 async function abrirTorreDeControle(romaneioIdParaEditar = null) {
@@ -424,7 +377,6 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
     if (currentRomaneioId) {
         if (tituloCarrinho) tituloCarrinho.innerHTML = `Editando Carga #${currentRomaneioId}`;
         if (textoBtnFinalizar) textoBtnFinalizar.textContent = 'Salvar Alterações';
-        
         if (document.getElementById('select-veiculo')) document.getElementById('select-veiculo').disabled = true;
         if (document.getElementById('input-motorista')) document.getElementById('input-motorista').disabled = true;
         
@@ -445,7 +397,7 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
                 acc[item.dav_numero].peso_total_dav += peso;
                 acc[item.dav_numero].itens.push({
                     romaneio_item_id: item.romaneio_item_id, 
-                    idavs_regi: item.idavs_regi, nome: item.produto_nome, unidade: item.produto_unidade, peso_unitario: parseFloat(item.peso_bruto_unitario), saldo: parseFloat(item.quantidade_a_entregar)
+                    idavs_regi: item.idavs_regi, codigo: item.produto_codigo, nome: item.produto_nome, unidade: item.produto_unidade, peso_unitario: parseFloat(item.peso_bruto_unitario), saldo: parseFloat(item.quantidade_a_entregar)
                 });
                 return acc;
             }, {});
@@ -456,7 +408,6 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
     } else {
         if (tituloCarrinho) tituloCarrinho.innerHTML = `Montar Nova Carga`;
         if (textoBtnFinalizar) textoBtnFinalizar.textContent = 'Finalizar e Despachar Carga';
-        
         if (document.getElementById('select-veiculo')) {
             document.getElementById('select-veiculo').disabled = false;
             document.getElementById('select-veiculo').value = '';
@@ -492,7 +443,6 @@ async function buscarPedidosPendentes() {
 
     const tipoData = document.querySelector('input[name="tipo-data"]:checked')?.value || 'entrega';
     const apenasAgendado = document.getElementById('filter-somente-agendado').checked;
-    
     const filialInput = document.getElementById('filter-filial-dav');
     const filialStr = (filialInput && !document.getElementById('filial-filter-container').classList.contains('hidden') && filialInput.value) 
                         ? `&filialDav=${filialInput.value}` : '';
@@ -510,14 +460,12 @@ async function buscarPedidosPendentes() {
         if (!res.ok) throw new Error("Falha ao buscar pedidos.");
         const davs = await res.json();
         
-        // Remove da pesquisa inicial o que já está no carrinho (ou abate o saldo)
         pendingDavs = [];
         davs.forEach(novoDav => {
             const cartDav = cartDavs.find(c => String(c.dav_numero) === String(novoDav.dav_numero));
             if (!cartDav) {
                 pendingDavs.push(novoDav);
             } else {
-                // Abate os saldos dos itens se o DAV já está parcialmente no carrinho
                 const itensRestantes = [];
                 novoDav.itens.forEach(novoItem => {
                     const cartItem = cartDav.itens.find(ci => String(ci.idavs_regi) === String(novoItem.idavs_regi));
@@ -525,9 +473,7 @@ async function buscarPedidosPendentes() {
                         novoItem.saldo -= cartItem.saldo;
                         novoItem.peso_total_item = novoItem.saldo * parseFloat(novoItem.peso_unitario);
                     }
-                    if (novoItem.saldo > 0) {
-                        itensRestantes.push(novoItem);
-                    }
+                    if (novoItem.saldo > 0) itensRestantes.push(novoItem);
                 });
                 
                 if (itensRestantes.length > 0) {
@@ -571,7 +517,6 @@ function renderPendingList() {
         const dataAgendada = dav.data_agendada ? new Date(dav.data_agendada).toLocaleDateString('pt-BR') : '-';
         const vendedorNome = dav.vendedor || 'Não informado';
         
-        // A MÁGICA FRACIONADA: O Input para escolher quantos enviar para o caminhão!
         const itensHtml = dav.itens.map(item => {
             const tagEntregue = item.entregue > 0 ? `<span class="bg-teal-100 text-teal-800 px-1 py-0.5 rounded text-[8px] font-bold">Já Entregue: ${item.entregue}</span>` : '';
             const tagDevolvido = item.devolvido > 0 ? `<span class="bg-red-100 text-red-700 px-1 py-0.5 rounded text-[8px] font-bold">Devolvido: ${item.devolvido}</span>` : '';
@@ -598,6 +543,7 @@ function renderPendingList() {
                     </p>
                     <div class="flex gap-2 mt-2 items-center flex-wrap">
                         <span class="text-[9px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 shadow-sm"><i data-feather="map-pin" class="w-3 h-3 inline"></i> ${dav.bairro.trim()}</span>
+                        <span class="text-[9px] text-teal-800 font-bold bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 shadow-sm"><i data-feather="user" class="w-3 h-3 inline"></i> ${vendedorNome}</span>
                         <span class="text-[9px] text-blue-800 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 shadow-sm">Ven: ${dataVenda} | Ent: ${dataAgendada}</span>
                         <span class="text-[9px] text-orange-700 font-bold bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 shadow-sm"><i data-feather="anchor" class="w-3 h-3 inline"></i> ${dav.peso_total_dav.toLocaleString('pt-BR', {minimumFractionDigits: 1})} kg</span>
                     </div>
@@ -639,7 +585,7 @@ function renderCartList() {
     container.innerHTML = cartDavs.map(dav => {
         const itensCartHtml = dav.itens.map(item => `
             <div class="flex justify-between items-center mt-1 border-t border-gray-100 pt-1.5">
-                <span class="text-[9px] font-bold text-gray-700 truncate flex-1">${item.codigo} - ${item.nome}</span>
+                <span class="text-[9px] font-bold text-gray-700 truncate flex-1">${item.codigo || ''} - ${item.nome}</span>
                 <span class="text-[10px] font-black text-indigo-700 w-16 text-right mr-3">${item.saldo} ${item.unidade}</span>
                 <button onclick="removerItemDoCarrinho('${dav.dav_numero}', '${item.idavs_regi}', ${dav.is_existing}, ${item.romaneio_item_id || null})" class="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded transition-colors" title="Retirar do Caminhão"><i data-feather="x" class="w-3 h-3"></i></button>
             </div>
@@ -662,67 +608,51 @@ function renderCartList() {
         </div>
         `;
     }).join('');
-    
     if(typeof feather !== 'undefined') feather.replace(); atualizarBarraDePeso();
 }
 
-// ADICIONAR TUDO (Botão grande)
 window.adicionarAoCarrinhoCompleto = function(davNumero) {
     const pDavIdx = pendingDavs.findIndex(d => String(d.dav_numero) === String(davNumero));
     if (pDavIdx === -1) return;
     const pDav = pendingDavs[pDavIdx];
-    
-    // Adiciona item por item (para manter o fracionamento correto)
-    // Usamos slice(0) para não quebrar o array enquanto iteramos e ele é modificado
     const itensParaAdd = pDav.itens.slice(0); 
     itensParaAdd.forEach(item => {
         adicionarItemFracionadoLogica(davNumero, item.idavs_regi, item.saldo);
     });
-    
     renderPendingList(); renderCartList();
 };
 
-// ADICIONAR FRACIONADO (Botão pequeno dentro da gaveta)
 window.adicionarItemFracionado = function(davNumero, idavsRegi) {
     const input = document.getElementById(`frac-${davNumero}-${idavsRegi}`);
     if (!input) return;
     const qtdDesejada = parseFloat(input.value);
-    
     if (isNaN(qtdDesejada) || qtdDesejada <= 0) return showToast("Quantidade inválida.", "error");
-    
     adicionarItemFracionadoLogica(davNumero, idavsRegi, qtdDesejada);
     renderPendingList(); renderCartList();
 };
 
-// O Motor da Quebra de Carga
 function adicionarItemFracionadoLogica(davNumero, idavsRegi, qtdDesejada) {
     const pDavIdx = pendingDavs.findIndex(d => String(d.dav_numero) === String(davNumero));
     if (pDavIdx === -1) return;
     const pDav = pendingDavs[pDavIdx];
-    
     const pItemIdx = pDav.itens.findIndex(i => String(i.idavs_regi) === String(idavsRegi));
     if (pItemIdx === -1) return;
     const pItem = pDav.itens[pItemIdx];
     
-    if (qtdDesejada > pItem.saldo) {
-        return showToast(`Só existem ${pItem.saldo} unidades de ${pItem.nome}.`, "error");
-    }
+    if (qtdDesejada > pItem.saldo) return showToast(`Só existem ${pItem.saldo} unidades disponíveis.`, "error");
 
-    // Procura ou Cria o DAV no Caminhão
     let cDav = cartDavs.find(d => String(d.dav_numero) === String(davNumero));
     if (!cDav) {
         cDav = { ...pDav, itens: [], peso_total_dav: 0, is_existing: false };
         cartDavs.push(cDav);
     }
     
-    // Procura ou Cria o Item no Caminhão
     let cItem = cDav.itens.find(i => String(i.idavs_regi) === String(idavsRegi));
     if (!cItem) {
         cItem = { ...pItem, saldo: 0, romaneio_item_id: null };
         cDav.itens.push(cItem);
     }
     
-    // Faz a transferência de peso e quantidade
     cItem.saldo += qtdDesejada;
     const pesoAdd = qtdDesejada * parseFloat(pItem.peso_unitario);
     cDav.peso_total_dav += pesoAdd;
@@ -730,22 +660,17 @@ function adicionarItemFracionadoLogica(davNumero, idavsRegi, qtdDesejada) {
     pItem.saldo -= qtdDesejada;
     pDav.peso_total_dav -= pesoAdd;
     
-    // Limpa se esvaziar
     if (pItem.saldo <= 0) pDav.itens.splice(pItemIdx, 1);
     if (pDav.itens.length === 0) pendingDavs.splice(pDavIdx, 1);
 }
 
-// REMOVER ITEM INDIVIDUAL DO CAMINHÃO
 window.removerItemDoCarrinho = function(davNumero, idavsRegi, isExisting, romaneioItemId) {
-    
-    // Se o item já estava salvo no banco, usamos a rota de exclusão de BD
     if (isExisting && romaneioItemId) {
         showCustomConfirm("Remover do Romaneio?", `Este item já está gravado no Caminhão. Deseja remover do banco de dados e devolver para a prateleira?`, async () => {
             lockUI();
             try {
                 await fetch(`${apiUrlBase}/entregas/romaneios/${currentRomaneioId}/itens/${romaneioItemId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getToken()}` } });
                 showToast(`Item removido do caminhão com sucesso.`, 'success');
-                // Recarrega tudo do banco para garantir integridade matemática perfeita
                 abrirTorreDeControle(currentRomaneioId);
             } catch(e) { showToast("Erro ao remover item.", 'error'); } 
             finally { unlockUI(); }
@@ -753,7 +678,6 @@ window.removerItemDoCarrinho = function(davNumero, idavsRegi, isExisting, romane
         return;
     }
 
-    // Se é um item que acabamos de colocar (só memória), devolvemos para a prateleira
     const cDavIdx = cartDavs.findIndex(d => String(d.dav_numero) === String(davNumero));
     if (cDavIdx === -1) return;
     const cDav = cartDavs[cDavIdx];
@@ -866,7 +790,6 @@ async function finalizarCarga() {
         const payloadItens = [];
         cartDavs.filter(dav => !dav.is_existing).forEach(dav => {
             dav.itens.forEach(item => {
-                // AQUI usamos o item.saldo porque no carrinho ele representa a quantidade!
                 payloadItens.push({ dav_numero: dav.dav_numero, idavs_regi: item.idavs_regi, quantidade_a_entregar: item.saldo });
             });
         });
@@ -895,5 +818,233 @@ async function finalizarCarga() {
         if(typeof feather !== 'undefined') feather.replace();
     } finally {
         unlockUI();
+    }
+}
+
+// ==========================================================
+//               NOVO MÓDULO: ACERTO DE CONTAS (CHECKLIST)
+// ==========================================================
+
+async function abrirAcertoContas(romaneioId) {
+    showLoader();
+    acertoRomaneioId = romaneioId;
+    
+    document.getElementById('romaneio-list-view').classList.add('hidden');
+    document.getElementById('tab-acerto').classList.remove('hidden');
+    document.getElementById('acerto-content').classList.remove('hidden');
+    
+    try {
+        const res = await fetch(`${apiUrlBase}/entregas/romaneios/${romaneioId}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const data = await res.json();
+        
+        document.getElementById('acerto-romaneio-id').textContent = data.id;
+        document.getElementById('acerto-motorista').textContent = data.nome_motorista;
+        document.getElementById('acerto-veiculo').textContent = data.placa_veiculo;
+
+        acertoItensOriginal = data.itens;
+        acertoChecklist = {};
+        data.itens.forEach(item => {
+            acertoChecklist[item.romaneio_item_id] = {
+                status: 'pendente', 
+                qtd_entregue: 0,
+                qtd_devolvida: 0,
+                qtd_enviada: parseFloat(item.quantidade_a_entregar)
+            };
+        });
+
+        renderAcertoChecklist();
+
+    } catch(e) {
+        showToast("Erro ao carregar itens da carga.", "error");
+    } finally { hideLoader(); }
+}
+
+function renderAcertoChecklist() {
+    const container = document.getElementById('acerto-itens-container');
+    
+    const grouped = acertoItensOriginal.reduce((acc, item) => {
+        if(!acc[item.dav_numero]) acc[item.dav_numero] = { cliente: item.cliente_nome, itens: [] };
+        acc[item.dav_numero].itens.push(item);
+        return acc;
+    }, {});
+
+    let html = '';
+    for (const [davNumero, dados] of Object.entries(grouped)) {
+        html += `<div class="border border-gray-200 rounded-lg overflow-hidden shadow-sm mb-4">
+                    <div class="bg-gray-100 px-4 py-2 border-b flex justify-between items-center">
+                        <span class="font-black text-gray-800 text-xs">DAV #${davNumero} - <span class="text-gray-600 font-medium">${dados.cliente}</span></span>
+                    </div>
+                    <div class="divide-y divide-gray-100 bg-white">`;
+        
+        dados.itens.forEach(item => {
+            const state = acertoChecklist[item.romaneio_item_id];
+            
+            let rowClass = 'hover:bg-gray-50';
+            let feedbackHtml = '';
+            
+            if (state.status === 'entregue_total') {
+                rowClass = 'acerto-entregue';
+                feedbackHtml = `<span class="text-[10px] font-black text-green-700 bg-white px-2 py-0.5 rounded shadow-sm border border-green-200">100% Entregue</span>`;
+            } else if (state.status === 'devolvido_total') {
+                rowClass = 'acerto-devolvido';
+                feedbackHtml = `<span class="text-[10px] font-black text-red-700 bg-white px-2 py-0.5 rounded shadow-sm border border-red-200">100% Devolvido</span>`;
+            } else if (state.status === 'parcial') {
+                rowClass = 'acerto-parcial';
+                feedbackHtml = `<span class="text-[10px] font-black text-orange-700 bg-white px-2 py-0.5 rounded shadow-sm border border-orange-200">Entregou: ${state.qtd_entregue} | Voltou: ${state.qtd_devolvida}</span>`;
+            }
+
+            html += `
+                <div class="p-3 flex flex-col sm:flex-row justify-between sm:items-center gap-2 transition-colors ${rowClass}">
+                    <div class="flex-1">
+                        <p class="text-xs font-bold text-gray-800">${item.produto_codigo || ''} - ${item.produto_nome}</p>
+                        <p class="text-[10px] font-black text-gray-500 mt-0.5 uppercase tracking-wider">Enviado: ${state.qtd_enviada} ${item.produto_unidade} ${feedbackHtml ? `&nbsp;&bull;&nbsp; ${feedbackHtml}` : ''}</p>
+                    </div>
+                    <div class="flex items-center gap-1.5 shrink-0 bg-white p-1 rounded shadow-sm border border-gray-200">
+                        <button onclick="setAcertoStatus(${item.romaneio_item_id}, 'entregue_total')" class="p-1.5 rounded hover:bg-green-100 text-green-600 transition-colors" title="Entregue 100%"><i data-feather="check" class="w-4 h-4"></i></button>
+                        <div class="w-px h-4 bg-gray-200"></div>
+                        <button onclick="setAcertoStatus(${item.romaneio_item_id}, 'devolvido_total')" class="p-1.5 rounded hover:bg-red-100 text-red-600 transition-colors" title="Devolvido 100%"><i data-feather="x" class="w-4 h-4"></i></button>
+                        <div class="w-px h-4 bg-gray-200"></div>
+                        <button onclick="abrirAcertoParcial(${item.romaneio_item_id})" class="p-1.5 rounded hover:bg-orange-100 text-orange-500 transition-colors" title="Devolução Parcial"><i data-feather="pie-chart" class="w-4 h-4"></i></button>
+                    </div>
+                </div>`;
+        });
+        html += `</div></div>`;
+    }
+    container.innerHTML = html;
+    if(typeof feather !== 'undefined') feather.replace();
+}
+
+window.setAcertoStatus = function(itemId, acao) {
+    const state = acertoChecklist[itemId];
+    if (acao === 'entregue_total') {
+        state.status = 'entregue_total';
+        state.qtd_entregue = state.qtd_enviada;
+        state.qtd_devolvida = 0;
+    } else if (acao === 'devolvido_total') {
+        state.status = 'devolvido_total';
+        state.qtd_entregue = 0;
+        state.qtd_devolvida = state.qtd_enviada;
+    }
+    renderAcertoChecklist();
+};
+
+window.abrirAcertoParcial = function(itemId) {
+    const state = acertoChecklist[itemId];
+    const qtdDevolvida = prompt(`Quantidade TOTAL ENVIADA: ${state.qtd_enviada}.\n\nQuantas unidades VOLTARAM (Devolução)?`);
+    
+    if (qtdDevolvida === null) return; 
+    const val = parseFloat(qtdDevolvida);
+    
+    if (isNaN(val) || val < 0 || val > state.qtd_enviada) {
+        return showToast("Quantidade inválida. A devolução não pode ser maior que o enviado.", "error");
+    }
+
+    if (val === 0) {
+        setAcertoStatus(itemId, 'entregue_total');
+    } else if (val === state.qtd_enviada) {
+        setAcertoStatus(itemId, 'devolvido_total');
+    } else {
+        state.status = 'parcial';
+        state.qtd_devolvida = val;
+        state.qtd_entregue = state.qtd_enviada - val;
+        renderAcertoChecklist();
+    }
+};
+
+async function finalizarAcertoRomaneio() {
+    const itensPendentes = Object.values(acertoChecklist).filter(s => s.status === 'pendente');
+    if (itensPendentes.length > 0) {
+        return showToast(`Existem ${itensPendentes.length} itens sem conferência. Marque todos antes de finalizar.`, "error");
+    }
+
+    showCustomConfirm("Finalizar e Arquivar?", "Confirma o encerramento deste romaneio? O sistema dará baixa definitiva no ERP.", async () => {
+        lockUI();
+        const btn = document.getElementById('btn-fechar-romaneio');
+        const textOrig = btn.innerHTML;
+        btn.innerHTML = '<i data-feather="loader" class="animate-spin w-5 h-5"></i> Aplicando no ERP...';
+        if(typeof feather !== 'undefined') feather.replace();
+
+        try {
+            const payload = [];
+            for (const [id, state] of Object.entries(acertoChecklist)) {
+                const itemBanco = acertoItensOriginal.find(i => String(i.romaneio_item_id) === String(id));
+                payload.push({
+                    romaneio_item_id: id,
+                    dav_numero: itemBanco.dav_numero,
+                    idavs_regi: itemBanco.idavs_regi,
+                    qtd_entregue: state.qtd_entregue,
+                    qtd_devolvida: state.qtd_devolvida
+                });
+            }
+
+            const res = await fetch(`${apiUrlBase}/entregas/romaneios/${acertoRomaneioId}/fechar`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+                body: JSON.stringify({ itens_acerto: payload })
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error);
+            }
+
+            showToast("Romaneio encerrado e arquivado com sucesso!", "success");
+            document.getElementById('btn-cancelar-acerto').click(); 
+
+        } catch (e) {
+            showToast(e.message, "error");
+            btn.innerHTML = textOrig;
+            if(typeof feather !== 'undefined') feather.replace();
+        } finally {
+            unlockUI();
+        }
+    });
+}
+
+function gerenciarAcessoModulos() {
+    const userData = getUserData();
+    if (!userData || !userData.permissoes) return;
+
+    const mapaModulos = {
+        'lancamentos': 'despesas.html',
+        'logistica': 'logistica.html',
+        'entregas': 'entregas.html',
+        'checklist': 'checklist.html',
+        'produtos': 'produtos.html',
+        'configuracoes': 'settings.html'
+    };
+
+    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
+        const permissao = userData.permissoes.find(p => p.nome_modulo === nomeModulo);
+        if (!permissao || !permissao.permitido) {
+            const link = document.querySelector(`#sidebar a[href="${href}"]`);
+            if (link && link.parentElement) link.parentElement.style.display = 'none';
+        }
+    }
+}
+
+async function popularSelect(selectElement, codParametro, token, placeholderText) {
+    if (!selectElement) return [];
+    try {
+        const response = await fetch(`${apiUrlBase}/settings/parametros?cod=${codParametro}`, { 
+            headers: { 'Authorization': `Bearer ${token}` } 
+        });
+        if (!response.ok) throw new Error("Falha ao carregar.");
+        const data = await response.json();
+        selectElement.innerHTML = `<option value="">${placeholderText}</option>` + 
+            data.map(p => `<option value="${p.NOME_PARAMETRO}">${p.NOME_PARAMETRO}</option>`).join('');
+        return data;
+    } catch (error) {
+        selectElement.innerHTML = `<option value="">Erro</option>`;
+        return [];
+    }
+}
+
+function handleApiError(response) {
+    if (response.status === 401 || response.status === 403) {
+        showToast("Sessão expirada. Faça login novamente.", "error");
+        setTimeout(logout, 2000);
+    } else {
+        response.json().then(data => showToast(`Erro: ${data.error || response.statusText}`, "error")).catch(() => showToast('Erro na API.', "error"));
     }
 }
