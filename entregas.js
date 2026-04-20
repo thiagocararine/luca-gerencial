@@ -3,8 +3,11 @@ document.addEventListener('DOMContentLoaded', initEntregasPage);
 // ==========================================================
 //               VARIÁVEIS GLOBAIS
 // ==========================================================
+// const apiUrlBase = '/api';  
+
 let currentRomaneioId = null;     
 let veiculosDisp = []; 
+let motoristasDisp = []; 
 let pendingDavs = []; 
 let cartDavs = [];    
 let romaneioListStatus = 'Em montagem'; 
@@ -13,8 +16,13 @@ let acertoRomaneioId = null;
 let acertoItensOriginal = [];
 let acertoChecklist = {}; 
 
+// ==========================================================
+//               INICIALIZAÇÃO E UTILIDADES
+// ==========================================================
 function getToken() { return localStorage.getItem('lucaUserToken'); }
-function getUserData() { try { return JSON.parse(atob(getToken().split('.')[1])); } catch (e) { return null; } }
+function getUserData() { 
+    try { return JSON.parse(atob(getToken().split('.')[1])); } catch (e) { return null; } 
+}
 function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html'; }
 
 function initEntregasPage() {
@@ -56,12 +64,15 @@ function showCustomConfirm(title, message, onConfirmCallback) {
     const btnYes = document.getElementById('btn-confirm-yes');
     const btnCancel = document.getElementById('btn-confirm-cancel');
     const cleanup = () => {
-        modal.classList.add('opacity-0'); setTimeout(() => modal.classList.add('hidden'), 200);
-        btnYes.removeEventListener('click', handleYes); btnCancel.removeEventListener('click', handleCancel);
+        modal.classList.add('opacity-0');
+        setTimeout(() => modal.classList.add('hidden'), 200);
+        btnYes.removeEventListener('click', handleYes);
+        btnCancel.removeEventListener('click', handleCancel);
     };
     const handleYes = () => { cleanup(); onConfirmCallback(); };
     const handleCancel = () => { cleanup(); };
-    btnYes.addEventListener('click', handleYes); btnCancel.addEventListener('click', handleCancel);
+    btnYes.addEventListener('click', handleYes);
+    btnCancel.addEventListener('click', handleCancel);
 }
 
 function showCustomPrompt(title, message, maxVal, onConfirmCallback) {
@@ -70,20 +81,33 @@ function showCustomPrompt(title, message, maxVal, onConfirmCallback) {
     document.getElementById('prompt-message').textContent = message;
     
     const input = document.getElementById('prompt-input');
-    input.value = ''; input.max = maxVal;
+    input.value = '';
+    input.max = maxVal;
     
     modal.classList.remove('hidden');
-    setTimeout(() => { modal.classList.remove('opacity-0'); input.focus(); }, 10);
+    setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        input.focus();
+    }, 10);
     
     const btnYes = document.getElementById('btn-prompt-confirm');
     const btnCancel = document.getElementById('btn-prompt-cancel');
+    
     const cleanup = () => {
-        modal.classList.add('opacity-0'); setTimeout(() => modal.classList.add('hidden'), 200);
-        btnYes.removeEventListener('click', handleYes); btnCancel.removeEventListener('click', handleCancel);
+        modal.classList.add('opacity-0');
+        setTimeout(() => modal.classList.add('hidden'), 200);
+        btnYes.removeEventListener('click', handleYes);
+        btnCancel.removeEventListener('click', handleCancel);
     };
-    const handleYes = () => { cleanup(); onConfirmCallback(input.value); };
+    
+    const handleYes = () => { 
+        cleanup(); 
+        onConfirmCallback(input.value); 
+    };
     const handleCancel = () => { cleanup(); };
-    btnYes.addEventListener('click', handleYes); btnCancel.addEventListener('click', handleCancel);
+    
+    btnYes.addEventListener('click', handleYes);
+    btnCancel.addEventListener('click', handleCancel);
 }
 
 function lockUI() { document.getElementById('ui-lock-overlay').classList.remove('hidden'); }
@@ -92,12 +116,15 @@ function showLoader() { const l = document.getElementById('global-loader'); if(l
 function hideLoader() { const l = document.getElementById('global-loader'); if(l) l.style.display = 'none'; }
 
 // ==========================================================
-//               NAVEGAÇÃO (SPA)
+//               NAVEGAÇÃO SPA E EVENTOS
 // ==========================================================
 function switchView(viewId) {
-    ['romaneio-list-view', 'retirada-view', 'romaneio-split-view', 'acerto-view', 'historico-view'].forEach(id => {
-        const el = document.getElementById(id); if (el) el.classList.add('hidden');
+    const views = ['romaneio-list-view', 'retirada-view', 'romaneio-split-view', 'acerto-view', 'historico-view'];
+    views.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
     });
+    
     const target = document.getElementById(viewId);
     if (target) target.classList.remove('hidden');
 
@@ -107,6 +134,7 @@ function switchView(viewId) {
 
 function setupEventListeners() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
+
     document.getElementById('btn-open-retirada')?.addEventListener('click', () => switchView('retirada-view'));
     document.getElementById('btn-open-historico')?.addEventListener('click', () => switchView('historico-view'));
     
@@ -122,11 +150,11 @@ function setupEventListeners() {
     
     document.getElementById('btn-tab-andamento')?.addEventListener('click', () => { romaneioListStatus = 'Em montagem'; updateListTabs(); loadRomaneiosAtivos(); });
     document.getElementById('btn-tab-concluidas')?.addEventListener('click', () => { romaneioListStatus = 'Concluido'; updateListTabs(); loadRomaneiosAtivos(); });
-    
+
     document.getElementById('btn-buscar-pendentes')?.addEventListener('click', buscarPedidosPendentes);
     document.getElementById('filter-bairro')?.addEventListener('change', renderPendingList);
     document.getElementById('filter-filial-dav')?.addEventListener('change', renderPendingList); 
-    document.getElementById('filter-receber-local')?.addEventListener('change', buscarPedidosPendentes); 
+    document.getElementById('filter-receber-local')?.addEventListener('change', renderPendingList); 
     document.getElementById('select-veiculo')?.addEventListener('change', atualizarBarraDePeso);
     document.getElementById('btn-finalizar-carga')?.addEventListener('click', finalizarCarga);
     
@@ -145,6 +173,28 @@ function updateListTabs() {
     } else {
         btnConcluidas.className = "px-4 py-1.5 rounded-md bg-white shadow-sm text-sm font-bold text-indigo-600 transition-colors";
         btnAndamento.className = "px-4 py-1.5 rounded-md text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors";
+    }
+}
+
+// ==========================================================
+//               PDF DA NOTA FISCAL (DANFE)
+// ==========================================================
+window.abrirDanfe = async function(chave) {
+    showLoader();
+    try {
+        const res = await fetch(`${apiUrlBase}/entregas/danfe/${chave}`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        
+        if (!res.ok) throw new Error((await res.json()).error || "Erro ao carregar a Nota Fiscal.");
+        
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank'); 
+    } catch(e) {
+        showToast(e.message, "error");
+    } finally {
+        hideLoader();
     }
 }
 
@@ -168,7 +218,9 @@ async function handleSearchDav() {
     } catch (error) {
         resultsContainer.innerHTML = '';
         showToast(error.message, 'error');
-    } finally { hideLoader(); }
+    } finally {
+        hideLoader();
+    }
 }
 
 function renderDavResults(data) {
@@ -180,6 +232,7 @@ function renderDavResults(data) {
     if (status_caixa === '1') statusTagHtml = `<span class="ml-3 inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-green-600 text-white shadow-sm">Pago (Recebido)</span>`;
     else statusTagHtml = `<span class="ml-3 inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-600 text-white animate-pulse shadow-sm">Pagamento Pendente</span>`;
 
+    // Atualizado com o botão PDF Node.js
     let nfeBadge = '';
     if (nota_fiscal && nota_fiscal.trim() !== '' && chave_nfe) {
         nfeBadge = `<button onclick="abrirDanfe('${chave_nfe}')" class="ml-2 inline-flex items-center px-2.5 py-1 rounded text-[10px] font-black uppercase bg-blue-100 text-blue-800 hover:bg-blue-600 hover:text-white transition-colors border border-blue-200" title="Clique para abrir e imprimir a Nota Fiscal">NFe: ${nota_fiscal} <i data-feather="file-text" class="w-3 h-3 ml-1"></i></button>`;
@@ -200,8 +253,8 @@ function renderDavResults(data) {
                     <tbody class="divide-y divide-gray-100">
                         ${itens.map(item => `
                             <tr class="expandable-row hover:bg-gray-50 transition-colors" data-idavs-regi="${item.idavs_regi}">
-                                <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome} <span class="text-gray-400 text-xs">(${item.unidade})</span></td>
-                                <td class="px-2 py-3 text-center font-black ${item.quantidade_saldo > 0 ? 'text-indigo-600' : 'text-gray-400'}">${item.quantidade_saldo}</td>
+                                <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome} <span class="text-gray-400 text-xs">(${item.unidade})</span> ${item.quantidade_devolvida > 0 ? `<span class="bg-red-100 text-red-700 px-1.5 py-0.5 rounded text-[10px] font-bold ml-1">Devolvido: ${item.quantidade_devolvida}</span>` : ''}</td>
+                                <td class="px-2 py-3 text-center font-black ${item.quantidade_saldo > 0 ? 'text-indigo-600' : 'text-green-600'}">${item.quantidade_saldo}</td>
                                 <td class="px-4 py-3 text-center">
                                     <input type="number" step="1" class="w-20 text-center rounded-md border-gray-300 focus:ring-indigo-500 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" ${item.quantidade_saldo > 0 && status_caixa === '1' ? '' : 'disabled title="Apenas pedidos pagos podem ser retirados"'}>
                                 </td>
@@ -240,7 +293,12 @@ async function handleConfirmRetirada(davNumber) {
     document.querySelectorAll('#dav-results-container tbody tr.expandable-row').forEach(row => {
         const input = row.querySelector('input[type="number"]');
         if (input && parseFloat(input.value) > 0) {
-            itemsParaRetirar.push({ idavs_regi: row.dataset.idavsRegi, quantidade_retirada: parseFloat(input.value), quantidade_saldo: parseFloat(input.max), pd_nome: row.querySelector('td:first-child').textContent });
+            itemsParaRetirar.push({
+                idavs_regi: row.dataset.idavsRegi,
+                quantidade_retirada: parseFloat(input.value),
+                quantidade_saldo: parseFloat(input.max),
+                pd_nome: row.querySelector('td:first-child').textContent
+            });
         }
     });
 
@@ -250,18 +308,25 @@ async function handleConfirmRetirada(davNumber) {
         lockUI();
         document.getElementById('confirm-retirada-btn').innerHTML = '<i data-feather="loader" class="animate-spin"></i> Processando...';
         if(typeof feather !== 'undefined') feather.replace();
+        
         try {
-            const response = await fetch(`${apiUrlBase}/entregas/retirada-manual`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` }, body: JSON.stringify({ dav_numero: davNumber, itens: itemsParaRetirar }) });
+            const response = await fetch(`${apiUrlBase}/entregas/retirada-manual`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+                body: JSON.stringify({ dav_numero: davNumber, itens: itemsParaRetirar })
+            });
             const result = await response.json();
             if (!response.ok) throw new Error(result.error);
             showToast(result.message, 'success');
             handleSearchDav(); 
-        } catch (error) { showToast(`Erro: ${error.message}`, 'error'); } finally { unlockUI(); }
+        } catch (error) {
+            showToast(`Erro: ${error.message}`, 'error');
+        } finally { unlockUI(); }
     });
 }
 
 // ==========================================================
-//               LISTA DE ROMANEIOS EM ANDAMENTO / CONCLUIDAS
+//               LISTA DE ROMANEIOS EM ANDAMENTO / CONCLUÍDAS
 // ==========================================================
 async function loadRomaneiosAtivos() {
     const container = document.getElementById('romaneios-list-container');
@@ -275,8 +340,13 @@ async function loadRomaneiosAtivos() {
         const romaneios = await res.json();
         
         if (romaneios.length === 0) {
-            container.innerHTML = `<div class="flex flex-col items-center justify-center py-10 text-gray-400"><i data-feather="truck" class="w-12 h-12 mb-3 opacity-50"></i><p class="font-bold">Nenhuma carga ${romaneioListStatus.toLowerCase()}.</p></div>`;
-            if(typeof feather !== 'undefined') feather.replace(); return;
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-10 text-gray-400">
+                    <i data-feather="truck" class="w-12 h-12 mb-3 opacity-50"></i>
+                    <p class="font-bold">Nenhuma carga ${romaneioListStatus.toLowerCase()}.</p>
+                </div>`;
+            if(typeof feather !== 'undefined') feather.replace();
+            return;
         }
 
         container.innerHTML = romaneios.map(r => {
@@ -284,13 +354,13 @@ async function loadRomaneiosAtivos() {
             if (r.status === 'Em montagem') {
                 actionButtons = `
                     <div class="flex flex-col sm:flex-row items-end sm:items-center gap-2 mt-3 sm:mt-0">
-                        <button onclick="excluirRomaneio(${r.id})" class="text-red-500 hover:text-white bg-white hover:bg-red-500 border border-red-200 text-[10px] font-bold px-3 py-2 rounded transition-colors flex items-center gap-1 shadow-sm" title="Cancelar e Excluir">
-                            <i data-feather="trash-2" class="w-3 h-3"></i> Excluir
+                        <button onclick="excluirRomaneio(${r.id})" class="text-red-600 hover:text-white bg-white hover:bg-red-600 border border-red-200 text-[10px] font-bold px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm" title="Cancelar e Excluir">
+                            <i data-feather="trash-2" class="w-3.5 h-3.5"></i> Excluir
                         </button>
-                        <button onclick="abrirTorreDeControle(${r.id})" class="text-indigo-600 bg-indigo-50 border border-indigo-200 text-[10px] font-bold hover:bg-indigo-600 hover:text-white px-3 py-2 rounded transition-colors flex items-center gap-1 shadow-sm">
-                            <i data-feather="edit-2" class="w-3 h-3"></i> Editar
+                        <button onclick="abrirTorreDeControle(${r.id})" class="text-indigo-600 bg-indigo-50 border border-indigo-200 text-[10px] font-bold hover:bg-indigo-600 hover:text-white px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm shrink-0">
+                            <i data-feather="edit-2" class="w-3.5 h-3.5"></i> Editar Carga
                         </button>
-                        <button onclick="abrirAcertoContas(${r.id})" class="text-blue-600 bg-blue-50 border border-blue-200 text-[10px] font-bold hover:bg-blue-600 hover:text-white px-4 py-2 rounded transition-colors flex items-center gap-1 shadow-sm">
+                        <button onclick="abrirAcertoContas(${r.id})" class="text-blue-600 bg-blue-50 border border-blue-200 text-[10px] font-bold hover:bg-blue-600 hover:text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
                             <i data-feather="check-square" class="w-4 h-4"></i> Acerto de Retorno
                         </button>
                     </div>
@@ -304,26 +374,30 @@ async function loadRomaneiosAtivos() {
             }
 
             return `
-            <div class="border border-gray-200 p-4 rounded-lg bg-white hover:border-indigo-300 transition-all cursor-default mb-3 shadow-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+            <div class="border border-gray-200 p-4 rounded-lg bg-white hover:border-indigo-400 transition-all cursor-default mb-3 shadow-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 group">
                 <div class="flex-1">
                     <h4 class="font-black text-gray-800 text-base flex items-center gap-2 mb-1">
                         <i data-feather="package" class="w-4 h-4 text-indigo-500"></i> Carga #${r.id} 
                         <span class="bg-blue-100 text-blue-800 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest">${r.status}</span>
                     </h4>
                     <p class="text-xs text-gray-600 font-medium ml-6"><i data-feather="user" class="w-3 h-3 inline text-gray-400"></i> ${r.nome_motorista} &nbsp;&bull;&nbsp; <i data-feather="truck" class="w-3 h-3 inline text-gray-400"></i> ${r.modelo_veiculo} (${r.placa_veiculo})</p>
+                    <p class="text-[10px] text-gray-400 mt-1 ml-6 font-bold uppercase tracking-wider">Origem: ${r.filial_origem}</p>
                 </div>
                 ${actionButtons}
             </div>`;
         }).join('');
         if(typeof feather !== 'undefined') feather.replace();
 
-    } catch (error) { container.innerHTML = `<p class="text-center text-red-500 font-bold py-10">${error.message}</p>`; }
+    } catch (error) {
+        container.innerHTML = `<p class="text-center text-red-500 font-bold py-10"><i data-feather="alert-triangle" class="inline-block mr-2"></i> ${error.message}</p>`;
+        if(typeof feather !== 'undefined') feather.replace();
+    }
 }
 
 function handleRomaneioClick(event) { if(event.target.closest('button')) return; }
 
 window.excluirRomaneio = function(id) {
-    showCustomConfirm("Excluir Carga?", `Deseja excluir a carga #${id}? Os itens retornarão à prateleira.`, async () => {
+    showCustomConfirm("Excluir Carga?", `Deseja realmente excluir a carga #${id}? Os pedidos voltarão para a prateleira.`, async () => {
         lockUI();
         try {
             const res = await fetch(`${apiUrlBase}/entregas/romaneios/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getToken()}` }});
@@ -335,15 +409,16 @@ window.excluirRomaneio = function(id) {
     });
 };
 
-
 // ==========================================================
-//               TORRE DE MONTAGEM E EDIÇÃO
+//               TORRE DE CONTROLE (MONTAGEM E EDIÇÃO)
 // ==========================================================
 async function abrirTorreDeControle(romaneioIdParaEditar = null) {
     showLoader();
     switchView('romaneio-split-view');
+    
     currentRomaneioId = romaneioIdParaEditar;
-    cartDavs = []; pendingDavs = [];
+    cartDavs = [];
+    pendingDavs = [];
     
     const select = document.getElementById('select-veiculo');
     if (select && select.options.length <= 1) {
@@ -351,59 +426,78 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
         try {
             const res = await fetch(`${apiUrlBase}/entregas/veiculos-disponiveis`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
             veiculosDisp = await res.json();
-            select.innerHTML = '<option value="">-- Selecione o Veículo --</option>' + veiculosDisp.map(v => `<option value="${v.id}">${v.modelo} (${v.placa}) - Cap: ${parseFloat(v.capacidade_kg || 0).toLocaleString('pt-BR')}kg</option>`).join('');
+            select.innerHTML = '<option value="">-- Selecione o Veículo --</option>' + 
+                veiculosDisp.map(v => `<option value="${v.id}">${v.modelo} (${v.placa}) - Cap: ${parseFloat(v.capacidade_kg || 0).toLocaleString('pt-BR')}kg</option>`).join('');
         } catch (e) { select.innerHTML = '<option value="">Erro ao carregar</option>'; }
     }
 
-    const selectMotorista = document.getElementById('input-motorista');
-    if (selectMotorista && selectMotorista.options.length <= 1) {
-        selectMotorista.innerHTML = '<option value="">Carregando...</option>';
+    // CORREÇÃO: Usa o datalist em vez de property options do input
+    const datalist = document.getElementById('motoristas-list');
+    if (datalist && datalist.options.length === 0) {
         try {
             const resMot = await fetch(`${apiUrlBase}/entregas/motoristas-disponiveis`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
             const motos = await resMot.json();
-            selectMotorista.innerHTML = '<option value="">-- Selecione o Motorista --</option>' + motos.map(m => `<option value="${m.nome}">${m.nome} ${m.cpf ? `(${m.cpf})` : ''}</option>`).join('');
-        } catch(e) { selectMotorista.innerHTML = '<option value="">Erro ao carregar</option>'; }
+            datalist.innerHTML = motos.map(m => `<option value="${m.nome}">`).join('');
+        } catch(e) {}
     }
 
     const tituloCarrinho = document.getElementById('titulo-carrinho');
     const textoBtnFinalizar = document.getElementById('texto-btn-finalizar');
 
     if (currentRomaneioId) {
-        document.getElementById('titulo-carrinho').innerHTML = `Editando Carga #${currentRomaneioId}`;
-        document.getElementById('texto-btn-finalizar').textContent = 'Salvar Alterações';
-        document.getElementById('select-veiculo').disabled = true;
-        document.getElementById('input-motorista').disabled = true;
+        if (tituloCarrinho) tituloCarrinho.innerHTML = `Editando Carga #${currentRomaneioId}`;
+        if (textoBtnFinalizar) textoBtnFinalizar.textContent = 'Salvar Alterações';
+        if (document.getElementById('select-veiculo')) document.getElementById('select-veiculo').disabled = true;
+        if (document.getElementById('input-motorista')) document.getElementById('input-motorista').disabled = true;
         
         try {
             const res = await fetch(`${apiUrlBase}/entregas/romaneios/${currentRomaneioId}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
             const data = await res.json();
-            document.getElementById('select-veiculo').value = veiculosDisp.find(v => v.placa === data.placa_veiculo)?.id || '';
             
-            // O valor do DB é salvo pelo nome
-            const optionMot = Array.from(selectMotorista.options).find(opt => option.value === data.nome_motorista);
-            if(optionMot) selectMotorista.value = optionMot.value;
+            if (document.getElementById('select-veiculo')) document.getElementById('select-veiculo').value = veiculosDisp.find(v => v.placa === data.placa_veiculo)?.id || '';
+            if (document.getElementById('input-motorista')) document.getElementById('input-motorista').value = data.nome_motorista;
 
             const grouped = data.itens.reduce((acc, item) => {
-                if(!acc[item.dav_numero]) acc[item.dav_numero] = { dav_numero: item.dav_numero, cliente: item.cliente_nome, bairro: 'Bairro no Romaneio', cidade: '', filial: data.filial_origem, peso_total_dav: 0, itens: [], is_existing: true };
+                if(!acc[item.dav_numero]) {
+                    acc[item.dav_numero] = {
+                        dav_numero: item.dav_numero, cliente: item.cliente_nome, bairro: 'Bairro no Romaneio', cidade: '', filial: data.filial_origem, peso_total_dav: 0, itens: [], is_existing: true
+                    };
+                }
                 const peso = parseFloat(item.peso_bruto_unitario) * parseFloat(item.quantidade_a_entregar);
                 acc[item.dav_numero].peso_total_dav += peso;
-                acc[item.dav_numero].itens.push({ romaneio_item_id: item.romaneio_item_id, idavs_regi: item.idavs_regi, codigo: item.produto_codigo, nome: item.produto_nome, unidade: item.produto_unidade, peso_unitario: parseFloat(item.peso_bruto_unitario), saldo: parseFloat(item.quantidade_a_entregar) });
+                acc[item.dav_numero].itens.push({
+                    romaneio_item_id: item.romaneio_item_id, 
+                    idavs_regi: item.idavs_regi, codigo: item.produto_codigo, nome: item.produto_nome, unidade: item.produto_unidade, peso_unitario: parseFloat(item.peso_bruto_unitario), saldo: parseFloat(item.quantidade_a_entregar)
+                });
                 return acc;
             }, {});
             cartDavs = Object.values(grouped);
-        } catch(e) { showToast("Erro ao carregar dados.", "error"); }
+        } catch(e) {
+            showToast("Erro ao carregar dados da carga.", "error");
+        }
     } else {
-        document.getElementById('titulo-carrinho').innerHTML = `Montar Nova Carga`;
-        document.getElementById('texto-btn-finalizar').textContent = 'Finalizar e Despachar Carga';
-        document.getElementById('select-veiculo').disabled = false; document.getElementById('select-veiculo').value = '';
-        document.getElementById('input-motorista').disabled = false; document.getElementById('input-motorista').value = '';
+        if (tituloCarrinho) tituloCarrinho.innerHTML = `Montar Nova Carga`;
+        if (textoBtnFinalizar) textoBtnFinalizar.textContent = 'Finalizar e Despachar Carga';
+        if (document.getElementById('select-veiculo')) {
+            document.getElementById('select-veiculo').disabled = false;
+            document.getElementById('select-veiculo').value = '';
+        }
+        if (document.getElementById('input-motorista')) {
+            document.getElementById('input-motorista').disabled = false;
+            document.getElementById('input-motorista').value = '';
+        }
     }
-    renderPendingList(); renderCartList(); hideLoader();
+
+    renderPendingList();
+    renderCartList();
+    hideLoader();
 }
 
 function fecharTorreDeControle() {
     if (cartDavs.length > 0) {
-        showCustomConfirm("Sair da Montagem?", "Você tem pedidos no caminhão. Se sair agora, perderá o progresso não salvo.", () => { switchView('romaneio-list-view'); });
+        showCustomConfirm("Sair da Montagem?", "Você tem pedidos no caminhão. Se sair agora, perderá o progresso não salvo.", () => {
+            switchView('romaneio-list-view');
+        });
     } else {
         switchView('romaneio-list-view');
     }
@@ -417,7 +511,8 @@ async function buscarPedidosPendentes() {
     const apenasAgendado = document.getElementById('filter-somente-agendado').checked;
     
     const filialInput = document.getElementById('filter-filial-dav');
-    const filialStr = (filialInput && !document.getElementById('filial-filter-container').classList.contains('hidden') && filialInput.value) ? `&filialDav=${filialInput.value}` : '';
+    const filialStr = (filialInput && !document.getElementById('filial-filter-container').classList.contains('hidden') && filialInput.value) 
+                        ? `&filialDav=${filialInput.value}` : '';
 
     const filtroReceberLocalElement = document.getElementById('filter-receber-local');
     const apenasReceberLocal = filtroReceberLocalElement ? filtroReceberLocalElement.checked : false;
@@ -426,26 +521,36 @@ async function buscarPedidosPendentes() {
     const btn = document.getElementById('btn-buscar-pendentes');
     const originalHtml = btn.innerHTML;
     btn.innerHTML = '<i data-feather="loader" class="w-3.5 h-3.5 animate-spin"></i> Buscando...'; 
-    btn.disabled = true; if(typeof feather !== 'undefined') feather.replace();
+    btn.disabled = true;
+    if(typeof feather !== 'undefined') feather.replace();
 
     try {
-        const res = await fetch(`${apiUrlBase}/entregas/eligible-davs?data=${data}&tipoData=${tipoData}&apenasEntregaMarcada=${apenasAgendado}${filialStr}${receberStr}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const res = await fetch(`${apiUrlBase}/entregas/eligible-davs?data=${data}&tipoData=${tipoData}&apenasEntregaMarcada=${apenasAgendado}${filialStr}${receberStr}`, { 
+            headers: { 'Authorization': `Bearer ${getToken()}` } 
+        });
         if (!res.ok) throw new Error("Falha ao buscar pedidos.");
         const davs = await res.json();
         
         pendingDavs = [];
         davs.forEach(novoDav => {
             const cartDav = cartDavs.find(c => String(c.dav_numero) === String(novoDav.dav_numero));
-            if (!cartDav) pendingDavs.push(novoDav);
-            else {
+            if (!cartDav) {
+                pendingDavs.push(novoDav);
+            } else {
                 const itensRestantes = [];
                 novoDav.itens.forEach(novoItem => {
                     const cartItem = cartDav.itens.find(ci => String(ci.idavs_regi) === String(novoItem.idavs_regi));
-                    if (cartItem) { novoItem.saldo -= cartItem.saldo; novoItem.peso_total_item = novoItem.saldo * parseFloat(novoItem.peso_unitario); }
+                    if (cartItem) {
+                        novoItem.saldo -= cartItem.saldo;
+                        novoItem.peso_total_item = novoItem.saldo * parseFloat(novoItem.peso_unitario);
+                    }
                     if (novoItem.saldo > 0) itensRestantes.push(novoItem);
                 });
+                
                 if (itensRestantes.length > 0) {
-                    novoDav.itens = itensRestantes; novoDav.peso_total_dav = itensRestantes.reduce((sum, i) => sum + i.peso_total_item, 0); pendingDavs.push(novoDav);
+                    novoDav.itens = itensRestantes;
+                    novoDav.peso_total_dav = itensRestantes.reduce((sum, i) => sum + i.peso_total_item, 0);
+                    pendingDavs.push(novoDav);
                 }
             }
         });
@@ -459,8 +564,13 @@ async function buscarPedidosPendentes() {
         }
 
         renderPendingList();
-    } catch(e) { showToast(e.message, "error"); } 
-    finally { btn.innerHTML = originalHtml; btn.disabled = false; if(typeof feather !== 'undefined') feather.replace(); }
+    } catch(e) {
+        showToast(e.message, "error");
+    } finally {
+        btn.innerHTML = originalHtml; 
+        btn.disabled = false;
+        if(typeof feather !== 'undefined') feather.replace();
+    }
 }
 
 function renderPendingList() {
@@ -478,6 +588,7 @@ function renderPendingList() {
     }
 
     container.innerHTML = davsVisiveis.map(dav => {
+        // Atualizado com o botão PDF Node.js
         let nfeBadge = '';
         if (dav.nota_fiscal && dav.chave_nfe) {
             nfeBadge = `<button onclick="abrirDanfe('${dav.chave_nfe}')" class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border border-blue-200 hover:bg-blue-600 hover:text-white transition-colors" title="Ver Nota Fiscal">NFe ${dav.nota_fiscal}</button>`;
@@ -638,12 +749,12 @@ function atualizarBarraDePeso() {
     const texto = document.getElementById('peso-texto');
 
     if (capMaxima === 0) {
-        texto.textContent = `${pesoTotal.toLocaleString('pt-BR')} kg / Sem Limite`;
+        texto.textContent = `${pesoTotal.toLocaleString('pt-BR', {minimumFractionDigits: 1})} kg / Sem Limite`;
         barra.style.width = '0%'; barra.className = 'bg-gray-400 h-3 rounded-full';
         texto.classList.remove('text-red-600'); return;
     }
     const percentual = (pesoTotal / capMaxima) * 100;
-    texto.textContent = `${pesoTotal.toLocaleString('pt-BR')} kg / ${capMaxima.toLocaleString('pt-BR')} kg (${percentual.toFixed(1)}%)`;
+    texto.textContent = `${pesoTotal.toLocaleString('pt-BR', {minimumFractionDigits: 1})} kg / ${capMaxima.toLocaleString('pt-BR')} kg (${percentual.toFixed(1)}%)`;
     barra.style.width = `${Math.min(percentual, 100)}%`;
     if (percentual > 100) { barra.className = 'h-3 rounded-full bg-red-600 shadow-inner'; texto.classList.add('text-red-600'); } 
     else { barra.className = 'h-3 rounded-full bg-green-500 shadow-inner'; texto.classList.remove('text-red-600'); }
@@ -681,8 +792,6 @@ async function finalizarCarga() {
 
             if (payloadItens.length > 0) {
                 const resItens = await fetch(`${apiUrlBase}/entregas/romaneios/${romaneioId}/itens`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` }, body: JSON.stringify(payloadItens) });
-                
-                // BLINDAGEM DO TRY CATCH ANTI-TRAVAMENTO
                 if (!resItens.ok) {
                     let errMsg = "Erro ao inserir itens no banco.";
                     try { const errObj = await resItens.json(); errMsg = errObj.error || errMsg; } catch(e) {}
@@ -903,24 +1012,5 @@ function handleApiError(response) {
         setTimeout(logout, 2000);
     } else {
         response.json().then(data => showToast(`Erro: ${data.error || response.statusText}`, "error")).catch(() => showToast('Erro na API.', "error"));
-    }
-}
-
-window.abrirDanfe = async function(chave) {
-    showLoader();
-    try {
-        const res = await fetch(`${apiUrlBase}/entregas/danfe/${chave}`, {
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
-        
-        if (!res.ok) throw new Error((await res.json()).error || "Erro ao carregar a Nota Fiscal.");
-        
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        window.open(url, '_blank'); // Abre o PDF numa nova aba nativa do Chrome/Edge
-    } catch(e) {
-        showToast(e.message, "error");
-    } finally {
-        hideLoader();
     }
 }
