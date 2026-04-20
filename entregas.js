@@ -9,7 +9,7 @@ let currentRomaneioId = null;
 let veiculosDisp = []; 
 let pendingDavs = []; 
 let cartDavs = [];    
-let romaneioListStatus = 'Em montagem'; // Controle da aba Ativas/Concluídas
+let romaneioListStatus = 'Em montagem';
 
 let acertoRomaneioId = null;
 let acertoItensOriginal = [];
@@ -122,14 +122,12 @@ function setupEventListeners() {
     document.getElementById('btn-nova-carga')?.addEventListener('click', () => abrirTorreDeControle(null));
     document.getElementById('romaneios-list-container')?.addEventListener('click', handleRomaneioClick);
     
-    // Alternador de Abas de Carga
     document.getElementById('btn-tab-andamento')?.addEventListener('click', () => { romaneioListStatus = 'Em montagem'; updateListTabs(); loadRomaneiosAtivos(); });
     document.getElementById('btn-tab-concluidas')?.addEventListener('click', () => { romaneioListStatus = 'Concluido'; updateListTabs(); loadRomaneiosAtivos(); });
     
     document.getElementById('btn-buscar-pendentes')?.addEventListener('click', buscarPedidosPendentes);
     document.getElementById('filter-bairro')?.addEventListener('change', renderPendingList);
     document.getElementById('filter-filial-dav')?.addEventListener('change', renderPendingList); 
-    document.getElementById('filter-receber-local')?.addEventListener('change', renderPendingList); 
     document.getElementById('select-veiculo')?.addEventListener('change', atualizarBarraDePeso);
     document.getElementById('btn-finalizar-carga')?.addEventListener('click', finalizarCarga);
     
@@ -181,7 +179,7 @@ function renderDavResults(data) {
 
     let statusTagHtml = '';
     if (status_caixa === '1') statusTagHtml = `<span class="ml-3 inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-green-600 text-white shadow-sm">Pago (Recebido)</span>`;
-    else statusTagHtml = `<span class="ml-3 inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-600 text-white animate-pulse shadow-sm">Pagamento Pendente</span>`;
+    else statusTagHtml = `<span class="ml-3 inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-600 text-white shadow-sm">Pagamento Pendente</span>`;
 
     let nfeBadge = '';
     if (nota_fiscal && nota_fiscal.trim() !== '' && chave_nfe) {
@@ -206,7 +204,7 @@ function renderDavResults(data) {
                                 <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome} <span class="text-gray-400 text-xs">(${item.unidade})</span></td>
                                 <td class="px-2 py-3 text-center font-black ${item.quantidade_saldo > 0 ? 'text-indigo-600' : 'text-gray-400'}">${item.quantidade_saldo}</td>
                                 <td class="px-4 py-3 text-center">
-                                    <input type="number" step="1" class="w-20 text-center rounded-md border-gray-300 focus:ring-indigo-500 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" ${item.quantidade_saldo > 0 && status_caixa === '1' ? '' : 'disabled title="Apenas pedidos pagos podem ser retirados"'}>
+                                    <input type="number" step="1" class="w-20 text-center rounded-md border-gray-300 focus:ring-indigo-500 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" ${item.quantidade_saldo > 0 ? '' : 'disabled'}>
                                 </td>
                             </tr>`).join('')}
                     </tbody>
@@ -225,7 +223,7 @@ function renderDavResults(data) {
                 <div class="space-y-4">
                     <h4 class="font-bold text-gray-700 uppercase tracking-wider text-[11px]">Itens do Pedido</h4>
                     <div class="overflow-hidden rounded-lg border border-gray-200 shadow-sm">${itemsHtml}</div>
-                    ${itemsComSaldoDisponivel.length > 0 && status_caixa === '1' ? `
+                    ${itemsComSaldoDisponivel.length > 0 ? `
                     <div class="flex justify-end pt-4 border-t border-gray-100">
                         <button id="confirm-retirada-btn" class="action-btn bg-green-600 hover:bg-green-700 flex items-center gap-2 shadow-md transform active:scale-95">
                             <i data-feather="check-circle" class="w-4 h-4"></i> Confirmar Retirada no Balcão
@@ -358,7 +356,6 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
         } catch (e) { select.innerHTML = '<option value="">Erro ao carregar</option>'; }
     }
 
-    // Carrega o histórico de motoristas no Datalist
     const datalist = document.getElementById('motoristas-list');
     if (datalist && datalist.options.length === 0) {
         try {
@@ -398,6 +395,14 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
         document.getElementById('input-motorista').disabled = false; document.getElementById('input-motorista').value = '';
     }
     renderPendingList(); renderCartList(); hideLoader();
+}
+
+function fecharTorreDeControle() {
+    if (cartDavs.length > 0) {
+        showCustomConfirm("Sair da Montagem?", "Você tem pedidos no caminhão. Se sair agora, perderá o progresso não salvo.", () => { switchView('romaneio-list-view'); });
+    } else {
+        switchView('romaneio-list-view');
+    }
 }
 
 async function buscarPedidosPendentes() {
@@ -455,13 +460,9 @@ function renderPendingList() {
     
     const filtroBairroElement = document.getElementById('filter-bairro');
     const filtroBairro = filtroBairroElement ? filtroBairroElement.value : '';
-    
-    const filtroReceberLocalElement = document.getElementById('filter-receber-local');
-    const apenasReceberLocal = filtroReceberLocalElement ? filtroReceberLocalElement.checked : false;
 
     let davsVisiveis = pendingDavs;
     if (filtroBairro) davsVisiveis = davsVisiveis.filter(d => d.bairro.trim() === filtroBairro);
-    if (apenasReceberLocal) davsVisiveis = davsVisiveis.filter(d => d.status_caixa !== '1');
 
     if (davsVisiveis.length === 0) {
         container.innerHTML = `<div class="h-full flex flex-col items-center justify-center text-gray-400"><div class="p-4 bg-gray-100 rounded-full mb-3"><i data-feather="filter" class="w-8 h-8 opacity-60"></i></div><p class="text-sm font-bold text-gray-500">Prateleira Vazia</p></div>`;
@@ -469,26 +470,23 @@ function renderPendingList() {
     }
 
     container.innerHTML = davsVisiveis.map(dav => {
-        const isPago = dav.status_caixa === '1';
-        const tagPagamento = isPago ? '' : `<span class="bg-red-600 text-white px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest animate-pulse ml-2 shadow-sm">Pagamento Pendente</span>`;
-        
         let nfeBadge = '';
         if (dav.nota_fiscal && dav.chave_nfe) {
             nfeBadge = `<a href="https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=${dav.chave_nfe}" target="_blank" class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border border-blue-200 hover:bg-blue-600 hover:text-white transition-colors" title="Ver Nota Fiscal">NFe ${dav.nota_fiscal}</a>`;
         }
 
         const itensHtml = dav.itens.map(item => `
-            <div class="flex justify-between items-center border-b border-indigo-100/50 py-1.5 last:border-0 hover:bg-indigo-50 px-1 rounded transition-colors ${!isPago ? 'opacity-60' : ''}">
+            <div class="flex justify-between items-center border-b border-indigo-100/50 py-1.5 last:border-0 hover:bg-indigo-50 px-1 rounded transition-colors">
                 <span class="text-[10px] font-medium text-gray-700 truncate flex-1 pr-2">${item.codigo} - ${item.nome}</span>
                 <div class="flex items-center gap-1.5 shrink-0 bg-white p-1 rounded shadow-sm border border-gray-100">
                     <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Disp: ${item.saldo}</span>
-                    <input type="number" id="frac-${dav.dav_numero}-${item.idavs_regi}" value="${item.saldo}" min="0.001" max="${item.saldo}" step="1" class="w-14 text-[10px] p-1 border border-indigo-300 rounded text-center font-bold text-indigo-700 focus:ring-indigo-500" ${!isPago ? 'disabled' : ''}>
-                    <button onclick="adicionarItemFracionado('${dav.dav_numero}', '${item.idavs_regi}')" class="bg-indigo-100 hover:bg-indigo-500 hover:text-white text-indigo-600 p-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed" ${!isPago ? 'disabled title="Pagamento pendente no caixa"' : ''}><i data-feather="plus" class="w-3 h-3"></i></button>
+                    <input type="number" id="frac-${dav.dav_numero}-${item.idavs_regi}" value="${item.saldo}" min="0.001" max="${item.saldo}" step="1" class="w-14 text-[10px] p-1 border border-indigo-300 rounded text-center font-bold text-indigo-700 focus:ring-indigo-500">
+                    <button onclick="adicionarItemFracionado('${dav.dav_numero}', '${item.idavs_regi}')" class="bg-indigo-100 hover:bg-indigo-500 hover:text-white text-indigo-600 p-1.5 rounded transition-colors"><i data-feather="plus" class="w-3 h-3"></i></button>
                 </div>
             </div>`).join('');
 
         return `
-        <div class="bg-white rounded-lg border ${isPago ? 'border-gray-200 hover:border-indigo-400' : 'border-red-300'} hover:shadow-md transition-all group mb-3 overflow-hidden shadow-sm">
+        <div class="bg-white rounded-lg border border-gray-200 hover:border-indigo-400 hover:shadow-md transition-all group mb-3 overflow-hidden shadow-sm">
             <div class="p-3 flex justify-between items-start">
                 <div class="flex-1 min-w-0 pr-3 cursor-pointer" onclick="toggleGavetaItens('${dav.dav_numero}')">
                     <p class="font-black text-gray-800 text-sm truncate flex items-center flex-wrap gap-1.5">
@@ -496,7 +494,6 @@ function renderPendingList() {
                         DAV #${dav.dav_numero} 
                         <span class="bg-gray-800 text-white text-[9px] px-2 py-0.5 rounded shadow-sm tracking-wider">${dav.filial}</span>
                         <span class="text-xs font-medium text-gray-500 ml-1">- ${dav.cliente}</span>
-                        ${tagPagamento}
                     </p>
                     <div class="flex gap-2 mt-2 items-center flex-wrap">
                         <span class="text-[9px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded border shadow-sm"><i data-feather="map-pin" class="w-3 h-3 inline"></i> ${dav.bairro.trim()}</span>
@@ -504,7 +501,7 @@ function renderPendingList() {
                         ${nfeBadge}
                     </div>
                 </div>
-                <button onclick="adicionarAoCarrinhoCompleto('${dav.dav_numero}')" class="bg-indigo-50 border border-indigo-200 text-indigo-600 hover:bg-indigo-600 hover:text-white p-3 rounded-lg transition-colors shrink-0 shadow-sm transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" ${!isPago ? 'disabled title="Pagamento pendente no caixa"' : ''}>
+                <button onclick="adicionarAoCarrinhoCompleto('${dav.dav_numero}')" class="bg-indigo-50 border border-indigo-200 text-indigo-600 hover:bg-indigo-600 hover:text-white p-3 rounded-lg transition-colors shrink-0 shadow-sm transform active:scale-95">
                     <i data-feather="chevrons-right" class="w-5 h-5"></i>
                 </button>
             </div>
@@ -525,7 +522,7 @@ function renderCartList() {
     document.getElementById('cart-counter').textContent = `${cartDavs.length} Pedido(s)`;
 
     if (cartDavs.length === 0) {
-        container.innerHTML = `<div class="h-full flex flex-col items-center justify-center text-gray-400"><div class="p-4 bg-white rounded-full mb-3 shadow-sm border"><i data-feather="package" class="w-8 h-8 opacity-40 text-indigo-400"></i></div><p class="text-sm font-bold text-gray-500">Caminhão Vazio</p></div>`;
+        container.innerHTML = `<div class="h-full flex flex-col items-center justify-center text-gray-400"><div class="p-4 bg-white rounded-full mb-3 shadow-sm border border-gray-100"><i data-feather="package" class="w-8 h-8 opacity-40 text-indigo-400"></i></div><p class="text-sm font-bold text-gray-500">Caminhão Vazio</p></div>`;
         if(typeof feather !== 'undefined') feather.replace(); atualizarBarraDePeso(); return;
     }
 
@@ -654,7 +651,7 @@ async function finalizarCarga() {
         lockUI();
         const btn = document.getElementById('btn-finalizar-carga');
         const originalHtml = btn.innerHTML;
-        btn.innerHTML = '<i data-feather="loader" class="animate-spin w-5 h-5"></i> Processando...';
+        btn.innerHTML = '<i data-feather="loader" class="animate-spin w-5 h-5"></i> Gravando...';
         if(typeof feather !== 'undefined') feather.replace();
 
         try {
@@ -674,7 +671,7 @@ async function finalizarCarga() {
             if (payloadItens.length > 0) {
                 const resItens = await fetch(`${apiUrlBase}/entregas/romaneios/${romaneioId}/itens`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` }, body: JSON.stringify(payloadItens) });
                 
-                // Blindagem do Try/Catch no parse de JSON para impedir travamento eterno
+                // BLINDAGEM DO TRY CATCH ANTI-TRAVAMENTO
                 if (!resItens.ok) {
                     let errMsg = "Erro ao inserir itens no banco.";
                     try { const errObj = await resItens.json(); errMsg = errObj.error || errMsg; } catch(e) {}

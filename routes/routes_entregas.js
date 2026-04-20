@@ -166,15 +166,6 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
     }
 });
 
-// NOVA ROTA: Busca motoristas no Histórico para o Datalist
-router.get('/motoristas-disponiveis', authenticateToken, async (req, res) => {
-    try {
-        const [historico] = await gerencialPool.execute("SELECT DISTINCT nome_motorista as nome FROM romaneios WHERE nome_motorista IS NOT NULL AND nome_motorista != '' ORDER BY nome_motorista ASC");
-        res.json(historico.map((m, i) => ({ id: i, nome: m.nome })));
-    } catch (error) { 
-        res.json([]); // Fallback vazio para permitir digitação livre
-    }
-});
 
 router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
     try {
@@ -306,7 +297,6 @@ router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
                 const [itemErpRowsAtualizado] = await sc.execute(`SELECT it_reti FROM idavs WHERE it_regist = ?`, [idavs_regi]);
                 const textoAntigoDev = itemErpRowsAtualizado[0].it_reti || '';
                 
-                // Formato melhorado para Parcial / Devolução
                 const novoTextoDev = `Lançamento: ${dStr}  {${nomeUsuario}}\nCodigo....: ${itemErp.it_codi}\nDescrição.: ${itemErp.it_nome}\nQuantidade: ${parseFloat(itemErp.it_quan)}\nUnidade...: ${itemErp.it_unid}\nQT Entrega: ${qtd_entregue}\nSaldo.....: Voltou p/ Loja\nRetirada..: 0\nLançamento: App Gerencial [WEB]\nPortador..: Romaneio #${romaneioId} (Motorista)\nRetirado..: Entregue: ${qtd_entregue} | Voltou: ${qtd_voltou}`;
                 
                 await sc.execute(`UPDATE idavs SET it_reti = ? WHERE it_regist = ?`, [textoAntigoDev ? (textoAntigoDev + '\n' + novoTextoDev).trim() : novoTextoDev.trim(), idavs_regi]);
@@ -321,7 +311,8 @@ router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
             await sc.execute("UPDATE cdavs SET cr_roma='', cr_dado='' WHERE cr_ndav=?", [davStr]);
         }
 
-        await gc.execute(`UPDATE romaneios SET status = 'Concluido' WHERE id = ?`, [romaneioId]);
+        // AGORA GRAVA TAMBÉM A DATA DE CONCLUSÃO!
+        await gc.execute(`UPDATE romaneios SET status = 'Concluido', data_conclusao = NOW() WHERE id = ?`, [romaneioId]);
 
         await gc.commit();
         await sc.commit();
@@ -347,11 +338,11 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
         const filialMap = { 'Santa Cruz da Serra': 'LUCAM', 'Piabetá': 'VMNAF', 'Parada Angélica': 'TNASC', 'Nova Campinas': 'LCMAT' };
         const dateColumn = tipoData === 'entrega' ? 'c.cr_entr' : 'c.cr_erec';
 
-        // Removido o c.cr_reca = '1' para permitir que DAVs não pagos apareçam e sejam tratados no Frontend
+        // FILTRO: EXIGE QUE ESTEJA PAGO (c.cr_reca = '1') PARA NÃO POLUIR A TELA!
         let query = `
             SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde, c.cr_edav, c.cr_entr, c.cr_udav, c.cr_reca, c.cr_nota, c.cr_chnf
             FROM cdavs c JOIN idavs i ON c.cr_ndav = i.it_ndav
-            WHERE DATE(${dateColumn}) = ? AND (i.it_quan - i.it_qtdv - i.it_qent) > 0 AND c.cr_roma = '' 
+            WHERE c.cr_reca = '1' AND DATE(${dateColumn}) = ? AND (i.it_quan - i.it_qtdv - i.it_qent) > 0 AND c.cr_roma = '' 
         `;
         const params = [data];
 
