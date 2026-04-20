@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', initEntregasPage);
 // ==========================================================
 //               VARIÁVEIS GLOBAIS
 // ==========================================================
-// const apiUrlBase = '/api';  // Descomente se não usar global.js
+// const apiUrlBase = '/api';  
 
 let currentRomaneioId = null;     
 let veiculosDisp = []; 
@@ -35,7 +35,6 @@ function initEntregasPage() {
     
     if (document.getElementById('filter-data')) document.getElementById('filter-data').value = new Date().toISOString().split('T')[0];
     
-    // Inicia sempre na tela principal de Romaneios
     switchView('romaneio-list-view');
     gerenciarAcessoModulos();
 }
@@ -115,7 +114,7 @@ function showLoader() { const l = document.getElementById('global-loader'); if(l
 function hideLoader() { const l = document.getElementById('global-loader'); if(l) l.style.display = 'none'; }
 
 // ==========================================================
-//               NAVEGAÇÃO (SPA - SINGLE PAGE)
+//               NAVEGAÇÃO (SPA)
 // ==========================================================
 function switchView(viewId) {
     const views = ['romaneio-list-view', 'retirada-view', 'romaneio-split-view', 'acerto-view', 'historico-view'];
@@ -134,7 +133,6 @@ function switchView(viewId) {
 function setupEventListeners() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
 
-    // Botões de Navegação Global
     document.getElementById('btn-open-retirada')?.addEventListener('click', () => switchView('retirada-view'));
     document.getElementById('btn-open-historico')?.addEventListener('click', () => switchView('historico-view'));
     
@@ -142,22 +140,18 @@ function setupEventListeners() {
         btn.addEventListener('click', () => switchView('romaneio-list-view'));
     });
 
-    // Retirada Balcão
     document.getElementById('search-dav-btn')?.addEventListener('click', handleSearchDav);
     document.getElementById('dav-search-input')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSearchDav(); });
 
-    // Romaneios Lista
     document.getElementById('btn-nova-carga')?.addEventListener('click', () => abrirTorreDeControle(null));
     document.getElementById('romaneios-list-container')?.addEventListener('click', handleRomaneioClick);
     
-    // Romaneio Montagem
     document.getElementById('btn-buscar-pendentes')?.addEventListener('click', buscarPedidosPendentes);
     document.getElementById('filter-bairro')?.addEventListener('change', renderPendingList);
     document.getElementById('filter-filial-dav')?.addEventListener('change', renderPendingList); 
     document.getElementById('select-veiculo')?.addEventListener('change', atualizarBarraDePeso);
     document.getElementById('btn-finalizar-carga')?.addEventListener('click', finalizarCarga);
     
-    // Acerto e Histórico
     document.getElementById('btn-fechar-romaneio')?.addEventListener('click', finalizarAcertoRomaneio);
     document.getElementById('btn-buscar-hist')?.addEventListener('click', buscarHistorico);
 }
@@ -198,15 +192,7 @@ function renderDavResults(data) {
     else if (status_caixa === '3') statusTagHtml = `<span class="ml-3 inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-red-600 text-white">Cancelado</span>`;
 
     if (status_caixa === '2' || status_caixa === '3') {
-        resultsContainer.innerHTML = `
-            <div class="bg-white p-6 rounded-lg shadow-lg max-w-xl mx-auto mt-4 border border-gray-200">
-                <div class="flex justify-between items-start border-b pb-4">
-                    <div>
-                        <h3 class="text-xl font-bold text-gray-900 flex items-center">${cliente.nome} ${statusTagHtml}</h3>
-                    </div>
-                    <p class="font-bold text-2xl text-gray-400 line-through">${formatCurrency(valor_total)}</p>
-                </div>
-            </div>`;
+        resultsContainer.innerHTML = `<div class="bg-white p-6 rounded-lg shadow-lg max-w-xl mx-auto mt-4 border border-gray-200"><div class="flex justify-between items-start border-b pb-4"><div><h3 class="text-xl font-bold text-gray-900 flex items-center">${cliente.nome} ${statusTagHtml}</h3></div><p class="font-bold text-2xl text-gray-400 line-through">${formatCurrency(valor_total)}</p></div></div>`;
     } else {
         const itemsComSaldoDisponivel = itens.filter(item => item.quantidade_saldo > 0);
         let itemsHtml = '<p class="text-center text-gray-500 p-4">Nenhum item encontrado.</p>';
@@ -446,6 +432,16 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
     renderPendingList();
     renderCartList();
     hideLoader();
+}
+
+function fecharTorreDeControle() {
+    if (cartDavs.length > 0) {
+        showCustomConfirm("Sair da Montagem?", "Você tem pedidos no caminhão. Se sair agora, perderá o progresso não salvo.", () => {
+            switchView('romaneio-list-view');
+        });
+    } else {
+        switchView('romaneio-list-view');
+    }
 }
 
 async function buscarPedidosPendentes() {
@@ -776,7 +772,9 @@ async function finalizarCarga() {
     const executaFinalizacao = async () => {
         lockUI();
         const btn = document.getElementById('btn-finalizar-carga');
-        const textoOriginal = document.getElementById('texto-btn-finalizar').textContent;
+        const textoBtnFinalizar = document.getElementById('texto-btn-finalizar');
+        const textoOriginal = textoBtnFinalizar ? textoBtnFinalizar.textContent : 'Finalizar e Despachar Carga';
+        
         btn.innerHTML = '<i data-feather="loader" class="animate-spin w-5 h-5"></i> Processando BD...';
         if(typeof feather !== 'undefined') feather.replace();
 
@@ -854,7 +852,7 @@ async function abrirAcertoContas(romaneioId) {
             acertoChecklist[item.romaneio_item_id] = {
                 status: 'pendente', 
                 qtd_entregue: 0,
-                qtd_devolvida: 0,
+                qtd_voltou: 0, // Alterado de qtd_devolvida para qtd_voltou
                 qtd_enviada: parseFloat(item.quantidade_a_entregar)
             };
         });
@@ -893,11 +891,11 @@ function renderAcertoChecklist() {
                 rowClass = 'acerto-entregue';
                 feedbackHtml = `<span class="text-[10px] font-black text-green-700 bg-white px-2 py-0.5 rounded shadow-sm border border-green-200">100% Entregue</span>`;
             } else if (state.status === 'devolvido_total') {
-                rowClass = 'acerto-devolvido';
-                feedbackHtml = `<span class="text-[10px] font-black text-red-700 bg-white px-2 py-0.5 rounded shadow-sm border border-red-200">100% Devolvido</span>`;
+                rowClass = 'acerto-devolvido'; // A classe CSS continua igual para ficar vermelha, só mudamos o texto
+                feedbackHtml = `<span class="text-[10px] font-black text-red-700 bg-white px-2 py-0.5 rounded shadow-sm border border-red-200">100% Não Entregue (Voltou)</span>`;
             } else if (state.status === 'parcial') {
                 rowClass = 'acerto-parcial';
-                feedbackHtml = `<span class="text-[10px] font-black text-orange-700 bg-white px-2 py-0.5 rounded shadow-sm border border-orange-200">Entregou: ${state.qtd_entregue} | Voltou: ${state.qtd_devolvida}</span>`;
+                feedbackHtml = `<span class="text-[10px] font-black text-orange-700 bg-white px-2 py-0.5 rounded shadow-sm border border-orange-200">Entregou: ${state.qtd_entregue} | Voltou: ${state.qtd_voltou}</span>`;
             }
 
             html += `
@@ -909,9 +907,9 @@ function renderAcertoChecklist() {
                     <div class="flex items-center gap-1.5 shrink-0 bg-white p-1 rounded shadow-sm border border-gray-200">
                         <button onclick="setAcertoStatus(${item.romaneio_item_id}, 'entregue_total')" class="p-1.5 rounded hover:bg-green-100 text-green-600 transition-colors" title="Entregue 100%"><i data-feather="check" class="w-4 h-4"></i></button>
                         <div class="w-px h-4 bg-gray-200"></div>
-                        <button onclick="setAcertoStatus(${item.romaneio_item_id}, 'devolvido_total')" class="p-1.5 rounded hover:bg-red-100 text-red-600 transition-colors" title="Devolvido 100%"><i data-feather="x" class="w-4 h-4"></i></button>
+                        <button onclick="setAcertoStatus(${item.romaneio_item_id}, 'devolvido_total')" class="p-1.5 rounded hover:bg-red-100 text-red-600 transition-colors" title="Não Entregue (Voltou p/ Loja)"><i data-feather="x" class="w-4 h-4"></i></button>
                         <div class="w-px h-4 bg-gray-200"></div>
-                        <button onclick="abrirAcertoParcial(${item.romaneio_item_id})" class="p-1.5 rounded hover:bg-orange-100 text-orange-500 transition-colors" title="Devolução Parcial"><i data-feather="pie-chart" class="w-4 h-4"></i></button>
+                        <button onclick="abrirAcertoParcial(${item.romaneio_item_id})" class="p-1.5 rounded hover:bg-orange-100 text-orange-500 transition-colors" title="Entrega Parcial (Voltou uma parte)"><i data-feather="pie-chart" class="w-4 h-4"></i></button>
                     </div>
                 </div>`;
         });
@@ -926,11 +924,11 @@ window.setAcertoStatus = function(itemId, acao) {
     if (acao === 'entregue_total') {
         state.status = 'entregue_total';
         state.qtd_entregue = state.qtd_enviada;
-        state.qtd_devolvida = 0;
+        state.qtd_voltou = 0;
     } else if (acao === 'devolvido_total') {
         state.status = 'devolvido_total';
         state.qtd_entregue = 0;
-        state.qtd_devolvida = state.qtd_enviada;
+        state.qtd_voltou = state.qtd_enviada;
     }
     renderAcertoChecklist();
 };
@@ -938,13 +936,13 @@ window.setAcertoStatus = function(itemId, acao) {
 window.abrirAcertoParcial = function(itemId) {
     const state = acertoChecklist[itemId];
     showCustomPrompt(
-        "Devolução Parcial", 
-        `Quantidade TOTAL ENVIADA: ${state.qtd_enviada}.\nQuantas unidades VOLTARAM (Devolução)?`, 
+        "Entrega Parcial", 
+        `Quantidade TOTAL ENVIADA: ${state.qtd_enviada}.\nQuantas unidades NÃO FORAM ENTREGUES (voltaram no caminhão)?`, 
         state.qtd_enviada, 
-        (qtdDevolvida) => {
-            const val = parseFloat(qtdDevolvida);
+        (qtdVoltouInput) => {
+            const val = parseFloat(qtdVoltouInput);
             if (isNaN(val) || val < 0 || val > state.qtd_enviada) {
-                return showToast("Quantidade inválida. A devolução não pode ser maior que o enviado.", "error");
+                return showToast("Quantidade inválida. O retorno não pode ser maior que o enviado.", "error");
             }
 
             if (val === 0) {
@@ -953,7 +951,7 @@ window.abrirAcertoParcial = function(itemId) {
                 setAcertoStatus(itemId, 'devolvido_total');
             } else {
                 state.status = 'parcial';
-                state.qtd_devolvida = val;
+                state.qtd_voltou = val;
                 state.qtd_entregue = state.qtd_enviada - val;
                 renderAcertoChecklist();
             }
@@ -983,7 +981,7 @@ async function finalizarAcertoRomaneio() {
                     dav_numero: itemBanco.dav_numero,
                     idavs_regi: itemBanco.idavs_regi,
                     qtd_entregue: state.qtd_entregue,
-                    qtd_devolvida: state.qtd_devolvida
+                    qtd_voltou: state.qtd_voltou // Passando a variável corrigida
                 });
             }
 
@@ -1012,7 +1010,7 @@ async function finalizarAcertoRomaneio() {
 }
 
 // ==========================================================
-//               MÓDULO: HISTÓRICO E RELATÓRIOS
+//               MÓDULO: HISTÓRICO / RELATÓRIOS
 // ==========================================================
 async function loadVeiculosHistorico() {
     const select = document.getElementById('hist-veiculo');
@@ -1036,7 +1034,7 @@ async function buscarHistorico() {
     if(typeof feather !== 'undefined') feather.replace();
 
     try {
-        let url = `${apiUrlBase}/entregas/romaneios?status=Concluído`;
+        let url = `${apiUrlBase}/entregas/romaneios?status=Concluido`;
         if (dataInicio) url += `&data_inicio=${dataInicio}`;
         if (dataFim) url += `&data_fim=${dataFim}`;
         if (motorista) url += `&motorista=${motorista}`;

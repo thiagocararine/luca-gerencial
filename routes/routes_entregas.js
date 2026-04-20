@@ -147,6 +147,7 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
             const textoAntigo = itemErp.it_reti || '';
             const now = new Date();
             const dStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+            
             const novoTexto = `Lançamento: ${dStr}  {${nomeUsuario}}\nCodigo....: ${itemErp.it_codi}\nDescrição.: ${itemErp.it_nome}\nQuantidade: ${parseFloat(itemErp.it_quan)}\nUnidade...: ${itemErp.it_unid}\nQT Entrega: ${qtd}\nSaldo.....: Baixa via App Gerencial\nRetirada..: ${qtd}\nLançamento: App Gerencial ID ${logResult.insertId}\nPortador..: App\nRetirado..: Retirada no Balcão via App [WEB]`;
 
             await sc.execute(`UPDATE idavs SET it_reti = ? WHERE it_regist = ?`, [textoAntigo ? (textoAntigo + '\n' + novoTexto).trim() : novoTexto.trim(), idavsRegiNum]);
@@ -165,9 +166,6 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
     }
 });
 
-// ==========================================================
-//               ROTAS DE GESTÃO DE ROMANEIOS E RELATÓRIOS
-// ==========================================================
 
 router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
     try {
@@ -177,7 +175,6 @@ router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
 });
 
 router.get('/romaneios', authenticateToken, async (req, res) => {
-    // Adicionado os novos campos de filtro para o Relatório Histórico
     const { status, filial, data_inicio, data_fim, motorista, veiculo } = req.query; 
     const { perfil } = req.user; 
 
@@ -192,7 +189,6 @@ router.get('/romaneios', authenticateToken, async (req, res) => {
             params.push(...statusArray);
         }
         
-        // Filtros do Histórico
         if (data_inicio) { conditions.push('DATE(r.data_criacao) >= ?'); params.push(data_inicio); }
         if (data_fim) { conditions.push('DATE(r.data_criacao) <= ?'); params.push(data_fim); }
         if (motorista) { conditions.push('r.nome_motorista LIKE ?'); params.push(`%${motorista}%`); }
@@ -259,7 +255,6 @@ router.delete('/romaneios/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// NOVA ROTA: O ACERTO DE CONTAS (RETORNO DO CAMINHÃO)
 router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
     const romaneioId = parseInt(req.params.id, 10);
     const { itens_acerto } = req.body; 
@@ -273,8 +268,7 @@ router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
         await sc.beginTransaction();
 
         const [statusRows] = await gc.execute('SELECT status FROM romaneios WHERE id = ? FOR UPDATE', [romaneioId]);
-        // COM ACENTO ↓
-        if (statusRows.length === 0 || statusRows[0].status === 'Concluído') {
+        if (statusRows.length === 0 || statusRows[0].status === 'Concluido') {
             throw new Error('Romaneio não encontrado ou já está Concluído.');
         }
 
@@ -284,7 +278,7 @@ router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
         for (const item of itens_acerto) {
             const idavs_regi = parseInt(item.idavs_regi, 10);
             const qtd_entregue = parseFloat(item.qtd_entregue) || 0;
-            const qtd_devolvida = parseFloat(item.qtd_devolvida) || 0;
+            const qtd_voltou = parseFloat(item.qtd_voltou) || 0; // Quantidade logística (Não entregue)
 
             const [itemErpRows] = await sc.execute(`SELECT * FROM idavs WHERE it_regist = ? FOR UPDATE`, [idavs_regi]);
             if (itemErpRows.length === 0) continue;
@@ -293,18 +287,24 @@ router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
             if (qtd_entregue > 0) {
                 await sc.execute(`UPDATE idavs SET it_qent = it_qent + ? WHERE it_regist = ?`, [qtd_entregue, idavs_regi]);
                 const textoAntigo = itemErp.it_reti || '';
-                const novoTexto = `Lançamento: ${dStr}  {${nomeUsuario}}\nCodigo....: ${itemErp.it_codi}\nDescrição.: ${itemErp.it_nome}\nQuantidade: ${parseFloat(itemErp.it_quan)}\nUnidade...: ${itemErp.it_unid}\nQT Entrega: ${qtd_entregue}\nSaldo.....: Entrega de Romaneio #${romaneioId}\nLançamento: App Gerencial [WEB]\nPortador..: Motorista\nRetirado..: Entrega via Romaneio`;
+                
+                const novoTexto = `Lançamento: ${dStr}  {${nomeUsuario}}\nCodigo....: ${itemErp.it_codi}\nDescrição.: ${itemErp.it_nome}\nQuantidade: ${parseFloat(itemErp.it_quan)}\nUnidade...: ${itemErp.it_unid}\nQT Entrega: ${qtd_entregue}\nSaldo.....: Entrega de Romaneio #${romaneioId}\nRetirada..: ${qtd_entregue}\nLançamento: App Gerencial [WEB]\nPortador..: Motorista\nRetirado..: Entrega via Romaneio`;
+                
                 await sc.execute(`UPDATE idavs SET it_reti = ? WHERE it_regist = ?`, [textoAntigo ? (textoAntigo + '\n' + novoTexto).trim() : novoTexto.trim(), idavs_regi]);
             }
 
-            if (qtd_devolvida > 0) {
-                await sc.execute(`UPDATE idavs SET it_qtdv = it_qtdv + ? WHERE it_regist = ?`, [qtd_devolvida, idavs_regi]);
+            // LÓGICA LOGÍSTICA CORRETA: Não altera it_qtdv (que é financeiro). Apenas escreve o histórico de falha de entrega.
+            if (qtd_voltou > 0) {
                 const [itemErpRowsAtualizado] = await sc.execute(`SELECT it_reti FROM idavs WHERE it_regist = ?`, [idavs_regi]);
                 const textoAntigoDev = itemErpRowsAtualizado[0].it_reti || '';
-                const novoTextoDev = `Lançamento: ${dStr}  {${nomeUsuario}}\nCodigo....: ${itemErp.it_codi}\nDescrição.: ${itemErp.it_nome}\nQT Devoluc.: ${qtd_devolvida}\nMotivo....: Retorno de Romaneio #${romaneioId} [WEB]`;
+                
+                // Formato exigido pelo Python de 11 linhas
+                const novoTextoDev = `Lançamento: ${dStr}  {${nomeUsuario}}\nCodigo....: ${itemErp.it_codi}\nDescrição.: ${itemErp.it_nome}\nQuantidade: ${parseFloat(itemErp.it_quan)}\nUnidade...: ${itemErp.it_unid}\nQT Entrega: 0\nSaldo.....: Voltou p/ Loja\nRetirada..: 0\nLançamento: App Gerencial [WEB]\nPortador..: Retorno de Romaneio #${romaneioId}\nRetirado..: Nao Entregue: ${qtd_voltou}`;
+                
                 await sc.execute(`UPDATE idavs SET it_reti = ? WHERE it_regist = ?`, [textoAntigoDev ? (textoAntigoDev + '\n' + novoTextoDev).trim() : novoTextoDev.trim(), idavs_regi]);
             }
 
+            // Limpa sempre o bloqueio logístico para liberar o saldo na prateleira
             await sc.execute("UPDATE idavs SET it_logi='0' WHERE it_regist=?", [idavs_regi]);
         }
 
@@ -314,8 +314,7 @@ router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
             await sc.execute("UPDATE cdavs SET cr_roma='', cr_dado='' WHERE cr_ndav=?", [davStr]);
         }
 
-        // COM ACENTO ↓
-        await gc.execute(`UPDATE romaneios SET status = 'Concluído' WHERE id = ?`, [romaneioId]);
+        await gc.execute(`UPDATE romaneios SET status = 'Concluido' WHERE id = ?`, [romaneioId]);
 
         await gc.commit();
         await sc.commit();
@@ -330,7 +329,6 @@ router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
         if (sc) sc.release();
     }
 });
-
 
 router.get('/eligible-davs', authenticateToken, async (req, res) => {
     const { data, tipoData, apenasEntregaMarcada, bairro, davNumero, filialDav } = req.query;
