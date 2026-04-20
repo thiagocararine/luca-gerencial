@@ -583,4 +583,54 @@ router.get('/danfe/:chave', authenticateToken, async (req, res) => {
     }
 });
 
+// NOVA ROTA: GERAR PDF DA NOTA FISCAL (DANFE) VIA BANCO DE DADOS
+router.get('/danfe/:chave', authenticateToken, async (req, res) => {
+    const chave = req.params.chave;
+    
+    try {
+        // Busca o XML da nota guardado no ERP
+        const [xmlRows] = await seiPool.execute(
+            `SELECT sf_xmlarq, sf_arqxml FROM sefazxml WHERE sf_nchave = ? LIMIT 1`, 
+            [chave]
+        );
+
+        if (xmlRows.length === 0) return res.status(404).json({ error: 'XML da Nota não encontrado.' });
+
+        // Busca o número da nota e a unidade no DAV para nomear o ficheiro
+        const [notaRows] = await seiPool.execute(
+            `SELECT cr_nota, cr_inde FROM cdavs WHERE cr_chnf = ? LIMIT 1`,
+            [chave]
+        );
+        
+        let numNota = chave.substring(25, 34); // Fallback extraído da chave
+        let unidade = 'Loja';
+        
+        if (notaRows.length > 0) {
+            numNota = notaRows[0].cr_nota || numNota;
+            unidade = notaRows[0].cr_inde || unidade;
+        }
+
+        // TRUQUE AQUI: Remove os zeros à esquerda (ex: "000012345" vira "12345")
+        numNota = parseInt(numNota, 10).toString();
+
+        let xmlContent = xmlRows[0].sf_xmlarq || xmlRows[0].sf_arqxml;
+        if (!xmlContent) return res.status(404).json({ error: 'Conteúdo do XML está vazio.' });
+        if (Buffer.isBuffer(xmlContent)) xmlContent = xmlContent.toString('utf8');
+
+        // A biblioteca lê o XML e desenha o PDF
+        const doc = await gerarPDF(xmlContent);
+        
+        res.setHeader('Content-Type', 'application/pdf');
+        
+        // NOME DO FICHEIRO LIMPO E SEM ZEROS À ESQUERDA
+        res.setHeader('Content-Disposition', `inline; filename="NFe_${numNota}_${unidade}.pdf"`);
+        
+        doc.pipe(res);
+
+    } catch (error) {
+        console.error("Erro ao gerar DANFE:", error);
+        res.status(500).json({ error: 'Erro interno ao gerar o PDF da Nota Fiscal.' });
+    }
+});
+
 module.exports = router;
