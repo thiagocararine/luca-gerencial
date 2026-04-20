@@ -84,7 +84,7 @@
                 </div>
                 <h3 class="text-lg font-bold text-gray-900 mb-2" id="prompt-title">Título</h3>
                 <p class="text-sm text-gray-500 mb-4 whitespace-pre-wrap" id="prompt-message">Mensagem</p>
-                <input type="number" id="prompt-input" class="w-full border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-3 text-center text-lg font-black text-indigo-700" step="any" min="0">
+                <input type="number" id="prompt-input" class="w-full border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-3 text-center text-lg font-black text-indigo-700" step="1" min="0">
             </div>
             <div class="bg-gray-50 px-6 py-4 flex justify-center gap-3 border-t border-gray-100">
                 <button id="btn-prompt-cancel" class="px-5 py-2 text-sm font-bold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancelar</button>
@@ -163,8 +163,11 @@
                 <div id="romaneio-list-view" class="flex-1 flex flex-col h-full hidden">
                     <div class="flex justify-between items-center bg-white/90 backdrop-blur-sm p-4 rounded-t-lg shadow-sm border border-gray-200 border-b-0 shrink-0">
                         <div>
-                            <h3 class="text-lg font-bold text-gray-800">Cargas em Andamento</h3>
-                            <p class="text-xs font-medium text-gray-500">Acompanhe as cargas atuais ou inicie uma nova.</p>
+                            <h3 class="text-lg font-bold text-gray-800 mb-2">Monitoramento de Frota</h3>
+                            <div class="flex gap-2 bg-gray-200 p-1 rounded-lg w-max shadow-inner">
+                                <button id="btn-tab-andamento" class="px-4 py-1.5 rounded-md bg-white shadow-sm text-sm font-bold text-indigo-600 transition-colors">Em Andamento</button>
+                                <button id="btn-tab-concluidas" class="px-4 py-1.5 rounded-md text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors">Concluídas</button>
+                            </div>
                         </div>
                         <button id="btn-nova-carga" class="action-btn bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-2 shadow-sm">
                             <span data-feather="plus-circle" class="w-4 h-4"></span> Montar Nova Carga
@@ -202,18 +205,18 @@
                                 <div class="flex items-center gap-4 bg-gray-50 p-1.5 rounded-lg border border-gray-200">
                                     <label class="inline-flex items-center cursor-pointer group">
                                         <input type="radio" name="tipo-data" value="recebimento" class="form-radio text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5">
-                                        <span class="ml-1.5 font-bold text-gray-600 text-xs group-hover:text-indigo-600 transition-colors">Data Venda</span>
+                                        <span class="ml-1.5 font-bold text-gray-600 text-xs">Data Venda</span>
                                     </label>
                                     <div class="w-px h-4 bg-gray-300"></div>
                                     <label class="inline-flex items-center cursor-pointer group">
                                         <input type="radio" name="tipo-data" value="entrega" class="form-radio text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5" checked>
-                                        <span class="ml-1.5 font-bold text-gray-600 text-xs group-hover:text-indigo-600 transition-colors">Data Agendamento</span>
+                                        <span class="ml-1.5 font-bold text-gray-600 text-xs">Data Agendamento</span>
                                     </label>
                                 </div>
                                 <input type="date" id="filter-data" class="border border-gray-300 rounded-md p-1.5 text-xs font-bold text-gray-700 focus:ring-indigo-500 shadow-sm flex-1 sm:max-w-[150px]">
                             </div>
                             <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
-                                <div class="flex items-center gap-4 w-full sm:w-auto">
+                                <div class="flex flex-col gap-2">
                                     <label class="inline-flex items-center cursor-pointer">
                                         <div class="relative">
                                             <input type="checkbox" id="filter-somente-agendado" class="sr-only" checked>
@@ -222,12 +225,15 @@
                                         </div>
                                         <span class="ml-2 font-bold text-gray-500 text-[10px] uppercase">Apenas c/ Entrega Marcada</span>
                                     </label>
+                                    <label class="inline-flex items-center cursor-pointer mt-1">
+                                        <input type="checkbox" id="filter-receber-local" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                                        <span class="ml-2 font-bold text-gray-600 text-[10px] uppercase underline decoration-dashed decoration-gray-300">Pagamento Pendente / Receber no Local</span>
+                                    </label>
                                 </div>
                                 <button id="btn-buscar-pendentes" class="action-btn bg-blue-600 hover:bg-blue-700 px-5 py-2 text-xs flex items-center justify-center gap-1.5 w-full sm:w-auto">
                                     <span data-feather="search" class="w-3.5 h-3.5"></span> Buscar Pedidos
                                 </button>
                             </div>
-                            
                             <div class="flex gap-2 pt-3 border-t border-gray-100">
                                 <div class="flex-1">
                                     <select id="filter-bairro" class="w-full border-gray-300 rounded p-1.5 text-[11px] font-bold text-gray-600 focus:ring-indigo-500 shadow-sm bg-gray-50 cursor-pointer">
@@ -244,7 +250,7 @@
                                     </select>
                                 </div>
                             </div>
-                            </div>
+                        </div>
                         <div id="lista-pendentes" class="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50/50"></div>
                     </div>
 
@@ -259,8 +265,9 @@
                                 <select id="select-veiculo" class="w-full border-gray-300 rounded-md text-sm p-2 focus:ring-indigo-500 bg-indigo-50/30 font-semibold text-gray-700"></select>
                             </div>
                             <div>
-                                <label class="text-[10px] font-bold text-indigo-800 uppercase block mb-1">Nome do Motorista</label>
-                                <input type="text" id="input-motorista" class="w-full border-gray-300 rounded-md text-sm p-2 focus:ring-indigo-500 font-semibold text-gray-700 placeholder-gray-400" placeholder="Quem fará a rota?">
+                                <label class="text-[10px] font-bold text-indigo-800 uppercase block mb-1">Motorista</label>
+                                <input type="text" id="input-motorista" list="motoristas-list" class="w-full border-gray-300 rounded-md text-sm p-2 focus:ring-indigo-500 font-semibold text-gray-700 placeholder-gray-400" placeholder="Nome ou Nome + CPF" autocomplete="off">
+                                <datalist id="motoristas-list"></datalist>
                             </div>
                         </div>
                         <div id="lista-carrinho" class="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-50"></div>
@@ -288,7 +295,7 @@
                             </div>
                             <button class="btn-voltar-home text-xs font-bold text-gray-500 hover:text-red-600 bg-white border border-gray-200 px-4 py-2 rounded shadow-sm transition-colors">Voltar para Cargas</button>
                         </div>
-                        <div class="p-3 bg-gray-50 border-b border-gray-200 text-xs text-gray-500 flex gap-4 justify-center shrink-0 shadow-inner">
+                        <div class="p-3 bg-gray-50 border-b text-xs text-gray-500 flex gap-4 justify-center shrink-0 shadow-inner">
                             <span class="flex items-center gap-1"><i data-feather="check-circle" class="w-3 h-3 text-green-500"></i> Entregue Total</span>
                             <span class="flex items-center gap-1"><i data-feather="x-circle" class="w-3 h-3 text-red-500"></i> Não Entregue (Voltou)</span>
                             <span class="flex items-center gap-1"><i data-feather="pie-chart" class="w-3 h-3 text-orange-500"></i> Entrega Parcial</span>
@@ -356,7 +363,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script src="entregas.js?v=8.0" defer></script>
+<script src="entregas.js?v=9.0" defer></script>
 <script src="assets/global.js"></script>
 </body>
 </html>

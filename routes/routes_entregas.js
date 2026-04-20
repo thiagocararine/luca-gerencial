@@ -166,6 +166,15 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
     }
 });
 
+// NOVA ROTA: Busca motoristas no Histórico para o Datalist
+router.get('/motoristas-disponiveis', authenticateToken, async (req, res) => {
+    try {
+        const [historico] = await gerencialPool.execute("SELECT DISTINCT nome_motorista as nome FROM romaneios WHERE nome_motorista IS NOT NULL AND nome_motorista != '' ORDER BY nome_motorista ASC");
+        res.json(historico.map((m, i) => ({ id: i, nome: m.nome })));
+    } catch (error) { 
+        res.json([]); // Fallback vazio para permitir digitação livre
+    }
+});
 
 router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
     try {
@@ -278,7 +287,7 @@ router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
         for (const item of itens_acerto) {
             const idavs_regi = parseInt(item.idavs_regi, 10);
             const qtd_entregue = parseFloat(item.qtd_entregue) || 0;
-            const qtd_voltou = parseFloat(item.qtd_voltou) || 0; // Quantidade logística (Não entregue)
+            const qtd_voltou = parseFloat(item.qtd_voltou) || 0; 
 
             const [itemErpRows] = await sc.execute(`SELECT * FROM idavs WHERE it_regist = ? FOR UPDATE`, [idavs_regi]);
             if (itemErpRows.length === 0) continue;
@@ -288,23 +297,21 @@ router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
                 await sc.execute(`UPDATE idavs SET it_qent = it_qent + ? WHERE it_regist = ?`, [qtd_entregue, idavs_regi]);
                 const textoAntigo = itemErp.it_reti || '';
                 
-                const novoTexto = `Lançamento: ${dStr}  {${nomeUsuario}}\nCodigo....: ${itemErp.it_codi}\nDescrição.: ${itemErp.it_nome}\nQuantidade: ${parseFloat(itemErp.it_quan)}\nUnidade...: ${itemErp.it_unid}\nQT Entrega: ${qtd_entregue}\nSaldo.....: Entrega de Romaneio #${romaneioId}\nRetirada..: ${qtd_entregue}\nLançamento: App Gerencial [WEB]\nPortador..: Motorista\nRetirado..: Entrega via Romaneio`;
+                const novoTexto = `Lançamento: ${dStr}  {${nomeUsuario}}\nCodigo....: ${itemErp.it_codi}\nDescrição.: ${itemErp.it_nome}\nQuantidade: ${parseFloat(itemErp.it_quan)}\nUnidade...: ${itemErp.it_unid}\nQT Entrega: ${qtd_entregue}\nSaldo.....: Entrega de Romaneio #${romaneioId}\nRetirada..: ${qtd_entregue}\nLançamento: App Gerencial [WEB]\nPortador..: Motorista\nRetirado..: Entrega Total via Romaneio`;
                 
                 await sc.execute(`UPDATE idavs SET it_reti = ? WHERE it_regist = ?`, [textoAntigo ? (textoAntigo + '\n' + novoTexto).trim() : novoTexto.trim(), idavs_regi]);
             }
 
-            // LÓGICA LOGÍSTICA CORRETA: Não altera it_qtdv (que é financeiro). Apenas escreve o histórico de falha de entrega.
             if (qtd_voltou > 0) {
                 const [itemErpRowsAtualizado] = await sc.execute(`SELECT it_reti FROM idavs WHERE it_regist = ?`, [idavs_regi]);
                 const textoAntigoDev = itemErpRowsAtualizado[0].it_reti || '';
                 
-                // Formato exigido pelo Python de 11 linhas
-                const novoTextoDev = `Lançamento: ${dStr}  {${nomeUsuario}}\nCodigo....: ${itemErp.it_codi}\nDescrição.: ${itemErp.it_nome}\nQuantidade: ${parseFloat(itemErp.it_quan)}\nUnidade...: ${itemErp.it_unid}\nQT Entrega: 0\nSaldo.....: Voltou p/ Loja\nRetirada..: 0\nLançamento: App Gerencial [WEB]\nPortador..: Retorno de Romaneio #${romaneioId}\nRetirado..: Nao Entregue: ${qtd_voltou}`;
+                // Formato melhorado para Parcial / Devolução
+                const novoTextoDev = `Lançamento: ${dStr}  {${nomeUsuario}}\nCodigo....: ${itemErp.it_codi}\nDescrição.: ${itemErp.it_nome}\nQuantidade: ${parseFloat(itemErp.it_quan)}\nUnidade...: ${itemErp.it_unid}\nQT Entrega: ${qtd_entregue}\nSaldo.....: Voltou p/ Loja\nRetirada..: 0\nLançamento: App Gerencial [WEB]\nPortador..: Romaneio #${romaneioId} (Motorista)\nRetirado..: Entregue: ${qtd_entregue} | Voltou: ${qtd_voltou}`;
                 
                 await sc.execute(`UPDATE idavs SET it_reti = ? WHERE it_regist = ?`, [textoAntigoDev ? (textoAntigoDev + '\n' + novoTextoDev).trim() : novoTextoDev.trim(), idavs_regi]);
             }
 
-            // Limpa sempre o bloqueio logístico para liberar o saldo na prateleira
             await sc.execute("UPDATE idavs SET it_logi='0' WHERE it_regist=?", [idavs_regi]);
         }
 
@@ -340,10 +347,11 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
         const filialMap = { 'Santa Cruz da Serra': 'LUCAM', 'Piabetá': 'VMNAF', 'Parada Angélica': 'TNASC', 'Nova Campinas': 'LCMAT' };
         const dateColumn = tipoData === 'entrega' ? 'c.cr_entr' : 'c.cr_erec';
 
+        // Removido o c.cr_reca = '1' para permitir que DAVs não pagos apareçam e sejam tratados no Frontend
         let query = `
-            SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde, c.cr_edav, c.cr_entr, c.cr_udav
+            SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde, c.cr_edav, c.cr_entr, c.cr_udav, c.cr_reca, c.cr_nota, c.cr_chnf
             FROM cdavs c JOIN idavs i ON c.cr_ndav = i.it_ndav
-            WHERE c.cr_reca = '1' AND DATE(${dateColumn}) = ? AND (i.it_quan - i.it_qtdv - i.it_qent) > 0 AND c.cr_roma = '' 
+            WHERE DATE(${dateColumn}) = ? AND (i.it_quan - i.it_qtdv - i.it_qent) > 0 AND c.cr_roma = '' 
         `;
         const params = [data];
 
@@ -396,7 +404,9 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
             }
 
             return {
-                dav_numero: dav.cr_ndav, cliente: dav.cr_nmcl, vendedor: dav.cr_udav, bairro: dav.cr_ebai || 'N/I', cidade: dav.cr_ecid || 'N/I', filial: dav.cr_inde, data_venda: dav.cr_edav, data_agendada: dav.cr_entr, peso_total_dav: pesoTotalDav, itens: itensComSaldo
+                dav_numero: dav.cr_ndav, cliente: dav.cr_nmcl, vendedor: dav.cr_udav, bairro: dav.cr_ebai || 'N/I', cidade: dav.cr_ecid || 'N/I', filial: dav.cr_inde, data_venda: dav.cr_edav, data_agendada: dav.cr_entr, peso_total_dav: pesoTotalDav, 
+                status_caixa: dav.cr_reca, nota_fiscal: dav.cr_nota, chave_nfe: dav.cr_chnf,
+                itens: itensComSaldo
             };
         }).filter(dav => dav.itens.length > 0); 
 
@@ -448,6 +458,8 @@ router.post('/romaneios/:id/itens', authenticateToken, async (req, res) => {
             const davNumeroStr = item.dav_numero.toString().padStart(13, '0'); 
 
             const itemErp = itemErpMap.get(idavsRegi);
+            if(!itemErp) throw new Error(`Item ${idavsRegi} não encontrado no ERP.`);
+
             const { saldo } = calcularSaldosItem(itemErp, null, { total: alocadoMap.get(idavsRegi) || 0 });
 
             if (qtd > saldo) throw new Error(`Saldo insuficiente para ${itemErp.it_nome}.`);
