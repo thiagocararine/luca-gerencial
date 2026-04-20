@@ -214,7 +214,10 @@ router.get('/romaneios', authenticateToken, async (req, res) => {
 
         const [romaneios] = await gerencialPool.execute(query, params);
         res.json(romaneios);
-    } catch (error) { res.status(500).json({ error: 'Erro ao buscar romaneios.' }); }
+    } catch (error) { 
+        console.error("ERRO NO SELECT DE ROMANEIOS: ", error);
+        res.status(500).json({ error: error.message }); 
+    }
 });
 
 router.post('/romaneios', authenticateToken, async (req, res) => {
