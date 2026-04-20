@@ -538,11 +538,12 @@ router.delete('/romaneios/:id/itens/:itemId', authenticateToken, async (req, res
 });
 
 // NOVA ROTA: GERAR PDF DA NOTA FISCAL (DANFE) VIA BANCO DE DADOS
+// NOVA ROTA: GERAR PDF DA NOTA FISCAL (DANFE) VIA BANCO DE DADOS
 router.get('/danfe/:chave', authenticateToken, async (req, res) => {
     const chave = req.params.chave;
     
     try {
-        // Busca o XML da nota guardado no ERP (tabela sefazxml)
+        // Busca o XML da nota guardado no ERP
         const [xmlRows] = await seiPool.execute(
             `SELECT sf_xmlarq, sf_arqxml FROM sefazxml WHERE sf_nchave = ? LIMIT 1`, 
             [chave]
@@ -550,19 +551,29 @@ router.get('/danfe/:chave', authenticateToken, async (req, res) => {
 
         if (xmlRows.length === 0) return res.status(404).json({ error: 'XML da Nota não encontrado.' });
 
-        // O ERP salva o XML em sf_xmlarq ou sf_arqxml (pegamos o que estiver preenchido)
+        // Busca o número da nota e a unidade no DAV para nomear o ficheiro
+        const [notaRows] = await seiPool.execute(
+            `SELECT cr_nota, cr_inde FROM cdavs WHERE cr_chnf = ? LIMIT 1`,
+            [chave]
+        );
+        
+        let numNota = chave.substring(25, 34); // Fallback extraído da chave
+        let unidade = 'Loja';
+        
+        if (notaRows.length > 0) {
+            numNota = notaRows[0].cr_nota || numNota;
+            unidade = notaRows[0].cr_inde || unidade;
+        }
+
         let xmlContent = xmlRows[0].sf_xmlarq || xmlRows[0].sf_arqxml;
         if (!xmlContent) return res.status(404).json({ error: 'Conteúdo do XML está vazio.' });
-        
-        // Converte o campo BLOB para String caso o MySQL devolva em formato Buffer
         if (Buffer.isBuffer(xmlContent)) xmlContent = xmlContent.toString('utf8');
 
-        // A biblioteca lê o XML e desenha o PDF na memória
         const doc = await gerarPDF(xmlContent);
         
-        // Devolve o PDF pronto para o navegador do utilizador
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `inline; filename="DANFE_${chave}.pdf"`);
+        // AQUI ESTÁ O NOME DO FICHEIRO CUSTOMIZADO
+        res.setHeader('Content-Disposition', `inline; filename="NFe_${numNota}_${unidade}.pdf"`);
         
         doc.pipe(res);
 

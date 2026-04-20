@@ -266,9 +266,10 @@ function renderDavResults(data) {
         resultsContainer.innerHTML = `
             <div class="bg-white p-6 rounded-lg shadow-lg max-w-xl mx-auto mt-4 border border-gray-200">
                 <div class="flex justify-between items-start border-b border-gray-100 pb-4 mb-4">
-                    <div class="flex flex-col gap-2">
+                    <div class="flex flex-col gap-1.5">
                         <h3 class="text-lg font-black text-gray-900">${cliente.nome}</h3>
-                        <div class="flex flex-wrap items-center">${statusTagHtml} ${nfeBadge}</div>
+                        <p class="text-[11px] font-bold text-teal-700 uppercase flex items-center gap-1"><i data-feather="user" class="w-3 h-3"></i> Vend: ${data.vendedor || 'N/I'}</p>
+                        <div class="flex flex-wrap items-center mt-1">${statusTagHtml} ${nfeBadge}</div>
                     </div>
                     <p class="font-black text-xl text-indigo-600">${formatCurrency(valor_total)}</p>
                 </div>
@@ -588,13 +589,13 @@ function renderPendingList() {
     }
 
     container.innerHTML = davsVisiveis.map(dav => {
-        // Atualizado com o botão PDF Node.js
         let nfeBadge = '';
         if (dav.nota_fiscal && dav.chave_nfe) {
             nfeBadge = `<button onclick="abrirDanfe('${dav.chave_nfe}')" class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border border-blue-200 hover:bg-blue-600 hover:text-white transition-colors" title="Ver Nota Fiscal">NFe ${dav.nota_fiscal}</button>`;
         }
 
         const tagReceber = dav.cobrar_local ? `<span class="bg-red-600 text-white px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest animate-pulse ml-2 shadow-sm">Receber no Local</span>` : '';
+        const vendedorNome = dav.vendedor || 'Não informado';
 
         const itensHtml = dav.itens.map(item => `
             <div class="flex justify-between items-center border-b border-indigo-100/50 py-1.5 last:border-0 hover:bg-indigo-50 px-1 rounded transition-colors">
@@ -619,6 +620,7 @@ function renderPendingList() {
                     </p>
                     <div class="flex gap-2 mt-2 items-center flex-wrap">
                         <span class="text-[9px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded border shadow-sm"><i data-feather="map-pin" class="w-3 h-3 inline"></i> ${dav.bairro.trim()}</span>
+                        <span class="text-[9px] text-teal-800 font-bold bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 shadow-sm"><i data-feather="user" class="w-3 h-3 inline"></i> Vend: ${vendedorNome}</span>
                         <span class="text-[9px] text-orange-700 font-bold bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 shadow-sm"><i data-feather="anchor" class="w-3 h-3 inline"></i> ${dav.peso_total_dav.toLocaleString('pt-BR', {minimumFractionDigits: 1})} kg</span>
                         ${nfeBadge}
                     </div>
