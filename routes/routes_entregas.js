@@ -3,6 +3,7 @@ const router = express.Router();
 const mysql = require('mysql2/promise');
 const { authenticateToken } = require('../middlewares');
 const dbConfig = require('../dbConfig');
+const { gerarPDF } = require('@alexssmusica/node-pdf-nfe');
 
 const dbConfigSei = {
     host: process.env.DB_HOST,
@@ -167,6 +168,14 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
 });
 
 
+// NOVA ROTA: Busca motoristas REAIS (Tabela)
+router.get('/motoristas-disponiveis', authenticateToken, async (req, res) => {
+    try {
+        const [motoristas] = await gerencialPool.execute("SELECT id, nome, cpf FROM cad_motoristas WHERE status = 'Ativo' ORDER BY nome ASC");
+        res.json(motoristas);
+    } catch (error) { res.status(500).json({ error: 'Erro ao buscar motoristas.' }); }
+});
+
 router.get('/veiculos-disponiveis', authenticateToken, async (req, res) => {
     try {
         const [veiculos] = await gerencialPool.execute("SELECT id, modelo, placa, capacidade_kg FROM veiculos WHERE status = 'Ativo' ORDER BY modelo ASC");
@@ -179,7 +188,7 @@ router.get('/romaneios', authenticateToken, async (req, res) => {
     const { perfil } = req.user; 
 
     try {
-        let query = `SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, r.status, v.modelo as modelo_veiculo, v.placa as placa_veiculo FROM romaneios r JOIN veiculos v ON r.id_veiculo = v.id`;
+        let query = `SELECT r.id, r.data_criacao, r.data_conclusao, r.nome_motorista, r.filial_origem, r.status, v.modelo as modelo_veiculo, v.placa as placa_veiculo FROM romaneios r JOIN veiculos v ON r.id_veiculo = v.id`;
         const params = [];
         const conditions = [];
 
@@ -311,7 +320,6 @@ router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
             await sc.execute("UPDATE cdavs SET cr_roma='', cr_dado='' WHERE cr_ndav=?", [davStr]);
         }
 
-        // AGORA GRAVA TAMBÉM A DATA DE CONCLUSÃO!
         await gc.execute(`UPDATE romaneios SET status = 'Concluido', data_conclusao = NOW() WHERE id = ?`, [romaneioId]);
 
         await gc.commit();
@@ -329,7 +337,7 @@ router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
 });
 
 router.get('/eligible-davs', authenticateToken, async (req, res) => {
-    const { data, tipoData, apenasEntregaMarcada, bairro, davNumero, filialDav } = req.query;
+    const { data, tipoData, apenasEntregaMarcada, bairro, apenasReceberLocal, filialDav } = req.query;
     const { perfil } = req.user;
 
     if (!data || !tipoData) return res.status(400).json({ error: "Data obrigatória." });
@@ -338,17 +346,24 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
         const filialMap = { 'Santa Cruz da Serra': 'LUCAM', 'Piabetá': 'VMNAF', 'Parada Angélica': 'TNASC', 'Nova Campinas': 'LCMAT' };
         const dateColumn = tipoData === 'entrega' ? 'c.cr_entr' : 'c.cr_erec';
 
-        // FILTRO: EXIGE QUE ESTEJA PAGO (c.cr_reca = '1') PARA NÃO POLUIR A TELA!
+        // FILTRO DESPOLUIDO: Somente os Pagos (reca=1) OU os marcados pra Receber no Local (rloc=1,S,T)
         let query = `
-            SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde, c.cr_edav, c.cr_entr, c.cr_udav, c.cr_reca, c.cr_nota, c.cr_chnf
+            SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde, c.cr_edav, c.cr_entr, c.cr_udav, c.cr_reca, c.cr_rloc, c.cr_nota, c.cr_chnf
             FROM cdavs c JOIN idavs i ON c.cr_ndav = i.it_ndav
-            WHERE c.cr_reca = '1' AND DATE(${dateColumn}) = ? AND (i.it_quan - i.it_qtdv - i.it_qent) > 0 AND c.cr_roma = '' 
+            WHERE DATE(${dateColumn}) = ? AND (i.it_quan - i.it_qtdv - i.it_qent) > 0 AND c.cr_roma = '' 
         `;
         const params = [data];
 
+        if (apenasReceberLocal === 'true') {
+            // Filtra só não pagos E com "Receber no local" ativo
+            query += ` AND c.cr_reca != '1' AND c.cr_rloc IN ('1','S','T')`;
+        } else {
+            // Padrão: Só exibe os que já foram pagos e recebidos no caixa
+            query += ` AND c.cr_reca = '1'`;
+        }
+
         if (apenasEntregaMarcada === 'true') query += ` AND c.cr_entr != '0000-00-00'`; 
         if (bairro) { query += ' AND c.cr_ebai LIKE ?'; params.push(`%${bairro}%`); }
-        if (davNumero) { query += ' AND CAST(c.cr_ndav AS UNSIGNED) = ?'; params.push(parseInt(davNumero, 10)); }
 
         if (perfil === 'Administrador' || perfil === 'Financeiro') {
             if (filialDav) { query += ' AND c.cr_inde = ?'; params.push(filialMap[filialDav]); }
@@ -396,7 +411,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
 
             return {
                 dav_numero: dav.cr_ndav, cliente: dav.cr_nmcl, vendedor: dav.cr_udav, bairro: dav.cr_ebai || 'N/I', cidade: dav.cr_ecid || 'N/I', filial: dav.cr_inde, data_venda: dav.cr_edav, data_agendada: dav.cr_entr, peso_total_dav: pesoTotalDav, 
-                status_caixa: dav.cr_reca, nota_fiscal: dav.cr_nota, chave_nfe: dav.cr_chnf,
+                status_caixa: dav.cr_reca, cobrar_local: dav.cr_rloc, nota_fiscal: dav.cr_nota, chave_nfe: dav.cr_chnf,
                 itens: itensComSaldo
             };
         }).filter(dav => dav.itens.length > 0); 
@@ -516,6 +531,41 @@ router.delete('/romaneios/:id/itens/:itemId', authenticateToken, async (req, res
     } finally { 
         gc.release(); 
         if(sc) sc.release();
+    }
+});
+
+// NOVA ROTA: GERAR PDF DA NOTA FISCAL (DANFE) VIA BANCO DE DADOS
+router.get('/danfe/:chave', authenticateToken, async (req, res) => {
+    const chave = req.params.chave;
+    
+    try {
+        // Busca o XML da nota guardado no ERP (tabela sefazxml)
+        const [xmlRows] = await seiPool.execute(
+            `SELECT sf_xmlarq, sf_arqxml FROM sefazxml WHERE sf_nchave = ? LIMIT 1`, 
+            [chave]
+        );
+
+        if (xmlRows.length === 0) return res.status(404).json({ error: 'XML da Nota não encontrado.' });
+
+        // O ERP salva o XML em sf_xmlarq ou sf_arqxml (pegamos o que estiver preenchido)
+        let xmlContent = xmlRows[0].sf_xmlarq || xmlRows[0].sf_arqxml;
+        if (!xmlContent) return res.status(404).json({ error: 'Conteúdo do XML está vazio.' });
+        
+        // Converte o campo BLOB para String caso o MySQL devolva em formato Buffer
+        if (Buffer.isBuffer(xmlContent)) xmlContent = xmlContent.toString('utf8');
+
+        // A biblioteca lê o XML e desenha o PDF na memória
+        const doc = await gerarPDF(xmlContent);
+        
+        // Devolve o PDF pronto para o navegador do utilizador
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="DANFE_${chave}.pdf"`);
+        
+        doc.pipe(res);
+
+    } catch (error) {
+        console.error("Erro ao gerar DANFE:", error);
+        res.status(500).json({ error: 'Erro interno ao gerar o PDF da Nota Fiscal.' });
     }
 });
 

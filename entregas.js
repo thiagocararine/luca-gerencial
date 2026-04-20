@@ -3,13 +3,11 @@ document.addEventListener('DOMContentLoaded', initEntregasPage);
 // ==========================================================
 //               VARIÁVEIS GLOBAIS
 // ==========================================================
-// const apiUrlBase = '/api';  
-
 let currentRomaneioId = null;     
 let veiculosDisp = []; 
 let pendingDavs = []; 
 let cartDavs = [];    
-let romaneioListStatus = 'Em montagem';
+let romaneioListStatus = 'Em montagem'; 
 
 let acertoRomaneioId = null;
 let acertoItensOriginal = [];
@@ -128,6 +126,7 @@ function setupEventListeners() {
     document.getElementById('btn-buscar-pendentes')?.addEventListener('click', buscarPedidosPendentes);
     document.getElementById('filter-bairro')?.addEventListener('change', renderPendingList);
     document.getElementById('filter-filial-dav')?.addEventListener('change', renderPendingList); 
+    document.getElementById('filter-receber-local')?.addEventListener('change', buscarPedidosPendentes); 
     document.getElementById('select-veiculo')?.addEventListener('change', atualizarBarraDePeso);
     document.getElementById('btn-finalizar-carga')?.addEventListener('click', finalizarCarga);
     
@@ -179,11 +178,11 @@ function renderDavResults(data) {
 
     let statusTagHtml = '';
     if (status_caixa === '1') statusTagHtml = `<span class="ml-3 inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-green-600 text-white shadow-sm">Pago (Recebido)</span>`;
-    else statusTagHtml = `<span class="ml-3 inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-600 text-white shadow-sm">Pagamento Pendente</span>`;
+    else statusTagHtml = `<span class="ml-3 inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-600 text-white animate-pulse shadow-sm">Pagamento Pendente</span>`;
 
     let nfeBadge = '';
     if (nota_fiscal && nota_fiscal.trim() !== '' && chave_nfe) {
-        nfeBadge = `<a href="https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=${chave_nfe}" target="_blank" class="ml-2 inline-flex items-center px-2.5 py-1 rounded text-[10px] font-black uppercase bg-blue-100 text-blue-800 hover:bg-blue-600 hover:text-white transition-colors border border-blue-200" title="Clique para consultar a Nota Fiscal">NFe: ${nota_fiscal} <i data-feather="external-link" class="w-3 h-3 ml-1"></i></a>`;
+        nfeBadge = `<button onclick="abrirDanfe('${chave_nfe}')" class="ml-2 inline-flex items-center px-2.5 py-1 rounded text-[10px] font-black uppercase bg-blue-100 text-blue-800 hover:bg-blue-600 hover:text-white transition-colors border border-blue-200" title="Clique para abrir e imprimir a Nota Fiscal">NFe: ${nota_fiscal} <i data-feather="file-text" class="w-3 h-3 ml-1"></i></button>`;
     }
 
     if (status_caixa === '2' || status_caixa === '3') {
@@ -204,7 +203,7 @@ function renderDavResults(data) {
                                 <td class="px-4 py-3 font-medium text-gray-800">${item.pd_nome} <span class="text-gray-400 text-xs">(${item.unidade})</span></td>
                                 <td class="px-2 py-3 text-center font-black ${item.quantidade_saldo > 0 ? 'text-indigo-600' : 'text-gray-400'}">${item.quantidade_saldo}</td>
                                 <td class="px-4 py-3 text-center">
-                                    <input type="number" step="1" class="w-20 text-center rounded-md border-gray-300 focus:ring-indigo-500 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" ${item.quantidade_saldo > 0 ? '' : 'disabled'}>
+                                    <input type="number" step="1" class="w-20 text-center rounded-md border-gray-300 focus:ring-indigo-500 shadow-sm" value="0" min="0" max="${item.quantidade_saldo}" ${item.quantidade_saldo > 0 && status_caixa === '1' ? '' : 'disabled title="Apenas pedidos pagos podem ser retirados"'}>
                                 </td>
                             </tr>`).join('')}
                     </tbody>
@@ -223,7 +222,7 @@ function renderDavResults(data) {
                 <div class="space-y-4">
                     <h4 class="font-bold text-gray-700 uppercase tracking-wider text-[11px]">Itens do Pedido</h4>
                     <div class="overflow-hidden rounded-lg border border-gray-200 shadow-sm">${itemsHtml}</div>
-                    ${itemsComSaldoDisponivel.length > 0 ? `
+                    ${itemsComSaldoDisponivel.length > 0 && status_caixa === '1' ? `
                     <div class="flex justify-end pt-4 border-t border-gray-100">
                         <button id="confirm-retirada-btn" class="action-btn bg-green-600 hover:bg-green-700 flex items-center gap-2 shadow-md transform active:scale-95">
                             <i data-feather="check-circle" class="w-4 h-4"></i> Confirmar Retirada no Balcão
@@ -356,13 +355,14 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
         } catch (e) { select.innerHTML = '<option value="">Erro ao carregar</option>'; }
     }
 
-    const datalist = document.getElementById('motoristas-list');
-    if (datalist && datalist.options.length === 0) {
+    const selectMotorista = document.getElementById('input-motorista');
+    if (selectMotorista && selectMotorista.options.length <= 1) {
+        selectMotorista.innerHTML = '<option value="">Carregando...</option>';
         try {
             const resMot = await fetch(`${apiUrlBase}/entregas/motoristas-disponiveis`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
             const motos = await resMot.json();
-            datalist.innerHTML = motos.map(m => `<option value="${m.nome}">`).join('');
-        } catch(e) {}
+            selectMotorista.innerHTML = '<option value="">-- Selecione o Motorista --</option>' + motos.map(m => `<option value="${m.nome}">${m.nome} ${m.cpf ? `(${m.cpf})` : ''}</option>`).join('');
+        } catch(e) { selectMotorista.innerHTML = '<option value="">Erro ao carregar</option>'; }
     }
 
     const tituloCarrinho = document.getElementById('titulo-carrinho');
@@ -378,7 +378,11 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
             const res = await fetch(`${apiUrlBase}/entregas/romaneios/${currentRomaneioId}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
             const data = await res.json();
             document.getElementById('select-veiculo').value = veiculosDisp.find(v => v.placa === data.placa_veiculo)?.id || '';
-            document.getElementById('input-motorista').value = data.nome_motorista;
+            
+            // O valor do DB é salvo pelo nome
+            const optionMot = Array.from(selectMotorista.options).find(opt => option.value === data.nome_motorista);
+            if(optionMot) selectMotorista.value = optionMot.value;
+
             const grouped = data.itens.reduce((acc, item) => {
                 if(!acc[item.dav_numero]) acc[item.dav_numero] = { dav_numero: item.dav_numero, cliente: item.cliente_nome, bairro: 'Bairro no Romaneio', cidade: '', filial: data.filial_origem, peso_total_dav: 0, itens: [], is_existing: true };
                 const peso = parseFloat(item.peso_bruto_unitario) * parseFloat(item.quantidade_a_entregar);
@@ -415,13 +419,17 @@ async function buscarPedidosPendentes() {
     const filialInput = document.getElementById('filter-filial-dav');
     const filialStr = (filialInput && !document.getElementById('filial-filter-container').classList.contains('hidden') && filialInput.value) ? `&filialDav=${filialInput.value}` : '';
 
+    const filtroReceberLocalElement = document.getElementById('filter-receber-local');
+    const apenasReceberLocal = filtroReceberLocalElement ? filtroReceberLocalElement.checked : false;
+    const receberStr = apenasReceberLocal ? '&apenasReceberLocal=true' : '';
+
     const btn = document.getElementById('btn-buscar-pendentes');
     const originalHtml = btn.innerHTML;
     btn.innerHTML = '<i data-feather="loader" class="w-3.5 h-3.5 animate-spin"></i> Buscando...'; 
     btn.disabled = true; if(typeof feather !== 'undefined') feather.replace();
 
     try {
-        const res = await fetch(`${apiUrlBase}/entregas/eligible-davs?data=${data}&tipoData=${tipoData}&apenasEntregaMarcada=${apenasAgendado}${filialStr}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const res = await fetch(`${apiUrlBase}/entregas/eligible-davs?data=${data}&tipoData=${tipoData}&apenasEntregaMarcada=${apenasAgendado}${filialStr}${receberStr}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!res.ok) throw new Error("Falha ao buscar pedidos.");
         const davs = await res.json();
         
@@ -472,8 +480,10 @@ function renderPendingList() {
     container.innerHTML = davsVisiveis.map(dav => {
         let nfeBadge = '';
         if (dav.nota_fiscal && dav.chave_nfe) {
-            nfeBadge = `<a href="https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=${dav.chave_nfe}" target="_blank" class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border border-blue-200 hover:bg-blue-600 hover:text-white transition-colors" title="Ver Nota Fiscal">NFe ${dav.nota_fiscal}</a>`;
+            nfeBadge = `<button onclick="abrirDanfe('${dav.chave_nfe}')" class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border border-blue-200 hover:bg-blue-600 hover:text-white transition-colors" title="Ver Nota Fiscal">NFe ${dav.nota_fiscal}</button>`;
         }
+
+        const tagReceber = dav.cobrar_local ? `<span class="bg-red-600 text-white px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest animate-pulse ml-2 shadow-sm">Receber no Local</span>` : '';
 
         const itensHtml = dav.itens.map(item => `
             <div class="flex justify-between items-center border-b border-indigo-100/50 py-1.5 last:border-0 hover:bg-indigo-50 px-1 rounded transition-colors">
@@ -494,6 +504,7 @@ function renderPendingList() {
                         DAV #${dav.dav_numero} 
                         <span class="bg-gray-800 text-white text-[9px] px-2 py-0.5 rounded shadow-sm tracking-wider">${dav.filial}</span>
                         <span class="text-xs font-medium text-gray-500 ml-1">- ${dav.cliente}</span>
+                        ${tagReceber}
                     </p>
                     <div class="flex gap-2 mt-2 items-center flex-wrap">
                         <span class="text-[9px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded border shadow-sm"><i data-feather="map-pin" class="w-3 h-3 inline"></i> ${dav.bairro.trim()}</span>
@@ -847,7 +858,7 @@ async function buscarHistorico() {
                 <div class="flex-1">
                     <h4 class="font-black text-gray-800 text-base flex items-center gap-2 mb-1">
                         <i data-feather="archive" class="w-4 h-4 text-indigo-500"></i> Carga #${r.id} 
-                        <span class="bg-gray-200 text-gray-600 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest">${new Date(r.data_criacao).toLocaleDateString('pt-BR')}</span>
+                        <span class="bg-gray-200 text-gray-600 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest">${new Date(r.data_conclusao || r.data_criacao).toLocaleDateString('pt-BR')}</span>
                     </h4>
                     <p class="text-xs text-gray-600 font-medium ml-6"><i data-feather="user" class="w-3 h-3 inline text-gray-400"></i> ${r.nome_motorista} &nbsp;&bull;&nbsp; <i data-feather="truck" class="w-3 h-3 inline text-gray-400"></i> ${r.modelo_veiculo} (${r.placa_veiculo})</p>
                 </div>
@@ -862,7 +873,7 @@ async function buscarHistorico() {
 }
 
 // ==========================================================
-//               FUNÇÕES DE UTILIDADE (FOOTER)
+//               FUNÇÕES DE UTILIDADE
 // ==========================================================
 function gerenciarAcessoModulos() {
     const userData = getUserData();
@@ -886,28 +897,30 @@ function gerenciarAcessoModulos() {
     }
 }
 
-async function popularSelect(selectElement, codParametro, token, placeholderText) {
-    if (!selectElement) return [];
-    try {
-        const response = await fetch(`${apiUrlBase}/settings/parametros?cod=${codParametro}`, { 
-            headers: { 'Authorization': `Bearer ${token}` } 
-        });
-        if (!response.ok) throw new Error("Falha ao carregar.");
-        const data = await response.json();
-        selectElement.innerHTML = `<option value="">${placeholderText}</option>` + 
-            data.map(p => `<option value="${p.NOME_PARAMETRO}">${p.NOME_PARAMETRO}</option>`).join('');
-        return data;
-    } catch (error) {
-        selectElement.innerHTML = `<option value="">Erro</option>`;
-        return [];
-    }
-}
-
 function handleApiError(response) {
     if (response.status === 401 || response.status === 403) {
         showToast("Sessão expirada. Faça login novamente.", "error");
         setTimeout(logout, 2000);
     } else {
         response.json().then(data => showToast(`Erro: ${data.error || response.statusText}`, "error")).catch(() => showToast('Erro na API.', "error"));
+    }
+}
+
+window.abrirDanfe = async function(chave) {
+    showLoader();
+    try {
+        const res = await fetch(`${apiUrlBase}/entregas/danfe/${chave}`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        
+        if (!res.ok) throw new Error((await res.json()).error || "Erro ao carregar a Nota Fiscal.");
+        
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank'); // Abre o PDF numa nova aba nativa do Chrome/Edge
+    } catch(e) {
+        showToast(e.message, "error");
+    } finally {
+        hideLoader();
     }
 }
