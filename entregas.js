@@ -509,7 +509,10 @@ async function buscarPedidosPendentes() {
 
 function renderPendingList() {
     const container = document.getElementById('lista-pendentes');
-    const filtroBairro = document.getElementById('filter-bairro').value;
+    
+    // Trava de segurança (Optional Chaining) adicionada aqui:
+    const filtroBairroElement = document.getElementById('filter-bairro');
+    const filtroBairro = filtroBairroElement ? filtroBairroElement.value : '';
     
     let davsVisiveis = pendingDavs;
     if (filtroBairro) davsVisiveis = davsVisiveis.filter(d => d.bairro.trim() === filtroBairro);

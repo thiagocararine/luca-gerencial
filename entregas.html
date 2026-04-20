@@ -197,17 +197,17 @@
                             <h3 class="font-bold text-gray-800 flex items-center gap-2"><span data-feather="inbox" class="w-4 h-4 text-indigo-600"></span> 1. Prateleira de Pedidos</h3>
                             <button class="btn-voltar-home text-[11px] font-bold text-gray-500 uppercase hover:text-indigo-600 px-2 py-1 rounded hover:bg-gray-200">Voltar à Lista</button>
                         </div>
-                        <div class="p-4 border-b bg-white shrink-0 flex flex-col gap-4 text-sm shadow-inner">
+                        <div class="p-4 border-b border-gray-200 bg-white shrink-0 flex flex-col gap-4 text-sm shadow-inner">
                             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                 <div class="flex items-center gap-4 bg-gray-50 p-1.5 rounded-lg border border-gray-200">
                                     <label class="inline-flex items-center cursor-pointer group">
                                         <input type="radio" name="tipo-data" value="recebimento" class="form-radio text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5">
-                                        <span class="ml-1.5 font-bold text-gray-600 text-xs">Data Venda</span>
+                                        <span class="ml-1.5 font-bold text-gray-600 text-xs group-hover:text-indigo-600 transition-colors">Data Venda</span>
                                     </label>
                                     <div class="w-px h-4 bg-gray-300"></div>
                                     <label class="inline-flex items-center cursor-pointer group">
                                         <input type="radio" name="tipo-data" value="entrega" class="form-radio text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5" checked>
-                                        <span class="ml-1.5 font-bold text-gray-600 text-xs">Data Agendamento</span>
+                                        <span class="ml-1.5 font-bold text-gray-600 text-xs group-hover:text-indigo-600 transition-colors">Data Agendamento</span>
                                     </label>
                                 </div>
                                 <input type="date" id="filter-data" class="border border-gray-300 rounded-md p-1.5 text-xs font-bold text-gray-700 focus:ring-indigo-500 shadow-sm flex-1 sm:max-w-[150px]">
@@ -227,7 +227,24 @@
                                     <span data-feather="search" class="w-3.5 h-3.5"></span> Buscar Pedidos
                                 </button>
                             </div>
-                        </div>
+                            
+                            <div class="flex gap-2 pt-3 border-t border-gray-100">
+                                <div class="flex-1">
+                                    <select id="filter-bairro" class="w-full border-gray-300 rounded p-1.5 text-[11px] font-bold text-gray-600 focus:ring-indigo-500 shadow-sm bg-gray-50 cursor-pointer">
+                                        <option value="">Filtro: Todos os Bairros</option>
+                                    </select>
+                                </div>
+                                <div id="filial-filter-container" class="hidden flex-1">
+                                    <select id="filter-filial-dav" class="w-full border-gray-300 rounded p-1.5 text-[11px] font-bold text-gray-600 focus:ring-indigo-500 shadow-sm bg-gray-50 cursor-pointer">
+                                        <option value="">Filtro: Todas as Filiais</option>
+                                        <option value="Santa Cruz da Serra">Vendido em: Santa Cruz</option>
+                                        <option value="Piabetá">Vendido em: Piabetá</option>
+                                        <option value="Parada Angélica">Vendido em: Parada Angélica</option>
+                                        <option value="Nova Campinas">Vendido em: Nova Campinas</option>
+                                    </select>
+                                </div>
+                            </div>
+                            </div>
                         <div id="lista-pendentes" class="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50/50"></div>
                     </div>
 
