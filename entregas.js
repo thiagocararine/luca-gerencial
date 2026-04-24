@@ -17,14 +17,13 @@ let acertoChecklist = {};
 let isFetchingPedidos = false;
 let isFinalizandoCarga = false;
 let isAcertandoRomaneio = false;
+let isConfirmandoRetirada = false;
 
 // ==========================================================
 //               INICIALIZAÇÃO E UTILIDADES
 // ==========================================================
 function getToken() { return localStorage.getItem('lucaUserToken'); }
-function getUserData() { 
-    try { return JSON.parse(atob(getToken().split('.')[1])); } catch (e) { return null; } 
-}
+function getUserData() { try { return JSON.parse(atob(getToken().split('.')[1])); } catch (e) { return null; } }
 function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html'; }
 
 function initEntregasPage() {
@@ -103,6 +102,9 @@ function unlockUI() { document.getElementById('ui-lock-overlay').classList.add('
 function showLoader() { const l = document.getElementById('global-loader'); if(l) l.style.display = 'flex'; }
 function hideLoader() { const l = document.getElementById('global-loader'); if(l) l.style.display = 'none'; }
 
+// Remove Zeros a Esquerda dos Produtos
+function limpaCod(cod) { return cod ? cod.toString().replace(/^0+(?=\d)/, '') : ''; }
+
 // ==========================================================
 //               NAVEGAÇÃO SPA E EVENTOS
 // ==========================================================
@@ -139,11 +141,7 @@ function setupEventListeners() {
     document.getElementById('btn-buscar-pendentes')?.addEventListener('click', buscarPedidosPendentes);
     document.getElementById('filter-bairro')?.addEventListener('change', renderPendingList);
     
-    // Escuta todos os checkboxes das filiais
-    document.querySelectorAll('.filial-checkbox').forEach(cb => {
-        cb.addEventListener('change', buscarPedidosPendentes);
-    });
-
+    document.querySelectorAll('.filial-checkbox').forEach(cb => cb.addEventListener('change', buscarPedidosPendentes));
     document.getElementById('filter-receber-local')?.addEventListener('change', buscarPedidosPendentes); 
     document.getElementById('select-veiculo')?.addEventListener('change', atualizarBarraDePeso);
     document.getElementById('btn-finalizar-carga')?.addEventListener('click', finalizarCarga);
@@ -158,14 +156,17 @@ function updateListTabs() {
     if (!btnAndamento || !btnConcluidas) return;
 
     if(romaneioListStatus === 'Em montagem') {
-        btnAndamento.className = "px-4 py-1.5 rounded-md bg-white shadow-sm text-sm font-bold text-indigo-600 transition-colors";
-        btnConcluidas.className = "px-4 py-1.5 rounded-md text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors";
+        btnAndamento.className = "px-4 py-2 rounded-md bg-white shadow-sm text-sm font-bold text-indigo-600 transition-colors";
+        btnConcluidas.className = "px-4 py-2 rounded-md text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors";
     } else {
-        btnConcluidas.className = "px-4 py-1.5 rounded-md bg-white shadow-sm text-sm font-bold text-indigo-600 transition-colors";
-        btnAndamento.className = "px-4 py-1.5 rounded-md text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors";
+        btnConcluidas.className = "px-4 py-2 rounded-md bg-white shadow-sm text-sm font-bold text-indigo-600 transition-colors";
+        btnAndamento.className = "px-4 py-2 rounded-md text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors";
     }
 }
 
+// ==========================================================
+//               IMPRESSÕES E RELATÓRIOS (PDF / HTML)
+// ==========================================================
 window.abrirDanfe = async function(chave) {
     showLoader();
     try {
@@ -191,9 +192,199 @@ window.abrirDanfe = async function(chave) {
         a.click();
         
         setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
-
     } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
 }
+
+window.imprimirEspelhoDav = async function(davNumber) {
+    showLoader();
+    try {
+        const res = await fetch(`${apiUrlBase}/entregas/dav/${davNumber}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const data = await res.json();
+        
+        const logo = localStorage.getItem('company_logo') || '';
+        const printWindow = window.open('', '_blank');
+        
+        let html = `
+        <html>
+        <head>
+            <title>DAV #${davNumber}</title>
+            <style>
+                body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 20px; font-size: 12px; color: #000; }
+                .header { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
+                .logo { max-width: 150px; max-height: 60px; }
+                .title { text-align: right; }
+                h1 { margin: 0; font-size: 20px; }
+                .info-box { border: 1px solid #ccc; padding: 10px; margin-bottom: 15px; border-radius: 5px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+                th { background-color: #f5f5f5; }
+                .total { text-align: right; font-size: 18px; font-weight: bold; margin-top: 15px; }
+                @media print { .no-print { display: none; } }
+            </style>
+        </head>
+        <body>
+            <div class="no-print" style="margin-bottom: 20px;">
+                <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Imprimir</button>
+            </div>
+            <div class="header">
+                <div>${logo ? `<img src="${logo}" class="logo">` : '<h2>LUCA GERENCIAL</h2>'}</div>
+                <div class="title">
+                    <h1>DOCUMENTO AUXILIAR DE VENDA (DAV)</h1>
+                    <p><strong>Nº:</strong> ${davNumber} &nbsp;&nbsp; <strong>Emissão:</strong> ${data.data_hora_pedido ? new Date(data.data_hora_pedido).toLocaleString('pt-BR') : ''}</p>
+                </div>
+            </div>
+            <div class="info-box">
+                <p><strong>Cliente:</strong> ${data.cliente.nome}</p>
+                <p><strong>Endereço:</strong> ${data.endereco.logradouro || ''}, ${data.endereco.bairro || ''} - ${data.endereco.cidade || ''}</p>
+                <p><strong>Vendedor:</strong> ${data.vendedor || 'N/I'} &nbsp;&nbsp; <strong>Filial:</strong> ${data.filial_pedido_nome || ''}</p>
+            </div>
+            <table>
+                <thead>
+                    <tr><th>Cód.</th><th>Descrição</th><th>Unid.</th><th>Qtd Total</th><th>Já Entregue</th><th>Saldo na Loja</th></tr>
+                </thead>
+                <tbody>
+                    ${data.itens.map(i => `<tr><td>${limpaCod(i.pd_codi)}</td><td>${i.pd_nome}</td><td>${i.unidade}</td><td>${i.quantidade_total}</td><td>${i.quantidade_entregue}</td><td><strong>${i.quantidade_saldo}</strong></td></tr>`).join('')}
+                </tbody>
+            </table>
+            <div class="total">VALOR TOTAL: R$ ${parseFloat(data.valor_total).toLocaleString('pt-BR', {minimumFractionDigits:2})}</div>
+            <div style="margin-top: 50px; text-align: center;">
+                <p>_________________________________________________</p>
+                <p>Assinatura do Cliente</p>
+            </div>
+        </body>
+        </html>`;
+        
+        printWindow.document.write(html);
+        printWindow.document.close();
+        setTimeout(() => printWindow.print(), 500);
+
+    } catch (e) { showToast("Erro ao gerar impressão.", "error"); } finally { hideLoader(); }
+};
+
+window.imprimirRoteiro = async function(romaneioId) {
+    showLoader();
+    try {
+        const res = await fetch(`${apiUrlBase}/entregas/romaneios/${romaneioId}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const data = await res.json();
+        
+        const logo = localStorage.getItem('company_logo') || '';
+        const printWindow = window.open('', '_blank');
+        
+        const grouped = data.itens.reduce((acc, item) => {
+            if(!acc[item.dav_numero]) {
+                acc[item.dav_numero] = { 
+                    dav_numero: item.dav_numero, cliente: item.cliente_nome, 
+                    logradouro: item.logradouro || '', bairro: item.bairro || 'Sem Bairro', 
+                    cidade: item.cidade || '', ref: item.referencia || '', tel: item.telefone || '',
+                    itens: [] 
+                };
+            }
+            acc[item.dav_numero].itens.push(item);
+            return acc;
+        }, {});
+        
+        const davsArray = Object.values(grouped).sort((a,b) => a.bairro.localeCompare(b.bairro));
+
+        let html = `
+        <html>
+        <head>
+            <title>Roteiro de Carga #${data.id}</title>
+            <style>
+                body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 20px; font-size: 11px; color: #000; }
+                .header { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
+                .logo { max-width: 140px; max-height: 50px; }
+                h1 { margin: 0; font-size: 18px; text-transform: uppercase; }
+                .dav-box { border: 1px solid #000; margin-bottom: 15px; page-break-inside: avoid; }
+                .dav-header { background-color: #e5e7eb; padding: 6px; font-weight: bold; border-bottom: 1px solid #000; display: flex; justify-content: space-between;}
+                .dav-address { padding: 6px; border-bottom: 1px solid #000; }
+                table { width: 100%; border-collapse: collapse; }
+                th, td { border: 1px solid #000; padding: 4px; text-align: left; }
+                .sig-box { padding: 20px 10px 10px 10px; text-align: right; }
+                @media print { .no-print { display: none; } }
+            </style>
+        </head>
+        <body>
+            <div class="no-print" style="margin-bottom: 15px;">
+                <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Imprimir</button>
+            </div>
+            <div class="header">
+                <div>${logo ? `<img src="${logo}" class="logo">` : '<h2>LUCA LOGÍSTICA</h2>'}</div>
+                <div style="text-align: right;">
+                    <h1>ROTEIRO DE CARGA #${data.id}</h1>
+                    <p><strong>Data:</strong> ${new Date(data.data_criacao).toLocaleString('pt-BR')} &nbsp;&nbsp; <strong>Origem:</strong> ${data.filial_origem}</p>
+                    <p><strong>Motorista:</strong> ${data.nome_motorista} &nbsp;&nbsp; <strong>Veículo:</strong> ${data.modelo_veiculo} (${data.placa_veiculo})</p>
+                </div>
+            </div>`;
+            
+        davsArray.forEach(dav => {
+            html += `
+            <div class="dav-box">
+                <div class="dav-header">
+                    <span>DAV #${dav.dav_numero} - Cliente: ${dav.cliente}</span>
+                    <span>Bairro: ${dav.bairro}</span>
+                </div>
+                <div class="dav-address">
+                    <strong>Endereço:</strong> ${dav.logradouro}, ${dav.bairro} - ${dav.cidade}<br>
+                    <strong>Ref:</strong> ${dav.ref} &nbsp;&nbsp; <strong>Tel:</strong> ${dav.tel}
+                </div>
+                <table>
+                    <tr><th width="15%">Cód</th><th width="65%">Produto</th><th width="10%">Unid</th><th width="10%">Qtd Entregar</th></tr>
+                    ${dav.itens.map(i => `<tr><td>${limpaCod(i.produto_codigo)}</td><td>${i.produto_nome}</td><td>${i.produto_unidade}</td><td style="text-align:center; font-weight:bold;">${parseFloat(i.quantidade_a_entregar)}</td></tr>`).join('')}
+                </table>
+                <div class="sig-box">
+                    Data: ___/___/_______ &nbsp;&nbsp;&nbsp;&nbsp; Assinatura: _________________________________________
+                </div>
+            </div>`;
+        });
+        
+        html += `</body></html>`;
+        printWindow.document.write(html);
+        printWindow.document.close();
+        setTimeout(() => printWindow.print(), 500);
+
+    } catch (e) { showToast("Erro ao gerar roteiro.", "error"); } finally { hideLoader(); }
+};
+
+window.abrirVisualizacaoRomaneio = async function(id) {
+    showLoader();
+    try {
+        const res = await fetch(`${apiUrlBase}/entregas/romaneios/${id}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!res.ok) throw new Error("Erro ao buscar detalhes da carga.");
+        const data = await res.json();
+        
+        document.getElementById('view-romaneio-id').textContent = data.id;
+        document.getElementById('view-motorista').textContent = data.nome_motorista;
+        document.getElementById('view-veiculo').textContent = `${data.modelo_veiculo} (${data.placa_veiculo})`;
+        document.getElementById('view-status').textContent = data.status;
+
+        document.getElementById('btn-imprimir-romaneio').onclick = () => window.imprimirRoteiro(data.id);
+
+        const container = document.getElementById('view-itens-container');
+        const grouped = data.itens.reduce((acc, item) => {
+            if(!acc[item.dav_numero]) acc[item.dav_numero] = { cliente: item.cliente_nome, bairro: item.bairro, itens: [] };
+            acc[item.dav_numero].itens.push(item); return acc;
+        }, {});
+
+        let html = '';
+        for (const [davNumero, dados] of Object.entries(grouped)) {
+            html += `<div class="border border-gray-200 rounded-lg overflow-hidden shadow-sm mb-4"><div class="bg-gray-100 px-4 py-2 border-b flex justify-between items-center"><span class="font-black text-gray-800 text-sm">DAV #${davNumero} - <span class="text-gray-600 font-medium">${dados.cliente}</span></span> <span class="text-xs font-bold text-gray-500">${dados.bairro || 'Sem Bairro'}</span></div><div class="divide-y divide-gray-100 bg-white">`;
+            dados.itens.forEach(item => {
+                html += `
+                    <div class="p-3 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                        <p class="text-sm font-bold text-gray-800">${limpaCod(item.produto_codigo)} - ${item.produto_nome}</p>
+                        <p class="text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">${parseFloat(item.quantidade_a_entregar)} ${item.produto_unidade}</p>
+                    </div>`;
+            });
+            html += `</div></div>`;
+        }
+        container.innerHTML = html;
+        
+        const modal = document.getElementById('view-romaneio-modal');
+        modal.classList.remove('hidden');
+        setTimeout(() => modal.classList.remove('opacity-0'), 10);
+
+    } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
+};
 
 // ==========================================================
 //               ABA 1: RETIRADA RÁPIDA (BALCÃO)
@@ -224,16 +415,16 @@ function renderDavResults(data) {
     const formatCurrency = (v) => (parseFloat(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
     let statusTagHtml = '';
-    if (status_caixa === '1') statusTagHtml = `<span class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-green-600 text-white shadow-sm">Pago (Recebido)</span>`;
-    else statusTagHtml = `<span class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-600 text-white animate-pulse shadow-sm">Pagamento Pendente</span>`;
+    if (status_caixa === '1') statusTagHtml = `<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-green-600 text-white shadow-sm">Pago (Recebido)</span>`;
+    else statusTagHtml = `<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-red-600 text-white animate-pulse shadow-sm">Pagamento Pendente</span>`;
 
     let nfeBadge = '';
     if (nota_fiscal && nota_fiscal.trim() !== '' && chave_nfe) {
-        nfeBadge = `<button onclick="abrirDanfe('${chave_nfe}')" class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-blue-100 text-blue-800 hover:bg-blue-600 hover:text-white transition-colors border border-blue-200 shadow-sm" title="Imprimir Nota Fiscal">NFe: ${nota_fiscal} <i data-feather="file-text" class="w-3 h-3 ml-1"></i></button>`;
+        nfeBadge = `<button onclick="abrirDanfe('${chave_nfe}')" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-black uppercase bg-blue-100 text-blue-800 hover:bg-blue-600 hover:text-white transition-colors border border-blue-200 shadow-sm" title="Imprimir Nota Fiscal">NFe: ${nota_fiscal} <i data-feather="file-text" class="w-3.5 h-3.5 ml-1"></i></button>`;
     }
 
     if (status_caixa === '2' || status_caixa === '3') {
-        resultsContainer.innerHTML = `<div class="bg-white p-5 rounded-lg shadow-lg max-w-xl mx-auto mt-3 border border-gray-200"><div class="flex justify-between items-start border-b pb-4"><div><h3 class="text-xl font-bold text-gray-900 flex items-center flex-wrap gap-2">${cliente.nome} <span class="bg-gray-600 text-white px-3 py-1 rounded-full text-[10px] uppercase font-black">Cancelado/Estornado</span></h3></div><p class="font-bold text-2xl text-gray-400 line-through">${formatCurrency(valor_total)}</p></div></div>`;
+        resultsContainer.innerHTML = `<div class="bg-white p-6 rounded-lg shadow-lg max-w-xl mx-auto mt-4 border border-gray-200"><div class="flex justify-between items-start border-b pb-4"><div><h3 class="text-xl font-bold text-gray-900 flex items-center flex-wrap gap-2">${cliente.nome} <span class="bg-gray-600 text-white px-3 py-1 rounded-full text-xs uppercase font-black">Cancelado/Estornado</span></h3></div><p class="font-bold text-2xl text-gray-400 line-through">${formatCurrency(valor_total)}</p></div></div>`;
     } else {
         const itemsComSaldoDisponivel = itens.filter(item => item.quantidade_saldo > 0);
         let itemsHtml = '<p class="text-center text-gray-500 p-4">Nenhum item encontrado com saldo disponível.</p>';
@@ -247,10 +438,10 @@ function renderDavResults(data) {
                     <tbody class="divide-y divide-gray-100">
                         ${itens.map(item => `
                             <tr class="expandable-row hover:bg-gray-50 transition-colors" data-idavs-regi="${item.idavs_regi}">
-                                <td class="px-3 py-3 font-medium text-gray-800">${item.pd_nome} <span class="text-gray-400 text-xs ml-1">(${item.unidade})</span> ${item.quantidade_devolvida > 0 ? `<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold ml-2">Devolvido: ${item.quantidade_devolvida}</span>` : ''}</td>
+                                <td class="px-3 py-3 font-medium text-gray-800">${limpaCod(item.pd_codi)} - ${item.pd_nome} <span class="text-gray-400 text-xs ml-1">(${item.unidade})</span> ${item.quantidade_devolvida > 0 ? `<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold ml-2">Devolvido: ${item.quantidade_devolvida}</span>` : ''}</td>
                                 <td class="px-2 py-3 text-center font-black text-sm ${item.quantidade_saldo > 0 ? 'text-indigo-600' : 'text-gray-400'}">${item.quantidade_saldo}</td>
                                 <td class="px-3 py-3 text-center">
-                                    <input type="number" step="1" class="w-20 text-center rounded-md border-gray-300 focus:ring-indigo-500 shadow-sm text-sm font-bold" value="0" min="0" max="${item.quantidade_saldo}" ${item.quantidade_saldo > 0 && status_caixa === '1' ? '' : 'disabled title="Apenas pedidos pagos podem ser retirados"'}>
+                                    <input type="number" step="1" class="w-24 text-center rounded-md border-gray-300 focus:ring-indigo-500 shadow-sm text-base font-bold" value="0" min="0" max="${item.quantidade_saldo}" ${item.quantidade_saldo > 0 && status_caixa === '1' ? '' : 'disabled title="Apenas pedidos pagos podem ser retirados"'}>
                                 </td>
                             </tr>`).join('')}
                     </tbody>
@@ -258,22 +449,27 @@ function renderDavResults(data) {
         }
 
         resultsContainer.innerHTML = `
-            <div class="bg-white p-5 rounded-xl shadow-sm max-w-2xl mx-auto mt-3 border border-gray-200">
-                <div class="flex justify-between items-start border-b border-gray-100 pb-4 mb-4">
+            <div class="bg-white p-6 rounded-xl shadow-lg max-w-3xl mx-auto mt-4 border border-gray-200">
+                <div class="flex justify-between items-start border-b border-gray-100 pb-5 mb-5">
                     <div class="flex flex-col gap-2">
-                        <h3 class="text-lg font-black text-gray-900">${cliente.nome}</h3>
-                        <p class="text-xs font-bold text-teal-700 uppercase flex items-center gap-1.5"><i data-feather="user" class="w-3.5 h-3.5"></i> Vend: ${data.vendedor || 'N/I'}</p>
+                        <h3 class="text-xl font-black text-gray-900">${cliente.nome}</h3>
+                        <p class="text-sm font-bold text-teal-700 uppercase flex items-center gap-1.5"><i data-feather="user" class="w-4 h-4"></i> Vend: ${data.vendedor || 'N/I'}</p>
                         <div class="flex flex-wrap items-center gap-2 mt-1">${statusTagHtml} ${nfeBadge}</div>
                     </div>
-                    <p class="font-black text-xl text-indigo-600">${formatCurrency(valor_total)}</p>
+                    <div class="text-right">
+                        <p class="font-black text-2xl text-indigo-600 mb-2">${formatCurrency(valor_total)}</p>
+                        <button onclick="imprimirEspelhoDav('${data.dav_numero}')" class="action-btn bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 text-xs py-1.5 px-3 flex inline-flex items-center gap-1.5 shadow-sm ml-auto">
+                            <i data-feather="printer" class="w-3.5 h-3.5"></i> Imprimir Espelho (A4)
+                        </button>
+                    </div>
                 </div>
-                <div class="space-y-3">
-                    <h4 class="font-bold text-gray-700 uppercase tracking-wider text-[11px]">Itens do Pedido</h4>
+                <div class="space-y-4">
+                    <h4 class="font-bold text-gray-700 uppercase tracking-wider text-xs">Itens do Pedido</h4>
                     <div class="overflow-hidden rounded-lg border border-gray-200 shadow-sm">${itemsHtml}</div>
                     ${itemsComSaldoDisponivel.length > 0 && status_caixa === '1' ? `
-                    <div class="flex justify-end pt-4 border-t border-gray-100">
-                        <button id="confirm-retirada-btn" class="action-btn bg-green-600 hover:bg-green-700 flex items-center gap-2 shadow-sm transform active:scale-95 text-sm py-2 px-4">
-                            <i data-feather="check-circle" class="w-4 h-4"></i> Confirmar Retirada no Balcão
+                    <div class="flex justify-end pt-5 border-t border-gray-100">
+                        <button id="confirm-retirada-btn" class="action-btn bg-green-600 hover:bg-green-700 flex items-center gap-2 shadow-md transform active:scale-95 text-base py-3 px-6">
+                            <i data-feather="check-circle" class="w-5 h-5"></i> Confirmar Retirada no Balcão
                         </button>
                     </div>` : ''}
                 </div>
@@ -283,7 +479,6 @@ function renderDavResults(data) {
     document.getElementById('confirm-retirada-btn')?.addEventListener('click', () => handleConfirmRetirada(data.dav_numero));
 }
 
-let isConfirmandoRetirada = false;
 async function handleConfirmRetirada(davNumber) {
     if (isConfirmandoRetirada) return;
 
@@ -302,7 +497,7 @@ async function handleConfirmRetirada(davNumber) {
         lockUI();
         const btn = document.getElementById('confirm-retirada-btn');
         btn.disabled = true;
-        btn.innerHTML = '<i data-feather="loader" class="w-4 h-4 animate-spin"></i> Processando...';
+        btn.innerHTML = '<i data-feather="loader" class="w-5 h-5 animate-spin"></i> Processando...';
         if(typeof feather !== 'undefined') feather.replace();
         
         try {
@@ -326,7 +521,7 @@ async function handleConfirmRetirada(davNumber) {
 async function loadRomaneiosAtivos() {
     const container = document.getElementById('romaneios-list-container');
     if (!container) return;
-    container.innerHTML = '<div class="py-10 flex justify-center"><i data-feather="loader" class="w-8 h-8 text-indigo-500 animate-spin"></i></div>';
+    container.innerHTML = '<div class="py-12 flex justify-center"><i data-feather="loader" class="w-8 h-8 text-indigo-500 animate-spin"></i></div>';
     if(typeof feather !== 'undefined') feather.replace();
 
     const dataFiltro = document.getElementById('filter-data-cargas')?.value || '';
@@ -340,9 +535,9 @@ async function loadRomaneiosAtivos() {
         
         if (romaneios.length === 0) {
             container.innerHTML = `
-                <div class="flex flex-col items-center justify-center py-10 text-gray-400">
-                    <i data-feather="truck" class="w-12 h-12 mb-3 opacity-50"></i>
-                    <p class="font-bold text-sm">Nenhuma carga ${romaneioListStatus.toLowerCase()} nesta data.</p>
+                <div class="flex flex-col items-center justify-center py-12 text-gray-400">
+                    <i data-feather="truck" class="w-14 h-14 mb-4 opacity-50"></i>
+                    <p class="font-bold text-lg">Nenhuma carga ${romaneioListStatus.toLowerCase()} nesta data.</p>
                 </div>`;
             if(typeof feather !== 'undefined') feather.replace();
             return;
@@ -352,43 +547,47 @@ async function loadRomaneiosAtivos() {
             let actionButtons = '';
             if (r.status === 'Em montagem') {
                 actionButtons = `
-                    <div class="flex flex-col sm:flex-row items-end sm:items-center gap-2 mt-3 sm:mt-0">
-                        <button onclick="excluirRomaneio(${r.id})" class="text-red-500 hover:text-white bg-white hover:bg-red-500 border border-red-200 text-[11px] font-bold px-3 py-2 rounded-md transition-colors flex items-center gap-1.5 shadow-sm" title="Cancelar e Excluir">
-                            <i data-feather="trash-2" class="w-3.5 h-3.5"></i> Excluir
+                    <div class="flex flex-col sm:flex-row items-end sm:items-center gap-2 mt-4 sm:mt-0">
+                        <button onclick="excluirRomaneio(${r.id})" class="text-red-500 hover:text-white bg-white hover:bg-red-500 border border-red-200 text-xs font-bold px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm" title="Cancelar e Excluir">
+                            <i data-feather="trash-2" class="w-4 h-4"></i> Excluir
                         </button>
-                        <button onclick="abrirTorreDeControle(${r.id})" class="text-indigo-600 bg-indigo-50 border border-indigo-200 text-[11px] font-bold hover:bg-indigo-600 hover:text-white px-3 py-2 rounded-md transition-colors flex items-center gap-1.5 shadow-sm shrink-0">
-                            <i data-feather="edit-2" class="w-3.5 h-3.5"></i> Editar Carga
+                        <button onclick="abrirTorreDeControle(${r.id})" class="text-indigo-600 bg-indigo-50 border border-indigo-200 text-xs font-bold hover:bg-indigo-600 hover:text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm shrink-0">
+                            <i data-feather="edit-2" class="w-4 h-4"></i> Editar Carga
                         </button>
-                        <button onclick="abrirAcertoContas(${r.id})" class="text-blue-600 bg-blue-50 border border-blue-200 text-[11px] font-bold hover:bg-blue-600 hover:text-white px-4 py-2 rounded-md transition-colors flex items-center gap-1.5 shadow-sm">
-                            <i data-feather="check-square" class="w-3.5 h-3.5"></i> Acerto de Retorno
+                        <button onclick="abrirAcertoContas(${r.id})" class="text-white bg-blue-600 border border-blue-700 text-xs font-bold hover:bg-blue-700 px-5 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+                            <i data-feather="check-square" class="w-4 h-4"></i> Acerto de Retorno
                         </button>
                     </div>
                 `;
             } else {
                  actionButtons = `
-                    <div class="flex items-center gap-2 mt-3 sm:mt-0">
-                        <span class="bg-gray-200 text-gray-600 px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5"><i data-feather="check" class="w-3 h-3"></i> Concluída</span>
+                    <div class="flex items-center gap-2 mt-4 sm:mt-0">
+                        <span class="bg-gray-200 text-gray-600 px-4 py-1.5 rounded-md text-xs font-black uppercase tracking-widest flex items-center gap-1.5"><i data-feather="check" class="w-4 h-4"></i> Concluída</span>
                     </div>
                 `;
             }
 
             return `
-            <div class="border border-gray-200 p-4 rounded-lg bg-white hover:border-indigo-400 transition-all cursor-default mb-3 shadow-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 group">
+            <div class="border border-gray-200 p-5 rounded-xl bg-white hover:border-indigo-400 transition-all cursor-default mb-4 shadow-sm flex flex-col xl:flex-row xl:justify-between xl:items-center gap-3 group">
                 <div class="flex-1">
-                    <h4 class="font-black text-gray-800 text-base flex items-center gap-2 mb-1.5">
-                        <i data-feather="package" class="w-4 h-4 text-indigo-500"></i> Carga #${r.id} 
-                        <span class="bg-blue-100 text-blue-800 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest">${r.status}</span>
+                    <h4 class="font-black text-gray-800 text-lg flex items-center gap-2 mb-1.5">
+                        <i data-feather="package" class="w-5 h-5 text-indigo-500"></i> Carga #${r.id} 
+                        <span class="bg-blue-100 text-blue-800 text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest">${r.status}</span>
                     </h4>
-                    <p class="text-xs text-gray-600 font-medium ml-6"><i data-feather="user" class="w-3 h-3 inline text-gray-400"></i> ${r.nome_motorista} &nbsp;&bull;&nbsp; <i data-feather="truck" class="w-3 h-3 inline text-gray-400"></i> ${r.modelo_veiculo} (${r.placa_veiculo})</p>
-                    <p class="text-[10px] text-gray-400 mt-1.5 ml-6 font-bold uppercase tracking-wider">Origem: ${r.filial_origem}</p>
+                    <p class="text-sm text-gray-600 font-medium ml-7"><i data-feather="user" class="w-4 h-4 inline text-gray-400"></i> ${r.nome_motorista} &nbsp;&bull;&nbsp; <i data-feather="truck" class="w-4 h-4 inline text-gray-400"></i> ${r.modelo_veiculo} (${r.placa_veiculo})</p>
+                    <p class="text-xs text-gray-400 mt-1.5 ml-7 font-bold uppercase tracking-wider">Origem: ${r.filial_origem}</p>
                 </div>
-                ${actionButtons}
+                <div class="flex flex-wrap items-center gap-2">
+                    <button onclick="abrirVisualizacaoRomaneio(${r.id})" class="text-gray-600 bg-white border border-gray-300 text-xs font-bold hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+                        <i data-feather="eye" class="w-4 h-4"></i> Visualizar
+                    </button>
+                    ${actionButtons}
+                </div>
             </div>`;
         }).join('');
         if(typeof feather !== 'undefined') feather.replace();
 
     } catch (error) {
-        console.error("ERRO NO SELECT DE ROMANEIOS: ", error);
         container.innerHTML = `<p class="text-center text-red-500 font-bold py-10"><i data-feather="alert-triangle" class="inline-block mr-2"></i> ${error.message}</p>`;
         if(typeof feather !== 'undefined') feather.replace();
     }
@@ -531,7 +730,6 @@ async function buscarPedidosPendentes() {
     const tipoData = document.querySelector('input[name="tipo-data"]:checked')?.value || 'entrega';
     const apenasAgendado = document.getElementById('filter-somente-agendado').checked;
     
-    // Busca múltiplas filiais (Array de checkboxes)
     const filialCheckboxes = document.querySelectorAll('.filial-checkbox:checked');
     const filiaisSelecionadas = Array.from(filialCheckboxes).map(cb => cb.value).join(',');
     const filialStr = (document.getElementById('filial-filter-container') && !document.getElementById('filial-filter-container').classList.contains('hidden') && filiaisSelecionadas) 
@@ -630,10 +828,10 @@ function renderPendingList() {
 
         const itensHtml = dav.itens.map(item => `
             <div class="flex justify-between items-center border-b border-indigo-100/50 py-1.5 last:border-0 hover:bg-indigo-50 px-1 rounded transition-colors">
-                <span class="text-[11px] font-medium text-gray-700 truncate flex-1 pr-2">${item.codigo} - ${item.nome}</span>
+                <span class="text-[11px] font-medium text-gray-700 truncate flex-1 pr-2">${limpaCod(item.codigo)} - ${item.nome}</span>
                 <div class="flex items-center gap-1.5 shrink-0 bg-white p-1 rounded-md shadow-sm border border-gray-200">
                     <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Disp: ${item.saldo}</span>
-                    <input type="number" id="frac-${dav.dav_numero}-${item.idavs_regi}" value="${item.saldo}" min="0.001" max="${item.saldo}" step="1" class="w-14 text-[11px] p-1 border border-indigo-300 rounded text-center font-bold text-indigo-700 focus:ring-indigo-500">
+                    <input type="number" id="frac-${dav.dav_numero}-${item.idavs_regi}" value="${item.saldo}" min="1" max="${item.saldo}" step="1" class="w-14 text-[11px] p-1 border border-indigo-300 rounded text-center font-bold text-indigo-700 focus:ring-indigo-500">
                     <button onclick="adicionarItemFracionado('${dav.dav_numero}', '${item.idavs_regi}')" class="bg-indigo-100 hover:bg-indigo-500 hover:text-white text-indigo-600 p-1.5 rounded transition-colors"><i data-feather="plus" class="w-3.5 h-3.5"></i></button>
                 </div>
             </div>`).join('');
@@ -685,7 +883,7 @@ function renderCartList() {
     container.innerHTML = cartDavs.map(dav => {
         const itensCartHtml = dav.itens.map(item => `
             <div class="flex justify-between items-center mt-1.5 border-t border-gray-100 pt-1.5">
-                <span class="text-[10px] font-bold text-gray-700 truncate flex-1">${item.codigo || ''} - ${item.nome}</span>
+                <span class="text-[10px] font-bold text-gray-700 truncate flex-1">${limpaCod(item.codigo)} - ${item.nome}</span>
                 <span class="text-[11px] font-black text-indigo-700 w-16 text-right mr-2">${item.saldo} ${item.unidade}</span>
                 <button onclick="removerItemDoCarrinho('${dav.dav_numero}', '${item.idavs_regi}', ${dav.is_existing}, ${item.romaneio_item_id || null})" class="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded transition-colors"><i data-feather="x" class="w-3.5 h-3.5"></i></button>
             </div>
@@ -828,7 +1026,6 @@ async function finalizarCarga() {
 
             if (payloadItens.length > 0) {
                 const resItens = await fetch(`${apiUrlBase}/entregas/romaneios/${romaneioId}/itens`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` }, body: JSON.stringify(payloadItens) });
-                
                 if (!resItens.ok) {
                     let errMsg = "Erro ao inserir itens no banco.";
                     try { const errObj = await resItens.json(); errMsg = errObj.error || errMsg; } catch(e) {}
@@ -889,7 +1086,7 @@ function renderAcertoChecklist() {
 
     let html = '';
     for (const [davNumero, dados] of Object.entries(grouped)) {
-        html += `<div class="border border-gray-200 rounded-lg overflow-hidden shadow-sm mb-4"><div class="bg-gray-100 px-4 py-2.5 border-b flex justify-between items-center"><span class="font-black text-gray-800 text-xs">DAV #${davNumero} - <span class="text-gray-600 font-medium">${dados.cliente}</span></span></div><div class="divide-y divide-gray-100 bg-white">`;
+        html += `<div class="border border-gray-200 rounded-xl overflow-hidden shadow-sm mb-5"><div class="bg-gray-100 px-5 py-3 border-b flex justify-between items-center"><span class="font-black text-gray-800 text-sm">DAV #${davNumero} - <span class="text-gray-600 font-medium">${dados.cliente}</span></span></div><div class="divide-y divide-gray-100 bg-white">`;
         dados.itens.forEach(item => {
             const state = acertoChecklist[item.romaneio_item_id];
             let rowClass = 'hover:bg-gray-50'; let feedbackHtml = '';
@@ -899,12 +1096,12 @@ function renderAcertoChecklist() {
             else if (state.status === 'parcial') { rowClass = 'acerto-parcial'; feedbackHtml = `<span class="text-[10px] font-black text-orange-700 bg-white px-2 py-0.5 rounded shadow-sm border border-orange-200">Entregou: ${state.qtd_entregue} | Voltou: ${state.qtd_voltou}</span>`; }
 
             html += `
-                <div class="p-3 flex flex-col sm:flex-row justify-between sm:items-center gap-2 transition-colors ${rowClass}">
-                    <div class="flex-1"><p class="text-xs font-bold text-gray-800">${item.produto_codigo || ''} - ${item.produto_nome}</p><p class="text-[10px] font-black text-gray-500 mt-1 uppercase tracking-wider">Enviado: <span class="text-indigo-600 text-[11px]">${state.qtd_enviada}</span> ${item.produto_unidade} ${feedbackHtml ? `&nbsp;&bull;&nbsp; ${feedbackHtml}` : ''}</p></div>
-                    <div class="flex items-center gap-1.5 shrink-0 bg-white p-1 rounded-md shadow-sm border border-gray-200">
-                        <button onclick="setAcertoStatus(${item.romaneio_item_id}, 'entregue_total')" class="p-1.5 rounded-md hover:bg-green-100 text-green-600 transition-colors" title="Entregue 100%"><i data-feather="check" class="w-4 h-4"></i></button>
-                        <div class="w-px h-5 bg-gray-200"></div><button onclick="setAcertoStatus(${item.romaneio_item_id}, 'devolvido_total')" class="p-1.5 rounded-md hover:bg-red-100 text-red-600 transition-colors" title="Não Entregue (Voltou tudo)"><i data-feather="x" class="w-4 h-4"></i></button>
-                        <div class="w-px h-5 bg-gray-200"></div><button onclick="abrirAcertoParcial(${item.romaneio_item_id})" class="p-1.5 rounded-md hover:bg-orange-100 text-orange-500 transition-colors" title="Entrega Parcial"><i data-feather="pie-chart" class="w-4 h-4"></i></button>
+                <div class="p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 transition-colors ${rowClass}">
+                    <div class="flex-1"><p class="text-sm font-bold text-gray-800">${limpaCod(item.produto_codigo)} - ${item.produto_nome}</p><p class="text-[10px] font-black text-gray-500 mt-1 uppercase tracking-wider">Enviado: <span class="text-indigo-600 text-xs">${state.qtd_enviada}</span> ${item.produto_unidade} ${feedbackHtml ? `&nbsp;&bull;&nbsp; ${feedbackHtml}` : ''}</p></div>
+                    <div class="flex items-center gap-2 shrink-0 bg-white p-1.5 rounded-lg shadow-sm border border-gray-200">
+                        <button onclick="setAcertoStatus(${item.romaneio_item_id}, 'entregue_total')" class="p-2 rounded-md hover:bg-green-100 text-green-600 transition-colors" title="Entregue 100%"><i data-feather="check" class="w-5 h-5"></i></button>
+                        <div class="w-px h-6 bg-gray-200"></div><button onclick="setAcertoStatus(${item.romaneio_item_id}, 'devolvido_total')" class="p-2 rounded-md hover:bg-red-100 text-red-600 transition-colors" title="Não Entregue (Voltou tudo)"><i data-feather="x" class="w-5 h-5"></i></button>
+                        <div class="w-px h-6 bg-gray-200"></div><button onclick="abrirAcertoParcial(${item.romaneio_item_id})" class="p-2 rounded-md hover:bg-orange-100 text-orange-500 transition-colors" title="Entrega Parcial"><i data-feather="pie-chart" class="w-5 h-5"></i></button>
                     </div>
                 </div>`;
         });
@@ -943,7 +1140,7 @@ async function finalizarAcertoRomaneio() {
         isAcertandoRomaneio = true;
         lockUI();
         const btn = document.getElementById('btn-fechar-romaneio');
-        btn.innerHTML = '<i data-feather="loader" class="w-5 h-5 animate-spin"></i> <span>Aplicando no ERP...</span>';
+        btn.innerHTML = '<i data-feather="loader" class="w-6 h-6 animate-spin"></i> <span>Aplicando no ERP...</span>';
         if(typeof feather !== 'undefined') feather.replace();
 
         try {
@@ -962,14 +1159,14 @@ async function finalizarAcertoRomaneio() {
         } finally { 
             isAcertandoRomaneio = false;
             unlockUI(); 
-            btn.innerHTML = '<i data-feather="archive" class="w-5 h-5"></i> <span>Baixar e Arquivar Romaneio</span>'; 
+            btn.innerHTML = '<i data-feather="archive" class="w-6 h-6"></i> <span>Baixar e Arquivar Romaneio</span>'; 
             if(typeof feather !== 'undefined') feather.replace(); 
         }
     });
 }
 
 // ==========================================================
-//               MÓDULO: HISTÓRICO / RELATÓRIOS
+//               MÓDULO: HISTÓRICO
 // ==========================================================
 async function loadVeiculosHistorico() {
     const select = document.getElementById('hist-veiculo');
@@ -1006,45 +1203,34 @@ async function buscarHistorico() {
         document.getElementById('hist-resumo-cargas').textContent = romaneios.length;
 
         if (romaneios.length === 0) {
-            container.innerHTML = `<div class="flex flex-col items-center justify-center py-10 text-gray-400"><i data-feather="file-text" class="w-10 h-10 mb-3 opacity-50"></i><p class="font-bold text-sm">Nenhum histórico encontrado.</p></div>`;
+            container.innerHTML = `<div class="flex flex-col items-center justify-center py-10 text-gray-400"><i data-feather="file-text" class="w-14 h-14 mb-3 opacity-50"></i><p class="font-bold text-lg">Nenhum histórico encontrado.</p></div>`;
             if(typeof feather !== 'undefined') feather.replace(); return;
         }
 
         container.innerHTML = romaneios.map(r => `
-            <div class="border border-gray-200 p-4 rounded-lg bg-gray-50 mb-3 shadow-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+            <div class="border border-gray-200 p-5 rounded-xl bg-gray-50 mb-4 shadow-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                 <div class="flex-1">
-                    <h4 class="font-black text-gray-800 text-base flex items-center gap-2 mb-1.5">
-                        <i data-feather="archive" class="w-4 h-4 text-indigo-500"></i> Carga #${r.id} 
-                        <span class="bg-gray-200 text-gray-600 text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest">${new Date(r.data_conclusao || r.data_criacao).toLocaleDateString('pt-BR')}</span>
+                    <h4 class="font-black text-gray-800 text-lg flex items-center gap-2 mb-1.5">
+                        <i data-feather="archive" class="w-5 h-5 text-indigo-500"></i> Carga #${r.id} 
+                        <span class="bg-gray-200 text-gray-600 text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest">${new Date(r.data_conclusao || r.data_criacao).toLocaleDateString('pt-BR')}</span>
                     </h4>
-                    <p class="text-xs text-gray-600 font-medium ml-6"><i data-feather="user" class="w-3.5 h-3.5 inline text-gray-400"></i> ${r.nome_motorista} &nbsp;&bull;&nbsp; <i data-feather="truck" class="w-3.5 h-3.5 inline text-gray-400"></i> ${r.modelo_veiculo} (${r.placa_veiculo})</p>
+                    <p class="text-sm text-gray-600 font-medium ml-7"><i data-feather="user" class="w-4 h-4 inline text-gray-400"></i> ${r.nome_motorista} &nbsp;&bull;&nbsp; <i data-feather="truck" class="w-4 h-4 inline text-gray-400"></i> ${r.modelo_veiculo} (${r.placa_veiculo})</p>
                 </div>
-                <div class="text-right">
-                    <span class="bg-green-100 text-green-800 text-[10px] px-3 py-1 rounded-md font-black uppercase shadow-sm border border-green-200">${r.status}</span>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button onclick="abrirVisualizacaoRomaneio(${r.id})" class="text-gray-600 bg-white border border-gray-300 text-xs font-bold hover:bg-gray-100 px-4 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+                        <i data-feather="eye" class="w-4 h-4"></i> Visualizar
+                    </button>
+                    <span class="bg-green-100 text-green-800 text-xs px-4 py-2.5 rounded-lg font-black uppercase shadow-sm border border-green-200 flex items-center gap-1"><i data-feather="check" class="w-4 h-4"></i> ${r.status}</span>
                 </div>
             </div>`).join('');
         if(typeof feather !== 'undefined') feather.replace();
-    } catch (e) {
-        container.innerHTML = `<p class="text-center text-red-500 font-bold py-10">${e.message}</p>`;
-    }
+    } catch (e) { container.innerHTML = `<p class="text-center text-red-500 font-bold py-10">${e.message}</p>`; }
 }
 
-// ==========================================================
-//               FUNÇÕES DE UTILIDADE
-// ==========================================================
 function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) return;
-
-    const mapaModulos = {
-        'lancamentos': 'despesas.html',
-        'logistica': 'logistica.html',
-        'entregas': 'entregas.html',
-        'checklist': 'checklist.html',
-        'produtos': 'produtos.html',
-        'configuracoes': 'settings.html'
-    };
-
+    const mapaModulos = { 'lancamentos': 'despesas.html', 'logistica': 'logistica.html', 'entregas': 'entregas.html', 'checklist': 'checklist.html', 'produtos': 'produtos.html', 'configuracoes': 'settings.html' };
     for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
         const permissao = userData.permissoes.find(p => p.nome_modulo === nomeModulo);
         if (!permissao || !permissao.permitido) {
@@ -1056,8 +1242,7 @@ function gerenciarAcessoModulos() {
 
 function handleApiError(response) {
     if (response.status === 401 || response.status === 403) {
-        showToast("Sessão expirada. Faça login novamente.", "error");
-        setTimeout(logout, 2000);
+        showToast("Sessão expirada. Faça login novamente.", "error"); setTimeout(logout, 2000);
     } else {
         response.json().then(data => showToast(`Erro: ${data.error || response.statusText}`, "error")).catch(() => showToast('Erro na API.', "error"));
     }

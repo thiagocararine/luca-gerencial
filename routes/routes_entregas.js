@@ -362,7 +362,6 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
         if (apenasEntregaMarcada === 'true') query += ` AND c.cr_entr != '0000-00-00'`; 
         if (bairro) { query += ' AND c.cr_ebai LIKE ?'; params.push(`%${bairro}%`); }
 
-        // AJUSTE: Permite múltiplas filiais (Array IN)
         if (perfil === 'Administrador' || perfil === 'Financeiro') {
             if (filialDav) { 
                 const filiaisArr = filialDav.split(',').map(f => filialMap[f.trim()]).filter(Boolean);
@@ -428,10 +427,22 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
 router.get('/romaneios/:id', authenticateToken, async (req, res) => {
     const romaneioId = parseInt(req.params.id, 10);
     try {
-        const [romaneioDetails] = await gerencialPool.execute(`SELECT r.id, r.data_criacao, r.nome_motorista, r.filial_origem, r.status, v.modelo as modelo_veiculo, v.placa as placa_veiculo, IFNULL(v.capacidade_kg, 0) as capacidade_kg FROM romaneios r JOIN veiculos v ON r.id_veiculo = v.id WHERE r.id = ?`, [romaneioId]);
+        const [romaneioDetails] = await gerencialPool.execute(`SELECT r.id, r.data_criacao, r.data_conclusao, r.nome_motorista, r.filial_origem, r.status, v.modelo as modelo_veiculo, v.placa as placa_veiculo, IFNULL(v.capacidade_kg, 0) as capacidade_kg FROM romaneios r JOIN veiculos v ON r.id_veiculo = v.id WHERE r.id = ?`, [romaneioId]);
         if (romaneioDetails.length === 0) return res.status(404).json({ error: 'Romaneio não encontrado.' });
 
-        const [items] = await gerencialPool.execute(`SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar, ri.pd_codi as produto_codigo, ri.pd_nome as produto_nome, i.it_unid as produto_unidade, c.cr_nmcl as cliente_nome, COALESCE(NULLIF(p.pd_pesb, 0), NULLIF(p.pd_pesl, 0), 0) as peso_bruto_unitario FROM romaneio_itens ri LEFT JOIN ${dbConfigSei.database}.idavs i ON ri.idavs_regi = i.it_regist LEFT JOIN ${dbConfigSei.database}.cdavs c ON ri.dav_numero = c.cr_ndav LEFT JOIN ${dbConfigSei.database}.produtos p ON ri.pd_codi = p.pd_codi WHERE ri.id_romaneio = ? ORDER BY ri.dav_numero ASC`, [romaneioId]);
+        // AJUSTE: Agora busca os dados de endereço do cliente para podermos imprimir o Roteiro!
+        const [items] = await gerencialPool.execute(`
+            SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar, 
+                   ri.pd_codi as produto_codigo, ri.pd_nome as produto_nome, 
+                   i.it_unid as produto_unidade, c.cr_nmcl as cliente_nome,
+                   c.cr_dade as logradouro, c.cr_ebai as bairro, c.cr_ecid as cidade, c.cr_refe as referencia, 
+                   COALESCE(NULLIF(p.pd_pesb, 0), NULLIF(p.pd_pesl, 0), 0) as peso_bruto_unitario 
+            FROM romaneio_itens ri 
+            LEFT JOIN ${dbConfigSei.database}.idavs i ON ri.idavs_regi = i.it_regist 
+            LEFT JOIN ${dbConfigSei.database}.cdavs c ON ri.dav_numero = c.cr_ndav 
+            LEFT JOIN ${dbConfigSei.database}.produtos p ON ri.pd_codi = p.pd_codi 
+            WHERE ri.id_romaneio = ? 
+            ORDER BY c.cr_ebai ASC, ri.dav_numero ASC`, [romaneioId]);
         
         res.json({ ...romaneioDetails[0], itens: items });
     } catch (error) { res.status(500).json({ error: 'Erro interno.' }); }
