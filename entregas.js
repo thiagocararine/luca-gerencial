@@ -3,8 +3,6 @@ document.addEventListener('DOMContentLoaded', initEntregasPage);
 // ==========================================================
 //               VARIÁVEIS GLOBAIS
 // ==========================================================
-// const apiUrlBase = '/api';  
-
 let currentRomaneioId = null;     
 let veiculosDisp = []; 
 let motoristasDisp = []; 
@@ -16,7 +14,6 @@ let acertoRomaneioId = null;
 let acertoItensOriginal = [];
 let acertoChecklist = {}; 
 
-// Variáveis de proteção de botão (Impede múltiplos cliques e carregamento infinito)
 let isFetchingPedidos = false;
 let isFinalizandoCarga = false;
 let isAcertandoRomaneio = false;
@@ -132,7 +129,6 @@ function setupEventListeners() {
     document.getElementById('search-dav-btn')?.addEventListener('click', handleSearchDav);
     document.getElementById('dav-search-input')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSearchDav(); });
 
-    // CARGAS - TELA INICIAL
     document.getElementById('btn-nova-carga')?.addEventListener('click', () => abrirTorreDeControle(null));
     document.getElementById('romaneios-list-container')?.addEventListener('click', handleRomaneioClick);
     document.getElementById('filter-data-cargas')?.addEventListener('change', loadRomaneiosAtivos);
@@ -140,15 +136,18 @@ function setupEventListeners() {
     document.getElementById('btn-tab-andamento')?.addEventListener('click', () => { romaneioListStatus = 'Em montagem'; updateListTabs(); loadRomaneiosAtivos(); });
     document.getElementById('btn-tab-concluidas')?.addEventListener('click', () => { romaneioListStatus = 'Concluido'; updateListTabs(); loadRomaneiosAtivos(); });
 
-    // MONTAGEM - TORRE DE CONTROLE
     document.getElementById('btn-buscar-pendentes')?.addEventListener('click', buscarPedidosPendentes);
     document.getElementById('filter-bairro')?.addEventListener('change', renderPendingList);
-    document.getElementById('filter-filial-dav')?.addEventListener('change', renderPendingList); 
-    document.getElementById('filter-receber-local')?.addEventListener('change', renderPendingList); 
+    
+    // Escuta todos os checkboxes das filiais
+    document.querySelectorAll('.filial-checkbox').forEach(cb => {
+        cb.addEventListener('change', buscarPedidosPendentes);
+    });
+
+    document.getElementById('filter-receber-local')?.addEventListener('change', buscarPedidosPendentes); 
     document.getElementById('select-veiculo')?.addEventListener('change', atualizarBarraDePeso);
     document.getElementById('btn-finalizar-carga')?.addEventListener('click', finalizarCarga);
     
-    // ACERTO E HISTÓRICO
     document.getElementById('btn-fechar-romaneio')?.addEventListener('click', finalizarAcertoRomaneio);
     document.getElementById('btn-buscar-hist')?.addEventListener('click', buscarHistorico);
 }
@@ -167,16 +166,10 @@ function updateListTabs() {
     }
 }
 
-// ==========================================================
-//               PDF DA NOTA FISCAL (DANFE)
-// ==========================================================
 window.abrirDanfe = async function(chave) {
     showLoader();
     try {
-        const res = await fetch(`${apiUrlBase}/entregas/danfe/${chave}`, {
-            headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
-        
+        const res = await fetch(`${apiUrlBase}/entregas/danfe/${chave}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         if (!res.ok) throw new Error((await res.json()).error || "Erro ao carregar a Nota Fiscal.");
         
         const disposition = res.headers.get('Content-Disposition');
@@ -185,9 +178,7 @@ window.abrirDanfe = async function(chave) {
         if (disposition && disposition.indexOf('filename=') !== -1) {
             const regex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
             const matches = regex.exec(disposition);
-            if (matches != null && matches[1]) {
-                fileName = matches[1].replace(/['"]/g, ''); 
-            }
+            if (matches != null && matches[1]) fileName = matches[1].replace(/['"]/g, ''); 
         }
 
         const blob = await res.blob();
@@ -195,21 +186,13 @@ window.abrirDanfe = async function(chave) {
         
         const a = document.createElement('a');
         a.style.display = 'none';
-        a.href = url;
-        a.download = fileName; 
+        a.href = url; a.download = fileName; 
         document.body.appendChild(a);
         a.click();
         
-        setTimeout(() => {
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-        }, 100);
+        setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
 
-    } catch(e) {
-        showToast(e.message, "error");
-    } finally {
-        hideLoader();
-    }
+    } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
 }
 
 // ==========================================================
@@ -246,11 +229,11 @@ function renderDavResults(data) {
 
     let nfeBadge = '';
     if (nota_fiscal && nota_fiscal.trim() !== '' && chave_nfe) {
-        nfeBadge = `<button onclick="abrirDanfe('${chave_nfe}')" class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-blue-100 text-blue-800 hover:bg-blue-600 hover:text-white transition-colors border border-blue-200 shadow-sm" title="Imprimir Nota Fiscal">NFe: ${nota_fiscal} <i data-feather="file-text" class="w-3.5 h-3.5 ml-1"></i></button>`;
+        nfeBadge = `<button onclick="abrirDanfe('${chave_nfe}')" class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-blue-100 text-blue-800 hover:bg-blue-600 hover:text-white transition-colors border border-blue-200 shadow-sm" title="Imprimir Nota Fiscal">NFe: ${nota_fiscal} <i data-feather="file-text" class="w-3 h-3 ml-1"></i></button>`;
     }
 
     if (status_caixa === '2' || status_caixa === '3') {
-        resultsContainer.innerHTML = `<div class="bg-white p-5 rounded-lg shadow-lg max-w-xl mx-auto mt-3 border border-gray-200"><div class="flex justify-between items-start border-b pb-4"><div><h3 class="text-xl font-bold text-gray-900 flex items-center flex-wrap gap-2">${cliente.nome} <span class="bg-gray-600 text-white px-3 py-1 rounded-full text-xs uppercase font-black">Cancelado/Estornado</span></h3></div><p class="font-bold text-2xl text-gray-400 line-through">${formatCurrency(valor_total)}</p></div></div>`;
+        resultsContainer.innerHTML = `<div class="bg-white p-5 rounded-lg shadow-lg max-w-xl mx-auto mt-3 border border-gray-200"><div class="flex justify-between items-start border-b pb-4"><div><h3 class="text-xl font-bold text-gray-900 flex items-center flex-wrap gap-2">${cliente.nome} <span class="bg-gray-600 text-white px-3 py-1 rounded-full text-[10px] uppercase font-black">Cancelado/Estornado</span></h3></div><p class="font-bold text-2xl text-gray-400 line-through">${formatCurrency(valor_total)}</p></div></div>`;
     } else {
         const itemsComSaldoDisponivel = itens.filter(item => item.quantidade_saldo > 0);
         let itemsHtml = '<p class="text-center text-gray-500 p-4">Nenhum item encontrado com saldo disponível.</p>';
@@ -370,7 +353,7 @@ async function loadRomaneiosAtivos() {
             if (r.status === 'Em montagem') {
                 actionButtons = `
                     <div class="flex flex-col sm:flex-row items-end sm:items-center gap-2 mt-3 sm:mt-0">
-                        <button onclick="excluirRomaneio(${r.id})" class="text-red-600 hover:text-white bg-white hover:bg-red-600 border border-red-200 text-[11px] font-bold px-3 py-2 rounded-md transition-colors flex items-center gap-1.5 shadow-sm" title="Cancelar e Excluir">
+                        <button onclick="excluirRomaneio(${r.id})" class="text-red-500 hover:text-white bg-white hover:bg-red-500 border border-red-200 text-[11px] font-bold px-3 py-2 rounded-md transition-colors flex items-center gap-1.5 shadow-sm" title="Cancelar e Excluir">
                             <i data-feather="trash-2" class="w-3.5 h-3.5"></i> Excluir
                         </button>
                         <button onclick="abrirTorreDeControle(${r.id})" class="text-indigo-600 bg-indigo-50 border border-indigo-200 text-[11px] font-bold hover:bg-indigo-600 hover:text-white px-3 py-2 rounded-md transition-colors flex items-center gap-1.5 shadow-sm shrink-0">
@@ -547,8 +530,13 @@ async function buscarPedidosPendentes() {
 
     const tipoData = document.querySelector('input[name="tipo-data"]:checked')?.value || 'entrega';
     const apenasAgendado = document.getElementById('filter-somente-agendado').checked;
-    const filialInput = document.getElementById('filter-filial-dav');
-    const filialStr = (filialInput && !document.getElementById('filial-filter-container').classList.contains('hidden') && filialInput.value) ? `&filialDav=${filialInput.value}` : '';
+    
+    // Busca múltiplas filiais (Array de checkboxes)
+    const filialCheckboxes = document.querySelectorAll('.filial-checkbox:checked');
+    const filiaisSelecionadas = Array.from(filialCheckboxes).map(cb => cb.value).join(',');
+    const filialStr = (document.getElementById('filial-filter-container') && !document.getElementById('filial-filter-container').classList.contains('hidden') && filiaisSelecionadas) 
+                        ? `&filialDav=${filiaisSelecionadas}` : '';
+
     const filtroReceberLocalElement = document.getElementById('filter-receber-local');
     const apenasReceberLocal = filtroReceberLocalElement ? filtroReceberLocalElement.checked : false;
     const receberStr = apenasReceberLocal ? '&apenasReceberLocal=true' : '';
@@ -594,7 +582,7 @@ async function buscarPedidosPendentes() {
         if(selectBairro) {
             const bairroAtual = selectBairro.value;
             const bairros = [...new Set(pendingDavs.map(d => d.bairro.trim()))].sort();
-            selectBairro.innerHTML = '<option value="">Filtro: Todos os Bairros</option>' + bairros.map(b => `<option value="${b}">${b}</option>`).join('');
+            selectBairro.innerHTML = '<option value="">Filtro Adicional: Todos os Bairros</option>' + bairros.map(b => `<option value="${b}">${b}</option>`).join('');
             if (bairros.includes(bairroAtual)) selectBairro.value = bairroAtual;
         }
 
@@ -614,11 +602,10 @@ function renderPendingList() {
     
     const filtroBairroElement = document.getElementById('filter-bairro');
     const filtroBairro = filtroBairroElement ? filtroBairroElement.value : '';
-    
+
     let davsVisiveis = pendingDavs;
     if (filtroBairro) davsVisiveis = davsVisiveis.filter(d => d.bairro.trim() === filtroBairro);
 
-    // ATUALIZA O CONTADOR COM A FORMATAÇÃO "XX Pedidos"
     const counterBadge = document.getElementById('pending-counter');
     if (counterBadge) {
         counterBadge.textContent = `${davsVisiveis.length} Pedido${davsVisiveis.length !== 1 ? 's' : ''}`;
@@ -662,7 +649,6 @@ function renderPendingList() {
                         <span class="text-xs font-medium text-gray-500 ml-1">- ${dav.cliente}</span>
                         ${tagReceber}
                     </p>
-                    
                     <div class="flex gap-2 mt-2 items-center flex-wrap">
                         <span class="text-[10px] text-gray-600 bg-gray-100 px-2 py-1 rounded border shadow-sm"><i data-feather="map-pin" class="w-3 h-3 inline"></i> ${dav.bairro.trim()}</span>
                         <span class="text-[10px] text-teal-800 font-bold bg-teal-50 px-2 py-1 rounded border border-teal-200 shadow-sm"><i data-feather="user" class="w-3 h-3 inline"></i> Vend: ${vendedorNome}</span>
@@ -1029,7 +1015,7 @@ async function buscarHistorico() {
                 <div class="flex-1">
                     <h4 class="font-black text-gray-800 text-base flex items-center gap-2 mb-1.5">
                         <i data-feather="archive" class="w-4 h-4 text-indigo-500"></i> Carga #${r.id} 
-                        <span class="bg-gray-200 text-gray-600 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest">${new Date(r.data_conclusao || r.data_criacao).toLocaleDateString('pt-BR')}</span>
+                        <span class="bg-gray-200 text-gray-600 text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest">${new Date(r.data_conclusao || r.data_criacao).toLocaleDateString('pt-BR')}</span>
                     </h4>
                     <p class="text-xs text-gray-600 font-medium ml-6"><i data-feather="user" class="w-3.5 h-3.5 inline text-gray-400"></i> ${r.nome_motorista} &nbsp;&bull;&nbsp; <i data-feather="truck" class="w-3.5 h-3.5 inline text-gray-400"></i> ${r.modelo_veiculo} (${r.placa_veiculo})</p>
                 </div>

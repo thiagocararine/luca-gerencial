@@ -16,8 +16,8 @@
         body { font-family: 'Inter', sans-serif; }
         [data-feather] { width: 1.25rem; height: 1.25rem; }
         
-        /* CSS do Sidebar e Background (Do seu Dashboard) */
         #sidebar.collapsed .sidebar-link { justify-content: center; }
+        #sidebar.collapsed ul[id^="submenu-"] { padding-left: 0 !important; }
         #company-logo { max-height: 40px; max-width: 40px; transition: opacity 0.3s ease-in-out; }
         #sidebar.collapsed #company-logo { opacity: 0; }
 
@@ -113,49 +113,41 @@
             </div>
             <div class="flex-grow p-4 overflow-y-auto">
                 <ul class="space-y-2">
-                    <li><a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="home"></span><span class="sidebar-text">Início / Dashboard</span></a></li>
-                    <li><a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="dollar-sign"></span><span class="sidebar-text">Lançamentos</span></a></li>
-                    <li><a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="truck"></span><span class="sidebar-text">Logística</span></a></li>
+                    <li><a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i data-feather="home" class="shrink-0"></i><span class="sidebar-text">Início / Dashboard</span></a></li>
+                    <li><a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i data-feather="dollar-sign" class="shrink-0"></i><span class="sidebar-text">Lançamentos</span></a></li>
+                    <li><a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i data-feather="truck" class="shrink-0"></i><span class="sidebar-text">Logística</span></a></li>
 
                     <li>
                         <button type="button" class="sidebar-link w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900" onclick="toggleSubmenu('submenu-expedicao')">
                             <div class="flex items-center gap-3">
-                                <span data-feather="package"></span>
+                                <i data-feather="package" class="shrink-0"></i>
                                 <span class="sidebar-text">Expedição</span>
                             </div>
-                            <span data-feather="chevron-down" class="w-4 h-4 transition-transform duration-200" id="icon-expedicao"></span>
+                            <i data-feather="chevron-down" class="w-4 h-4 transition-transform duration-200" id="icon-expedicao"></i>
                         </button>
-                        <ul id="submenu-expedicao" class="hidden pl-9 mt-1 space-y-1">
-                            <li><a href="entregas.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Entregas</a></li>
-                            <li><a href="checklist.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Checklist Veículos</a></li>
-                            <li><a href="produtos.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Cadastro Produtos</a></li>
-                            <li><a href="estoque.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Endereçamento</a></li>
+                        <ul id="submenu-expedicao" class="hidden pl-4 md:pl-9 mt-1 space-y-1">
+                            <li><a href="entregas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50"><i data-feather="truck" class="w-4 h-4 shrink-0"></i><span class="sidebar-text">Entregas</span></a></li>
+                            <li><a href="checklist.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50"><i data-feather="clipboard" class="w-4 h-4 shrink-0"></i><span class="sidebar-text">Checklist Veículos</span></a></li>
+                            <li><a href="produtos.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50"><i data-feather="box" class="w-4 h-4 shrink-0"></i><span class="sidebar-text">Cadastro Produtos</span></a></li>
+                            <li><a href="estoque.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50"><i data-feather="map-pin" class="w-4 h-4 shrink-0"></i><span class="sidebar-text">Endereçamento</span></a></li>
                         </ul>
                     </li>
 
                     <li>
                         <button type="button" class="sidebar-link w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100/80 hover:text-gray-900" onclick="toggleSubmenu('submenu-financeiro')">
                             <div class="flex items-center gap-3">
-                                <span data-feather="dollar-sign"></span>
+                                <i data-feather="dollar-sign" class="shrink-0"></i>
                                 <span class="sidebar-text">Financeiro</span>
                             </div>
-                            <span data-feather="chevron-down" class="w-4 h-4 transition-transform duration-200" id="icon-financeiro"></span>
+                            <i data-feather="chevron-down" class="w-4 h-4 transition-transform duration-200" id="icon-financeiro"></i>
                         </button>
-                        <ul id="submenu-financeiro" class="hidden pl-4 mt-1 space-y-1">
-                            <li>
-                                <a href="financeiro.html" class="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50/50">
-                                    <i data-feather="file-text" class="w-4 h-4"></i>
-                                    <span class="sidebar-text">Contas a Pagar</span>
-                                </a>
-                                <a href="/conciliacao.html" class="sidebar-link group flex items-center gap-3 px-3 py-2 rounded-md text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
-                                    <i data-feather="layers" class="w-5 h-5 text-gray-400 group-hover:text-indigo-500 transition-colors"></i>
-                                    <span class="font-medium text-sm transition-opacity duration-300">Conciliação de Recebíveis</span>
-                                </a>
-                            </li>
+                        <ul id="submenu-financeiro" class="hidden pl-4 md:pl-9 mt-1 space-y-1">
+                            <li><a href="financeiro.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50"><i data-feather="file-text" class="w-4 h-4 shrink-0"></i><span class="sidebar-text">Contas a Pagar</span></a></li>
+                            <li><a href="conciliacao.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50"><i data-feather="layers" class="w-4 h-4 shrink-0"></i><span class="sidebar-text">Conciliação</span></a></li>
                         </ul>
                     </li>
                     
-                    <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
+                    <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i data-feather="settings" class="shrink-0"></i><span class="sidebar-text">Configurações</span></a></li>
                 </ul>
             </div>
             
@@ -170,7 +162,7 @@
 
     <div class="flex-1 flex flex-col min-w-0">
         <header class="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
-            <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900"><span data-feather="menu"></span></button>
+            <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900"><i data-feather="menu"></i></button>
             <div class="hidden md:block"></div>
             <div class="flex items-center gap-4 ml-auto">
                 <span class="text-sm text-gray-700">Olá, <strong id="user-name" class="font-medium">Utilizador</strong>!</span>
@@ -213,7 +205,7 @@
                                 <input type="date" id="filter-data-cargas" class="text-sm font-bold text-gray-700 border-none focus:ring-0 cursor-pointer bg-transparent">
                             </div>
                             <button id="btn-nova-carga" class="action-btn bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-2 shadow-sm">
-                                <span data-feather="plus-circle" class="w-4 h-4"></span> Montar Nova Carga
+                                <i data-feather="plus-circle" class="w-4 h-4"></i> Montar Nova Carga
                             </button>
                         </div>
                     </div>
@@ -231,7 +223,7 @@
                         <div class="mt-3 flex rounded-md shadow-sm">
                             <input type="number" id="dav-search-input" class="block w-full rounded-none rounded-l-md border-gray-300 focus:ring-indigo-500 p-2 font-bold text-base text-gray-700" placeholder="Digite o número do DAV">
                             <button id="search-dav-btn" class="relative -ml-px inline-flex items-center space-x-2 rounded-r-md border border-gray-300 bg-gray-50 px-5 py-2 text-sm font-bold text-gray-700 hover:bg-gray-100 transition-colors">
-                                <span data-feather="search" class="h-4 w-4"></span><span>Buscar</span>
+                                <i data-feather="search" class="h-4 w-4"></i><span>Buscar</span>
                             </button>
                         </div>
                     </div>
@@ -239,14 +231,16 @@
                 </div>
 
                 <div id="romaneio-split-view" class="hidden flex-1 flex flex-col lg:flex-row gap-4 h-full pb-4">
+                    
                     <div class="w-full lg:w-1/2 bg-white/95 backdrop-blur-md rounded-lg shadow-sm border border-gray-200 flex flex-col overflow-hidden h-full">
                         <div class="bg-gray-100/80 p-3 border-b flex justify-between items-center shrink-0">
                             <h3 class="text-sm font-bold text-gray-800 flex items-center gap-2">
-                                <span data-feather="inbox" class="w-4 h-4 text-indigo-600"></span> 1. Prateleira
+                                <i data-feather="inbox" class="w-4 h-4 text-indigo-600"></i> 1. Prateleira
                                 <span class="text-[10px] font-bold bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full ml-1 shadow-sm whitespace-nowrap" id="pending-counter">0 Pedidos</span>
                             </h3>
                             <button class="btn-voltar-home text-xs font-bold text-gray-500 uppercase hover:text-indigo-600 px-2 py-1 rounded hover:bg-gray-200 border border-gray-300">Voltar à Lista</button>
                         </div>
+                        
                         <div class="p-3 border-b border-gray-200 bg-white shrink-0 flex flex-col gap-3 shadow-inner">
                             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                 <div class="flex items-center gap-3 bg-gray-50 p-1.5 rounded-lg border border-gray-200">
@@ -262,6 +256,7 @@
                                 </div>
                                 <input type="date" id="filter-data" class="border border-gray-300 rounded-md p-1.5 text-xs font-bold text-gray-700 focus:ring-indigo-500 shadow-sm flex-1 sm:max-w-[140px]">
                             </div>
+                            
                             <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
                                 <div class="flex flex-col gap-1.5">
                                     <label class="inline-flex items-center cursor-pointer">
@@ -281,21 +276,20 @@
                                     <i data-feather="search" class="w-3.5 h-3.5"></i> Buscar Pedidos
                                 </button>
                             </div>
-                            <div class="flex gap-2 pt-2 border-t border-gray-100">
-                                <div class="flex-1">
-                                    <select id="filter-bairro" class="w-full border-gray-300 rounded-md p-1.5 text-xs font-bold text-gray-600 focus:ring-indigo-500 shadow-sm bg-gray-50 cursor-pointer">
-                                        <option value="">Filtro: Todos os Bairros</option>
-                                    </select>
+                            
+                            <div id="filial-filter-container" class="hidden w-full pt-3 border-t border-gray-100 mt-2">
+                                <span class="text-[10px] font-bold text-gray-500 uppercase block mb-2">Filtrar por Filial de Origem (Múltipla Seleção)</span>
+                                <div class="flex flex-wrap gap-4">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="checkbox" class="filial-checkbox rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5" value="Santa Cruz da Serra" checked><span class="ml-1.5 text-xs font-bold text-gray-700">Santa Cruz</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="checkbox" class="filial-checkbox rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5" value="Piabetá" checked><span class="ml-1.5 text-xs font-bold text-gray-700">Piabetá</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="checkbox" class="filial-checkbox rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5" value="Parada Angélica" checked><span class="ml-1.5 text-xs font-bold text-gray-700">Angélica</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="checkbox" class="filial-checkbox rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5" value="Nova Campinas" checked><span class="ml-1.5 text-xs font-bold text-gray-700">Campinas</span></label>
                                 </div>
-                                <div id="filial-filter-container" class="hidden flex-1">
-                                    <select id="filter-filial-dav" class="w-full border-gray-300 rounded-md p-1.5 text-xs font-bold text-gray-600 focus:ring-indigo-500 shadow-sm bg-gray-50 cursor-pointer">
-                                        <option value="">Filtro: Todas as Filiais</option>
-                                        <option value="Santa Cruz da Serra">Vendido em: Santa Cruz</option>
-                                        <option value="Piabetá">Vendido em: Piabetá</option>
-                                        <option value="Parada Angélica">Vendido em: Parada Angélica</option>
-                                        <option value="Nova Campinas">Vendido em: Nova Campinas</option>
-                                    </select>
-                                </div>
+                            </div>
+                            <div class="w-full pt-2 border-t border-gray-100">
+                                <select id="filter-bairro" class="w-full border-gray-300 rounded-md p-1.5 text-xs font-bold text-gray-600 focus:ring-indigo-500 shadow-sm bg-gray-50 cursor-pointer">
+                                    <option value="">Filtro Adicional: Todos os Bairros</option>
+                                </select>
                             </div>
                         </div>
                         <div id="lista-pendentes" class="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50/50"></div>
@@ -303,7 +297,7 @@
 
                     <div class="w-full lg:w-1/2 bg-white/95 backdrop-blur-md rounded-lg shadow-sm border-2 border-indigo-200 flex flex-col overflow-hidden relative h-full">
                         <div class="bg-indigo-50/80 p-3 border-b flex justify-between items-center shrink-0">
-                            <h3 class="text-sm font-bold text-indigo-900 flex items-center gap-2"><span data-feather="truck" class="w-4 h-4"></span> <span id="titulo-carrinho">2. Montar Carga</span></h3>
+                            <h3 class="text-sm font-bold text-indigo-900 flex items-center gap-2"><i data-feather="truck" class="w-4 h-4"></i> <span id="titulo-carrinho">2. Montar Carga</span></h3>
                             <span class="text-xs font-bold bg-indigo-600 text-white px-2.5 py-0.5 rounded-full shadow-sm" id="cart-counter">0 Pedidos</span>
                         </div>
                         <div class="p-3 border-b bg-white shrink-0 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -413,14 +407,14 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script src="entregas.js?v=12.0" defer></script>
+<script src="entregas.js?v=14.0" defer></script>
 <script src="assets/global.js"></script>
 
 <script>
-    // Lógica do Menu Lateral (Copiada do seu index.html)
     window.toggleSubmenu = function(id) {
         const submenu = document.getElementById(id);
-        const icon = document.getElementById('icon-expedicao');
+        const iconId = id.replace('submenu-', 'icon-');
+        const icon = document.getElementById(iconId);
         
         if (submenu.classList.contains('hidden')) {
             submenu.classList.remove('hidden');
@@ -432,7 +426,7 @@
     };
 
     document.addEventListener('DOMContentLoaded', () => {
-        feather.replace();
+        if(typeof feather !== 'undefined') feather.replace();
 
         const sidebar = document.getElementById('sidebar');
         
@@ -445,8 +439,8 @@
                 sidebar.classList.toggle('w-20', collapsed);
                 document.querySelectorAll('.sidebar-text').forEach(el => el.classList.toggle('hidden', collapsed));
                 document.getElementById('company-logo')?.classList.toggle('hidden', collapsed);
-                document.getElementById('toggle-icon-collapse').classList.toggle('hidden', collapsed);
-                document.getElementById('toggle-icon-expand').classList.toggle('hidden', !collapsed);
+                document.getElementById('toggle-icon-collapse')?.classList.toggle('hidden', collapsed);
+                document.getElementById('toggle-icon-expand')?.classList.toggle('hidden', !collapsed);
                 
                 sidebar.querySelectorAll('.sidebar-link').forEach(link => {
                     link.classList.toggle('justify-center', collapsed);

@@ -3,7 +3,6 @@ const router = express.Router();
 const mysql = require('mysql2/promise');
 const { authenticateToken } = require('../middlewares');
 const dbConfig = require('../dbConfig');
-const { gerarPDF } = require('@alexssmusica/node-pdf-nfe');
 
 const dbConfigSei = {
     host: process.env.DB_HOST,
@@ -167,8 +166,6 @@ router.post('/retirada-manual', authenticateToken, async (req, res) => {
     }
 });
 
-
-// NOVA ROTA: Busca motoristas REAIS (Tabela)
 router.get('/motoristas-disponiveis', authenticateToken, async (req, res) => {
     try {
         const [motoristas] = await gerencialPool.execute("SELECT id, nome, cpf FROM cad_motoristas WHERE status = 'Ativo' ORDER BY nome ASC");
@@ -349,7 +346,6 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
         const filialMap = { 'Santa Cruz da Serra': 'LUCAM', 'Piabetá': 'VMNAF', 'Parada Angélica': 'TNASC', 'Nova Campinas': 'LCMAT' };
         const dateColumn = tipoData === 'entrega' ? 'c.cr_entr' : 'c.cr_erec';
 
-        // FILTRO DESPOLUIDO: Somente os Pagos (reca=1) OU os marcados pra Receber no Local (rloc=1,S,T)
         let query = `
             SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde, c.cr_edav, c.cr_entr, c.cr_udav, c.cr_reca, c.cr_rloc, c.cr_nota, c.cr_chnf
             FROM cdavs c JOIN idavs i ON c.cr_ndav = i.it_ndav
@@ -358,18 +354,23 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
         const params = [data];
 
         if (apenasReceberLocal === 'true') {
-            // Filtra só não pagos E com "Receber no local" ativo
             query += ` AND c.cr_reca != '1' AND c.cr_rloc IN ('1','S','T')`;
         } else {
-            // Padrão: Só exibe os que já foram pagos e recebidos no caixa
             query += ` AND c.cr_reca = '1'`;
         }
 
         if (apenasEntregaMarcada === 'true') query += ` AND c.cr_entr != '0000-00-00'`; 
         if (bairro) { query += ' AND c.cr_ebai LIKE ?'; params.push(`%${bairro}%`); }
 
+        // AJUSTE: Permite múltiplas filiais (Array IN)
         if (perfil === 'Administrador' || perfil === 'Financeiro') {
-            if (filialDav) { query += ' AND c.cr_inde = ?'; params.push(filialMap[filialDav]); }
+            if (filialDav) { 
+                const filiaisArr = filialDav.split(',').map(f => filialMap[f.trim()]).filter(Boolean);
+                if (filiaisArr.length > 0) {
+                    query += ` AND c.cr_inde IN (${filiaisArr.map(() => '?').join(',')})`;
+                    params.push(...filiaisArr);
+                }
+            }
         } else {
             query += ' AND c.cr_inde = ?'; params.push(filialMap[req.user.unidade]);
         }
@@ -537,13 +538,12 @@ router.delete('/romaneios/:id/itens/:itemId', authenticateToken, async (req, res
     }
 });
 
-// NOVA ROTA: GERAR PDF DA NOTA FISCAL (DANFE) VIA BANCO DE DADOS
-// NOVA ROTA: GERAR PDF DA NOTA FISCAL (DANFE) VIA BANCO DE DADOS
+const { gerarPDF } = require('@alexssmusica/node-pdf-nfe');
+
 router.get('/danfe/:chave', authenticateToken, async (req, res) => {
     const chave = req.params.chave;
     
     try {
-        // Busca o XML da nota guardado no ERP
         const [xmlRows] = await seiPool.execute(
             `SELECT sf_xmlarq, sf_arqxml FROM sefazxml WHERE sf_nchave = ? LIMIT 1`, 
             [chave]
@@ -551,13 +551,12 @@ router.get('/danfe/:chave', authenticateToken, async (req, res) => {
 
         if (xmlRows.length === 0) return res.status(404).json({ error: 'XML da Nota não encontrado.' });
 
-        // Busca o número da nota e a unidade no DAV para nomear o ficheiro
         const [notaRows] = await seiPool.execute(
             `SELECT cr_nota, cr_inde FROM cdavs WHERE cr_chnf = ? LIMIT 1`,
             [chave]
         );
         
-        let numNota = chave.substring(25, 34); // Fallback extraído da chave
+        let numNota = chave.substring(25, 34); 
         let unidade = 'Loja';
         
         if (notaRows.length > 0) {
@@ -565,65 +564,17 @@ router.get('/danfe/:chave', authenticateToken, async (req, res) => {
             unidade = notaRows[0].cr_inde || unidade;
         }
 
-        let xmlContent = xmlRows[0].sf_xmlarq || xmlRows[0].sf_arqxml;
-        if (!xmlContent) return res.status(404).json({ error: 'Conteúdo do XML está vazio.' });
-        if (Buffer.isBuffer(xmlContent)) xmlContent = xmlContent.toString('utf8');
-
-        const doc = await gerarPDF(xmlContent);
-        
-        res.setHeader('Content-Type', 'application/pdf');
-        // AQUI ESTÁ O NOME DO FICHEIRO CUSTOMIZADO
-        res.setHeader('Content-Disposition', `inline; filename="NFe_${numNota}_${unidade}.pdf"`);
-        
-        doc.pipe(res);
-
-    } catch (error) {
-        console.error("Erro ao gerar DANFE:", error);
-        res.status(500).json({ error: 'Erro interno ao gerar o PDF da Nota Fiscal.' });
-    }
-});
-
-// NOVA ROTA: GERAR PDF DA NOTA FISCAL (DANFE) VIA BANCO DE DADOS
-router.get('/danfe/:chave', authenticateToken, async (req, res) => {
-    const chave = req.params.chave;
-    
-    try {
-        // Busca o XML da nota guardado no ERP
-        const [xmlRows] = await seiPool.execute(
-            `SELECT sf_xmlarq, sf_arqxml FROM sefazxml WHERE sf_nchave = ? LIMIT 1`, 
-            [chave]
-        );
-
-        if (xmlRows.length === 0) return res.status(404).json({ error: 'XML da Nota não encontrado.' });
-
-        // Busca o número da nota e a unidade no DAV para nomear o ficheiro
-        const [notaRows] = await seiPool.execute(
-            `SELECT cr_nota, cr_inde FROM cdavs WHERE cr_chnf = ? LIMIT 1`,
-            [chave]
-        );
-        
-        let numNota = chave.substring(25, 34); // Fallback extraído da chave
-        let unidade = 'Loja';
-        
-        if (notaRows.length > 0) {
-            numNota = notaRows[0].cr_nota || numNota;
-            unidade = notaRows[0].cr_inde || unidade;
-        }
-
-        // TRUQUE AQUI: Remove os zeros à esquerda (ex: "000012345" vira "12345")
         numNota = parseInt(numNota, 10).toString();
 
         let xmlContent = xmlRows[0].sf_xmlarq || xmlRows[0].sf_arqxml;
         if (!xmlContent) return res.status(404).json({ error: 'Conteúdo do XML está vazio.' });
         if (Buffer.isBuffer(xmlContent)) xmlContent = xmlContent.toString('utf8');
 
-        // A biblioteca lê o XML e desenha o PDF
         const doc = await gerarPDF(xmlContent);
         
         res.setHeader('Content-Type', 'application/pdf');
-        
-        // NOME DO FICHEIRO LIMPO E SEM ZEROS À ESQUERDA
-        res.setHeader('Content-Disposition', `inline; filename="NFe_${numNota}_${unidade}.pdf"`);
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+        res.setHeader('Content-Disposition', `attachment; filename="NFe_${numNota}_${unidade}.pdf"`);
         
         doc.pipe(res);
 
