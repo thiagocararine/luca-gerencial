@@ -362,6 +362,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
         if (apenasEntregaMarcada === 'true') query += ` AND c.cr_entr != '0000-00-00'`; 
         if (bairro) { query += ' AND c.cr_ebai LIKE ?'; params.push(`%${bairro}%`); }
 
+        // AJUSTE PARA MÚLTIPLAS FILIAIS (ARRAY)
         if (perfil === 'Administrador' || perfil === 'Financeiro') {
             if (filialDav) { 
                 const filiaisArr = filialDav.split(',').map(f => filialMap[f.trim()]).filter(Boolean);
@@ -430,7 +431,7 @@ router.get('/romaneios/:id', authenticateToken, async (req, res) => {
         const [romaneioDetails] = await gerencialPool.execute(`SELECT r.id, r.data_criacao, r.data_conclusao, r.nome_motorista, r.filial_origem, r.status, v.modelo as modelo_veiculo, v.placa as placa_veiculo, IFNULL(v.capacidade_kg, 0) as capacidade_kg FROM romaneios r JOIN veiculos v ON r.id_veiculo = v.id WHERE r.id = ?`, [romaneioId]);
         if (romaneioDetails.length === 0) return res.status(404).json({ error: 'Romaneio não encontrado.' });
 
-        // AJUSTE: Agora busca os dados de endereço do cliente para podermos imprimir o Roteiro!
+        // AJUSTE IMPORTANTÍSSIMO: Retorna os dados de Morada para gerar o PDF do Roteiro
         const [items] = await gerencialPool.execute(`
             SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar, 
                    ri.pd_codi as produto_codigo, ri.pd_nome as produto_nome, 
@@ -575,6 +576,7 @@ router.get('/danfe/:chave', authenticateToken, async (req, res) => {
             unidade = notaRows[0].cr_inde || unidade;
         }
 
+        // TRUQUE AQUI: Limpa os zeros à esquerda do nome do Ficheiro PDF do Danfe
         numNota = parseInt(numNota, 10).toString();
 
         let xmlContent = xmlRows[0].sf_xmlarq || xmlRows[0].sf_arqxml;

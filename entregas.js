@@ -156,11 +156,11 @@ function updateListTabs() {
     if (!btnAndamento || !btnConcluidas) return;
 
     if(romaneioListStatus === 'Em montagem') {
-        btnAndamento.className = "px-4 py-2 rounded-md bg-white shadow-sm text-sm font-bold text-indigo-600 transition-colors";
-        btnConcluidas.className = "px-4 py-2 rounded-md text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors";
+        btnAndamento.className = "px-4 py-1.5 rounded-md bg-white shadow-sm text-sm font-bold text-indigo-600 transition-colors";
+        btnConcluidas.className = "px-4 py-1.5 rounded-md text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors";
     } else {
-        btnConcluidas.className = "px-4 py-2 rounded-md bg-white shadow-sm text-sm font-bold text-indigo-600 transition-colors";
-        btnAndamento.className = "px-4 py-2 rounded-md text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors";
+        btnConcluidas.className = "px-4 py-1.5 rounded-md bg-white shadow-sm text-sm font-bold text-indigo-600 transition-colors";
+        btnAndamento.className = "px-4 py-1.5 rounded-md text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors";
     }
 }
 
@@ -192,6 +192,7 @@ window.abrirDanfe = async function(chave) {
         a.click();
         
         setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
+
     } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
 }
 
@@ -247,6 +248,7 @@ window.imprimirEspelhoDav = async function(davNumber) {
                 </tbody>
             </table>
             <div class="total">VALOR TOTAL: R$ ${parseFloat(data.valor_total).toLocaleString('pt-BR', {minimumFractionDigits:2})}</div>
+            
             <div style="margin-top: 50px; text-align: center;">
                 <p>_________________________________________________</p>
                 <p>Assinatura do Cliente</p>
@@ -352,6 +354,12 @@ window.abrirVisualizacaoRomaneio = async function(id) {
         if (!res.ok) throw new Error("Erro ao buscar detalhes da carga.");
         const data = await res.json();
         
+        const modal = document.getElementById('view-romaneio-modal');
+        if (!modal) {
+            showToast("Modal de visualização não encontrado.", "error");
+            return;
+        }
+
         document.getElementById('view-romaneio-id').textContent = data.id;
         document.getElementById('view-motorista').textContent = data.nome_motorista;
         document.getElementById('view-veiculo').textContent = `${data.modelo_veiculo} (${data.placa_veiculo})`;
@@ -379,12 +387,12 @@ window.abrirVisualizacaoRomaneio = async function(id) {
         }
         container.innerHTML = html;
         
-        const modal = document.getElementById('view-romaneio-modal');
         modal.classList.remove('hidden');
         setTimeout(() => modal.classList.remove('opacity-0'), 10);
 
     } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
 };
+
 
 // ==========================================================
 //               ABA 1: RETIRADA RÁPIDA (BALCÃO)
@@ -438,7 +446,7 @@ function renderDavResults(data) {
                     <tbody class="divide-y divide-gray-100">
                         ${itens.map(item => `
                             <tr class="expandable-row hover:bg-gray-50 transition-colors" data-idavs-regi="${item.idavs_regi}">
-                                <td class="px-3 py-3 font-medium text-gray-800">${limpaCod(item.pd_codi)} - ${item.pd_nome} <span class="text-gray-400 text-xs ml-1">(${item.unidade})</span> ${item.quantidade_devolvida > 0 ? `<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold ml-2">Devolvido: ${item.quantidade_devolvida}</span>` : ''}</td>
+                                <td class="px-3 py-3 font-medium text-gray-800">${limpaCod(item.pd_codi)} - ${item.pd_nome} <span class="text-gray-400 text-xs ml-1">(${item.unidade})</span> ${item.quantidade_devolvida > 0 ? `<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold ml-2">Devolvido: ${item.quantidade_devolvida}</span>` : ''}</td>
                                 <td class="px-2 py-3 text-center font-black text-sm ${item.quantidade_saldo > 0 ? 'text-indigo-600' : 'text-gray-400'}">${item.quantidade_saldo}</td>
                                 <td class="px-3 py-3 text-center">
                                     <input type="number" step="1" class="w-24 text-center rounded-md border-gray-300 focus:ring-indigo-500 shadow-sm text-base font-bold" value="0" min="0" max="${item.quantidade_saldo}" ${item.quantidade_saldo > 0 && status_caixa === '1' ? '' : 'disabled title="Apenas pedidos pagos podem ser retirados"'}>
@@ -578,9 +586,14 @@ async function loadRomaneiosAtivos() {
                     <p class="text-xs text-gray-400 mt-1.5 ml-7 font-bold uppercase tracking-wider">Origem: ${r.filial_origem}</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
-                    <button onclick="abrirVisualizacaoRomaneio(${r.id})" class="text-gray-600 bg-white border border-gray-300 text-xs font-bold hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+                    <button onclick="abrirVisualizacaoRomaneio(${r.id})" class="text-gray-600 bg-white border border-gray-300 text-xs font-bold hover:bg-gray-100 px-4 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
                         <i data-feather="eye" class="w-4 h-4"></i> Visualizar
                     </button>
+                    
+                    <button onclick="window.imprimirRoteiro(${r.id})" class="text-indigo-700 bg-indigo-50 border border-indigo-200 text-xs font-bold hover:bg-indigo-600 hover:text-white px-4 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+                        <i data-feather="printer" class="w-4 h-4"></i> Imprimir Roteiro
+                    </button>
+                    
                     ${actionButtons}
                 </div>
             </div>`;
@@ -588,6 +601,7 @@ async function loadRomaneiosAtivos() {
         if(typeof feather !== 'undefined') feather.replace();
 
     } catch (error) {
+        console.error("ERRO NO SELECT DE ROMANEIOS: ", error);
         container.innerHTML = `<p class="text-center text-red-500 font-bold py-10"><i data-feather="alert-triangle" class="inline-block mr-2"></i> ${error.message}</p>`;
         if(typeof feather !== 'undefined') feather.replace();
     }
@@ -993,7 +1007,7 @@ function atualizarBarraDePeso() {
 }
 
 async function finalizarCarga() {
-    if (isFinalizandoCarga) return;
+    if (isFinalizandoCarga) return; 
 
     const idVeiculo = document.getElementById('select-veiculo').value;
     const motorista = document.getElementById('input-motorista').value;
@@ -1026,6 +1040,7 @@ async function finalizarCarga() {
 
             if (payloadItens.length > 0) {
                 const resItens = await fetch(`${apiUrlBase}/entregas/romaneios/${romaneioId}/itens`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` }, body: JSON.stringify(payloadItens) });
+                
                 if (!resItens.ok) {
                     let errMsg = "Erro ao inserir itens no banco.";
                     try { const errObj = await resItens.json(); errMsg = errObj.error || errMsg; } catch(e) {}
@@ -1033,8 +1048,10 @@ async function finalizarCarga() {
                 }
             }
 
-            showToast(`Carga gravada!`, 'success');
+            showToast(`Carga gravada! Abrindo roteiro...`, 'success');
+            window.imprimirRoteiro(romaneioId);
             switchView('romaneio-list-view');
+            
         } catch (e) { 
             showToast(e.message, "error"); 
         } finally { 
@@ -1166,7 +1183,7 @@ async function finalizarAcertoRomaneio() {
 }
 
 // ==========================================================
-//               MÓDULO: HISTÓRICO
+//               MÓDULO: HISTÓRICO E VISUALIZAR CARGA
 // ==========================================================
 async function loadVeiculosHistorico() {
     const select = document.getElementById('hist-veiculo');
@@ -1224,13 +1241,73 @@ async function buscarHistorico() {
                 </div>
             </div>`).join('');
         if(typeof feather !== 'undefined') feather.replace();
-    } catch (e) { container.innerHTML = `<p class="text-center text-red-500 font-bold py-10">${e.message}</p>`; }
+    } catch (e) {
+        container.innerHTML = `<p class="text-center text-red-500 font-bold py-10">${e.message}</p>`;
+    }
 }
 
+window.abrirVisualizacaoRomaneio = async function(id) {
+    showLoader();
+    try {
+        const res = await fetch(`${apiUrlBase}/entregas/romaneios/${id}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!res.ok) throw new Error("Erro ao buscar detalhes da carga.");
+        const data = await res.json();
+        
+        const modal = document.getElementById('view-romaneio-modal');
+        if (!modal) {
+            showToast("Modal de visualização não encontrado na página.", "error");
+            return;
+        }
+
+        document.getElementById('view-romaneio-id').textContent = data.id;
+        document.getElementById('view-motorista').textContent = data.nome_motorista;
+        document.getElementById('view-veiculo').textContent = `${data.modelo_veiculo} (${data.placa_veiculo})`;
+        document.getElementById('view-status').textContent = data.status;
+
+        document.getElementById('btn-imprimir-romaneio').onclick = () => window.imprimirRoteiro(data.id);
+
+        const container = document.getElementById('view-itens-container');
+        const grouped = data.itens.reduce((acc, item) => {
+            if(!acc[item.dav_numero]) acc[item.dav_numero] = { cliente: item.cliente_nome, bairro: item.bairro, itens: [] };
+            acc[item.dav_numero].itens.push(item); return acc;
+        }, {});
+
+        let html = '';
+        for (const [davNumero, dados] of Object.entries(grouped)) {
+            html += `<div class="border border-gray-200 rounded-lg overflow-hidden shadow-sm mb-4"><div class="bg-gray-100 px-4 py-2 border-b flex justify-between items-center"><span class="font-black text-gray-800 text-sm">DAV #${davNumero} - <span class="text-gray-600 font-medium">${dados.cliente}</span></span> <span class="text-xs font-bold text-gray-500">${dados.bairro || 'Sem Bairro'}</span></div><div class="divide-y divide-gray-100 bg-white">`;
+            dados.itens.forEach(item => {
+                html += `
+                    <div class="p-3 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                        <p class="text-sm font-bold text-gray-800">${limpaCod(item.produto_codigo)} - ${item.produto_nome}</p>
+                        <p class="text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">${parseFloat(item.quantidade_a_entregar)} ${item.produto_unidade}</p>
+                    </div>`;
+            });
+            html += `</div></div>`;
+        }
+        container.innerHTML = html;
+        
+        modal.classList.remove('hidden');
+        setTimeout(() => modal.classList.remove('opacity-0'), 10);
+
+    } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
+};
+
+// ==========================================================
+//               FUNÇÕES DE UTILIDADE
+// ==========================================================
 function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) return;
-    const mapaModulos = { 'lancamentos': 'despesas.html', 'logistica': 'logistica.html', 'entregas': 'entregas.html', 'checklist': 'checklist.html', 'produtos': 'produtos.html', 'configuracoes': 'settings.html' };
+
+    const mapaModulos = {
+        'lancamentos': 'despesas.html',
+        'logistica': 'logistica.html',
+        'entregas': 'entregas.html',
+        'checklist': 'checklist.html',
+        'produtos': 'produtos.html',
+        'configuracoes': 'settings.html'
+    };
+
     for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
         const permissao = userData.permissoes.find(p => p.nome_modulo === nomeModulo);
         if (!permissao || !permissao.permitido) {
@@ -1242,7 +1319,8 @@ function gerenciarAcessoModulos() {
 
 function handleApiError(response) {
     if (response.status === 401 || response.status === 403) {
-        showToast("Sessão expirada. Faça login novamente.", "error"); setTimeout(logout, 2000);
+        showToast("Sessão expirada. Faça login novamente.", "error");
+        setTimeout(logout, 2000);
     } else {
         response.json().then(data => showToast(`Erro: ${data.error || response.statusText}`, "error")).catch(() => showToast('Erro na API.', "error"));
     }
