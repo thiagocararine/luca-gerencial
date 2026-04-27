@@ -78,15 +78,14 @@ function mapearModalidadeMaquininha(tipoStr) {
     if (!tipoStr) return null; 
     const t = String(tipoStr).toLowerCase();
     
-    if (t === 'credit_card' || t.includes('credito') || t.includes('crédito')) {
-        return 'Cartão de Crédito';
-    }
-    if (t === 'debit_card' || t.includes('debito') || t.includes('débito')) {
-        return 'Cartão de Débito';
-    }
-    if (t === 'bank_transfer' || t.includes('pix') || t === 'available_money' || t === 'account_money') {
-        return 'Pix';
-    }
+    // Crédito
+    if (t === 'credit_card' || t.includes('credito') || t.includes('crédito')) return 'Cartão de Crédito';
+    
+    // Débito E Pré-Pago
+    if (t === 'debit_card' || t === 'prepaid_card' || t.includes('debito') || t.includes('débito')) return 'Cartão de Débito';
+    
+    // Pix e Saldo
+    if (t === 'bank_transfer' || t.includes('pix') || t === 'available_money' || t === 'account_money') return 'Pix';
     
     return null; 
 }
