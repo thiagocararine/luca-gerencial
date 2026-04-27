@@ -269,7 +269,19 @@ window.imprimirRoteiro = async function(romaneioId) {
         const res = await fetch(`${apiUrlBase}/entregas/romaneios/${romaneioId}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         const data = await res.json();
         
-        const logo = localStorage.getItem('company_logo') || '';
+        // NOVO: Busca o Logo do ficheiro config_logo.json de forma inteligente
+        let logoBase64 = localStorage.getItem('company_logo');
+        if (!logoBase64) {
+            try {
+                const resLogo = await fetch('config_logo.json');
+                if (resLogo.ok) {
+                    const logoData = await resLogo.json();
+                    logoBase64 = logoData.logoBase64;
+                    localStorage.setItem('company_logo', logoBase64);
+                }
+            } catch(e) { console.warn("Logo não encontrado."); }
+        }
+        
         const printWindow = window.open('', '_blank');
         
         const grouped = data.itens.reduce((acc, item) => {
@@ -310,7 +322,7 @@ window.imprimirRoteiro = async function(romaneioId) {
                 <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Imprimir</button>
             </div>
             <div class="header">
-                <div>${logo ? `<img src="${logo}" class="logo">` : '<h2>LUCA LOGÍSTICA</h2>'}</div>
+                <div>${logoBase64 ? `<img src="${logoBase64}" class="logo">` : '<h2>LUCA LOGÍSTICA</h2>'}</div>
                 <div style="text-align: right;">
                     <h1>ROTEIRO DE CARGA #${data.id}</h1>
                     <p><strong>Data:</strong> ${new Date(data.data_criacao).toLocaleString('pt-BR')} &nbsp;&nbsp; <strong>Origem:</strong> ${data.filial_origem}</p>
@@ -1334,7 +1346,6 @@ window.imprimirDavsRoteiro = async function(idDoRomaneio) {
 function gerarJanelaImpressaoDavs(davs, logoBase64) {
     const janela = window.open('', '_blank');
     
-    // Injeta a imagem recuperada do ficheiro json
     const imgHtml = logoBase64 ? `<img src="${logoBase64}" class="logo" />` : '';
 
     let html = `
@@ -1343,25 +1354,45 @@ function gerarJanelaImpressaoDavs(davs, logoBase64) {
         <title>Impressão de DAVs - Roteiro</title>
         <style>
             @media print {
-                @page { margin: 5mm; size: A4 portrait; }
+                /* FORÇA O MODO PAISAGEM (LANDSCAPE) */
+                @page { margin: 5mm; size: A4 landscape; } 
                 body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; }
                 .page-break { page-break-after: always; }
             }
-            body { font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; }
-            .dav-container { width: 100%; padding: 10px; box-sizing: border-box; }
-            .header-flex { display: flex; justify-content: space-between; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
-            .logo { max-width: 140px; max-height: 60px; margin-right: 15px; }
-            .info-loja { flex: 1; font-size: 10px; line-height: 1.3; }
-            .info-dav { text-align: right; font-size: 10px; line-height: 1.3; }
-            .titulo-loja { font-weight: bold; font-size: 13px; margin-bottom: 3px; }
-            .destaque { font-weight: bold; font-size: 12px; }
-            .tabela-itens { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 15px; font-size: 10px; }
-            .tabela-itens th, .tabela-itens td { padding: 4px; text-align: left; border-bottom: 1px dotted #ccc; }
-            .tabela-itens th { border-bottom: 1px dashed #000; font-weight: bold; }
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 12px; color: #000; }
+            
+            /* Estrutura Ocupando a Folha Inteira */
+            .dav-container { width: 100%; height: 95vh; padding: 10px; box-sizing: border-box; display: flex; flex-direction: column; }
+            
+            /* Quadrados (Boxes) Estilo PDF */
+            .box { border: 2px solid #000; border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+            
+            /* Cabeçalho */
+            .header-flex { display: flex; justify-content: space-between; align-items: center; }
+            .logo { max-width: 180px; max-height: 70px; }
+            .info-loja { flex: 1; text-align: center; font-size: 11px; line-height: 1.4; font-weight: bold;}
+            .info-dav { text-align: right; font-size: 12px; line-height: 1.4; width: 260px; }
+            .titulo-loja { font-size: 16px; margin-bottom: 4px; text-transform: uppercase; }
+            .destaque { font-weight: bold; font-size: 14px; }
+            .aviso-fiscal { text-align: center; font-size: 10px; font-weight: bold; margin: 4px 0; }
+            
+            /* Dados do Cliente */
+            .cliente-box { display: flex; justify-content: space-between; font-size: 13px; }
+            
+            /* Tabela que estica */
+            .tabela-container { flex: 1; border: 2px solid #000; border-radius: 6px; overflow: hidden; margin-bottom: 8px; }
+            .tabela-itens { width: 100%; border-collapse: collapse; font-size: 11px; }
+            .tabela-itens th, .tabela-itens td { padding: 6px; text-align: left; border-bottom: 1px solid #000; border-right: 1px solid #000; }
+            .tabela-itens th:last-child, .tabela-itens td:last-child { border-right: none; }
+            .tabela-itens tbody tr:last-child td { border-bottom: none; }
+            .tabela-itens th { background-color: #f0f0f0; font-weight: bold; text-transform: uppercase; }
             .valores-right { text-align: right !important; }
-            .rodape-dav { border-top: 1px dashed #000; padding-top: 10px; font-size: 10px; }
-            .obs-regras { margin-top: 10px; font-size: 9px; line-height: 1.2; }
-            .endereco-box { margin-top: 10px; border: 1px solid #000; padding: 5px; }
+            
+            /* Rodapé Dividido */
+            .rodape-flex { display: flex; justify-content: space-between; gap: 15px; }
+            .regras-box { flex: 2; font-size: 10px; line-height: 1.3; font-weight: bold; border-right: 1px solid #ccc; padding-right: 10px;}
+            .endereco-box { flex: 2; font-size: 12px; line-height: 1.4; border-right: 1px solid #ccc; padding-right: 10px;}
+            .totais-box { flex: 1; text-align: right; display: flex; flex-direction: column; justify-content: space-between; }
         </style>
     </head>
     <body>
@@ -1398,77 +1429,71 @@ function gerarJanelaImpressaoDavs(davs, logoBase64) {
 
         html += `
         <div class="dav-container ${index < davs.length - 1 ? 'page-break' : ''}">
-            <div class="header-flex">
-                ${imgHtml}
+            
+            <div class="box header-flex">
+                <div style="width: 260px;">${imgHtml}</div>
                 <div class="info-loja">
                     <div class="titulo-loja">LUCA MATERIAL DE CONSTRUCAO LTDA</div>
-                    <div>Avn Automovel Clube SN Qd 04 Lote 19</div>
-                    <div>Parada Angelica Duque De Caxias [RJ] CEP: 25272405</div>
-                    <div>CNPJ: 36.671.152/0004-06</div>
-                    <div>Tel(s): (21) 2778-3885 | 2739-1480 | 2675-7410 | 3658-7218</div>
+                    <div>Avn Automovel Clube SN Qd 04 Lote 19 - Parada Angelica Duque De Caxias [RJ] CEP: 25272405</div>
+                    <div>CNPJ: 36.671.152/0004-06 &nbsp;&nbsp;|&nbsp;&nbsp; Tel(s): (21) 2778-3885 | 2739-1480 | 2675-7410</div>
                 </div>
                 <div class="info-dav">
-                    <div class="destaque">DOCUMENTO AUXILIAR DE VENDA</div>
-                    <div>Emissão: [${dav.cr_udav} ${dataHora}]</div>
-                    <div>N° DAV: <b style="font-size:14px;">${dav.cr_ndav}</b></div>
+                    <div class="destaque" style="font-size: 15px;">DOCUMENTO AUXILIAR DE VENDA</div>
+                    <div style="margin-top: 4px;">Emissão: [${dav.cr_udav} ${dataHora}]</div>
+                    <div style="margin-top: 4px;">N° DAV: <b style="font-size:18px;">${dav.cr_ndav}</b></div>
                 </div>
             </div>
             
-            <div style="text-align: center; font-size: 9px; margin-bottom: 10px;">
-                NÃO É DOCUMENTO FISCAL, NÃO É VALIDO COMO RECIBO E COMO GARANTIA DE MERCADORIA, NÃO COMPROVA PAGAMENTO
+            <div class="aviso-fiscal">NÃO É DOCUMENTO FISCAL, NÃO É VALIDO COMO RECIBO E COMO GARANTIA DE MERCADORIA, NÃO COMPROVA PAGAMENTO</div>
+            
+            <div class="box cliente-box">
+                <div><span class="destaque">NOME DO CLIENTE:</span> ${dav.cr_nmcl}</div>
+                <div><span class="destaque">CPF-CNPJ:</span> ${dav.cl_docume || 'Não Informado'}</div>
             </div>
             
-            <div style="margin-bottom: 5px;">
-                <span class="destaque">NOME DO CLIENTE:</span> ${dav.cr_nmcl}
-            </div>
-            <div style="margin-bottom: 10px;">
-                <span class="destaque">CPF-CNPJ:</span> ${dav.cl_docume || 'Não Informado'}
+            <div class="tabela-container">
+                <table class="tabela-itens">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>ID-Código</th>
+                            <th>Descrição dos Produtos</th>
+                            <th>UN</th>
+                            <th class="valores-right">Quantidade</th>
+                            <th class="valores-right">Vl.Unitário</th>
+                            <th class="valores-right">Valor Total</th>
+                            <th>Fabricante</th>
+                            <th>Endereço</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${trs}
+                    </tbody>
+                </table>
             </div>
             
-            <table class="tabela-itens">
-                <thead>
-                    <tr>
-                        <th>Item</th>
-                        <th>ID-Código</th>
-                        <th>Descrição dos Produtos</th>
-                        <th>UN</th>
-                        <th class="valores-right">Quantidade</th>
-                        <th class="valores-right">Vl.Unitário</th>
-                        <th class="valores-right">Valor Total</th>
-                        <th>Fabricante</th>
-                        <th>Endereço</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${trs}
-                </tbody>
-            </table>
-            
-            <div class="rodape-dav">
-                <div style="text-align: right; margin-bottom: 10px;">
-                    <span class="destaque" style="font-size: 14px;">TOTAL DO DAV: R$ ${totalDav.toFixed(2)}</span>
-                </div>
-                
-                <div>
-                    <b>Vendedor:</b> ${dav.cr_udav}
-                </div>
-                
-                <div class="obs-regras">
+            <div class="box rodape-flex">
+                <div class="regras-box">
                     - DEVOLUCAO/DESISTENCIA SOMENTE NA DATA DA COMPRA.<br>
-                    - NAO REALIZAMOS TROCA DE MERCADORIA ADQUIRIDA EM LOJA FISICA<br>
-                      EXCETO, COMPROVADO DEFEITO DE FABRICACAO E COM A NOTA.<br>
+                    - NAO REALIZAMOS TROCA DE MERCADORIA ADQUIRIDA EM LOJA FISICA EXCETO, COMPROVADO DEFEITO DE FABRICACAO E COM A NOTA.<br>
                     - NAO AGENDAMOS HORARIO DE ENTREGA, E NAO GUARDAMOS PEDIDOS!!<br>
                     - ATENCAO: NAO GUARDAMOS TIJOLOS, POR FAVOR NAO INSISTA.<br>
                     - ENTREGAS DE SEGUNDA A SABADO DE 8H as 18HRS.
                 </div>
                 
                 <div class="endereco-box">
-                    <div class="destaque" style="margin-bottom: 5px;">[ ENDEREÇO DE ENTREGA ]</div>
+                    <div class="destaque" style="margin-bottom: 5px; border-bottom: 1px solid #ccc; padding-bottom: 4px;">[ ENDEREÇO DE ENTREGA ]</div>
                     <div>${logradouroCompleto}</div>
-                    <div>Bairro: ${dav.cr_ebai || ''} - Cidade: ${dav.cr_ecid || ''} - CEP: ${dav.cr_ecep || ''}</div>
+                    <div>Bairro: ${dav.cr_ebai || ''} &nbsp;|&nbsp; Cidade: ${dav.cr_ecid || ''} &nbsp;|&nbsp; CEP: ${dav.cr_ecep || ''}</div>
                     <div style="margin-top: 5px;"><b>Referência:</b> ${dav.cr_refe || 'Nenhuma'}</div>
                 </div>
+                
+                <div class="totais-box">
+                    <div><b>Vendedor:</b> ${dav.cr_udav}</div>
+                    <div class="destaque" style="font-size: 18px; margin-top: 15px;">TOTAL DO DAV:<br>R$ ${totalDav.toFixed(2)}</div>
+                </div>
             </div>
+            
         </div>
         `;
     });
