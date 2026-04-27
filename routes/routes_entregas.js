@@ -597,4 +597,51 @@ router.get('/danfe/:chave', authenticateToken, async (req, res) => {
     }
 });
 
+// ROTA: Buscar DAVs Completos para Impressão em Lote
+router.get('/romaneios/:id/imprimir-davs', authenticateToken, async (req, res) => {
+    const romaneioId = parseInt(req.params.id, 10);
+    try {
+        // 1. Descobrir quais os DAVs que estão dentro deste Roteiro
+        const [davsRows] = await gerencialPool.execute(
+            `SELECT DISTINCT dav_numero FROM romaneio_itens WHERE id_romaneio = ?`, 
+            [romaneioId]
+        );
+        
+        if (davsRows.length === 0) return res.status(404).json({ error: 'Nenhum DAV neste roteiro.' });
+        
+        const davNumeros = davsRows.map(r => r.dav_numero);
+        const placeholders = davNumeros.map(() => '?').join(',');
+        
+        // 2. Buscar os Cabeçalhos e Dados do Cliente (incluindo o CPF)
+        const [cabecalhos] = await seiPool.execute(`
+            SELECT c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_ebai, c.cr_ecid, c.cr_ecep, 
+                   c.cr_edav, c.cr_hdav, c.cr_udav, c.cr_tnot, c.cr_refe, cl.cl_docume 
+            FROM cdavs c 
+            LEFT JOIN clientes cl ON c.cr_cdcl = cl.cl_codigo 
+            WHERE c.cr_ndav IN (${placeholders})
+        `, davNumeros);
+
+        // 3. Buscar os Itens de todos esses DAVs
+        const [itens] = await seiPool.execute(`
+            SELECT it_ndav, it_codi, it_nome, it_unid, it_quan, it_prec, it_ctot, it_fabr, it_ende 
+            FROM idavs 
+            WHERE it_ndav IN (${placeholders})
+            AND (it_canc IS NULL OR it_canc <> 1)
+        `, davNumeros);
+
+        // 4. Juntar os Itens dentro dos respetivos Cabeçalhos
+        const resultado = cabecalhos.map(cab => {
+            return {
+                ...cab,
+                itens: itens.filter(i => i.it_ndav === cab.cr_ndav)
+            };
+        });
+
+        res.json(resultado);
+    } catch (error) {
+        console.error("[Erro Impressao DAVs]", error);
+        res.status(500).json({ error: 'Erro ao buscar DAVs do romaneio para impressão.' });
+    }
+});
+
 module.exports = router;

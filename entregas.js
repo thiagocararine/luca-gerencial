@@ -120,6 +120,7 @@ function switchView(viewId) {
 }
 
 function setupEventListeners() {
+    document.getElementById('btn-imprimir-davs').addEventListener('click', imprimirDavsRoteiro);
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('btn-open-retirada')?.addEventListener('click', () => switchView('retirada-view'));
     document.getElementById('btn-open-historico')?.addEventListener('click', () => switchView('historico-view'));
@@ -366,6 +367,7 @@ window.abrirVisualizacaoRomaneio = async function(id) {
         document.getElementById('view-status').textContent = data.status;
 
         document.getElementById('btn-imprimir-romaneio').onclick = () => window.imprimirRoteiro(data.id);
+        document.getElementById('btn-imprimir-davs').classList.remove('hidden');
 
         const container = document.getElementById('view-itens-container');
         const grouped = data.itens.reduce((acc, item) => {
@@ -1324,4 +1326,197 @@ function handleApiError(response) {
     } else {
         response.json().then(data => showToast(`Erro: ${data.error || response.statusText}`, "error")).catch(() => showToast('Erro na API.', "error"));
     }
+}
+
+// --- FUNÇÕES DE IMPRESSÃO EM LOTE (DAVs) ---
+
+async function imprimirDavsRoteiro() {
+    if (!currentRomaneioId) return alert("Nenhum roteiro selecionado!");
+    
+    try {
+        const btn = document.getElementById('btn-imprimir-davs');
+        const oldHtml = btn.innerHTML;
+        btn.innerHTML = '<i data-feather="loader" class="w-4 h-4 animate-spin"></i> Gerando...';
+        btn.disabled = true;
+        if(typeof feather !== 'undefined') feather.replace();
+
+        // Vai à nova rota buscar todos os DAVs deste roteiro
+        const res = await fetch(`/api/entregas/romaneios/${currentRomaneioId}/imprimir-davs`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        
+        btn.innerHTML = oldHtml;
+        btn.disabled = false;
+        if(typeof feather !== 'undefined') feather.replace();
+
+        if (!res.ok) throw new Error("Erro ao buscar dados dos DAVs.");
+        
+        const davs = await res.json();
+        if(davs.length === 0) return alert("Não há DAVs neste roteiro.");
+        
+        gerarJanelaImpressaoDavs(davs);
+        
+    } catch(e) {
+        alert(e.message);
+    }
+}
+
+function gerarJanelaImpressaoDavs(davs) {
+    const janela = window.open('', '_blank');
+    
+    // Resgata o Logo da Empresa que já está guardado no sistema
+    const logoBase64 = localStorage.getItem('company_logo') || '';
+    const imgHtml = logoBase64 ? `<img src="${logoBase64}" class="logo" />` : '';
+
+    let html = `
+    <html>
+    <head>
+        <title>Impressão de DAVs - Roteiro</title>
+        <style>
+            @media print {
+                @page { margin: 5mm; size: A4 portrait; }
+                body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; }
+                .page-break { page-break-after: always; }
+            }
+            body { font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; }
+            .dav-container { width: 100%; padding: 10px; box-sizing: border-box; }
+            .header-flex { display: flex; justify-content: space-between; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
+            .logo { max-width: 140px; max-height: 60px; margin-right: 15px; }
+            .info-loja { flex: 1; font-size: 10px; line-height: 1.3; }
+            .info-dav { text-align: right; font-size: 10px; line-height: 1.3; }
+            .titulo-loja { font-weight: bold; font-size: 13px; margin-bottom: 3px; }
+            .destaque { font-weight: bold; font-size: 12px; }
+            .tabela-itens { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 15px; font-size: 10px; }
+            .tabela-itens th, .tabela-itens td { padding: 4px; text-align: left; border-bottom: 1px dotted #ccc; }
+            .tabela-itens th { border-bottom: 1px dashed #000; font-weight: bold; }
+            .valores-right { text-align: right !important; }
+            .rodape-dav { border-top: 1px dashed #000; padding-top: 10px; font-size: 10px; }
+            .obs-regras { margin-top: 10px; font-size: 9px; line-height: 1.2; }
+            .endereco-box { margin-top: 10px; border: 1px solid #000; padding: 5px; }
+        </style>
+    </head>
+    <body>
+    `;
+    
+    davs.forEach((dav, index) => {
+        const dataEmissao = dav.cr_edav ? dav.cr_edav.split('T')[0].split('-').reverse().join('/') : '';
+        const dataHora = `${dataEmissao} ${dav.cr_hdav || ''}`;
+        
+        let trs = '';
+        let totalDav = parseFloat(dav.cr_tnot) || 0;
+        
+        dav.itens.forEach((it, i) => {
+            const qtd = parseFloat(it.it_quan) || 0;
+            const vunit = parseFloat(it.it_prec) || 0;
+            const vtotal = parseFloat(it.it_ctot) || (qtd * vunit);
+            
+            trs += `
+                <tr>
+                    <td>${String(i+1).padStart(3, '0')}</td>
+                    <td>${it.it_codi || ''}</td>
+                    <td>${it.it_nome || ''}</td>
+                    <td>${it.it_unid || 'UN'}</td>
+                    <td class="valores-right">${qtd.toFixed(2)}</td>
+                    <td class="valores-right">${vunit.toFixed(2)}</td>
+                    <td class="valores-right">${vtotal.toFixed(2)}</td>
+                    <td>${it.it_fabr || ''}</td>
+                    <td>${it.it_ende || ''}</td>
+                </tr>
+            `;
+        });
+        
+        const logradouroCompleto = (dav.cr_dade || '').replace(/;/g, ' ');
+
+        html += `
+        <div class="dav-container ${index < davs.length - 1 ? 'page-break' : ''}">
+            <div class="header-flex">
+                ${imgHtml}
+                <div class="info-loja">
+                    <div class="titulo-loja">LUCA MATERIAL DE CONSTRUCAO LTDA</div>
+                    <div>Avn Automovel Clube SN Qd 04 Lote 19</div>
+                    <div>Parada Angelica Duque De Caxias [RJ] CEP: 25272405</div>
+                    <div>CNPJ: 36.671.152/0004-06</div>
+                    <div>Tel(s): (21) 2778-3885 | 2739-1480 | 2675-7410 | 3658-7218</div>
+                </div>
+                <div class="info-dav">
+                    <div class="destaque">DOCUMENTO AUXILIAR DE VENDA</div>
+                    <div>Emissão: [${dav.cr_udav} ${dataHora}]</div>
+                    <div>N° DAV: <b style="font-size:14px;">${dav.cr_ndav}</b></div>
+                </div>
+            </div>
+            
+            <div style="text-align: center; font-size: 9px; margin-bottom: 10px;">
+                NÃO É DOCUMENTO FISCAL, NÃO É VALIDO COMO RECIBO E COMO GARANTIA DE MERCADORIA, NÃO COMPROVA PAGAMENTO
+            </div>
+            
+            <div style="margin-bottom: 5px;">
+                <span class="destaque">NOME DO CLIENTE:</span> ${dav.cr_nmcl}
+            </div>
+            <div style="margin-bottom: 10px;">
+                <span class="destaque">CPF-CNPJ:</span> ${dav.cl_docume || 'Não Informado'}
+            </div>
+            
+            <table class="tabela-itens">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>ID-Código</th>
+                        <th>Descrição dos Produtos</th>
+                        <th>UN</th>
+                        <th class="valores-right">Quantidade</th>
+                        <th class="valores-right">Vl.Unitário</th>
+                        <th class="valores-right">Valor Total</th>
+                        <th>Fabricante</th>
+                        <th>Endereço</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${trs}
+                </tbody>
+            </table>
+            
+            <div class="rodape-dav">
+                <div style="text-align: right; margin-bottom: 10px;">
+                    <span class="destaque" style="font-size: 14px;">TOTAL DO DAV: R$ ${totalDav.toFixed(2)}</span>
+                </div>
+                
+                <div>
+                    <b>Vendedor:</b> ${dav.cr_udav}
+                </div>
+                
+                <div class="obs-regras">
+                    - DEVOLUCAO/DESISTENCIA SOMENTE NA DATA DA COMPRA.<br>
+                    - NAO REALIZAMOS TROCA DE MERCADORIA ADQUIRIDA EM LOJA FISICA<br>
+                      EXCETO, COMPROVADO DEFEITO DE FABRICACAO E COM A NOTA.<br>
+                    - NAO AGENDAMOS HORARIO DE ENTREGA, E NAO GUARDAMOS PEDIDOS!!<br>
+                    - ATENCAO: NAO GUARDAMOS TIJOLOS, POR FAVOR NAO INSISTA.<br>
+                    - ENTREGAS DE SEGUNDA A SABADO DE 8H as 18HRS.
+                </div>
+                
+                <div class="endereco-box">
+                    <div class="destaque" style="margin-bottom: 5px;">[ ENDEREÇO DE ENTREGA ]</div>
+                    <div>${logradouroCompleto}</div>
+                    <div>Bairro: ${dav.cr_ebai || ''} - Cidade: ${dav.cr_ecid || ''} - CEP: ${dav.cr_ecep || ''}</div>
+                    <div style="margin-top: 5px;"><b>Referência:</b> ${dav.cr_refe || 'Nenhuma'}</div>
+                </div>
+            </div>
+        </div>
+        `;
+    });
+    
+    html += `
+        <script>
+            window.onload = function() {
+                setTimeout(function() {
+                    window.print();
+                }, 500);
+            };
+        </script>
+    </body>
+    </html>
+    `;
+    
+    janela.document.open();
+    janela.document.write(html);
+    janela.document.close();
 }
