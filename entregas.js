@@ -120,7 +120,6 @@ function switchView(viewId) {
 }
 
 function setupEventListeners() {
-    document.getElementById('btn-imprimir-davs').addEventListener('click', imprimirDavsRoteiro);
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('btn-open-retirada')?.addEventListener('click', () => switchView('retirada-view'));
     document.getElementById('btn-open-historico')?.addEventListener('click', () => switchView('historico-view'));
@@ -367,6 +366,7 @@ window.abrirVisualizacaoRomaneio = async function(id) {
         document.getElementById('view-status').textContent = data.status;
 
         document.getElementById('btn-imprimir-romaneio').onclick = () => window.imprimirRoteiro(data.id);
+        document.getElementById('btn-imprimir-davs').onclick = () => window.imprimirDavsRoteiro(data.id);
         document.getElementById('btn-imprimir-davs').classList.remove('hidden');
 
         const container = document.getElementById('view-itens-container');
@@ -1330,7 +1330,7 @@ function handleApiError(response) {
 
 // --- FUNÇÕES DE IMPRESSÃO EM LOTE (DAVs) ---
 
-async function imprimirDavsRoteiro() {
+window.imprimirDavsRoteiro = async function(idDoRomaneio) {
     if (!currentRomaneioId) return alert("Nenhum roteiro selecionado!");
     
     try {

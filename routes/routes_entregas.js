@@ -609,7 +609,7 @@ router.get('/romaneios/:id/imprimir-davs', authenticateToken, async (req, res) =
         
         if (davsRows.length === 0) return res.status(404).json({ error: 'Nenhum DAV neste roteiro.' });
         
-        const davNumeros = davsRows.map(r => r.dav_numero);
+        const davNumeros = davsRows.map(r => String(r.dav_numero).padStart(13, '0'));
         const placeholders = davNumeros.map(() => '?').join(',');
         
         // 2. Buscar os Cabeçalhos e Dados do Cliente (incluindo o CPF)
