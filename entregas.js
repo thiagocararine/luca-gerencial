@@ -347,55 +347,6 @@ window.imprimirRoteiro = async function(romaneioId) {
     } catch (e) { showToast("Erro ao gerar roteiro.", "error"); } finally { hideLoader(); }
 };
 
-window.abrirVisualizacaoRomaneio = async function(id) {
-    showLoader();
-    try {
-        const res = await fetch(`${apiUrlBase}/entregas/romaneios/${id}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!res.ok) throw new Error("Erro ao buscar detalhes da carga.");
-        const data = await res.json();
-        
-        const modal = document.getElementById('view-romaneio-modal');
-        if (!modal) {
-            showToast("Modal de visualização não encontrado.", "error");
-            return;
-        }
-
-        document.getElementById('view-romaneio-id').textContent = data.id;
-        document.getElementById('view-motorista').textContent = data.nome_motorista;
-        document.getElementById('view-veiculo').textContent = `${data.modelo_veiculo} (${data.placa_veiculo})`;
-        document.getElementById('view-status').textContent = data.status;
-
-        document.getElementById('btn-imprimir-romaneio').onclick = () => window.imprimirRoteiro(data.id);
-        document.getElementById('btn-imprimir-davs').onclick = () => window.imprimirDavsRoteiro(data.id);
-        document.getElementById('btn-imprimir-davs').classList.remove('hidden');
-
-        const container = document.getElementById('view-itens-container');
-        const grouped = data.itens.reduce((acc, item) => {
-            if(!acc[item.dav_numero]) acc[item.dav_numero] = { cliente: item.cliente_nome, bairro: item.bairro, itens: [] };
-            acc[item.dav_numero].itens.push(item); return acc;
-        }, {});
-
-        let html = '';
-        for (const [davNumero, dados] of Object.entries(grouped)) {
-            html += `<div class="border border-gray-200 rounded-lg overflow-hidden shadow-sm mb-4"><div class="bg-gray-100 px-4 py-2 border-b flex justify-between items-center"><span class="font-black text-gray-800 text-sm">DAV #${davNumero} - <span class="text-gray-600 font-medium">${dados.cliente}</span></span> <span class="text-xs font-bold text-gray-500">${dados.bairro || 'Sem Bairro'}</span></div><div class="divide-y divide-gray-100 bg-white">`;
-            dados.itens.forEach(item => {
-                html += `
-                    <div class="p-3 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                        <p class="text-sm font-bold text-gray-800">${limpaCod(item.produto_codigo)} - ${item.produto_nome}</p>
-                        <p class="text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">${parseFloat(item.quantidade_a_entregar)} ${item.produto_unidade}</p>
-                    </div>`;
-            });
-            html += `</div></div>`;
-        }
-        container.innerHTML = html;
-        
-        modal.classList.remove('hidden');
-        setTimeout(() => modal.classList.remove('opacity-0'), 10);
-
-    } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
-};
-
-
 // ==========================================================
 //               ABA 1: RETIRADA RÁPIDA (BALCÃO)
 // ==========================================================
@@ -1267,6 +1218,13 @@ window.abrirVisualizacaoRomaneio = async function(id) {
         document.getElementById('view-status').textContent = data.status;
 
         document.getElementById('btn-imprimir-romaneio').onclick = () => window.imprimirRoteiro(data.id);
+        
+        // CORREÇÃO: Liga a ação ao botão roxo e remove o "hidden"
+        const btnDavs = document.getElementById('btn-imprimir-davs');
+        if(btnDavs) {
+            btnDavs.onclick = () => window.imprimirDavsRoteiro(data.id);
+            btnDavs.classList.remove('hidden');
+        }
 
         const container = document.getElementById('view-itens-container');
         const grouped = data.itens.reduce((acc, item) => {
@@ -1331,7 +1289,7 @@ function handleApiError(response) {
 // --- FUNÇÕES DE IMPRESSÃO EM LOTE (DAVs) ---
 
 window.imprimirDavsRoteiro = async function(idDoRomaneio) {
-    if (!currentRomaneioId) return alert("Nenhum roteiro selecionado!");
+    if (!idDoRomaneio) return alert("Nenhum roteiro selecionado!");
     
     try {
         const btn = document.getElementById('btn-imprimir-davs');
@@ -1340,8 +1298,7 @@ window.imprimirDavsRoteiro = async function(idDoRomaneio) {
         btn.disabled = true;
         if(typeof feather !== 'undefined') feather.replace();
 
-        // Vai à nova rota buscar todos os DAVs deste roteiro
-        const res = await fetch(`/api/entregas/romaneios/${currentRomaneioId}/imprimir-davs`, {
+        const res = await fetch(`${apiUrlBase}/entregas/romaneios/${idDoRomaneio}/imprimir-davs`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         
@@ -1354,18 +1311,30 @@ window.imprimirDavsRoteiro = async function(idDoRomaneio) {
         const davs = await res.json();
         if(davs.length === 0) return alert("Não há DAVs neste roteiro.");
         
-        gerarJanelaImpressaoDavs(davs);
+        // AQUI LÊ O SEU config_logo.json PARA INJETAR NO PDF
+        let logoBase64 = localStorage.getItem('company_logo');
+        if (!logoBase64) {
+            try {
+                const resLogo = await fetch('config_logo.json');
+                if (resLogo.ok) {
+                    const logoData = await resLogo.json();
+                    logoBase64 = logoData.logoBase64;
+                    localStorage.setItem('company_logo', logoBase64); // Salva na memória
+                }
+            } catch(e) { console.warn("Ficheiro config_logo.json não encontrado ou inválido."); }
+        }
+        
+        gerarJanelaImpressaoDavs(davs, logoBase64);
         
     } catch(e) {
         alert(e.message);
     }
 }
 
-function gerarJanelaImpressaoDavs(davs) {
+function gerarJanelaImpressaoDavs(davs, logoBase64) {
     const janela = window.open('', '_blank');
     
-    // Resgata o Logo da Empresa que já está guardado no sistema
-    const logoBase64 = localStorage.getItem('company_logo') || '';
+    // Injeta a imagem recuperada do ficheiro json
     const imgHtml = logoBase64 ? `<img src="${logoBase64}" class="logo" />` : '';
 
     let html = `
