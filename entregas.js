@@ -165,10 +165,11 @@ function getCabecalhoDavHtml(logoBase64, dataEmissao, davNumber, paginaStr) {
 function getEstiloImpressao() {
     return `
     <style>
-        body { font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; padding: 10px; line-height: 1.3; }
+        @page { margin: 5mm; }
+        body { font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; padding: 0; margin: 0; line-height: 1.4; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 10px; font-size: 11px; }
-        th, td { border: 1px solid #000; padding: 4px 2px; }
+        th, td { border: 1px solid #000; padding: 6px 4px; }
         th { background-color: #f5f5f5; text-align: left; text-transform: uppercase; font-weight: bold; font-size: 10px; }
         td { vertical-align: middle; }
         
@@ -288,7 +289,9 @@ window.imprimirEspelhoDav = async function(davNumber) {
             const fabricante = i.fabricante || i.it_fabr || i.pd_fabr || '';
             const endereco = i.endereco_prateleira || i.it_ende || i.pd_ende || '';
             
-            // Variáveis preparadas para receber os valores corretos quando o backend for atualizado
+            // Tratamento de info extra (Ex: i.informacao_adicional)
+            const infoAdicional = i.informacao_adicional ? `<br><span style="font-size:10px; font-style:italic; color:#555;">${i.informacao_adicional}</span>` : '';
+            
             const qtd = parseFloat(i.quantidade_total || i.it_quan || 0).toFixed(2);
             const vlUnit = parseFloat(i.valor_unitario || i.it_prec || i.vl_unitario || 0).toFixed(2);
             const vlTot = parseFloat(i.valor_total_item || i.it_ctot || i.vl_total || 0).toFixed(2);
@@ -297,10 +300,10 @@ window.imprimirEspelhoDav = async function(davNumber) {
             itensHtml += `
                 <tr>
                     <td class="text-center">${numItem}</td>
-                    <td>${limpaCod(i.pd_codi)} <br> <b>${i.pd_nome}</b></td>
+                    <td>${limpaCod(i.pd_codi)} <br> <b>${i.pd_nome}</b>${infoAdicional}</td>
                     <td class="text-center">${i.unidade}</td>
-                    <td style="font-size: 9px; text-align:center;">${fabricante}</td>
-                    <td style="font-size: 9px; text-align:center;">${endereco}</td>
+                    <td style="font-size: 10px; text-align:center;">${fabricante}</td>
+                    <td style="font-size: 10px; text-align:center;">${endereco}</td>
                     <td class="text-center">${qtd}</td>
                     <td class="text-right">${vlUnit}</td>
                     <td class="text-right">${vlTot}</td>
@@ -335,7 +338,7 @@ window.imprimirEspelhoDav = async function(davNumber) {
                 <thead>
                     <tr>
                         <th width="4%" class="text-center">ITEM</th>
-                        <th width="32%">ID-CÓD / DESCRIÇÃO DOS PRODUTOS</th>
+                        <th width="32%">ID-CÓDIGO / DESCRIÇÃO DOS PRODUTOS</th>
                         <th width="4%" class="text-center">UN</th>
                         <th width="12%" class="text-center">FABRICANTE</th>
                         <th width="10%" class="text-center">ENDEREÇO</th>
@@ -368,9 +371,9 @@ window.imprimirEspelhoDav = async function(davNumber) {
                 - ENTREGAS DE SEGUNDA A SABADO DE 8H as 18HRS.
             </div>
             
-            <div style="margin-top: 40px; text-align: center; width: 60%; margin-left: auto; margin-right: auto; padding-top: 5px; font-weight: bold;">
-                ___________________________________________________________<br>
-                Assinatura do Cliente
+            <div style="margin-top: 60px; text-align: center; width: 80%; margin-left: auto; margin-right: auto; padding-top: 10px; font-weight: bold;">
+                _________________________________________________________________________________<br>
+                Assinatura do Cliente / Ciente e de acordo com o recebimento
             </div>
         </body>
         </html>`;
@@ -382,7 +385,7 @@ window.imprimirEspelhoDav = async function(davNumber) {
     } catch (e) { showToast("Erro ao gerar impressão.", "error"); } finally { hideLoader(); }
 };
 
-// IMPRESSÃO DE LOTE DE DAVS (COM O NOVO PADRÃO DE XEROX ERP)
+// IMPRESSÃO DE LOTE DE DAVS (AGORA COM AS CAIXAS, FABRICANTE E ENDEREÇO)
 window.imprimirPedidosCarga = async function(romaneioId) {
     showLoader();
     try {
@@ -414,6 +417,8 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                 const fabricante = i.fabricante || i.it_fabr || i.pd_fabr || '';
                 const endereco = i.endereco_prateleira || i.it_ende || i.pd_ende || '';
                 
+                const infoAdicional = i.informacao_adicional ? `<br><span style="font-size:10px; font-style:italic; color:#555;">${i.informacao_adicional}</span>` : '';
+                
                 const qtd = parseFloat(i.quantidade_total || i.it_quan || 0).toFixed(2);
                 const vlUnit = parseFloat(i.valor_unitario || i.it_prec || i.vl_unitario || 0).toFixed(2);
                 const vlTot = parseFloat(i.valor_total_item || i.it_ctot || i.vl_total || 0).toFixed(2);
@@ -421,10 +426,10 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                 itensHtml += `
                     <tr>
                         <td class="text-center">${numItem}</td>
-                        <td>${limpaCod(i.pd_codi)} <br> <b>${i.pd_nome}</b></td>
+                        <td>${limpaCod(i.pd_codi)} <br> <b>${i.pd_nome}</b>${infoAdicional}</td>
                         <td class="text-center">${i.unidade}</td>
-                        <td style="font-size: 9px; text-align:center;">${fabricante}</td>
-                        <td style="font-size: 9px; text-align:center;">${endereco}</td>
+                        <td style="font-size: 10px; text-align:center;">${fabricante}</td>
+                        <td style="font-size: 10px; text-align:center;">${endereco}</td>
                         <td class="text-center">${qtd}</td>
                         <td class="text-right">${vlUnit}</td>
                         <td class="text-right">${vlTot}</td>
@@ -453,7 +458,7 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                     <thead>
                         <tr>
                             <th width="4%" class="text-center">ITEM</th>
-                            <th width="32%">ID-CÓD / DESCRIÇÃO DOS PRODUTOS</th>
+                            <th width="32%">ID-CÓDIGO / DESCRIÇÃO DOS PRODUTOS</th>
                             <th width="4%" class="text-center">UN</th>
                             <th width="12%" class="text-center">FABRICANTE</th>
                             <th width="10%" class="text-center">ENDEREÇO</th>
@@ -486,9 +491,9 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                     - ENTREGAS DE SEGUNDA A SABADO DE 8H as 18HRS.
                 </div>
                 
-                <div style="margin-top: 40px; text-align: center; width: 60%; margin-left: auto; margin-right: auto; padding-top: 5px; font-weight: bold;">
-                    ___________________________________________________________<br>
-                    Assinatura do Cliente
+                <div style="margin-top: 60px; text-align: center; width: 80%; margin-left: auto; margin-right: auto; padding-top: 10px; font-weight: bold;">
+                    _________________________________________________________________________________<br>
+                    Assinatura do Cliente / Ciente e de acordo com o recebimento
                 </div>
             </div>`;
         });
@@ -537,7 +542,8 @@ window.imprimirRoteiro = async function(romaneioId) {
         <head>
             <title>Roteiro de Carga #${data.id}</title>
             <style>
-                body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 11px; color: #000; padding: 20px; line-height: 1.3; }
+                @page { margin: 5mm; }
+                body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 11px; color: #000; padding: 0; margin: 0; line-height: 1.4; }
                 .doc-title { font-size: 14px; font-weight: bold; margin: 10px 0; text-align: center; text-transform: uppercase; }
                 .row-between { display: flex; justify-content: space-between; margin-bottom: 5px; }
                 .dav-box { border: 1px solid #000; margin-bottom: 15px; page-break-inside: avoid; }
