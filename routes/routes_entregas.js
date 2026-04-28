@@ -48,7 +48,7 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         const isUsuarioAdmin = ['escritorio', 'escritório (lojas)'].includes(filialUsuario ? filialUsuario.trim().toLowerCase() : '');
 
         let davQuery = `
-            SELECT c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, c.cr_edav, c.cr_hdav, c.cr_udav, c.cr_tnot, c.cr_tipo, c.cr_reca, c.cr_urec, c.cr_erec, c.cr_hrec, c.cr_ecan, c.cr_hcan, c.cr_usac, c.cr_nfem, c.cr_chnf, c.cr_seri, c.cr_tnfs, c.cr_nota, c.cr_fili, c.cr_inde, cl.cl_docume 
+            SELECT c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, c.cr_edav, c.cr_hdav, c.cr_udav, c.cr_tnot, c.cr_tipo, c.cr_reca, c.cr_rloc, c.cr_urec, c.cr_erec, c.cr_hrec, c.cr_ecan, c.cr_hcan, c.cr_usac, c.cr_nfem, c.cr_chnf, c.cr_seri, c.cr_tnfs, c.cr_nota, c.cr_fili, c.cr_inde, cl.cl_docume 
             FROM cdavs c LEFT JOIN clientes cl ON c.cr_cdcl = cl.cl_codigo WHERE CAST(c.cr_ndav AS UNSIGNED) = ?
         `;
         const queryParams = [davNumber];
@@ -72,7 +72,14 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         };
 
         const responseData = {
-            dav_numero: davData.cr_ndav, data_hora_pedido: combineDateTime(davData.cr_edav, davData.cr_hdav), vendedor: davData.cr_udav, valor_total: davData.cr_tnot, status_caixa: davData.cr_reca, filial_pedido_nome: davData.cr_fili, filial_pedido_codigo: davData.cr_inde,
+            dav_numero: davData.cr_ndav, 
+            data_hora_pedido: combineDateTime(davData.cr_edav, davData.cr_hdav), 
+            vendedor: davData.cr_udav, 
+            valor_total: davData.cr_tnot, 
+            status_caixa: davData.cr_reca, 
+            cobrar_local: davData.cr_rloc,
+            filial_pedido_nome: davData.cr_fili, 
+            filial_pedido_codigo: davData.cr_inde,
             cliente: { nome: davData.cr_nmcl, doc: davData.cl_docume },
             endereco: { logradouro: (davData.cr_dade || '').split(';')[0]?.trim(), bairro: davData.cr_ebai, cidade: davData.cr_ecid, cep: davData.cr_ecep, referencia: davData.cr_refe },
             caixa_info: { usuario: davData.cr_urec, data_hora: combineDateTime(davData.cr_erec, davData.cr_hrec) },
@@ -87,9 +94,9 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             UNION ALL
             (SELECT ri.idavs_regi, r.data_criacao as data, ri.quantidade_a_entregar as quantidade, r.nome_motorista COLLATE utf8mb4_unicode_ci as responsavel, 'Saída em Romaneio' as tipo FROM romaneio_itens ri JOIN romaneios r ON ri.id_romaneio = r.id WHERE ri.dav_numero = ?) ORDER BY data DESC`;
 
-        // AJUSTE AQUI: Inclusão do it_prec, it_ctot, it_fabr, it_ende
+        // AJUSTE: INCLUSÃO DE it_prec, it_ctot, it_fabr, it_ende e it_obsc na query
         const allResults = await Promise.all([
-            seiPool.execute(`SELECT it_regist, it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti, it_inde, it_prec, it_ctot, it_fabr, it_ende FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`, [davNumber]),
+            seiPool.execute(`SELECT it_regist, it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti, it_inde, it_prec, it_ctot, it_fabr, it_ende, it_obsc FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`, [davNumber]),
             gerencialPool.execute('SELECT idavs_regi, SUM(quantidade_retirada) as total FROM entregas_manuais_log WHERE dav_numero = ? GROUP BY idavs_regi', [davNumber]),
             gerencialPool.execute('SELECT idavs_regi, SUM(quantidade_a_entregar) as total FROM romaneio_itens WHERE dav_numero = ? GROUP BY idavs_regi', [davNumber]),
             gerencialPool.execute(historicoQuery, [davNumber, davNumber])
@@ -117,7 +124,8 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
                 valor_unitario: item.it_prec,
                 valor_total_item: item.it_ctot,
                 fabricante: item.it_fabr,
-                endereco_prateleira: item.it_ende
+                endereco_prateleira: item.it_ende,
+                observacao: item.it_obsc // Mapeamento da observação do item
             });
         }
         res.json(responseData);
@@ -227,7 +235,6 @@ router.get('/romaneios', authenticateToken, async (req, res) => {
         const [romaneios] = await gerencialPool.execute(query, params);
         res.json(romaneios);
     } catch (error) { 
-        console.error("ERRO NO SELECT DE ROMANEIOS: ", error);
         res.status(500).json({ error: error.message }); 
     }
 });
@@ -396,9 +403,9 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
 
         const numerosDav = davsRaw.map(d => parseInt(d.cr_ndav, 10));
 
-        // AJUSTE: Também enviamos os novos campos para que fiquem cacheados.
+        // AJUSTE: Múltiplas colunas essenciais para o frontend
         const [itensRaw] = await seiPool.query(
-            `SELECT i.it_regist, i.it_ndav, i.it_codi, i.it_nome, i.it_unid, i.it_quan, i.it_qent, i.it_qtdv, i.it_inde, i.it_prec, i.it_ctot, i.it_fabr, i.it_ende, COALESCE(NULLIF(p.pd_pesb, 0), NULLIF(p.pd_pesl, 0), 0) as peso_bruto_unitario
+            `SELECT i.it_regist, i.it_ndav, i.it_codi, i.it_nome, i.it_unid, i.it_quan, i.it_qent, i.it_qtdv, i.it_inde, i.it_prec, i.it_ctot, i.it_fabr, i.it_ende, i.it_obsc, COALESCE(NULLIF(p.pd_pesb, 0), NULLIF(p.pd_pesl, 0), 0) as peso_bruto_unitario
              FROM idavs i LEFT JOIN produtos p ON i.it_codi = p.pd_codi WHERE i.it_ndav IN (?) AND (i.it_canc IS NULL OR i.it_canc <> 1)`, [numerosDav]
         );
 
@@ -424,8 +431,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
                     itensComSaldo.push({
                         idavs_regi: idavsRegi, codigo: item.it_codi, nome: item.it_nome, unidade: item.it_unid,
                         saldo: saldo, entregue: entregue, devolvido: devolvido, peso_unitario: item.peso_bruto_unitario, peso_total_item: pesoTotalItem, filial_item: item.it_inde,
-                        // Enviando para cache
-                        valor_unitario: item.it_prec, valor_total: item.it_ctot, fabricante: item.it_fabr, endereco: item.it_ende
+                        valor_unitario: item.it_prec, valor_total_item: item.it_ctot, fabricante: item.it_fabr, endereco_prateleira: item.it_ende, observacao: item.it_obsc
                     });
                 }
             }
@@ -448,11 +454,13 @@ router.get('/romaneios/:id', authenticateToken, async (req, res) => {
         const [romaneioDetails] = await gerencialPool.execute(`SELECT r.id, r.data_criacao, r.data_conclusao, r.nome_motorista, r.filial_origem, r.status, v.modelo as modelo_veiculo, v.placa as placa_veiculo, IFNULL(v.capacidade_kg, 0) as capacidade_kg FROM romaneios r JOIN veiculos v ON r.id_veiculo = v.id WHERE r.id = ?`, [romaneioId]);
         if (romaneioDetails.length === 0) return res.status(404).json({ error: 'Romaneio não encontrado.' });
 
+        // AJUSTE: Buscando os novos dados para preencher o Roteiro e Visualização da Carga
         const [items] = await gerencialPool.execute(`
             SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar, 
                    ri.pd_codi as produto_codigo, ri.pd_nome as produto_nome, 
                    i.it_unid as produto_unidade, c.cr_nmcl as cliente_nome, c.cr_rloc as cobrar_local,
                    c.cr_dade as logradouro, c.cr_ebai as bairro, c.cr_ecid as cidade, c.cr_refe as referencia, 
+                   i.it_prec as valor_unitario, i.it_ctot as valor_total_item, i.it_fabr as fabricante, i.it_ende as endereco_prateleira, i.it_obsc as observacao,
                    COALESCE(NULLIF(p.pd_pesb, 0), NULLIF(p.pd_pesl, 0), 0) as peso_bruto_unitario 
             FROM romaneio_itens ri 
             LEFT JOIN ${dbConfigSei.database}.idavs i ON ri.idavs_regi = i.it_regist 

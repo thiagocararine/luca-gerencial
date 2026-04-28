@@ -120,7 +120,7 @@ function getCabecalhoHtml(logoBase64) {
 }
 
 function getCabecalhoDavHtml(logoBase64, dataEmissao, davNumber, paginaStr, isReceberLocal = false) {
-    const tagReceber = isReceberLocal ? ` <span style="font-weight:bold; font-size:12px;">{ Receber no Local }</span>` : '';
+    const tagReceber = isReceberLocal ? ` <span style="background:#000; color:#fff; padding:2px 6px; font-size:11px; border-radius:3px;">{ Receber no Local }</span>` : '';
     return `
     <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 10px;">
         <div style="display: flex; align-items: flex-start; gap: 15px;">
@@ -154,14 +154,18 @@ function getEstiloImpressao() {
     <style>
         @page { margin: 5mm; }
         body { font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; padding: 0; margin: 0; line-height: 1.3; }
+        
         table { width: 100%; border-collapse: collapse; margin-top: 5px; margin-bottom: 5px; font-size: 11px; }
         th, td { border: 1px solid #000; padding: 4px 2px; }
-        th { background-color: #f5f5f5; text-align: left; text-transform: uppercase; font-weight: bold; font-size: 10px; }
+        th { background-color: #f5f5f5; text-align: center; text-transform: uppercase; font-weight: bold; font-size: 10px; }
         td { vertical-align: middle; }
+        
         .text-center { text-align: center; }
         .text-right { text-align: right; }
+        .text-left { text-align: left; }
         .font-bold { font-weight: bold; }
         .page-break { page-break-after: always; }
+        
         .info-cliente { margin-bottom: 5px; font-size: 11px; border: 1px solid #000; padding: 4px; }
         .endereco-entrega { border: 1px solid #000; padding: 5px; margin-top: 10px; font-size: 11px;}
         .totais-box { margin-top: 10px; font-size: 12px; display: flex; justify-content: space-between; border: 1px solid #000; padding: 5px; background: #f9f9f9; }
@@ -253,6 +257,7 @@ window.abrirDanfe = async function(chave) {
     } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
 }
 
+// IMPRESSÃO DE ESPELHO DAV INDIVIDUAL (BALCÃO)
 window.imprimirEspelhoDav = async function(davNumber) {
     showLoader();
     try {
@@ -268,8 +273,9 @@ window.imprimirEspelhoDav = async function(davNumber) {
         data.itens.forEach((i, index) => {
             const numItem = String(index + 1).padStart(3, '0');
             const fabricante = i.fabricante || i.it_fabr || i.pd_fabr || '';
-            const endereco = i.endereco_prateleira || i.it_ende || i.pd_ende || '';
-            const infoAdicional = (i.observacao || i.it_obsc) ? `<br><span style="font-size:10px; color:#333;">${i.observacao || i.it_obsc}</span>` : '';
+            const endereco = i.endereco_prateleira || i.endereco || i.it_ende || i.pd_ende || '';
+            const obsTexto = i.observacao || i.it_obsc || '';
+            const infoAdicional = obsTexto ? `<br><span style="font-size:10px; font-style:italic; color:#333;">↳ ${obsTexto}</span>` : '';
             
             const qtd = parseFloat(i.quantidade_total || i.it_quan || 0).toFixed(2);
             const vlUnit = parseFloat(i.valor_unitario || i.it_prec || i.vl_unitario || 0).toFixed(2);
@@ -279,13 +285,14 @@ window.imprimirEspelhoDav = async function(davNumber) {
             itensHtml += `
                 <tr>
                     <td class="text-center">${numItem}</td>
-                    <td>${limpaCod(i.pd_codi)} <br> <b>${i.pd_nome}</b>${infoAdicional}</td>
+                    <td class="text-center">${limpaCod(i.pd_codi)}</td>
+                    <td class="text-left"><b>${i.pd_nome}</b>${infoAdicional}</td>
                     <td class="text-center">${i.unidade}</td>
-                    <td style="font-size: 9px; text-align:center;">${fabricante}</td>
-                    <td style="font-size: 9px; text-align:center;">${endereco}</td>
                     <td class="text-center">${qtd}</td>
                     <td class="text-right">${vlUnit}</td>
                     <td class="text-right">${vlTot}</td>
+                    <td style="font-size: 9px; text-align:center;">${fabricante}</td>
+                    <td style="font-size: 9px; text-align:center;">${endereco}</td>
                     <td class="text-center font-bold">${saldoRet}</td>
                 </tr>
             `;
@@ -298,7 +305,7 @@ window.imprimirEspelhoDav = async function(davNumber) {
             ${getEstiloImpressao()}
         </head>
         <body>
-            <div class="no-print" style="margin-bottom: 10px; text-align: center;">
+            <div class="no-print" style="margin-bottom: 20px; text-align: center;">
                 <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Imprimir Espelho DAV</button>
             </div>
             
@@ -316,25 +323,26 @@ window.imprimirEspelhoDav = async function(davNumber) {
             <table>
                 <thead>
                     <tr>
-                        <th width="4%" class="text-center">ITEM</th>
-                        <th width="32%">ID-CÓD / DESCRIÇÃO DOS PRODUTOS</th>
-                        <th width="4%" class="text-center">UN</th>
-                        <th width="12%" class="text-center">FABRICANTE</th>
-                        <th width="10%" class="text-center">ENDEREÇO</th>
-                        <th width="8%" class="text-center">QTD</th>
-                        <th width="10%" class="text-right">VL. UNIT.</th>
-                        <th width="10%" class="text-right">VL. TOTAL</th>
-                        <th width="10%" class="text-center">SALDO RET.</th>
+                        <th width="4%">ITEM</th>
+                        <th width="9%">ID-CÓDIGO</th>
+                        <th width="28%" class="text-left">DESCRIÇÃO DOS PRODUTOS</th>
+                        <th width="4%">UN</th>
+                        <th width="8%">QUANTIDADE</th>
+                        <th width="9%" class="text-right">VL.UNITÁRIO</th>
+                        <th width="9%" class="text-right">VALOR TOTAL</th>
+                        <th width="10%">FABRICANTE</th>
+                        <th width="10%">ENDEREÇO</th>
+                        <th width="9%">SALDO A RETIRAR</th>
                     </tr>
                 </thead>
                 <tbody>${itensHtml}</tbody>
             </table>
 
             <div class="endereco-entrega">
-                <div class="font-bold" style="margin-bottom: 2px;">[ ENDEREÇO DE ENTREGA ]</div>
+                <div class="font-bold" style="margin-bottom: 5px;">[ ENDEREÇO DE ENTREGA ]</div>
                 <div>${data.endereco.logradouro || 'Retirada na Loja / Não informado'}</div>
                 <div>Bairro: ${data.endereco.bairro || '-'} &nbsp;|&nbsp; Cidade: ${data.endereco.cidade || '-'} &nbsp;|&nbsp; CEP: ${data.endereco.cep || '-'}</div>
-                <div style="margin-top: 2px;"><strong>Referência:</strong> ${data.endereco.referencia || '-'}</div>
+                <div style="margin-top: 5px;"><strong>Referência:</strong> ${data.endereco.referencia || '-'}</div>
             </div>
 
             <div class="totais-box">
@@ -350,7 +358,7 @@ window.imprimirEspelhoDav = async function(davNumber) {
                 - ENTREGAS DE SEGUNDA A SABADO DE 8H as 18HRS.
             </div>
             
-            <div style="margin-top: 50px; text-align: center; width: 80%; margin-left: auto; margin-right: auto; padding-top: 5px; font-weight: bold;">
+            <div style="margin-top: 60px; text-align: center; width: 80%; margin-left: auto; margin-right: auto; padding-top: 10px; font-weight: bold;">
                 _________________________________________________________________________________<br>
                 Assinatura do Cliente / Ciente e de acordo com o recebimento
             </div>
@@ -364,6 +372,7 @@ window.imprimirEspelhoDav = async function(davNumber) {
     } catch (e) { showToast("Erro ao gerar impressão.", "error"); } finally { hideLoader(); }
 };
 
+// IMPRESSÃO DE LOTE DE DAVS (COM CAIXAS, FABRICANTE, ENDEREÇO E OBS)
 window.imprimirPedidosCarga = async function(romaneioId) {
     showLoader();
     try {
@@ -378,7 +387,7 @@ window.imprimirPedidosCarga = async function(romaneioId) {
         const printWindow = window.open('', '_blank');
 
         let html = `<html><head><title>DAVs da Carga #${romaneioId}</title>${getEstiloImpressao()}</head><body>
-        <div class="no-print" style="margin-bottom: 10px; text-align: center;">
+        <div class="no-print" style="margin-bottom: 20px; text-align: center;">
             <button onclick="window.print()" style="padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Imprimir Todos os DAVs (Lote)</button>
         </div>`;
 
@@ -395,8 +404,9 @@ window.imprimirPedidosCarga = async function(romaneioId) {
 
                 const numItem = String(index + 1).padStart(3, '0');
                 const fabricante = i.fabricante || i.it_fabr || i.pd_fabr || '';
-                const endereco = i.endereco_prateleira || i.it_ende || i.pd_ende || '';
-                const infoAdicional = (i.observacao || i.it_obsc) ? `<br><span style="font-size:10px; color:#333;">${i.observacao || i.it_obsc}</span>` : '';
+                const endereco = i.endereco_prateleira || i.endereco || i.it_ende || i.pd_ende || '';
+                const obsTexto = i.observacao || i.it_obsc || '';
+                const infoAdicional = obsTexto ? `<br><span style="font-size:10px; font-style:italic; color:#333;">↳ ${obsTexto}</span>` : '';
                 
                 const qtd = parseFloat(i.quantidade_total || i.it_quan || 0).toFixed(2);
                 const vlUnit = parseFloat(i.valor_unitario || i.it_prec || i.vl_unitario || 0).toFixed(2);
@@ -405,13 +415,14 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                 itensHtml += `
                     <tr>
                         <td class="text-center">${numItem}</td>
-                        <td>${limpaCod(i.pd_codi)} <br> <b>${i.pd_nome}</b>${infoAdicional}</td>
+                        <td class="text-center">${limpaCod(i.pd_codi)}</td>
+                        <td class="text-left"><b>${i.pd_nome}</b>${infoAdicional}</td>
                         <td class="text-center">${i.unidade}</td>
-                        <td style="font-size: 9px; text-align:center;">${fabricante}</td>
-                        <td style="font-size: 9px; text-align:center;">${endereco}</td>
                         <td class="text-center">${qtd}</td>
                         <td class="text-right">${vlUnit}</td>
                         <td class="text-right">${vlTot}</td>
+                        <td style="font-size: 9px; text-align:center;">${fabricante}</td>
+                        <td style="font-size: 9px; text-align:center;">${endereco}</td>
                         <td class="text-center font-bold">${saldoParaEntregarExibicao.toFixed(2)}</td>
                     </tr>
                 `;
@@ -436,25 +447,26 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                 <table>
                     <thead>
                         <tr>
-                            <th width="4%" class="text-center">ITEM</th>
-                            <th width="32%">ID-CÓDIGO / DESCRIÇÃO DOS PRODUTOS</th>
-                            <th width="4%" class="text-center">UN</th>
-                            <th width="12%" class="text-center">FABRICANTE</th>
-                            <th width="10%" class="text-center">ENDEREÇO</th>
-                            <th width="8%" class="text-center">QTD</th>
-                            <th width="10%" class="text-right">VL. UNIT.</th>
-                            <th width="10%" class="text-right">VL. TOTAL</th>
-                            <th width="10%" class="text-center">SALDO RET.</th>
+                            <th width="4%">ITEM</th>
+                            <th width="9%">ID-CÓDIGO</th>
+                            <th width="28%" class="text-left">DESCRIÇÃO DOS PRODUTOS</th>
+                            <th width="4%">UN</th>
+                            <th width="8%">QUANTIDADE</th>
+                            <th width="9%" class="text-right">VL.UNITÁRIO</th>
+                            <th width="9%" class="text-right">VALOR TOTAL</th>
+                            <th width="10%">FABRICANTE</th>
+                            <th width="10%">ENDEREÇO</th>
+                            <th width="9%">SALDO A RETIRAR</th>
                         </tr>
                     </thead>
                     <tbody>${itensHtml}</tbody>
                 </table>
 
                 <div class="endereco-entrega">
-                    <div class="font-bold" style="margin-bottom: 2px;">[ ENDEREÇO DE ENTREGA ]</div>
+                    <div class="font-bold" style="margin-bottom: 5px;">[ ENDEREÇO DE ENTREGA ]</div>
                     <div>${data.endereco.logradouro || 'Retirada na Loja / Não informado'}</div>
                     <div>Bairro: ${data.endereco.bairro || '-'} &nbsp;|&nbsp; Cidade: ${data.endereco.cidade || '-'} &nbsp;|&nbsp; CEP: ${data.endereco.cep || '-'}</div>
-                    <div style="margin-top: 2px;"><strong>Referência:</strong> ${data.endereco.referencia || '-'}</div>
+                    <div style="margin-top: 5px;"><strong>Referência:</strong> ${data.endereco.referencia || '-'}</div>
                 </div>
 
                 <div class="totais-box">
@@ -470,7 +482,7 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                     - ENTREGAS DE SEGUNDA A SABADO DE 8H as 18HRS.
                 </div>
                 
-                <div style="margin-top: 50px; text-align: center; width: 80%; margin-left: auto; margin-right: auto; padding-top: 5px; font-weight: bold;">
+                <div style="margin-top: 60px; text-align: center; width: 80%; margin-left: auto; margin-right: auto; padding-top: 10px; font-weight: bold;">
                     _________________________________________________________________________________<br>
                     Assinatura do Cliente / Ciente e de acordo com o recebimento
                 </div>
@@ -485,6 +497,7 @@ window.imprimirPedidosCarga = async function(romaneioId) {
     } catch (e) { showToast("Erro ao gerar lote de DAVs.", "error"); } finally { hideLoader(); }
 };
 
+// IMPRESSÃO ROTEIRO DE CARGA
 window.imprimirRoteiro = async function(romaneioId) {
     showLoader();
     try {
@@ -500,13 +513,16 @@ window.imprimirRoteiro = async function(romaneioId) {
                     dav_numero: item.dav_numero, cliente: item.cliente_nome, 
                     logradouro: item.logradouro || '', bairro: item.bairro || 'Sem Bairro', 
                     cidade: item.cidade || '', ref: item.referencia || '', tel: item.telefone || '',
-                    itens: [], isReceberLocal: false
+                    itens: [],
+                    isReceberLocal: false
                 };
             }
             acc[item.dav_numero].itens.push(item);
+            
             if (item.cobrar_local === '1' || item.cobrar_local === 'S' || item.cobrar_local === 'T' || item.cr_rloc === 'S') {
                 acc[item.dav_numero].isReceberLocal = true;
             }
+            
             return acc;
         }, {});
         
@@ -518,7 +534,7 @@ window.imprimirRoteiro = async function(romaneioId) {
             <title>Roteiro de Carga #${data.id}</title>
             <style>
                 @page { margin: 5mm; }
-                body { font-family: 'Helvetica', Arial, sans-serif; font-size: 11px; color: #000; padding: 0; margin: 0; line-height: 1.4; }
+                body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 11px; color: #000; padding: 0; margin: 0; line-height: 1.4; }
                 .doc-title { font-size: 14px; font-weight: bold; margin: 10px 0; text-align: center; text-transform: uppercase; }
                 .row-between { display: flex; justify-content: space-between; margin-bottom: 5px; }
                 .dav-box { border: 1px solid #000; margin-bottom: 15px; page-break-inside: avoid; }
@@ -561,19 +577,21 @@ window.imprimirRoteiro = async function(romaneioId) {
                 </div>
                 <table>
                     <tr>
-                        <th width="15%">ID-CÓDIGO</th>
+                        <th width="15%" class="text-center">ID-CÓDIGO</th>
                         <th width="60%">DESCRIÇÃO DO PRODUTO</th>
                         <th width="10%" class="text-center">UN</th>
                         <th width="15%" class="text-center">QTD A ENTREGAR</th>
                     </tr>
-                    ${dav.itens.map(i => `
+                    ${dav.itens.map(i => {
+                        const obsRoteiro = (i.observacao || i.it_obsc) ? `<br><span style="font-size:10px; font-style:italic; color:#333;">↳ ${i.observacao || i.it_obsc}</span>` : '';
+                        return `
                         <tr>
-                            <td>${limpaCod(i.produto_codigo)}</td>
-                            <td>${i.produto_nome}</td>
+                            <td class="text-center">${limpaCod(i.produto_codigo)}</td>
+                            <td>${i.produto_nome}${obsRoteiro}</td>
                             <td class="text-center">${i.produto_unidade}</td>
                             <td class="text-center font-bold" style="font-size: 13px;">${parseFloat(i.quantidade_a_entregar)}</td>
-                        </tr>
-                    `).join('')}
+                        </tr>`;
+                    }).join('')}
                 </table>
                 <div class="sig-box">
                     DATA: ___/___/_______ &nbsp;&nbsp;&nbsp;&nbsp; ASSINATURA CLIENTE: _________________________________________
@@ -597,7 +615,10 @@ window.abrirVisualizacaoRomaneio = async function(id) {
         const data = await res.json();
         
         const modal = document.getElementById('view-romaneio-modal');
-        if (!modal) { showToast("Modal não encontrado.", "error"); return; }
+        if (!modal) {
+            showToast("Modal de visualização não encontrado na página.", "error");
+            return;
+        }
 
         document.getElementById('view-romaneio-id').textContent = data.id;
         document.getElementById('view-motorista').textContent = data.nome_motorista;
@@ -628,9 +649,13 @@ window.abrirVisualizacaoRomaneio = async function(id) {
         for (const [davNumero, dados] of Object.entries(grouped)) {
             html += `<div class="border border-gray-200 rounded-lg overflow-hidden shadow-sm mb-4"><div class="bg-gray-100 px-4 py-2 border-b flex justify-between items-center"><span class="font-black text-gray-800 text-sm">DAV #${davNumero.toString().padStart(13, '0')} - <span class="text-gray-600 font-medium">${dados.cliente}</span></span> <span class="text-xs font-bold text-gray-500">${dados.bairro || 'Sem Bairro'}</span></div><div class="divide-y divide-gray-100 bg-white">`;
             dados.itens.forEach(item => {
+                const obsModal = (item.observacao || item.it_obsc) ? `<br><span class="text-[10px] text-gray-500 italic mt-0.5 block">↳ ${item.observacao || item.it_obsc}</span>` : '';
                 html += `
                     <div class="p-3 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                        <p class="text-sm font-bold text-gray-800">${limpaCod(item.produto_codigo)} - ${item.produto_nome}</p>
+                        <div>
+                            <p class="text-sm font-bold text-gray-800">${limpaCod(item.produto_codigo)} - ${item.produto_nome}</p>
+                            ${obsModal}
+                        </div>
                         <p class="text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">${parseFloat(item.quantidade_a_entregar)} ${item.produto_unidade}</p>
                     </div>`;
             });
@@ -694,14 +719,21 @@ function renderDavResults(data) {
                         <tr><th style="border:none;background:transparent;" class="px-3 py-2 text-left font-bold text-gray-600">Produto</th><th style="border:none;background:transparent;" class="px-2 py-2 text-center font-bold text-gray-600">Saldo</th><th style="border:none;background:transparent;" class="px-3 py-2 text-center font-bold text-gray-600">Retirar</th></tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
-                        ${itens.map(item => `
+                        ${itens.map(item => {
+                            const obsBalcao = (item.observacao || item.it_obsc) ? `<div class="text-[10px] text-gray-500 italic mt-1 pb-1">↳ ${item.observacao || item.it_obsc}</div>` : '';
+                            return `
                             <tr class="expandable-row hover:bg-gray-50 transition-colors" data-idavs-regi="${item.idavs_regi}">
-                                <td style="border:none;" class="px-3 py-3 font-medium text-gray-800">${limpaCod(item.pd_codi)} - ${item.pd_nome} <span class="text-gray-400 text-xs ml-1">(${item.unidade})</span> ${item.quantidade_devolvida > 0 ? `<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold ml-2">Devolvido: ${item.quantidade_devolvida}</span>` : ''}</td>
+                                <td style="border:none;" class="px-3 py-3 font-medium text-gray-800">
+                                    ${limpaCod(item.pd_codi)} - ${item.pd_nome} <span class="text-gray-400 text-xs ml-1">(${item.unidade})</span> 
+                                    ${item.quantidade_devolvida > 0 ? `<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold ml-2">Devolvido: ${item.quantidade_devolvida}</span>` : ''}
+                                    ${obsBalcao}
+                                </td>
                                 <td style="border:none;" class="px-2 py-3 text-center font-black text-sm ${item.quantidade_saldo > 0 ? 'text-indigo-600' : 'text-gray-400'}">${item.quantidade_saldo}</td>
                                 <td style="border:none;" class="px-3 py-3 text-center">
                                     <input type="number" step="1" class="w-24 text-center rounded-md border-gray-300 focus:ring-indigo-500 shadow-sm text-base font-bold" value="0" min="0" max="${item.quantidade_saldo}" ${item.quantidade_saldo > 0 && status_caixa === '1' ? '' : 'disabled title="Apenas pedidos pagos podem ser retirados"'}>
                                 </td>
-                            </tr>`).join('')}
+                            </tr>`;
+                        }).join('')}
                     </tbody>
                 </table>`;
         }
@@ -1106,15 +1138,21 @@ function renderPendingList() {
 
         const tagReceber = dav.cobrar_local ? `<span class="bg-red-600 text-white px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest animate-pulse ml-2 shadow-sm">Receber no Local</span>` : '';
 
-        const itensHtml = dav.itens.map(item => `
-            <div class="flex justify-between items-center border-b border-indigo-100/50 py-1.5 last:border-0 hover:bg-indigo-50 px-1 rounded transition-colors">
-                <span class="text-[11px] font-medium text-gray-700 truncate flex-1 pr-2">${limpaCod(item.codigo)} - ${item.nome}</span>
-                <div class="flex items-center gap-1.5 shrink-0 bg-white p-1 rounded-md shadow-sm border border-gray-200">
-                    <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Disp: ${item.saldo}</span>
-                    <input type="number" id="frac-${dav.dav_numero}-${item.idavs_regi}" value="${item.saldo}" min="1" max="${item.saldo}" step="1" class="w-14 text-[11px] p-1 border border-indigo-300 rounded text-center font-bold text-indigo-700 focus:ring-indigo-500">
-                    <button onclick="adicionarItemFracionado('${dav.dav_numero}', '${item.idavs_regi}')" class="bg-indigo-100 hover:bg-indigo-500 hover:text-white text-indigo-600 p-1.5 rounded transition-colors"><i data-feather="plus" class="w-3.5 h-3.5"></i></button>
+        const itensHtml = dav.itens.map(item => {
+            const obsPrateleira = (item.observacao || item.it_obsc) ? `<div class="w-full text-[9px] text-gray-500 italic px-1 pb-1">↳ ${item.observacao || item.it_obsc}</div>` : '';
+            return `
+            <div class="flex flex-col border-b border-indigo-100/50 py-1.5 last:border-0 hover:bg-indigo-50 px-1 rounded transition-colors">
+                <div class="flex justify-between items-center">
+                    <span class="text-[11px] font-medium text-gray-700 truncate flex-1 pr-2">${limpaCod(item.codigo)} - ${item.nome}</span>
+                    <div class="flex items-center gap-1.5 shrink-0 bg-white p-1 rounded-md shadow-sm border border-gray-200">
+                        <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Disp: ${item.saldo}</span>
+                        <input type="number" id="frac-${dav.dav_numero}-${item.idavs_regi}" value="${item.saldo}" min="1" max="${item.saldo}" step="1" class="w-14 text-[11px] p-1 border border-indigo-300 rounded text-center font-bold text-indigo-700 focus:ring-indigo-500">
+                        <button onclick="adicionarItemFracionado('${dav.dav_numero}', '${item.idavs_regi}')" class="bg-indigo-100 hover:bg-indigo-500 hover:text-white text-indigo-600 p-1.5 rounded transition-colors"><i data-feather="plus" class="w-3.5 h-3.5"></i></button>
+                    </div>
                 </div>
-            </div>`).join('');
+                ${obsPrateleira}
+            </div>`
+        }).join('');
 
         return `
         <div class="bg-white rounded-lg border border-gray-200 hover:border-indigo-400 hover:shadow-md transition-all group mb-3 overflow-hidden shadow-sm">
@@ -1445,7 +1483,7 @@ async function finalizarAcertoRomaneio() {
 }
 
 // ==========================================================
-//               MÓDULO: HISTÓRICO E VISUALIZAR CARGA
+//               MÓDULO: HISTÓRICO
 // ==========================================================
 async function loadVeiculosHistorico() {
     const select = document.getElementById('hist-veiculo');
@@ -1508,10 +1546,84 @@ async function buscarHistorico() {
     }
 }
 
+window.abrirVisualizacaoRomaneio = async function(id) {
+    showLoader();
+    try {
+        const res = await fetch(`${apiUrlBase}/entregas/romaneios/${id}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!res.ok) throw new Error("Erro ao buscar detalhes da carga.");
+        const data = await res.json();
+        
+        const modal = document.getElementById('view-romaneio-modal');
+        if (!modal) {
+            showToast("Modal de visualização não encontrado na página.", "error");
+            return;
+        }
+
+        document.getElementById('view-romaneio-id').textContent = data.id;
+        document.getElementById('view-motorista').textContent = data.nome_motorista;
+        document.getElementById('view-veiculo').textContent = `${data.modelo_veiculo} (${data.placa_veiculo})`;
+        document.getElementById('view-status').textContent = data.status;
+
+        document.getElementById('btn-imprimir-romaneio').onclick = () => window.imprimirRoteiro(data.id);
+        
+        let btnImprimirDavs = document.getElementById('btn-imprimir-davs');
+        if (!btnImprimirDavs) {
+            const container = document.getElementById('btn-imprimir-romaneio').parentNode;
+            btnImprimirDavs = document.createElement('button');
+            btnImprimirDavs.id = 'btn-imprimir-davs';
+            btnImprimirDavs.className = 'action-btn bg-emerald-100 text-emerald-800 hover:bg-emerald-600 hover:text-white shadow-md flex items-center gap-2 transition-colors border border-emerald-200 mr-2';
+            btnImprimirDavs.innerHTML = '<i data-feather="layers" class="w-4 h-4"></i> Imprimir Lote DAVs';
+            container.insertBefore(btnImprimirDavs, document.getElementById('btn-imprimir-romaneio'));
+            if(typeof feather !== 'undefined') feather.replace();
+        }
+        btnImprimirDavs.onclick = () => window.imprimirPedidosCarga(data.id);
+
+        const container = document.getElementById('view-itens-container');
+        const grouped = data.itens.reduce((acc, item) => {
+            if(!acc[item.dav_numero]) acc[item.dav_numero] = { cliente: item.cliente_nome, bairro: item.bairro, itens: [] };
+            acc[item.dav_numero].itens.push(item); return acc;
+        }, {});
+
+        let html = '';
+        for (const [davNumero, dados] of Object.entries(grouped)) {
+            html += `<div class="border border-gray-200 rounded-lg overflow-hidden shadow-sm mb-4"><div class="bg-gray-100 px-4 py-2 border-b flex justify-between items-center"><span class="font-black text-gray-800 text-sm">DAV #${davNumero.toString().padStart(13, '0')} - <span class="text-gray-600 font-medium">${dados.cliente}</span></span> <span class="text-xs font-bold text-gray-500">${dados.bairro || 'Sem Bairro'}</span></div><div class="divide-y divide-gray-100 bg-white">`;
+            dados.itens.forEach(item => {
+                const obsModal = (item.observacao || item.it_obsc) ? `<span class="text-[10px] text-gray-500 italic mt-0.5 block">↳ ${item.observacao || item.it_obsc}</span>` : '';
+                html += `
+                    <div class="p-3 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                        <div>
+                            <p class="text-sm font-bold text-gray-800">${limpaCod(item.produto_codigo)} - ${item.produto_nome}</p>
+                            ${obsModal}
+                        </div>
+                        <p class="text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">${parseFloat(item.quantidade_a_entregar)} ${item.produto_unidade}</p>
+                    </div>`;
+            });
+            html += `</div></div>`;
+        }
+        container.innerHTML = html;
+        
+        modal.classList.remove('hidden');
+        setTimeout(() => modal.classList.remove('opacity-0'), 10);
+
+    } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
+};
+
+// ==========================================================
+//               FUNÇÕES DE UTILIDADE
+// ==========================================================
 function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) return;
-    const mapaModulos = { 'lancamentos': 'despesas.html', 'logistica': 'logistica.html', 'entregas': 'entregas.html', 'checklist': 'checklist.html', 'produtos': 'produtos.html', 'configuracoes': 'settings.html' };
+
+    const mapaModulos = {
+        'lancamentos': 'despesas.html',
+        'logistica': 'logistica.html',
+        'entregas': 'entregas.html',
+        'checklist': 'checklist.html',
+        'produtos': 'produtos.html',
+        'configuracoes': 'settings.html'
+    };
+
     for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
         const permissao = userData.permissoes.find(p => p.nome_modulo === nomeModulo);
         if (!permissao || !permissao.permitido) {
@@ -1523,7 +1635,8 @@ function gerenciarAcessoModulos() {
 
 function handleApiError(response) {
     if (response.status === 401 || response.status === 403) {
-        showToast("Sessão expirada. Faça login novamente.", "error"); setTimeout(logout, 2000);
+        showToast("Sessão expirada. Faça login novamente.", "error");
+        setTimeout(logout, 2000);
     } else {
         response.json().then(data => showToast(`Erro: ${data.error || response.statusText}`, "error")).catch(() => showToast('Erro na API.', "error"));
     }
