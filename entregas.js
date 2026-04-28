@@ -249,6 +249,9 @@ function updateListTabs() {
     }
 }
 
+// ==========================================================
+//               IMPRESSÕES E RELATÓRIOS (PDF / HTML)
+// ==========================================================
 window.abrirDanfe = async function(chave) {
     showLoader();
     try {
@@ -270,6 +273,118 @@ window.abrirDanfe = async function(chave) {
         setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
     } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
 }
+
+// IMPRESSÃO DE ESPELHO DAV INDIVIDUAL (BALCÃO)
+window.imprimirEspelhoDav = async function(davNumber) {
+    showLoader();
+    try {
+        const res = await fetch(`${apiUrlBase}/entregas/dav/${davNumber}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const data = await res.json();
+        
+        const logo = localStorage.getItem('company_logo') || '';
+        const printWindow = window.open('', '_blank');
+        const dataEmissao = data.data_hora_pedido ? new Date(data.data_hora_pedido).toLocaleString('pt-BR') : '';
+        const isReceberLocal = (data.cobrar_local === '1' || data.cobrar_local === 'S' || data.cobrar_local === 'T' || data.status_caixa !== '1');
+
+        let itensHtml = '';
+        data.itens.forEach((i, index) => {
+            const numItem = String(index + 1).padStart(3, '0');
+            const fabricante = i.fabricante || i.it_fabr || i.pd_fabr || '';
+            const endereco = i.endereco_prateleira || i.endereco || i.it_ende || i.pd_ende || '';
+            
+            // Tratamento de Devolução (ALERTA VERMELHO)
+            const qtdDevolvida = parseFloat(i.quantidade_devolvida || i.devolvido || i.it_qtdv || 0);
+            const tagDev = qtdDevolvida > 0 ? `<br><span style="color:#dc2626; font-size:10px; font-weight:bold;">[ ATENÇÃO: DEVOLUÇÃO DE ${qtdDevolvida} UN ]</span>` : '';
+            
+            const obsTexto = extrairObservacao(i.observacao || i.it_obsc);
+            const infoAdicional = obsTexto ? `<br><span style="font-size:10px; font-style:italic; color:#333;">↳ ${obsTexto}</span>` : '';
+            
+            const qtd = parseFloat(i.quantidade_total || i.it_quan || 0).toFixed(2);
+            const vlUnit = parseFloat(i.valor_unitario || i.it_prec || i.vl_unitario || 0).toFixed(2);
+            const vlTot = parseFloat(i.valor_total_item || i.it_ctot || i.vl_total || 0).toFixed(2);
+            const saldoRet = parseFloat(i.quantidade_saldo || 0).toFixed(2);
+            
+            itensHtml += `
+                <tr>
+                    <td class="text-center">${numItem}</td>
+                    <td class="text-center">${limpaCod(i.pd_codi)}</td>
+                    <td class="text-left"><b>${i.pd_nome}</b>${infoAdicional}${tagDev}</td>
+                    <td class="text-center">${i.unidade}</td>
+                    <td class="text-center">${qtd}</td>
+                    <td class="text-right">${vlUnit}</td>
+                    <td class="text-right">${vlTot}</td>
+                    <td style="font-size: 9px; text-align:center;">${fabricante}</td>
+                    <td style="font-size: 9px; text-align:center;">${endereco}</td>
+                    <td class="text-center font-bold">${saldoRet}</td>
+                </tr>
+            `;
+        });
+
+        let html = `
+        <html>
+        <head>
+            <title>DAV #${davNumber}</title>
+            ${getEstiloImpressao()}
+        </head>
+        <body>
+            <div class="no-print" style="margin-bottom: 20px; text-align: center;">
+                <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Imprimir Espelho DAV</button>
+            </div>
+            
+            ${getCabecalhoDavHtml(logo, dataEmissao, davNumber, '001 [001]', isReceberLocal, data.cliente.nome, data.cliente.doc)}
+
+            <table>
+                <thead>
+                    <tr>
+                        <th width="4%">ITEM</th>
+                        <th width="9%">ID-CÓDIGO</th>
+                        <th width="28%" class="text-left">DESCRIÇÃO DOS PRODUTOS</th>
+                        <th width="4%">UN</th>
+                        <th width="8%">QUANTIDADE</th>
+                        <th width="9%" class="text-right">VL.UNITÁRIO</th>
+                        <th width="9%" class="text-right">VALOR TOTAL</th>
+                        <th width="10%">FABRICANTE</th>
+                        <th width="10%">ENDEREÇO</th>
+                        <th width="9%">SALDO A RETIRAR</th>
+                    </tr>
+                </thead>
+                <tbody>${itensHtml}</tbody>
+            </table>
+
+            <div class="endereco-entrega">
+                <div class="font-bold" style="margin-bottom: 5px;">[ ENDEREÇO DE ENTREGA ]</div>
+                <div>${formatarEnderecoCompleto(data.endereco.logradouro)}</div>
+                <div>Bairro: ${data.endereco.bairro || '-'} &nbsp;|&nbsp; Cidade: ${data.endereco.cidade || '-'} &nbsp;|&nbsp; CEP: ${data.endereco.cep || '-'}</div>
+                <div style="margin-top: 5px;"><strong>Referência:</strong> ${data.endereco.referencia || '-'}</div>
+            </div>
+
+            <div class="totais-box">
+                <div><strong>VENDEDOR:</strong> ${data.vendedor || 'N/I'}</div>
+                <div><strong>TOTAL DO DAV:</strong> R$ ${parseFloat(data.valor_total).toLocaleString('pt-BR', {minimumFractionDigits:2})}</div>
+            </div>
+
+            <div class="rodape-observacoes">
+                - DEVOLUCAO/DESISTENCIA SOMENTE NA DATA DA COMPRA.<br>
+                - NAO REALIZAMOS TROCA DE MERCADORIA ADQUIRIDA EM LOJA FISICA EXCETO, COMPROVADO DEFEITO DE FABRICACAO E COM A NOTA.<br>
+                - NAO AGENDAMOS HORARIO DE ENTREGA, E NAO GUARDAMOS PEDIDOS!!<br>
+                - ATENCAO: NAO GUARDAMOS TIJOLOS, POR FAVOR NAO INSISTA.<br>
+                - ENTREGAS DE SEGUNDA A SABADO DE 8H as 18HRS.
+            </div>
+            
+            <div style="margin-top: 60px; text-align: center; width: 80%; margin-left: auto; margin-right: auto; padding-top: 10px; font-weight: bold;">
+                _________________________________________________________________________________<br>
+                Assinatura do Cliente / Ciente e de acordo com o recebimento
+            </div>
+        </body>
+        </html>`;
+        
+        printWindow.document.write(html);
+        printWindow.document.close();
+        setTimeout(() => printWindow.print(), 500);
+
+    } catch (e) { showToast("Erro ao gerar impressão.", "error"); } finally { hideLoader(); }
+};
+
 // IMPRESSÃO DE LOTE DE DAVS (CARGAS) - XEROX COMPLETO DO ERP
 window.imprimirPedidosCarga = async function(romaneioId) {
     showLoader();
@@ -304,7 +419,12 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                 const fabricante = i.fabricante || i.it_fabr || i.pd_fabr || '';
                 const endereco = i.endereco_prateleira || i.endereco || i.it_ende || i.pd_ende || '';
                 
+                // DEVOLUÇÃO (Alerta Vermelho)
+                const qtdDevolvida = parseFloat(i.quantidade_devolvida || i.devolvido || i.it_qtdv || 0);
+                const tagDev = qtdDevolvida > 0 ? `<br><span style="color:#dc2626; font-size:10px; font-weight:bold;">[ ATENÇÃO: DEVOLUÇÃO DE ${qtdDevolvida} UN ]</span>` : '';
+
                 const obsTexto = extrairObservacao(i.observacao || i.it_obsc);
+                const infoAdicional = obsTexto ? `<br><span style="font-size:10px; font-style:italic; color:#333;">↳ ${obsTexto}</span>` : '';
                 
                 const qtd = parseFloat(i.quantidade_total || i.it_quan || 0).toFixed(2);
                 const vlUnit = parseFloat(i.valor_unitario || i.it_prec || i.vl_unitario || 0).toFixed(2);
@@ -314,7 +434,7 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                     <tr>
                         <td class="text-center">${numItem}</td>
                         <td class="text-center">${limpaCod(i.pd_codi)}</td>
-                        <td class="text-left">${i.pd_nome}</td>
+                        <td class="text-left"><b>${i.pd_nome}</b>${infoAdicional}${tagDev}</td>
                         <td class="text-center">${i.unidade}</td>
                         <td class="text-center">${qtd}</td>
                         <td class="text-right">${vlUnit}</td>
@@ -324,9 +444,6 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                         <td class="text-center font-bold">${saldoParaEntregarExibicao.toFixed(2)}</td>
                     </tr>
                 `;
-                if (obsTexto) {
-                    itensHtml += `<tr><td colspan="2" style="border-right: 1px solid #000; border-bottom: 1px dotted #ccc;"></td><td colspan="8" style="font-size:10px; font-weight:bold; padding: 2px 4px;">↳ ${obsTexto}</td></tr>`;
-                }
             });
 
             const dataEmissao = data.data_hora_pedido ? new Date(data.data_hora_pedido).toLocaleString('pt-BR') : '';
@@ -485,10 +602,15 @@ window.imprimirRoteiro = async function(romaneioId) {
                     ${dav.itens.map(i => {
                         const obsDescodificada = extrairObservacao(i.observacao || i.it_obsc);
                         const obsRoteiro = obsDescodificada ? `<br><span style="font-size:10px; font-style:italic; color:#333;">↳ ${obsDescodificada}</span>` : '';
+                        
+                        // DEVOLUÇÃO no Roteiro
+                        const qtdDevolvida = parseFloat(i.quantidade_devolvida || i.devolvido || i.it_qtdv || 0);
+                        const tagDev = qtdDevolvida > 0 ? `<br><span style="color:#dc2626; font-size:10px; font-weight:bold;">[ ATENÇÃO: DEVOLUÇÃO DE ${qtdDevolvida} UN ]</span>` : '';
+                        
                         return `
                         <tr>
                             <td class="text-center">${limpaCod(i.produto_codigo)}</td>
-                            <td>${i.produto_nome}${obsRoteiro}</td>
+                            <td>${i.produto_nome}${obsRoteiro}${tagDev}</td>
                             <td class="text-center">${i.produto_unidade}</td>
                             <td class="text-center font-bold" style="font-size: 13px;">${parseFloat(i.quantidade_a_entregar)}</td>
                         </tr>`;
@@ -552,10 +674,15 @@ window.abrirVisualizacaoRomaneio = async function(id) {
             dados.itens.forEach(item => {
                 const obsDescodificada = extrairObservacao(item.observacao || item.it_obsc);
                 const obsModal = obsDescodificada ? `<span class="text-[10px] text-gray-500 italic mt-0.5 block">↳ ${obsDescodificada}</span>` : '';
+                
+                // DEVOLUÇÃO no Modal de Visualização
+                const qtdDev = parseFloat(item.quantidade_devolvida || item.devolvido || item.it_qtdv || 0);
+                const tagDev = qtdDev > 0 ? `<span class="bg-red-600 text-white px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ml-2 shadow-sm animate-pulse">Devolvido: ${qtdDev}</span>` : '';
+                
                 html += `
                     <div class="p-3 flex justify-between items-center hover:bg-gray-50 transition-colors">
                         <div>
-                            <p class="text-sm font-bold text-gray-800">${limpaCod(item.produto_codigo)} - ${item.produto_nome}</p>
+                            <p class="text-sm font-bold text-gray-800">${limpaCod(item.produto_codigo)} - ${item.produto_nome} ${tagDev}</p>
                             ${obsModal}
                         </div>
                         <p class="text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">${parseFloat(item.quantidade_a_entregar)} ${item.produto_unidade}</p>
@@ -624,11 +751,13 @@ function renderDavResults(data) {
                         ${itens.map(item => {
                             const obsDescodificada = extrairObservacao(item.observacao || item.it_obsc);
                             const obsBalcao = obsDescodificada ? `<div class="text-[10px] text-gray-500 italic mt-1 pb-1">↳ ${obsDescodificada}</div>` : '';
+                            const qtdDev = parseFloat(item.quantidade_devolvida || item.devolvido || 0);
+                            const tagDev = qtdDev > 0 ? `<span class="bg-red-600 text-white px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ml-2 shadow-sm animate-pulse">Teve Devolução: ${qtdDev}</span>` : '';
                             return `
                             <tr class="expandable-row hover:bg-gray-50 transition-colors" data-idavs-regi="${item.idavs_regi}">
                                 <td style="border:none;" class="px-3 py-3 font-medium text-gray-800">
                                     ${limpaCod(item.pd_codi)} - ${item.pd_nome} <span class="text-gray-400 text-xs ml-1">(${item.unidade})</span> 
-                                    ${item.quantidade_devolvida > 0 ? `<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold ml-2">Devolvido: ${item.quantidade_devolvida}</span>` : ''}
+                                    ${tagDev}
                                     ${obsBalcao}
                                 </td>
                                 <td style="border:none;" class="px-2 py-3 text-center font-black text-sm ${item.quantidade_saldo > 0 ? 'text-indigo-600' : 'text-gray-400'}">${item.quantidade_saldo}</td>
@@ -1044,10 +1173,15 @@ function renderPendingList() {
         const itensHtml = dav.itens.map(item => {
             const obsDescodificada = extrairObservacao(item.observacao || item.it_obsc);
             const obsPrateleira = obsDescodificada ? `<div class="w-full text-[9px] text-gray-500 italic px-1 pb-1">↳ ${obsDescodificada}</div>` : '';
+            
+            // Etiqueta de devolução na Prateleira
+            const qtdDev = parseFloat(item.devolvido || item.quantidade_devolvida || 0);
+            const tagDev = qtdDev > 0 ? `<span class="bg-red-600 text-white px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ml-1 shadow-sm animate-pulse">DEVOLVIDO: ${qtdDev}</span>` : '';
+            
             return `
             <div class="flex flex-col border-b border-indigo-100/50 py-1.5 last:border-0 hover:bg-indigo-50 px-1 rounded transition-colors">
                 <div class="flex justify-between items-center">
-                    <span class="text-[11px] font-medium text-gray-700 truncate flex-1 pr-2">${limpaCod(item.codigo)} - ${item.nome}</span>
+                    <span class="text-[11px] font-medium text-gray-700 truncate flex-1 pr-2">${limpaCod(item.codigo)} - ${item.nome} ${tagDev}</span>
                     <div class="flex items-center gap-1.5 shrink-0 bg-white p-1 rounded-md shadow-sm border border-gray-200">
                         <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Disp: ${item.saldo}</span>
                         <input type="number" id="frac-${dav.dav_numero}-${item.idavs_regi}" value="${item.saldo}" min="1" max="${item.saldo}" step="1" class="w-14 text-[11px] p-1 border border-indigo-300 rounded text-center font-bold text-indigo-700 focus:ring-indigo-500">
@@ -1103,13 +1237,17 @@ function renderCartList() {
     }
 
     container.innerHTML = cartDavs.map(dav => {
-        const itensCartHtml = dav.itens.map(item => `
+        const itensCartHtml = dav.itens.map(item => {
+            const qtdDev = parseFloat(item.devolvido || item.quantidade_devolvida || 0);
+            const tagDev = qtdDev > 0 ? `<span class="bg-red-600 text-white px-1 py-0.5 rounded text-[8px] font-black uppercase ml-1 animate-pulse">Dev: ${qtdDev}</span>` : '';
+            return `
             <div class="flex justify-between items-center mt-1.5 border-t border-gray-100 pt-1.5">
-                <span class="text-[10px] font-bold text-gray-700 truncate flex-1">${limpaCod(item.codigo)} - ${item.nome}</span>
+                <span class="text-[10px] font-bold text-gray-700 truncate flex-1">${limpaCod(item.codigo)} - ${item.nome} ${tagDev}</span>
                 <span class="text-[11px] font-black text-indigo-700 w-16 text-right mr-2">${item.saldo} ${item.unidade}</span>
                 <button onclick="removerItemDoCarrinho('${dav.dav_numero}', '${item.idavs_regi}', ${dav.is_existing}, ${item.romaneio_item_id || null})" class="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded transition-colors"><i data-feather="x" class="w-3.5 h-3.5"></i></button>
             </div>
-        `).join('');
+            `;
+        }).join('');
 
         return `<div class="bg-white p-3 rounded-lg border ${dav.is_existing ? 'border-gray-300' : 'border-indigo-300 bg-indigo-50/20'} shadow-sm mb-3"><div class="flex justify-between items-start mb-2"><div class="flex-1 min-w-0 pr-2"><p class="font-black ${dav.is_existing ? 'text-gray-800' : 'text-indigo-900'} text-xs truncate">DAV #${dav.dav_numero}</p></div><div class="text-right"><span class="text-xs font-black ${dav.is_existing ? 'text-gray-700' : 'text-indigo-700'} block">${dav.peso_total_dav.toLocaleString('pt-BR', {minimumFractionDigits: 1})} kg</span></div></div><div class="bg-gray-50 p-2 rounded-md border border-gray-100">${itensCartHtml}</div></div>`;
     }).join('');
