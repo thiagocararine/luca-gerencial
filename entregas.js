@@ -19,7 +19,7 @@ let isFinalizandoCarga = false;
 let isAcertandoRomaneio = false;
 let isConfirmandoRetirada = false;
 
-let lastRomaneiosHtml = ''; // Cache visual para o Auto-Refresh
+let lastRomaneiosHtml = ''; 
 
 // ==========================================================
 //               INICIALIZAÇÃO E UTILIDADES
@@ -45,7 +45,7 @@ function initEntregasPage() {
     switchView('romaneio-list-view');
     gerenciarAcessoModulos();
 
-    // AUTO-REFRESH SILENCIOSO A CADA 15 SEGUNDOS (Com Cache Visual)
+    // AUTO-REFRESH SILENCIOSO A CADA 15 SEGUNDOS
     setInterval(() => {
         const view = document.getElementById('romaneio-list-view');
         const modal = document.getElementById('view-romaneio-modal');
@@ -288,16 +288,23 @@ window.imprimirEspelhoDav = async function(davNumber) {
             const fabricante = i.fabricante || i.it_fabr || i.pd_fabr || '';
             const endereco = i.endereco_prateleira || i.it_ende || i.pd_ende || '';
             
+            // Variáveis preparadas para receber os valores corretos quando o backend for atualizado
+            const qtd = parseFloat(i.quantidade_total || i.it_quan || 0).toFixed(2);
+            const vlUnit = parseFloat(i.valor_unitario || i.it_prec || i.vl_unitario || 0).toFixed(2);
+            const vlTot = parseFloat(i.valor_total_item || i.it_ctot || i.vl_total || 0).toFixed(2);
+            const saldoRet = parseFloat(i.quantidade_saldo || 0).toFixed(2);
+            
             itensHtml += `
                 <tr>
                     <td class="text-center">${numItem}</td>
                     <td>${limpaCod(i.pd_codi)} <br> <b>${i.pd_nome}</b></td>
                     <td class="text-center">${i.unidade}</td>
-                    <td class="text-center">${parseFloat(i.quantidade_total).toFixed(2)}</td>
-                    <td class="text-center">${parseFloat(i.quantidade_entregue).toFixed(2)}</td>
-                    <td class="text-center font-bold">${parseFloat(i.quantidade_saldo).toFixed(2)}</td>
                     <td style="font-size: 9px; text-align:center;">${fabricante}</td>
                     <td style="font-size: 9px; text-align:center;">${endereco}</td>
+                    <td class="text-center">${qtd}</td>
+                    <td class="text-right">${vlUnit}</td>
+                    <td class="text-right">${vlTot}</td>
+                    <td class="text-center font-bold">${saldoRet}</td>
                 </tr>
             `;
         });
@@ -328,13 +335,14 @@ window.imprimirEspelhoDav = async function(davNumber) {
                 <thead>
                     <tr>
                         <th width="4%" class="text-center">ITEM</th>
-                        <th width="36%">ID-CÓDIGO / DESCRIÇÃO DOS PRODUTOS</th>
+                        <th width="32%">ID-CÓD / DESCRIÇÃO DOS PRODUTOS</th>
                         <th width="4%" class="text-center">UN</th>
-                        <th width="10%" class="text-center">QTD TOTAL</th>
-                        <th width="10%" class="text-center">JÁ ENTREGUE</th>
-                        <th width="12%" class="text-center">SALDO P/ ENT.</th>
-                        <th width="14%" class="text-center">FABRICANTE</th>
+                        <th width="12%" class="text-center">FABRICANTE</th>
                         <th width="10%" class="text-center">ENDEREÇO</th>
+                        <th width="8%" class="text-center">QTD</th>
+                        <th width="10%" class="text-right">VL. UNIT.</th>
+                        <th width="10%" class="text-right">VL. TOTAL</th>
+                        <th width="10%" class="text-center">SALDO RET.</th>
                     </tr>
                 </thead>
                 <tbody>${itensHtml}</tbody>
@@ -374,7 +382,7 @@ window.imprimirEspelhoDav = async function(davNumber) {
     } catch (e) { showToast("Erro ao gerar impressão.", "error"); } finally { hideLoader(); }
 };
 
-// IMPRESSÃO DE LOTE DE DAVS (AGORA COM AS CAIXAS, FABRICANTE E ENDEREÇO)
+// IMPRESSÃO DE LOTE DE DAVS (COM O NOVO PADRÃO DE XEROX ERP)
 window.imprimirPedidosCarga = async function(romaneioId) {
     showLoader();
     try {
@@ -399,27 +407,28 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                 const itemNoRomaneio = romaneioData.itens.find(ri => String(ri.idavs_regi) === String(i.idavs_regi));
                 let qtdNestaCarga = itemNoRomaneio ? parseFloat(itemNoRomaneio.quantidade_a_entregar) : 0;
                 
-                let qtdTotal = parseFloat(i.quantidade_total);
-                let qtdJaEntregueGeral = parseFloat(i.quantidade_entregue);
-                let saldoBanco = parseFloat(i.quantidade_saldo);
-
-                let jaEntregueReal = qtdJaEntregueGeral - qtdNestaCarga;
+                let saldoBanco = parseFloat(i.quantidade_saldo || 0);
                 let saldoParaEntregarExibicao = saldoBanco + qtdNestaCarga;
 
                 const numItem = String(index + 1).padStart(3, '0');
                 const fabricante = i.fabricante || i.it_fabr || i.pd_fabr || '';
                 const endereco = i.endereco_prateleira || i.it_ende || i.pd_ende || '';
+                
+                const qtd = parseFloat(i.quantidade_total || i.it_quan || 0).toFixed(2);
+                const vlUnit = parseFloat(i.valor_unitario || i.it_prec || i.vl_unitario || 0).toFixed(2);
+                const vlTot = parseFloat(i.valor_total_item || i.it_ctot || i.vl_total || 0).toFixed(2);
 
                 itensHtml += `
                     <tr>
                         <td class="text-center">${numItem}</td>
                         <td>${limpaCod(i.pd_codi)} <br> <b>${i.pd_nome}</b></td>
                         <td class="text-center">${i.unidade}</td>
-                        <td class="text-center">${qtdTotal.toFixed(2)}</td>
-                        <td class="text-center">${Math.max(0, jaEntregueReal).toFixed(2)}</td>
-                        <td class="text-center font-bold">${saldoParaEntregarExibicao.toFixed(2)}</td>
                         <td style="font-size: 9px; text-align:center;">${fabricante}</td>
                         <td style="font-size: 9px; text-align:center;">${endereco}</td>
+                        <td class="text-center">${qtd}</td>
+                        <td class="text-right">${vlUnit}</td>
+                        <td class="text-right">${vlTot}</td>
+                        <td class="text-center font-bold">${saldoParaEntregarExibicao.toFixed(2)}</td>
                     </tr>
                 `;
             });
@@ -444,13 +453,14 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                     <thead>
                         <tr>
                             <th width="4%" class="text-center">ITEM</th>
-                            <th width="36%">ID-CÓDIGO / DESCRIÇÃO DOS PRODUTOS</th>
+                            <th width="32%">ID-CÓD / DESCRIÇÃO DOS PRODUTOS</th>
                             <th width="4%" class="text-center">UN</th>
-                            <th width="10%" class="text-center">QTD TOTAL</th>
-                            <th width="10%" class="text-center">JÁ ENTREGUE</th>
-                            <th width="12%" class="text-center">SALDO P/ ENT.</th>
-                            <th width="14%" class="text-center">FABRICANTE</th>
+                            <th width="12%" class="text-center">FABRICANTE</th>
                             <th width="10%" class="text-center">ENDEREÇO</th>
+                            <th width="8%" class="text-center">QTD</th>
+                            <th width="10%" class="text-right">VL. UNIT.</th>
+                            <th width="10%" class="text-right">VL. TOTAL</th>
+                            <th width="10%" class="text-center">SALDO RET.</th>
                         </tr>
                     </thead>
                     <tbody>${itensHtml}</tbody>
@@ -655,6 +665,7 @@ window.abrirVisualizacaoRomaneio = async function(id) {
 
     } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
 };
+
 
 // ==========================================================
 //               ABA 1: RETIRADA RÁPIDA (BALCÃO)
