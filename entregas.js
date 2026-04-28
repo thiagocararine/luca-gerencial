@@ -778,12 +778,19 @@ function renderDavResults(data) {
                         <p class="text-sm font-bold text-teal-700 uppercase flex items-center gap-1.5"><i data-feather="user" class="w-4 h-4"></i> Vend: ${data.vendedor || 'N/I'}</p>
                         <div class="flex flex-wrap items-center gap-2 mt-1">${statusTagHtml} ${nfeBadge}</div>
                     </div>
+                    
                     <div class="text-right">
                         <p class="font-black text-2xl text-indigo-600 mb-2">${formatCurrency(valor_total)}</p>
-                        <button onclick="imprimirEspelhoDav('${data.dav_numero}')" class="action-btn bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 text-xs py-1.5 px-3 flex inline-flex items-center gap-1.5 shadow-sm ml-auto">
-                            <i data-feather="printer" class="w-3.5 h-3.5"></i> Imprimir Espelho (A4)
-                        </button>
+                        <div class="flex gap-2 justify-end">
+                            <button onclick="imprimirEspelhoDav('${data.dav_numero}')" class="action-btn bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 text-xs py-1.5 px-3 flex inline-flex items-center gap-1.5 shadow-sm">
+                                <i data-feather="printer" class="w-3.5 h-3.5"></i> Espelho (A4)
+                            </button>
+                            <button onclick="window.imprimirCupomTermico('${data.dav_numero}')" class="action-btn bg-yellow-100 text-yellow-800 border border-yellow-300 hover:bg-yellow-500 hover:text-white text-xs py-1.5 px-3 flex inline-flex items-center gap-1.5 shadow-sm">
+                                <i data-feather="file-text" class="w-3.5 h-3.5"></i> Cupom Térmico
+                            </button>
+                        </div>
                     </div>
+                    
                 </div>
                 <div class="space-y-4">
                     <h4 class="font-bold text-gray-700 uppercase tracking-wider text-xs">Itens do Pedido</h4>
