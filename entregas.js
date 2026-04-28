@@ -102,8 +102,23 @@ function unlockUI() { document.getElementById('ui-lock-overlay').classList.add('
 function showLoader() { const l = document.getElementById('global-loader'); if(l) l.style.display = 'flex'; }
 function hideLoader() { const l = document.getElementById('global-loader'); if(l) l.style.display = 'none'; }
 
-// Remove Zeros a Esquerda dos Produtos
 function limpaCod(cod) { return cod ? cod.toString().replace(/^0+(?=\d)/, '') : ''; }
+
+// CABEÇALHO PADRÃO ALINHADO À ESQUERDA PARA AS IMPRESSÕES
+function getCabecalhoHtml(logoBase64) {
+    return `
+        <div style="display: flex; align-items: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px;">
+            <div style="margin-right: 15px;">
+                ${logoBase64 ? `<img src="${logoBase64}" style="max-width: 140px; max-height: 60px;">` : '<h2>LUCA</h2>'}
+            </div>
+            <div style="text-align: left; font-family: 'Helvetica', sans-serif;">
+                <div style="font-size: 16px; font-weight: bold; margin-bottom: 3px;">LUCA MATERIAL DE CONSTRUCAO LTDA</div>
+                <div style="font-size: 11px;">Av. Automovel Clube SN Qd 04 Lote 19 - Parada Angelica Duque De Caxias [RJ] CEP: 25272405</div>
+                <div style="font-size: 11px;">CNPJ: 36.671.152/0004-06 | Tel(s): (21) 2778-3885 | 2739-1480 | 2675-7410</div>
+            </div>
+        </div>
+    `;
+}
 
 // ==========================================================
 //               NAVEGAÇÃO SPA E EVENTOS
@@ -156,11 +171,11 @@ function updateListTabs() {
     if (!btnAndamento || !btnConcluidas) return;
 
     if(romaneioListStatus === 'Em montagem') {
-        btnAndamento.className = "px-4 py-2 rounded-md bg-white shadow-sm text-sm font-bold text-indigo-600 transition-colors";
-        btnConcluidas.className = "px-4 py-2 rounded-md text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors";
+        btnAndamento.className = "px-4 py-1.5 rounded-md bg-white shadow-sm text-sm font-bold text-indigo-600 transition-colors";
+        btnConcluidas.className = "px-4 py-1.5 rounded-md text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors";
     } else {
-        btnConcluidas.className = "px-4 py-2 rounded-md bg-white shadow-sm text-sm font-bold text-indigo-600 transition-colors";
-        btnAndamento.className = "px-4 py-2 rounded-md text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors";
+        btnConcluidas.className = "px-4 py-1.5 rounded-md bg-white shadow-sm text-sm font-bold text-indigo-600 transition-colors";
+        btnAndamento.className = "px-4 py-1.5 rounded-md text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors";
     }
 }
 
@@ -195,13 +210,13 @@ window.abrirDanfe = async function(chave) {
     } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
 }
 
-// IMPRESSÃO DE ESPELHO DAV (FIEL AO ERP ANTIGO)
 window.imprimirEspelhoDav = async function(davNumber) {
     showLoader();
     try {
         const res = await fetch(`${apiUrlBase}/entregas/dav/${davNumber}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
         const data = await res.json();
         
+        const logo = localStorage.getItem('company_logo') || '';
         const printWindow = window.open('', '_blank');
         
         let itensHtml = '';
@@ -228,8 +243,6 @@ window.imprimirEspelhoDav = async function(davNumber) {
             <title>DAV #${davNumber}</title>
             <style>
                 body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 11px; color: #000; padding: 20px; line-height: 1.3; }
-                .header-top { display: flex; flex-direction: column; align-items: center; border-bottom: 1px solid #000; padding-bottom: 10px; margin-bottom: 10px; text-align: center; }
-                .company-name { font-size: 16px; font-weight: bold; margin-bottom: 3px; text-transform: uppercase; }
                 .doc-title { font-size: 14px; font-weight: bold; margin: 10px 0; text-align: center; }
                 .row-between { display: flex; justify-content: space-between; margin-bottom: 3px; }
                 .warning-box { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 5px 0; text-align: center; font-weight: bold; font-size: 10px; margin: 10px 0; }
@@ -250,10 +263,7 @@ window.imprimirEspelhoDav = async function(davNumber) {
                 <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Imprimir Espelho DAV</button>
             </div>
             
-            <div class="header-top">
-                <div class="company-name">LUCA MATERIAL DE CONSTRUCAO LTDA</div>
-                <div>CNPJ: 36.671.152/0004-06 | Tel(s): (21) 2778-3885 | 2739-1480 | 2675-7410</div>
-            </div>
+            ${getCabecalhoHtml(logo)}
 
             <div class="doc-title">DOCUMENTO AUXILIAR DE VENDA</div>
             
@@ -321,7 +331,144 @@ window.imprimirEspelhoDav = async function(davNumber) {
     } catch (e) { showToast("Erro ao gerar impressão.", "error"); } finally { hideLoader(); }
 };
 
-// IMPRESSÃO ROTEIRO DE CARGA (FIEL AO ERP ANTIGO)
+// IMPRESSÃO DE TODOS OS DAVs DA CARGA (RELATÓRIO EM LOTE)
+window.imprimirPedidosCarga = async function(romaneioId) {
+    showLoader();
+    try {
+        const res = await fetch(`${apiUrlBase}/entregas/romaneios/${romaneioId}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        const romaneioData = await res.json();
+
+        // Extrair todos os DAVs únicos que estão neste romaneio
+        const davsUnicos = [...new Set(romaneioData.itens.map(i => i.dav_numero))];
+
+        // Vai buscar o espelho completo de cada DAV ao Backend
+        const davsPromises = davsUnicos.map(davNum => 
+            fetch(`${apiUrlBase}/entregas/dav/${davNum}`, { headers: { 'Authorization': `Bearer ${getToken()}` } }).then(r => r.json())
+        );
+        const davsCompletos = await Promise.all(davsPromises);
+
+        const logo = localStorage.getItem('company_logo') || '';
+        const printWindow = window.open('', '_blank');
+
+        let html = `
+        <html>
+        <head>
+            <title>Pedidos da Carga #${romaneioId}</title>
+            <style>
+                body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 11px; color: #000; padding: 15px; line-height: 1.3; }
+                .doc-title { font-size: 14px; font-weight: bold; margin: 10px 0; text-align: center; }
+                .row-between { display: flex; justify-content: space-between; margin-bottom: 3px; }
+                .warning-box { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 5px 0; text-align: center; font-weight: bold; font-size: 10px; margin: 10px 0; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 10px; }
+                th { border-top: 1px solid #000; border-bottom: 1px solid #000; text-align: left; padding: 5px 2px; font-size: 10px; text-transform: uppercase; }
+                td { border-bottom: 1px dotted #ccc; padding: 5px 2px; font-size: 11px; vertical-align: top; }
+                .text-center { text-align: center; }
+                .font-bold { font-weight: bold; }
+                .info-section { margin-bottom: 10px; }
+                .observacoes { font-size: 10px; margin-top: 20px; }
+                .totais { display: flex; justify-content: space-between; border-top: 1px solid #000; padding-top: 10px; margin-top: 10px; font-size: 14px; }
+                .endereco-entrega { border: 1px solid #000; padding: 10px; margin-top: 15px; }
+                .page-break { page-break-after: always; }
+                @media print { .no-print { display: none; } }
+            </style>
+        </head>
+        <body>
+            <div class="no-print" style="margin-bottom: 20px; text-align: center;">
+                <button onclick="window.print()" style="padding: 10px 20px; background: #16a34a; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Imprimir Todos os Pedidos (Lote)</button>
+            </div>`;
+
+        // Renderiza cada DAV numa página separada
+        davsCompletos.forEach((data, idx) => {
+            let itensHtml = '';
+            data.itens.forEach((i, index) => {
+                const numItem = String(index + 1).padStart(3, '0');
+                itensHtml += `
+                    <tr>
+                        <td class="text-center">${numItem}</td>
+                        <td>${limpaCod(i.pd_codi)}</td>
+                        <td>${i.pd_nome}</td>
+                        <td class="text-center">${i.unidade}</td>
+                        <td class="text-center">${parseFloat(i.quantidade_total).toFixed(2)}</td>
+                        <td class="text-center">${parseFloat(i.quantidade_entregue).toFixed(2)}</td>
+                        <td class="text-center font-bold">${parseFloat(i.quantidade_saldo).toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+
+            const dataEmissao = data.data_hora_pedido ? new Date(data.data_hora_pedido).toLocaleString('pt-BR') : '';
+
+            html += `
+            <div class="${idx < davsCompletos.length - 1 ? 'page-break' : ''}">
+                ${getCabecalhoHtml(logo)}
+
+                <div class="doc-title">DOCUMENTO AUXILIAR DE VENDA (CARGA #${romaneioId})</div>
+                
+                <div class="row-between">
+                    <div><strong>Nº DAV:</strong> ${data.dav_numero.toString().padStart(13, '0')}</div>
+                    <div><strong>Emissão:</strong> ${dataEmissao}</div>
+                </div>
+                
+                <div class="warning-box">
+                    NÃO É DOCUMENTO FISCAL, NÃO É VALIDO COMO RECIBO E COMO GARANTIA DE MERCADORIA, NÃO COMPROVA PAGAMENTO
+                </div>
+
+                <div class="info-section">
+                    <div><strong>NOME DO CLIENTE:</strong> ${data.cliente.nome.toUpperCase()}</div>
+                    <div><strong>CPF/CNPJ:</strong> ${data.cliente.doc || 'Não informado'}</div>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th width="5%" class="text-center">ITEM</th>
+                            <th width="12%">ID-CÓDIGO</th>
+                            <th width="48%">DESCRIÇÃO DOS PRODUTOS</th>
+                            <th width="5%" class="text-center">UN</th>
+                            <th width="10%" class="text-center">QTD TOTAL</th>
+                            <th width="10%" class="text-center">JÁ ENTREGUE</th>
+                            <th width="10%" class="text-center">SALDO P/ ENT.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${itensHtml}
+                    </tbody>
+                </table>
+
+                <div class="totais font-bold">
+                    <div>Vendedor: ${data.vendedor || 'N/I'}</div>
+                    <div>TOTAL DO DAV: R$ ${parseFloat(data.valor_total).toLocaleString('pt-BR', {minimumFractionDigits:2})}</div>
+                </div>
+
+                <div class="endereco-entrega">
+                    <div class="font-bold" style="margin-bottom: 5px;">[ ENDEREÇO DE ENTREGA ]</div>
+                    <div>${data.endereco.logradouro || 'Retirada na Loja / Não informado'}</div>
+                    <div>Bairro: ${data.endereco.bairro || '-'} &nbsp;|&nbsp; Cidade: ${data.endereco.cidade || '-'} &nbsp;|&nbsp; CEP: ${data.endereco.cep || '-'}</div>
+                    <div style="margin-top: 5px;"><strong>Referência:</strong> ${data.endereco.referencia || '-'}</div>
+                </div>
+
+                <div class="observacoes">
+                    - DEVOLUCAO/DESISTENCIA SOMENTE NA DATA DA COMPRA.<br>
+                    - NAO REALIZAMOS TROCA DE MERCADORIA ADQUIRIDA EM LOJA FISICA EXCETO COMPROVADO DEFEITO DE FABRICACAO.<br>
+                    - NAO AGENDAMOS HORARIO DE ENTREGA, E NAO GUARDAMOS PEDIDOS!!<br>
+                    - ATENCAO: NAO GUARDAMOS TIJOLOS, POR FAVOR NAO INSISTA.<br>
+                    - ENTREGAS DE SEGUNDA A SABADO DE 8H as 18HRS.
+                </div>
+                
+                <div style="margin-top: 40px; text-align: center; border-top: 1px solid #000; width: 60%; margin-left: auto; margin-right: auto; padding-top: 5px;">
+                    Assinatura do Cliente
+                </div>
+            </div>`;
+        });
+
+        html += `</body></html>`;
+        printWindow.document.write(html);
+        printWindow.document.close();
+        setTimeout(() => printWindow.print(), 800); 
+
+    } catch (e) { showToast("Erro ao gerar lote de DAVs.", "error"); } finally { hideLoader(); }
+};
+
+// IMPRESSÃO ROTEIRO DE CARGA (RESUMO)
 window.imprimirRoteiro = async function(romaneioId) {
     showLoader();
     try {
@@ -329,6 +476,7 @@ window.imprimirRoteiro = async function(romaneioId) {
         const data = await res.json();
         
         const printWindow = window.open('', '_blank');
+        const logo = localStorage.getItem('company_logo') || '';
         
         const grouped = data.itens.reduce((acc, item) => {
             if(!acc[item.dav_numero]) {
@@ -351,8 +499,6 @@ window.imprimirRoteiro = async function(romaneioId) {
             <title>Roteiro de Carga #${data.id}</title>
             <style>
                 body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 11px; color: #000; padding: 20px; line-height: 1.3; }
-                .header-top { display: flex; flex-direction: column; align-items: center; border-bottom: 1px solid #000; padding-bottom: 10px; margin-bottom: 10px; text-align: center; }
-                .company-name { font-size: 16px; font-weight: bold; margin-bottom: 3px; text-transform: uppercase; }
                 .doc-title { font-size: 14px; font-weight: bold; margin: 10px 0; text-align: center; text-transform: uppercase; }
                 .row-between { display: flex; justify-content: space-between; margin-bottom: 5px; }
                 .dav-box { border: 1px solid #000; margin-bottom: 15px; page-break-inside: avoid; }
@@ -371,10 +517,7 @@ window.imprimirRoteiro = async function(romaneioId) {
                 <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Imprimir Roteiro</button>
             </div>
             
-            <div class="header-top">
-                <div class="company-name">LUCA MATERIAL DE CONSTRUCAO LTDA</div>
-                <div>CNPJ: 36.671.152/0004-06 | Tel(s): (21) 2778-3885 | 2739-1480 | 2675-7410</div>
-            </div>
+            ${getCabecalhoHtml(logo)}
             
             <div class="doc-title">ROTEIRO DE CARGA #${data.id}</div>
             
@@ -443,6 +586,19 @@ window.abrirVisualizacaoRomaneio = async function(id) {
         document.getElementById('view-status').textContent = data.status;
 
         document.getElementById('btn-imprimir-romaneio').onclick = () => window.imprimirRoteiro(data.id);
+        
+        // Insere dinamicamente o botão de imprimir Lote de DAVs no Modal
+        let btnImprimirDavs = document.getElementById('btn-imprimir-davs');
+        if (!btnImprimirDavs) {
+            const container = document.getElementById('btn-imprimir-romaneio').parentNode;
+            btnImprimirDavs = document.createElement('button');
+            btnImprimirDavs.id = 'btn-imprimir-davs';
+            btnImprimirDavs.className = 'action-btn bg-emerald-100 text-emerald-800 hover:bg-emerald-600 hover:text-white shadow-md flex items-center gap-2 transition-colors border border-emerald-200 mr-2';
+            btnImprimirDavs.innerHTML = '<i data-feather="layers" class="w-4 h-4"></i> Imprimir Lote DAVs';
+            container.insertBefore(btnImprimirDavs, document.getElementById('btn-imprimir-romaneio'));
+            if(typeof feather !== 'undefined') feather.replace();
+        }
+        btnImprimirDavs.onclick = () => window.imprimirPedidosCarga(data.id);
 
         const container = document.getElementById('view-itens-container');
         const grouped = data.itens.reduce((acc, item) => {
@@ -452,7 +608,7 @@ window.abrirVisualizacaoRomaneio = async function(id) {
 
         let html = '';
         for (const [davNumero, dados] of Object.entries(grouped)) {
-            html += `<div class="border border-gray-200 rounded-lg overflow-hidden shadow-sm mb-4"><div class="bg-gray-100 px-4 py-2 border-b flex justify-between items-center"><span class="font-black text-gray-800 text-sm">DAV #${davNumero} - <span class="text-gray-600 font-medium">${dados.cliente}</span></span> <span class="text-xs font-bold text-gray-500">${dados.bairro || 'Sem Bairro'}</span></div><div class="divide-y divide-gray-100 bg-white">`;
+            html += `<div class="border border-gray-200 rounded-lg overflow-hidden shadow-sm mb-4"><div class="bg-gray-100 px-4 py-2 border-b flex justify-between items-center"><span class="font-black text-gray-800 text-sm">DAV #${davNumero.toString().padStart(13, '0')} - <span class="text-gray-600 font-medium">${dados.cliente}</span></span> <span class="text-xs font-bold text-gray-500">${dados.bairro || 'Sem Bairro'}</span></div><div class="divide-y divide-gray-100 bg-white">`;
             dados.itens.forEach(item => {
                 html += `
                     <div class="p-3 flex justify-between items-center hover:bg-gray-50 transition-colors">
@@ -667,8 +823,12 @@ async function loadRomaneiosAtivos() {
                         <i data-feather="eye" class="w-4 h-4"></i> Visualizar
                     </button>
                     
-                    <button onclick="window.imprimirRoteiro(${r.id})" class="text-indigo-700 bg-indigo-50 border border-indigo-200 text-xs font-bold hover:bg-indigo-600 hover:text-white px-4 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
-                        <i data-feather="printer" class="w-4 h-4"></i> Imprimir Roteiro
+                    <button onclick="window.imprimirRoteiro(${r.id})" class="text-indigo-700 bg-indigo-50 border border-indigo-200 text-xs font-bold hover:bg-indigo-600 hover:text-white px-4 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm" title="Imprimir Roteiro (Resumo)">
+                        <i data-feather="printer" class="w-4 h-4"></i> Roteiro
+                    </button>
+
+                    <button onclick="window.imprimirPedidosCarga(${r.id})" class="text-emerald-800 bg-emerald-50 border border-emerald-200 text-xs font-bold hover:bg-emerald-600 hover:text-white px-4 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm" title="Imprimir Lote de DAVs">
+                        <i data-feather="layers" class="w-4 h-4"></i> Imprimir DAVs
                     </button>
                     
                     ${actionButtons}
@@ -1125,8 +1285,11 @@ async function finalizarCarga() {
                 }
             }
 
-            showToast(`Carga gravada! Abrindo roteiro...`, 'success');
-            window.imprimirRoteiro(romaneioId);
+            showToast(`Carga gravada! Gerando Roteiro e Lote de DAVs...`, 'success');
+            
+            // ABRE AS IMPRESSÕES (Opcional, você pode escolher se prefere que abra só uma)
+            window.imprimirPedidosCarga(romaneioId); 
+            
             switchView('romaneio-list-view');
             
         } catch (e) { 
@@ -1342,6 +1505,18 @@ window.abrirVisualizacaoRomaneio = async function(id) {
         document.getElementById('view-status').textContent = data.status;
 
         document.getElementById('btn-imprimir-romaneio').onclick = () => window.imprimirRoteiro(data.id);
+        
+        let btnImprimirDavs = document.getElementById('btn-imprimir-davs');
+        if (!btnImprimirDavs) {
+            const container = document.getElementById('btn-imprimir-romaneio').parentNode;
+            btnImprimirDavs = document.createElement('button');
+            btnImprimirDavs.id = 'btn-imprimir-davs';
+            btnImprimirDavs.className = 'action-btn bg-emerald-100 text-emerald-800 hover:bg-emerald-600 hover:text-white shadow-md flex items-center gap-2 transition-colors border border-emerald-200 mr-2';
+            btnImprimirDavs.innerHTML = '<i data-feather="layers" class="w-4 h-4"></i> Imprimir Lote DAVs';
+            container.insertBefore(btnImprimirDavs, document.getElementById('btn-imprimir-romaneio'));
+            if(typeof feather !== 'undefined') feather.replace();
+        }
+        btnImprimirDavs.onclick = () => window.imprimirPedidosCarga(data.id);
 
         const container = document.getElementById('view-itens-container');
         const grouped = data.itens.reduce((acc, item) => {
