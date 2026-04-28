@@ -670,6 +670,9 @@ function efetivarTransferencia() {
 
     fecharModalTransferencia();
     renderizarTabelaAuditoria(linhaAtualAuditoria.chave_id);
+
+    // NOVO: Atualiza a tela principal por trás
+    sincronizarTotaisPrincipais();
 }
 
 function fecharModalTransferencia() {
@@ -779,6 +782,9 @@ function conciliarManualmente() {
 
     tableAuditoria.deselectRow(); 
     renderizarTabelaAuditoria(chave);
+
+    // NOVO: Atualiza a tela principal por trás
+    sincronizarTotaisPrincipais();
 }
 
 function fecharModalAuditoria() {
@@ -1103,4 +1109,39 @@ function encolherAreaUpload(nomeArquivo) {
 
     // Redesenha o novo ícone 
     if (typeof feather !== 'undefined') feather.replace();
+}
+
+function sincronizarTotaisPrincipais() {
+    if (!tablePrincipal) return;
+    
+    dadosConsolidados.forEach(linha => {
+        const chave = linha.chave_id;
+        let sumMaq = 0;
+        let sumErp = 0;
+
+        // Se a auditoria desta linha já foi aberta e modificada
+        if (estadoAuditoria[chave]) {
+            estadoAuditoria[chave].matches.forEach(m => {
+                sumMaq += m.maqItem.valor;
+                sumErp += m.erpItem.valor;
+            });
+            estadoAuditoria[chave].sobrasMaq.forEach(m => sumMaq += m.valor);
+            estadoAuditoria[chave].sobrasERP.forEach(e => sumErp += e.valor);
+        } else {
+            // Se a linha ainda não foi mexida
+            let arrMaq = transacoesMaqPorChave[chave] || [];
+            let arrErp = transacoesERPPorChave[chave] || [];
+            arrMaq.forEach(m => sumMaq += m.valor);
+            arrErp.forEach(e => sumErp += e.valor);
+        }
+
+        // Atualiza os valores da linha
+        linha.valor_mp = sumMaq;
+        linha.valor_erp = sumErp;
+        linha.diferenca = sumMaq - sumErp;
+        linha.status = (Math.abs(linha.diferenca) <= 0.05) ? 'OK' : 'DIVERGENTE';
+    });
+
+    // Atualiza a tabela principal instantaneamente
+    tablePrincipal.updateData(dadosConsolidados);
 }
