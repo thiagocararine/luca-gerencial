@@ -116,6 +116,78 @@ function hideLoader() { const l = document.getElementById('global-loader'); if(l
 function limpaCod(cod) { return cod ? cod.toString().replace(/^0+(?=\d)/, '') : ''; }
 
 // ==========================================================
+//               LAYOUT PADRÃO (ERP) PARA IMPRESSÕES
+// ==========================================================
+function getCabecalhoHtml(logoBase64) {
+    return `
+        <div style="display: flex; align-items: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px;">
+            <div style="margin-right: 15px;">
+                ${logoBase64 ? `<img src="${logoBase64}" style="max-width: 140px; max-height: 60px;">` : '<h2>LUCA</h2>'}
+            </div>
+            <div style="text-align: left; font-family: 'Helvetica', sans-serif;">
+                <div style="font-size: 16px; font-weight: bold; margin-bottom: 3px;">LUCA MATERIAL DE CONSTRUCAO LTDA</div>
+                <div style="font-size: 11px;">Av. Automovel Clube SN Qd 04 Lote 19 - Parada Angelica Duque De Caxias [RJ] CEP: 25272405</div>
+                <div style="font-size: 11px;">CNPJ: 36.671.152/0004-06 | Tel(s): (21) 2778-3885 | 2739-1480 | 2675-7410</div>
+            </div>
+        </div>
+    `;
+}
+
+function getCabecalhoDavHtml(logoBase64, dataEmissao, davNumber, paginaStr) {
+    return `
+    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 10px;">
+        <div style="display: flex; align-items: flex-start; gap: 15px;">
+            <div style="width: 120px;">
+                ${logoBase64 ? `<img src="${logoBase64}" style="max-width: 100%; height: auto;">` : '<h2 style="margin:0;">LUCA</h2>'}
+            </div>
+            <div style="font-size: 11px; font-family: 'Courier New', Courier, monospace; line-height: 1.2;">
+                <div style="font-weight: bold; font-size: 14px;">LUCA MATERIAL DE CONSTRUCAO LTDA</div>
+                <div>Av Automovel Clube SN Qd 04 Lote 19</div>
+                <div>Parada Angelica Duque De Caxias [RJ] CEP: 25272405</div>
+                <div>CNPJ: 36.671.152/0004-06</div>
+                <div>Tel(s): (21) 2778-3885 | 2739-1480 | 2675-7410</div>
+                <div style="margin-top: 5px; font-weight: bold; font-size: 13px;">DOCUMENTO AUXILIAR DE VENDA</div>
+            </div>
+        </div>
+        <div style="font-size: 11px; text-align: right; font-family: 'Courier New', Courier, monospace; line-height: 1.2;">
+            <div>${dataEmissao}</div>
+            <div>Pagina: ${paginaStr}</div>
+            <div>Relatorio: DAV</div>
+            <div style="margin-top: 10px; font-weight: bold; font-size: 13px;">Nº DAV: ${davNumber.toString().padStart(13, '0')}</div>
+        </div>
+    </div>
+    <div style="font-size: 9px; font-weight: bold; text-align: center; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 4px 0; margin-bottom: 10px; font-family: 'Courier New', monospace;">
+        NÃO É DOCUMENTO FISCAL, NÃO É VALIDO COMO RECIBO E COMO GARANTIA DE MERCADORIA, NÃO COMPROVA PAGAMENTO
+    </div>
+    `;
+}
+
+function getEstiloImpressao() {
+    return `
+    <style>
+        body { font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; padding: 10px; line-height: 1.3; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 10px; font-size: 11px; }
+        th, td { border: 1px solid #000; padding: 4px 2px; }
+        th { background-color: #f5f5f5; text-align: left; text-transform: uppercase; font-weight: bold; font-size: 10px; }
+        td { vertical-align: middle; }
+        
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .font-bold { font-weight: bold; }
+        .page-break { page-break-after: always; }
+        
+        .info-cliente { margin-bottom: 10px; font-size: 12px; border: 1px solid #000; padding: 5px; }
+        .endereco-entrega { border: 1px solid #000; padding: 8px; margin-top: 15px; }
+        .totais-box { margin-top: 15px; font-size: 12px; display: flex; justify-content: space-between; border: 1px solid #000; padding: 5px; background: #f9f9f9; }
+        
+        .rodape-observacoes { font-size: 9px; margin-top: 15px; line-height: 1.4; border: 1px solid #000; padding: 5px; }
+        @media print { .no-print { display: none; } }
+    </style>
+    `;
+}
+
+// ==========================================================
 //               NAVEGAÇÃO SPA E EVENTOS
 // ==========================================================
 function switchView(viewId) {
@@ -175,57 +247,6 @@ function updateListTabs() {
 }
 
 // ==========================================================
-//               LAYOUT PADRÃO (ERP) PARA IMPRESSÕES
-// ==========================================================
-function getCabecalhoDavHtml(logoBase64, dataEmissao, davNumber, paginaStr) {
-    return `
-    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 10px;">
-        <div style="display: flex; align-items: flex-start; gap: 15px;">
-            <div style="width: 120px;">
-                ${logoBase64 ? `<img src="${logoBase64}" style="max-width: 100%; height: auto;">` : '<h2 style="margin:0;">LUCA</h2>'}
-            </div>
-            <div style="font-size: 11px; font-family: 'Courier New', Courier, monospace; line-height: 1.2;">
-                <div style="font-weight: bold; font-size: 14px;">LUCA MATERIAL DE CONSTRUCAO LTDA</div>
-                <div>Av Automovel Clube SN Qd 04 Lote 19</div>
-                <div>Parada Angelica Duque De Caxias [RJ] CEP: 25272405</div>
-                <div>CNPJ: 36.671.152/0004-06</div>
-                <div>Tel(s): (21) 2778-3885 | 2739-1480 | 2675-7410</div>
-                <div style="margin-top: 5px; font-weight: bold; font-size: 13px;">DOCUMENTO AUXILIAR DE VENDA</div>
-            </div>
-        </div>
-        <div style="font-size: 11px; text-align: right; font-family: 'Courier New', Courier, monospace; line-height: 1.2;">
-            <div>${dataEmissao}</div>
-            <div>Pagina: ${paginaStr}</div>
-            <div>Relatorio: DAV</div>
-            <div style="margin-top: 10px; font-weight: bold; font-size: 13px;">Nº DAV: ${davNumber.toString().padStart(13, '0')}</div>
-        </div>
-    </div>
-    <div style="font-size: 9px; font-weight: bold; text-align: center; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 4px 0; margin-bottom: 10px; font-family: 'Courier New', monospace;">
-        NÃO É DOCUMENTO FISCAL, NÃO É VALIDO COMO RECIBO E COMO GARANTIA DE MERCADORIA, NÃO COMPROVA PAGAMENTO
-    </div>
-    `;
-}
-
-function getEstiloImpressao() {
-    return `
-    <style>
-        body { font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; padding: 10px; line-height: 1.3; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 10px; font-size: 11px; }
-        th { border-bottom: 1px solid #000; text-align: left; padding: 4px 2px; text-transform: uppercase; font-weight: bold; }
-        td { border-bottom: 1px dotted #ccc; padding: 4px 2px; vertical-align: top; }
-        .text-center { text-align: center; }
-        .text-right { text-align: right; }
-        .font-bold { font-weight: bold; }
-        .page-break { page-break-after: always; }
-        .info-cliente { margin-bottom: 10px; font-size: 12px; }
-        .totais-box { margin-top: 15px; font-size: 12px; }
-        .rodape-observacoes { font-size: 9px; margin-top: 20px; line-height: 1.4; }
-        @media print { .no-print { display: none; } }
-    </style>
-    `;
-}
-
-// ==========================================================
 //               IMPRESSÕES E RELATÓRIOS (PDF / HTML)
 // ==========================================================
 window.abrirDanfe = async function(chave) {
@@ -264,15 +285,19 @@ window.imprimirEspelhoDav = async function(davNumber) {
         let itensHtml = '';
         data.itens.forEach((i, index) => {
             const numItem = String(index + 1).padStart(3, '0');
-            // No balcão (impressão individual) a "Carga Atual" é 0, logo exibe o real.
+            const fabricante = i.fabricante || i.it_fabr || i.pd_fabr || '';
+            const endereco = i.endereco_prateleira || i.it_ende || i.pd_ende || '';
+            
             itensHtml += `
                 <tr>
                     <td class="text-center">${numItem}</td>
-                    <td>${limpaCod(i.pd_codi)} <br> ${i.pd_nome}</td>
+                    <td>${limpaCod(i.pd_codi)} <br> <b>${i.pd_nome}</b></td>
                     <td class="text-center">${i.unidade}</td>
-                    <td class="text-right">${parseFloat(i.quantidade_total).toFixed(2)}</td>
-                    <td class="text-right">${parseFloat(i.quantidade_entregue).toFixed(2)}</td>
-                    <td class="text-right font-bold">${parseFloat(i.quantidade_saldo).toFixed(2)}</td>
+                    <td class="text-center">${parseFloat(i.quantidade_total).toFixed(2)}</td>
+                    <td class="text-center">${parseFloat(i.quantidade_entregue).toFixed(2)}</td>
+                    <td class="text-center font-bold">${parseFloat(i.quantidade_saldo).toFixed(2)}</td>
+                    <td style="font-size: 9px; text-align:center;">${fabricante}</td>
+                    <td style="font-size: 9px; text-align:center;">${endereco}</td>
                 </tr>
             `;
         });
@@ -291,27 +316,40 @@ window.imprimirEspelhoDav = async function(davNumber) {
             ${getCabecalhoDavHtml(logo, dataEmissao, davNumber, '001 [001]')}
 
             <div class="info-cliente">
-                <strong>NOME DO CLIENTE:</strong> ${data.cliente.nome.toUpperCase()}<br>
-                <strong>CPF-CNPJ:</strong> ${data.cliente.doc || 'Não informado'}
+                <table style="margin: 0; border: none; width: 100%;">
+                    <tr>
+                        <td style="border: none; padding: 0;"><strong>NOME DO CLIENTE:</strong> ${data.cliente.nome.toUpperCase()}</td>
+                        <td style="border: none; padding: 0; text-align: right;"><strong>CPF-CNPJ:</strong> ${data.cliente.doc || 'Não informado'}</td>
+                    </tr>
+                </table>
             </div>
 
             <table>
                 <thead>
                     <tr>
-                        <th width="5%" class="text-center">ITEM</th>
-                        <th width="45%">ID-CÓDIGO / DESCRIÇÃO DOS PRODUTOS</th>
-                        <th width="5%" class="text-center">UN</th>
-                        <th width="15%" class="text-right">QTD TOTAL</th>
-                        <th width="15%" class="text-right">JÁ ENTREGUE</th>
-                        <th width="15%" class="text-right">SALDO P/ ENT.</th>
+                        <th width="4%" class="text-center">ITEM</th>
+                        <th width="36%">ID-CÓDIGO / DESCRIÇÃO DOS PRODUTOS</th>
+                        <th width="4%" class="text-center">UN</th>
+                        <th width="10%" class="text-center">QTD TOTAL</th>
+                        <th width="10%" class="text-center">JÁ ENTREGUE</th>
+                        <th width="12%" class="text-center">SALDO P/ ENT.</th>
+                        <th width="14%" class="text-center">FABRICANTE</th>
+                        <th width="10%" class="text-center">ENDEREÇO</th>
                     </tr>
                 </thead>
                 <tbody>${itensHtml}</tbody>
             </table>
 
+            <div class="endereco-entrega">
+                <div class="font-bold" style="margin-bottom: 5px;">[ ENDEREÇO DE ENTREGA ]</div>
+                <div>${data.endereco.logradouro || 'Retirada na Loja / Não informado'}</div>
+                <div>Bairro: ${data.endereco.bairro || '-'} &nbsp;|&nbsp; Cidade: ${data.endereco.cidade || '-'} &nbsp;|&nbsp; CEP: ${data.endereco.cep || '-'}</div>
+                <div style="margin-top: 5px;"><strong>Referência:</strong> ${data.endereco.referencia || '-'}</div>
+            </div>
+
             <div class="totais-box">
                 <div><strong>VENDEDOR:</strong> ${data.vendedor || 'N/I'}</div>
-                <div style="margin-top: 5px;"><strong>TOTAL DO DAV:</strong> R$ ${parseFloat(data.valor_total).toLocaleString('pt-BR', {minimumFractionDigits:2})}</div>
+                <div><strong>TOTAL DO DAV:</strong> R$ ${parseFloat(data.valor_total).toLocaleString('pt-BR', {minimumFractionDigits:2})}</div>
             </div>
 
             <div class="rodape-observacoes">
@@ -322,7 +360,8 @@ window.imprimirEspelhoDav = async function(davNumber) {
                 - ENTREGAS DE SEGUNDA A SABADO DE 8H as 18HRS.
             </div>
             
-            <div style="margin-top: 50px; text-align: center; border-top: 1px dashed #000; width: 60%; margin-left: auto; margin-right: auto; padding-top: 5px; font-weight: bold;">
+            <div style="margin-top: 40px; text-align: center; width: 60%; margin-left: auto; margin-right: auto; padding-top: 5px; font-weight: bold;">
+                ___________________________________________________________<br>
                 Assinatura do Cliente
             </div>
         </body>
@@ -335,7 +374,7 @@ window.imprimirEspelhoDav = async function(davNumber) {
     } catch (e) { showToast("Erro ao gerar impressão.", "error"); } finally { hideLoader(); }
 };
 
-// IMPRESSÃO DE LOTE DE DAVS (AJUSTE DA MATEMÁTICA DE SALDOS)
+// IMPRESSÃO DE LOTE DE DAVS (AGORA COM AS CAIXAS, FABRICANTE E ENDEREÇO)
 window.imprimirPedidosCarga = async function(romaneioId) {
     showLoader();
     try {
@@ -357,7 +396,6 @@ window.imprimirPedidosCarga = async function(romaneioId) {
         davsCompletos.forEach((data, idx) => {
             let itensHtml = '';
             data.itens.forEach((i, index) => {
-                // AQUI ESTÁ A CORREÇÃO MATEMÁTICA! Revertemos o romaneio atual para exibir o que está indo agora.
                 const itemNoRomaneio = romaneioData.itens.find(ri => String(ri.idavs_regi) === String(i.idavs_regi));
                 let qtdNestaCarga = itemNoRomaneio ? parseFloat(itemNoRomaneio.quantidade_a_entregar) : 0;
                 
@@ -365,20 +403,23 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                 let qtdJaEntregueGeral = parseFloat(i.quantidade_entregue);
                 let saldoBanco = parseFloat(i.quantidade_saldo);
 
-                // O que foi entregue "antes de hoje" é o total subtraído do caminhão de hoje
                 let jaEntregueReal = qtdJaEntregueGeral - qtdNestaCarga;
-                // O Saldo que vai no impresso é o que vai no caminhão hoje + o que sobrar no estoque
                 let saldoParaEntregarExibicao = saldoBanco + qtdNestaCarga;
 
                 const numItem = String(index + 1).padStart(3, '0');
+                const fabricante = i.fabricante || i.it_fabr || i.pd_fabr || '';
+                const endereco = i.endereco_prateleira || i.it_ende || i.pd_ende || '';
+
                 itensHtml += `
                     <tr>
                         <td class="text-center">${numItem}</td>
-                        <td>${limpaCod(i.pd_codi)} <br> ${i.pd_nome}</td>
+                        <td>${limpaCod(i.pd_codi)} <br> <b>${i.pd_nome}</b></td>
                         <td class="text-center">${i.unidade}</td>
-                        <td class="text-right">${qtdTotal.toFixed(2)}</td>
-                        <td class="text-right">${Math.max(0, jaEntregueReal).toFixed(2)}</td>
-                        <td class="text-right font-bold">${saldoParaEntregarExibicao.toFixed(2)}</td>
+                        <td class="text-center">${qtdTotal.toFixed(2)}</td>
+                        <td class="text-center">${Math.max(0, jaEntregueReal).toFixed(2)}</td>
+                        <td class="text-center font-bold">${saldoParaEntregarExibicao.toFixed(2)}</td>
+                        <td style="font-size: 9px; text-align:center;">${fabricante}</td>
+                        <td style="font-size: 9px; text-align:center;">${endereco}</td>
                     </tr>
                 `;
             });
@@ -391,27 +432,40 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                 ${getCabecalhoDavHtml(logo, dataEmissao, data.dav_numero, pageStr)}
 
                 <div class="info-cliente">
-                    <strong>NOME DO CLIENTE:</strong> ${data.cliente.nome.toUpperCase()}<br>
-                    <strong>CPF-CNPJ:</strong> ${data.cliente.doc || 'Não informado'}
+                    <table style="margin: 0; border: none; width: 100%;">
+                        <tr>
+                            <td style="border: none; padding: 0;"><strong>NOME DO CLIENTE:</strong> ${data.cliente.nome.toUpperCase()}</td>
+                            <td style="border: none; padding: 0; text-align: right;"><strong>CPF-CNPJ:</strong> ${data.cliente.doc || 'Não informado'}</td>
+                        </tr>
+                    </table>
                 </div>
 
                 <table>
                     <thead>
                         <tr>
-                            <th width="5%" class="text-center">ITEM</th>
-                            <th width="45%">ID-CÓDIGO / DESCRIÇÃO DOS PRODUTOS</th>
-                            <th width="5%" class="text-center">UN</th>
-                            <th width="15%" class="text-right">QTD TOTAL</th>
-                            <th width="15%" class="text-right">JÁ ENTREGUE</th>
-                            <th width="15%" class="text-right">SALDO P/ ENT.</th>
+                            <th width="4%" class="text-center">ITEM</th>
+                            <th width="36%">ID-CÓDIGO / DESCRIÇÃO DOS PRODUTOS</th>
+                            <th width="4%" class="text-center">UN</th>
+                            <th width="10%" class="text-center">QTD TOTAL</th>
+                            <th width="10%" class="text-center">JÁ ENTREGUE</th>
+                            <th width="12%" class="text-center">SALDO P/ ENT.</th>
+                            <th width="14%" class="text-center">FABRICANTE</th>
+                            <th width="10%" class="text-center">ENDEREÇO</th>
                         </tr>
                     </thead>
                     <tbody>${itensHtml}</tbody>
                 </table>
 
+                <div class="endereco-entrega">
+                    <div class="font-bold" style="margin-bottom: 5px;">[ ENDEREÇO DE ENTREGA ]</div>
+                    <div>${data.endereco.logradouro || 'Retirada na Loja / Não informado'}</div>
+                    <div>Bairro: ${data.endereco.bairro || '-'} &nbsp;|&nbsp; Cidade: ${data.endereco.cidade || '-'} &nbsp;|&nbsp; CEP: ${data.endereco.cep || '-'}</div>
+                    <div style="margin-top: 5px;"><strong>Referência:</strong> ${data.endereco.referencia || '-'}</div>
+                </div>
+
                 <div class="totais-box">
                     <div><strong>VENDEDOR:</strong> ${data.vendedor || 'N/I'}</div>
-                    <div style="margin-top: 5px;"><strong>TOTAL DO DAV:</strong> R$ ${parseFloat(data.valor_total).toLocaleString('pt-BR', {minimumFractionDigits:2})}</div>
+                    <div><strong>TOTAL DO DAV:</strong> R$ ${parseFloat(data.valor_total).toLocaleString('pt-BR', {minimumFractionDigits:2})}</div>
                 </div>
 
                 <div class="rodape-observacoes">
@@ -422,7 +476,8 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                     - ENTREGAS DE SEGUNDA A SABADO DE 8H as 18HRS.
                 </div>
                 
-                <div style="margin-top: 50px; text-align: center; border-top: 1px dashed #000; width: 60%; margin-left: auto; margin-right: auto; padding-top: 5px; font-weight: bold;">
+                <div style="margin-top: 40px; text-align: center; width: 60%; margin-left: auto; margin-right: auto; padding-top: 5px; font-weight: bold;">
+                    ___________________________________________________________<br>
                     Assinatura do Cliente
                 </div>
             </div>`;
@@ -436,7 +491,7 @@ window.imprimirPedidosCarga = async function(romaneioId) {
     } catch (e) { showToast("Erro ao gerar lote de DAVs.", "error"); } finally { hideLoader(); }
 };
 
-// IMPRESSÃO ROTEIRO DE CARGA (RESUMO DO MOTORISTA)
+// IMPRESSÃO ROTEIRO DE CARGA (COM TAG: RECEBER NO LOCAL)
 window.imprimirRoteiro = async function(romaneioId) {
     showLoader();
     try {
@@ -452,10 +507,16 @@ window.imprimirRoteiro = async function(romaneioId) {
                     dav_numero: item.dav_numero, cliente: item.cliente_nome, 
                     logradouro: item.logradouro || '', bairro: item.bairro || 'Sem Bairro', 
                     cidade: item.cidade || '', ref: item.referencia || '', tel: item.telefone || '',
-                    itens: [] 
+                    itens: [],
+                    isReceberLocal: false
                 };
             }
             acc[item.dav_numero].itens.push(item);
+            
+            if (item.cobrar_local === '1' || item.cobrar_local === 'S' || item.cobrar_local === 'T' || item.cr_rloc === 'S') {
+                acc[item.dav_numero].isReceberLocal = true;
+            }
+            
             return acc;
         }, {});
         
@@ -465,10 +526,19 @@ window.imprimirRoteiro = async function(romaneioId) {
         <html>
         <head>
             <title>Roteiro de Carga #${data.id}</title>
-            ${getEstiloImpressao()}
             <style>
-                .dav-box { margin-bottom: 15px; page-break-inside: avoid; border: 1px solid #000; padding: 5px; }
-                .dav-header { font-weight: bold; border-bottom: 1px dashed #000; padding-bottom: 3px; margin-bottom: 3px; display: flex; justify-content: space-between;}
+                body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 11px; color: #000; padding: 20px; line-height: 1.3; }
+                .doc-title { font-size: 14px; font-weight: bold; margin: 10px 0; text-align: center; text-transform: uppercase; }
+                .row-between { display: flex; justify-content: space-between; margin-bottom: 5px; }
+                .dav-box { border: 1px solid #000; margin-bottom: 15px; page-break-inside: avoid; }
+                .dav-header { background-color: #f3f4f6; padding: 6px; font-weight: bold; border-bottom: 1px solid #000; display: flex; justify-content: space-between; align-items: center;}
+                .dav-address { padding: 6px; border-bottom: 1px solid #000; font-size: 10px; }
+                table { width: 100%; border-collapse: collapse; }
+                th { border-bottom: 1px solid #000; text-align: left; padding: 4px; font-size: 10px; text-transform: uppercase; }
+                td { border-bottom: 1px dotted #ccc; padding: 4px; font-size: 11px; vertical-align: top;}
+                .text-center { text-align: center; }
+                .sig-box { padding: 25px 10px 10px 10px; text-align: right; border-top: 1px solid #000; font-weight: bold; }
+                @media print { .no-print { display: none; } }
             </style>
         </head>
         <body>
@@ -476,23 +546,25 @@ window.imprimirRoteiro = async function(romaneioId) {
                 <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Imprimir Roteiro</button>
             </div>
             
-            <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; align-items: center;">
-                <div style="width: 140px;">${logo ? `<img src="${logo}" style="max-width: 100%;">` : '<h2>LUCA</h2>'}</div>
-                <div style="text-align: right; line-height: 1.4;">
-                    <div style="font-size: 16px; font-weight: bold;">ROTEIRO DE CARGA #${data.id}</div>
-                    <div><strong>Data:</strong> ${new Date(data.data_criacao).toLocaleString('pt-BR')} &nbsp;|&nbsp; <strong>Origem:</strong> ${data.filial_origem}</div>
-                    <div><strong>Motorista:</strong> ${data.nome_motorista} &nbsp;|&nbsp; <strong>Veículo:</strong> ${data.modelo_veiculo} (${data.placa_veiculo})</div>
-                </div>
+            ${getCabecalhoHtml(logo)}
+            
+            <div class="doc-title">ROTEIRO DE CARGA #${data.id}</div>
+            
+            <div class="row-between" style="border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 15px;">
+                <div><strong>Data Fechamento:</strong> ${new Date(data.data_criacao).toLocaleString('pt-BR')} &nbsp;|&nbsp; <strong>Origem:</strong> ${data.filial_origem}</div>
+                <div><strong>Motorista:</strong> ${data.nome_motorista} &nbsp;|&nbsp; <strong>Veículo:</strong> ${data.modelo_veiculo} (${data.placa_veiculo})</div>
             </div>`;
             
         davsArray.forEach(dav => {
+            const tagReceber = dav.isReceberLocal ? `<span style="background:#000; color:#fff; padding:3px 6px; font-size:10px; border-radius:3px; margin-left:8px;">RECEBER NO LOCAL</span>` : '';
+            
             html += `
             <div class="dav-box">
                 <div class="dav-header">
-                    <span>DAV #${dav.dav_numero.toString().padStart(13, '0')} - CLIENTE: ${dav.cliente.toUpperCase()}</span>
+                    <span style="display:flex; align-items:center;">DAV #${dav.dav_numero.toString().padStart(13, '0')} - CLIENTE: ${dav.cliente.toUpperCase()} ${tagReceber}</span>
                     <span>BAIRRO: ${dav.bairro.toUpperCase()}</span>
                 </div>
-                <div style="margin-bottom: 5px;">
+                <div class="dav-address">
                     <strong>ENDEREÇO:</strong> ${dav.logradouro}, ${dav.bairro} - ${dav.cidade}<br>
                     <strong>REF:</strong> ${dav.ref} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>TEL:</strong> ${dav.tel}
                 </div>
@@ -501,7 +573,7 @@ window.imprimirRoteiro = async function(romaneioId) {
                         <th width="15%">ID-CÓDIGO</th>
                         <th width="60%">DESCRIÇÃO DO PRODUTO</th>
                         <th width="10%" class="text-center">UN</th>
-                        <th width="15%" class="text-center">A ENTREGAR</th>
+                        <th width="15%" class="text-center">QTD A ENTREGAR</th>
                     </tr>
                     ${dav.itens.map(i => `
                         <tr>
@@ -512,7 +584,7 @@ window.imprimirRoteiro = async function(romaneioId) {
                         </tr>
                     `).join('')}
                 </table>
-                <div style="text-align: right; padding-top: 15px; border-top: 1px dotted #ccc; margin-top: 10px;">
+                <div class="sig-box">
                     DATA: ___/___/_______ &nbsp;&nbsp;&nbsp;&nbsp; ASSINATURA CLIENTE: _________________________________________
                 </div>
             </div>`;
@@ -534,7 +606,10 @@ window.abrirVisualizacaoRomaneio = async function(id) {
         const data = await res.json();
         
         const modal = document.getElementById('view-romaneio-modal');
-        if (!modal) { showToast("Modal de visualização não encontrado.", "error"); return; }
+        if (!modal) {
+            showToast("Modal de visualização não encontrado na página.", "error");
+            return;
+        }
 
         document.getElementById('view-romaneio-id').textContent = data.id;
         document.getElementById('view-motorista').textContent = data.nome_motorista;
@@ -574,6 +649,7 @@ window.abrirVisualizacaoRomaneio = async function(id) {
             html += `</div></div>`;
         }
         container.innerHTML = html;
+        
         modal.classList.remove('hidden');
         setTimeout(() => modal.classList.remove('opacity-0'), 10);
 
@@ -625,16 +701,16 @@ function renderDavResults(data) {
         
         if (itens.length > 0) {
             itemsHtml = `
-                <table class="min-w-full text-sm">
+                <table class="min-w-full text-sm" style="border:none;">
                     <thead class="bg-gray-50 border-b border-gray-200">
-                        <tr><th class="px-3 py-2 text-left font-bold text-gray-600">Produto</th><th class="px-2 py-2 text-center font-bold text-gray-600">Saldo</th><th class="px-3 py-2 text-center font-bold text-gray-600">Retirar</th></tr>
+                        <tr><th style="border:none;" class="px-3 py-2 text-left font-bold text-gray-600">Produto</th><th style="border:none;" class="px-2 py-2 text-center font-bold text-gray-600">Saldo</th><th style="border:none;" class="px-3 py-2 text-center font-bold text-gray-600">Retirar</th></tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
                         ${itens.map(item => `
                             <tr class="expandable-row hover:bg-gray-50 transition-colors" data-idavs-regi="${item.idavs_regi}">
-                                <td class="px-3 py-3 font-medium text-gray-800">${limpaCod(item.pd_codi)} - ${item.pd_nome} <span class="text-gray-400 text-xs ml-1">(${item.unidade})</span> ${item.quantidade_devolvida > 0 ? `<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold ml-2">Devolvido: ${item.quantidade_devolvida}</span>` : ''}</td>
-                                <td class="px-2 py-3 text-center font-black text-sm ${item.quantidade_saldo > 0 ? 'text-indigo-600' : 'text-gray-400'}">${item.quantidade_saldo}</td>
-                                <td class="px-3 py-3 text-center">
+                                <td style="border:none;" class="px-3 py-3 font-medium text-gray-800">${limpaCod(item.pd_codi)} - ${item.pd_nome} <span class="text-gray-400 text-xs ml-1">(${item.unidade})</span> ${item.quantidade_devolvida > 0 ? `<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold ml-2">Devolvido: ${item.quantidade_devolvida}</span>` : ''}</td>
+                                <td style="border:none;" class="px-2 py-3 text-center font-black text-sm ${item.quantidade_saldo > 0 ? 'text-indigo-600' : 'text-gray-400'}">${item.quantidade_saldo}</td>
+                                <td style="border:none;" class="px-3 py-3 text-center">
                                     <input type="number" step="1" class="w-24 text-center rounded-md border-gray-300 focus:ring-indigo-500 shadow-sm text-base font-bold" value="0" min="0" max="${item.quantidade_saldo}" ${item.quantidade_saldo > 0 && status_caixa === '1' ? '' : 'disabled title="Apenas pedidos pagos podem ser retirados"'}>
                                 </td>
                             </tr>`).join('')}
