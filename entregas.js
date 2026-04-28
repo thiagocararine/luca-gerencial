@@ -3,23 +3,12 @@ document.addEventListener('DOMContentLoaded', initEntregasPage);
 // ==========================================================
 //               VARIÁVEIS GLOBAIS E ESTADO
 // ==========================================================
-let currentRomaneioId = null;     
-let veiculosDisp = []; 
-let motoristasDisp = []; 
-let pendingDavs = []; 
-let cartDavs = [];    
-let romaneioListStatus = 'Em montagem'; 
-
-let acertoRomaneioId = null;
-let acertoItensOriginal = [];
-let acertoChecklist = {}; 
-
-let isFetchingPedidos = false;
-let isFinalizandoCarga = false;
-let isAcertandoRomaneio = false;
-let isConfirmandoRetirada = false;
-
-let lastRomaneiosHtml = ''; 
+let currentRomaneioId = null, veiculosDisp = [], motoristasDisp = [];
+let pendingDavs = [], cartDavs = [], romaneioListStatus = 'Em montagem';
+let acertoRomaneioId = null, acertoItensOriginal = [], acertoChecklist = {};
+let isFetchingPedidos = false, isFinalizandoCarga = false;
+let isAcertandoRomaneio = false, isConfirmandoRetirada = false;
+let lastRomaneiosHtml = '';
 
 // ==========================================================
 //               INICIALIZAÇÃO E UTILIDADES
@@ -45,7 +34,6 @@ function initEntregasPage() {
     switchView('romaneio-list-view');
     gerenciarAcessoModulos();
 
-    // AUTO-REFRESH SILENCIOSO A CADA 15 SEGUNDOS
     setInterval(() => {
         const view = document.getElementById('romaneio-list-view');
         const modal = document.getElementById('view-romaneio-modal');
@@ -90,7 +78,6 @@ function showCustomPrompt(title, message, maxVal, onConfirmCallback) {
     const modal = document.getElementById('custom-prompt-modal');
     document.getElementById('prompt-title').textContent = title;
     document.getElementById('prompt-message').textContent = message;
-    
     const input = document.getElementById('prompt-input');
     input.value = ''; input.max = maxVal;
     
@@ -112,7 +99,6 @@ function lockUI() { document.getElementById('ui-lock-overlay').classList.remove(
 function unlockUI() { document.getElementById('ui-lock-overlay').classList.add('hidden'); }
 function showLoader() { const l = document.getElementById('global-loader'); if(l) l.style.display = 'flex'; }
 function hideLoader() { const l = document.getElementById('global-loader'); if(l) l.style.display = 'none'; }
-
 function limpaCod(cod) { return cod ? cod.toString().replace(/^0+(?=\d)/, '') : ''; }
 
 // ==========================================================
@@ -133,7 +119,8 @@ function getCabecalhoHtml(logoBase64) {
     `;
 }
 
-function getCabecalhoDavHtml(logoBase64, dataEmissao, davNumber, paginaStr) {
+function getCabecalhoDavHtml(logoBase64, dataEmissao, davNumber, paginaStr, isReceberLocal = false) {
+    const tagReceber = isReceberLocal ? ` <span style="font-weight:bold; font-size:12px;">{ Receber no Local }</span>` : '';
     return `
     <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 10px;">
         <div style="display: flex; align-items: flex-start; gap: 15px;">
@@ -144,7 +131,7 @@ function getCabecalhoDavHtml(logoBase64, dataEmissao, davNumber, paginaStr) {
                 <div style="font-weight: bold; font-size: 14px;">LUCA MATERIAL DE CONSTRUCAO LTDA</div>
                 <div>Av Automovel Clube SN Qd 04 Lote 19</div>
                 <div>Parada Angelica Duque De Caxias [RJ] CEP: 25272405</div>
-                <div>CNPJ: 36.671.152/0004-06</div>
+                <div>CNPJ: 36.671.152/0004-06 ${tagReceber}</div>
                 <div>Tel(s): (21) 2778-3885 | 2739-1480 | 2675-7410</div>
                 <div style="margin-top: 5px; font-weight: bold; font-size: 13px;">DOCUMENTO AUXILIAR DE VENDA</div>
             </div>
@@ -166,23 +153,19 @@ function getEstiloImpressao() {
     return `
     <style>
         @page { margin: 5mm; }
-        body { font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; padding: 0; margin: 0; line-height: 1.4; }
-        
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 10px; font-size: 11px; }
-        th, td { border: 1px solid #000; padding: 6px 4px; }
+        body { font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; padding: 0; margin: 0; line-height: 1.3; }
+        table { width: 100%; border-collapse: collapse; margin-top: 5px; margin-bottom: 5px; font-size: 11px; }
+        th, td { border: 1px solid #000; padding: 4px 2px; }
         th { background-color: #f5f5f5; text-align: left; text-transform: uppercase; font-weight: bold; font-size: 10px; }
         td { vertical-align: middle; }
-        
         .text-center { text-align: center; }
         .text-right { text-align: right; }
         .font-bold { font-weight: bold; }
         .page-break { page-break-after: always; }
-        
-        .info-cliente { margin-bottom: 10px; font-size: 12px; border: 1px solid #000; padding: 5px; }
-        .endereco-entrega { border: 1px solid #000; padding: 8px; margin-top: 15px; }
-        .totais-box { margin-top: 15px; font-size: 12px; display: flex; justify-content: space-between; border: 1px solid #000; padding: 5px; background: #f9f9f9; }
-        
-        .rodape-observacoes { font-size: 9px; margin-top: 15px; line-height: 1.4; border: 1px solid #000; padding: 5px; }
+        .info-cliente { margin-bottom: 5px; font-size: 11px; border: 1px solid #000; padding: 4px; }
+        .endereco-entrega { border: 1px solid #000; padding: 5px; margin-top: 10px; font-size: 11px;}
+        .totais-box { margin-top: 10px; font-size: 12px; display: flex; justify-content: space-between; border: 1px solid #000; padding: 5px; background: #f9f9f9; }
+        .rodape-observacoes { font-size: 9px; margin-top: 10px; line-height: 1.2; border: 1px solid #000; padding: 5px; }
         @media print { .no-print { display: none; } }
     </style>
     `;
@@ -197,7 +180,6 @@ function switchView(viewId) {
     });
     const target = document.getElementById(viewId);
     if (target) target.classList.remove('hidden');
-
     if (viewId === 'romaneio-list-view') loadRomaneiosAtivos();
     if (viewId === 'historico-view') loadVeiculosHistorico();
 }
@@ -213,7 +195,6 @@ function setupEventListeners() {
 
     document.getElementById('search-dav-btn')?.addEventListener('click', handleSearchDav);
     document.getElementById('dav-search-input')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSearchDav(); });
-
     document.getElementById('btn-nova-carga')?.addEventListener('click', () => abrirTorreDeControle(null));
     document.getElementById('romaneios-list-container')?.addEventListener('click', handleRomaneioClick);
     document.getElementById('filter-data-cargas')?.addEventListener('change', () => loadRomaneiosAtivos(false));
@@ -272,7 +253,6 @@ window.abrirDanfe = async function(chave) {
     } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
 }
 
-// IMPRESSÃO DE ESPELHO DAV INDIVIDUAL (BALCÃO)
 window.imprimirEspelhoDav = async function(davNumber) {
     showLoader();
     try {
@@ -282,15 +262,14 @@ window.imprimirEspelhoDav = async function(davNumber) {
         const logo = localStorage.getItem('company_logo') || '';
         const printWindow = window.open('', '_blank');
         const dataEmissao = data.data_hora_pedido ? new Date(data.data_hora_pedido).toLocaleString('pt-BR') : '';
+        const isReceberLocal = (data.cobrar_local === '1' || data.cobrar_local === 'S' || data.cobrar_local === 'T' || data.status_caixa !== '1');
 
         let itensHtml = '';
         data.itens.forEach((i, index) => {
             const numItem = String(index + 1).padStart(3, '0');
             const fabricante = i.fabricante || i.it_fabr || i.pd_fabr || '';
             const endereco = i.endereco_prateleira || i.it_ende || i.pd_ende || '';
-            
-            // Tratamento de info extra (Ex: i.informacao_adicional)
-            const infoAdicional = i.informacao_adicional ? `<br><span style="font-size:10px; font-style:italic; color:#555;">${i.informacao_adicional}</span>` : '';
+            const infoAdicional = (i.observacao || i.it_obsc) ? `<br><span style="font-size:10px; color:#333;">${i.observacao || i.it_obsc}</span>` : '';
             
             const qtd = parseFloat(i.quantidade_total || i.it_quan || 0).toFixed(2);
             const vlUnit = parseFloat(i.valor_unitario || i.it_prec || i.vl_unitario || 0).toFixed(2);
@@ -302,8 +281,8 @@ window.imprimirEspelhoDav = async function(davNumber) {
                     <td class="text-center">${numItem}</td>
                     <td>${limpaCod(i.pd_codi)} <br> <b>${i.pd_nome}</b>${infoAdicional}</td>
                     <td class="text-center">${i.unidade}</td>
-                    <td style="font-size: 10px; text-align:center;">${fabricante}</td>
-                    <td style="font-size: 10px; text-align:center;">${endereco}</td>
+                    <td style="font-size: 9px; text-align:center;">${fabricante}</td>
+                    <td style="font-size: 9px; text-align:center;">${endereco}</td>
                     <td class="text-center">${qtd}</td>
                     <td class="text-right">${vlUnit}</td>
                     <td class="text-right">${vlTot}</td>
@@ -319,11 +298,11 @@ window.imprimirEspelhoDav = async function(davNumber) {
             ${getEstiloImpressao()}
         </head>
         <body>
-            <div class="no-print" style="margin-bottom: 20px; text-align: center;">
+            <div class="no-print" style="margin-bottom: 10px; text-align: center;">
                 <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Imprimir Espelho DAV</button>
             </div>
             
-            ${getCabecalhoDavHtml(logo, dataEmissao, davNumber, '001 [001]')}
+            ${getCabecalhoDavHtml(logo, dataEmissao, davNumber, '001 [001]', isReceberLocal)}
 
             <div class="info-cliente">
                 <table style="margin: 0; border: none; width: 100%;">
@@ -338,7 +317,7 @@ window.imprimirEspelhoDav = async function(davNumber) {
                 <thead>
                     <tr>
                         <th width="4%" class="text-center">ITEM</th>
-                        <th width="32%">ID-CÓDIGO / DESCRIÇÃO DOS PRODUTOS</th>
+                        <th width="32%">ID-CÓD / DESCRIÇÃO DOS PRODUTOS</th>
                         <th width="4%" class="text-center">UN</th>
                         <th width="12%" class="text-center">FABRICANTE</th>
                         <th width="10%" class="text-center">ENDEREÇO</th>
@@ -352,10 +331,10 @@ window.imprimirEspelhoDav = async function(davNumber) {
             </table>
 
             <div class="endereco-entrega">
-                <div class="font-bold" style="margin-bottom: 5px;">[ ENDEREÇO DE ENTREGA ]</div>
+                <div class="font-bold" style="margin-bottom: 2px;">[ ENDEREÇO DE ENTREGA ]</div>
                 <div>${data.endereco.logradouro || 'Retirada na Loja / Não informado'}</div>
                 <div>Bairro: ${data.endereco.bairro || '-'} &nbsp;|&nbsp; Cidade: ${data.endereco.cidade || '-'} &nbsp;|&nbsp; CEP: ${data.endereco.cep || '-'}</div>
-                <div style="margin-top: 5px;"><strong>Referência:</strong> ${data.endereco.referencia || '-'}</div>
+                <div style="margin-top: 2px;"><strong>Referência:</strong> ${data.endereco.referencia || '-'}</div>
             </div>
 
             <div class="totais-box">
@@ -371,7 +350,7 @@ window.imprimirEspelhoDav = async function(davNumber) {
                 - ENTREGAS DE SEGUNDA A SABADO DE 8H as 18HRS.
             </div>
             
-            <div style="margin-top: 60px; text-align: center; width: 80%; margin-left: auto; margin-right: auto; padding-top: 10px; font-weight: bold;">
+            <div style="margin-top: 50px; text-align: center; width: 80%; margin-left: auto; margin-right: auto; padding-top: 5px; font-weight: bold;">
                 _________________________________________________________________________________<br>
                 Assinatura do Cliente / Ciente e de acordo com o recebimento
             </div>
@@ -385,7 +364,6 @@ window.imprimirEspelhoDav = async function(davNumber) {
     } catch (e) { showToast("Erro ao gerar impressão.", "error"); } finally { hideLoader(); }
 };
 
-// IMPRESSÃO DE LOTE DE DAVS (AGORA COM AS CAIXAS, FABRICANTE E ENDEREÇO)
 window.imprimirPedidosCarga = async function(romaneioId) {
     showLoader();
     try {
@@ -400,11 +378,13 @@ window.imprimirPedidosCarga = async function(romaneioId) {
         const printWindow = window.open('', '_blank');
 
         let html = `<html><head><title>DAVs da Carga #${romaneioId}</title>${getEstiloImpressao()}</head><body>
-        <div class="no-print" style="margin-bottom: 20px; text-align: center;">
+        <div class="no-print" style="margin-bottom: 10px; text-align: center;">
             <button onclick="window.print()" style="padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Imprimir Todos os DAVs (Lote)</button>
         </div>`;
 
         davsCompletos.forEach((data, idx) => {
+            const isReceberLocal = (data.cobrar_local === '1' || data.cobrar_local === 'S' || data.cobrar_local === 'T' || data.status_caixa !== '1');
+
             let itensHtml = '';
             data.itens.forEach((i, index) => {
                 const itemNoRomaneio = romaneioData.itens.find(ri => String(ri.idavs_regi) === String(i.idavs_regi));
@@ -416,8 +396,7 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                 const numItem = String(index + 1).padStart(3, '0');
                 const fabricante = i.fabricante || i.it_fabr || i.pd_fabr || '';
                 const endereco = i.endereco_prateleira || i.it_ende || i.pd_ende || '';
-                
-                const infoAdicional = i.informacao_adicional ? `<br><span style="font-size:10px; font-style:italic; color:#555;">${i.informacao_adicional}</span>` : '';
+                const infoAdicional = (i.observacao || i.it_obsc) ? `<br><span style="font-size:10px; color:#333;">${i.observacao || i.it_obsc}</span>` : '';
                 
                 const qtd = parseFloat(i.quantidade_total || i.it_quan || 0).toFixed(2);
                 const vlUnit = parseFloat(i.valor_unitario || i.it_prec || i.vl_unitario || 0).toFixed(2);
@@ -428,8 +407,8 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                         <td class="text-center">${numItem}</td>
                         <td>${limpaCod(i.pd_codi)} <br> <b>${i.pd_nome}</b>${infoAdicional}</td>
                         <td class="text-center">${i.unidade}</td>
-                        <td style="font-size: 10px; text-align:center;">${fabricante}</td>
-                        <td style="font-size: 10px; text-align:center;">${endereco}</td>
+                        <td style="font-size: 9px; text-align:center;">${fabricante}</td>
+                        <td style="font-size: 9px; text-align:center;">${endereco}</td>
                         <td class="text-center">${qtd}</td>
                         <td class="text-right">${vlUnit}</td>
                         <td class="text-right">${vlTot}</td>
@@ -443,7 +422,7 @@ window.imprimirPedidosCarga = async function(romaneioId) {
 
             html += `
             <div class="${idx < davsCompletos.length - 1 ? 'page-break' : ''}">
-                ${getCabecalhoDavHtml(logo, dataEmissao, data.dav_numero, pageStr)}
+                ${getCabecalhoDavHtml(logo, dataEmissao, data.dav_numero, pageStr, isReceberLocal)}
 
                 <div class="info-cliente">
                     <table style="margin: 0; border: none; width: 100%;">
@@ -472,10 +451,10 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                 </table>
 
                 <div class="endereco-entrega">
-                    <div class="font-bold" style="margin-bottom: 5px;">[ ENDEREÇO DE ENTREGA ]</div>
+                    <div class="font-bold" style="margin-bottom: 2px;">[ ENDEREÇO DE ENTREGA ]</div>
                     <div>${data.endereco.logradouro || 'Retirada na Loja / Não informado'}</div>
                     <div>Bairro: ${data.endereco.bairro || '-'} &nbsp;|&nbsp; Cidade: ${data.endereco.cidade || '-'} &nbsp;|&nbsp; CEP: ${data.endereco.cep || '-'}</div>
-                    <div style="margin-top: 5px;"><strong>Referência:</strong> ${data.endereco.referencia || '-'}</div>
+                    <div style="margin-top: 2px;"><strong>Referência:</strong> ${data.endereco.referencia || '-'}</div>
                 </div>
 
                 <div class="totais-box">
@@ -491,7 +470,7 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                     - ENTREGAS DE SEGUNDA A SABADO DE 8H as 18HRS.
                 </div>
                 
-                <div style="margin-top: 60px; text-align: center; width: 80%; margin-left: auto; margin-right: auto; padding-top: 10px; font-weight: bold;">
+                <div style="margin-top: 50px; text-align: center; width: 80%; margin-left: auto; margin-right: auto; padding-top: 5px; font-weight: bold;">
                     _________________________________________________________________________________<br>
                     Assinatura do Cliente / Ciente e de acordo com o recebimento
                 </div>
@@ -506,7 +485,6 @@ window.imprimirPedidosCarga = async function(romaneioId) {
     } catch (e) { showToast("Erro ao gerar lote de DAVs.", "error"); } finally { hideLoader(); }
 };
 
-// IMPRESSÃO ROTEIRO DE CARGA (COM TAG: RECEBER NO LOCAL)
 window.imprimirRoteiro = async function(romaneioId) {
     showLoader();
     try {
@@ -522,16 +500,13 @@ window.imprimirRoteiro = async function(romaneioId) {
                     dav_numero: item.dav_numero, cliente: item.cliente_nome, 
                     logradouro: item.logradouro || '', bairro: item.bairro || 'Sem Bairro', 
                     cidade: item.cidade || '', ref: item.referencia || '', tel: item.telefone || '',
-                    itens: [],
-                    isReceberLocal: false
+                    itens: [], isReceberLocal: false
                 };
             }
             acc[item.dav_numero].itens.push(item);
-            
             if (item.cobrar_local === '1' || item.cobrar_local === 'S' || item.cobrar_local === 'T' || item.cr_rloc === 'S') {
                 acc[item.dav_numero].isReceberLocal = true;
             }
-            
             return acc;
         }, {});
         
@@ -543,7 +518,7 @@ window.imprimirRoteiro = async function(romaneioId) {
             <title>Roteiro de Carga #${data.id}</title>
             <style>
                 @page { margin: 5mm; }
-                body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 11px; color: #000; padding: 0; margin: 0; line-height: 1.4; }
+                body { font-family: 'Helvetica', Arial, sans-serif; font-size: 11px; color: #000; padding: 0; margin: 0; line-height: 1.4; }
                 .doc-title { font-size: 14px; font-weight: bold; margin: 10px 0; text-align: center; text-transform: uppercase; }
                 .row-between { display: flex; justify-content: space-between; margin-bottom: 5px; }
                 .dav-box { border: 1px solid #000; margin-bottom: 15px; page-break-inside: avoid; }
@@ -622,10 +597,7 @@ window.abrirVisualizacaoRomaneio = async function(id) {
         const data = await res.json();
         
         const modal = document.getElementById('view-romaneio-modal');
-        if (!modal) {
-            showToast("Modal de visualização não encontrado na página.", "error");
-            return;
-        }
+        if (!modal) { showToast("Modal não encontrado.", "error"); return; }
 
         document.getElementById('view-romaneio-id').textContent = data.id;
         document.getElementById('view-motorista').textContent = data.nome_motorista;
@@ -671,7 +643,6 @@ window.abrirVisualizacaoRomaneio = async function(id) {
 
     } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
 };
-
 
 // ==========================================================
 //               ABA 1: RETIRADA RÁPIDA (BALCÃO)
@@ -720,7 +691,7 @@ function renderDavResults(data) {
             itemsHtml = `
                 <table class="min-w-full text-sm" style="border:none;">
                     <thead class="bg-gray-50 border-b border-gray-200">
-                        <tr><th style="border:none;" class="px-3 py-2 text-left font-bold text-gray-600">Produto</th><th style="border:none;" class="px-2 py-2 text-center font-bold text-gray-600">Saldo</th><th style="border:none;" class="px-3 py-2 text-center font-bold text-gray-600">Retirar</th></tr>
+                        <tr><th style="border:none;background:transparent;" class="px-3 py-2 text-left font-bold text-gray-600">Produto</th><th style="border:none;background:transparent;" class="px-2 py-2 text-center font-bold text-gray-600">Saldo</th><th style="border:none;background:transparent;" class="px-3 py-2 text-center font-bold text-gray-600">Retirar</th></tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
                         ${itens.map(item => `
@@ -1335,7 +1306,6 @@ async function finalizarCarga() {
 
             if (payloadItens.length > 0) {
                 const resItens = await fetch(`${apiUrlBase}/entregas/romaneios/${romaneioId}/itens`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` }, body: JSON.stringify(payloadItens) });
-                
                 if (!resItens.ok) {
                     let errMsg = "Erro ao inserir itens no banco.";
                     try { const errObj = await resItens.json(); errMsg = errObj.error || errMsg; } catch(e) {}
@@ -1344,14 +1314,11 @@ async function finalizarCarga() {
             }
 
             showToast(`Carga gravada! Abrindo relatórios...`, 'success');
-            
             window.imprimirPedidosCarga(romaneioId); 
-            
             switchView('romaneio-list-view');
             
-        } catch (e) { 
-            showToast(e.message, "error"); 
-        } finally { 
+        } catch (e) { showToast(e.message, "error"); } 
+        finally { 
             isFinalizandoCarga = false;
             unlockUI(); 
             btn.innerHTML = '<i data-feather="check-circle" class="w-4 h-4"></i> <span id="texto-btn-finalizar">Finalizar e Despachar Carga</span>';
@@ -1361,9 +1328,7 @@ async function finalizarCarga() {
 
     if (capMaxima > 0 && pesoTotal > capMaxima) {
         showCustomConfirm("Capacidade Excedida!", `A carga excede a capacidade em ${(pesoTotal - capMaxima).toLocaleString('pt-BR')}kg. Forçar o despacho?`, executaFinalizacao);
-    } else {
-        executaFinalizacao();
-    }
+    } else { executaFinalizacao(); }
 }
 
 // ==========================================================
@@ -1543,80 +1508,10 @@ async function buscarHistorico() {
     }
 }
 
-window.abrirVisualizacaoRomaneio = async function(id) {
-    showLoader();
-    try {
-        const res = await fetch(`${apiUrlBase}/entregas/romaneios/${id}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!res.ok) throw new Error("Erro ao buscar detalhes da carga.");
-        const data = await res.json();
-        
-        const modal = document.getElementById('view-romaneio-modal');
-        if (!modal) {
-            showToast("Modal de visualização não encontrado na página.", "error");
-            return;
-        }
-
-        document.getElementById('view-romaneio-id').textContent = data.id;
-        document.getElementById('view-motorista').textContent = data.nome_motorista;
-        document.getElementById('view-veiculo').textContent = `${data.modelo_veiculo} (${data.placa_veiculo})`;
-        document.getElementById('view-status').textContent = data.status;
-
-        document.getElementById('btn-imprimir-romaneio').onclick = () => window.imprimirRoteiro(data.id);
-        
-        let btnImprimirDavs = document.getElementById('btn-imprimir-davs');
-        if (!btnImprimirDavs) {
-            const container = document.getElementById('btn-imprimir-romaneio').parentNode;
-            btnImprimirDavs = document.createElement('button');
-            btnImprimirDavs.id = 'btn-imprimir-davs';
-            btnImprimirDavs.className = 'action-btn bg-emerald-100 text-emerald-800 hover:bg-emerald-600 hover:text-white shadow-md flex items-center gap-2 transition-colors border border-emerald-200 mr-2';
-            btnImprimirDavs.innerHTML = '<i data-feather="layers" class="w-4 h-4"></i> Imprimir Lote DAVs';
-            container.insertBefore(btnImprimirDavs, document.getElementById('btn-imprimir-romaneio'));
-            if(typeof feather !== 'undefined') feather.replace();
-        }
-        btnImprimirDavs.onclick = () => window.imprimirPedidosCarga(data.id);
-
-        const container = document.getElementById('view-itens-container');
-        const grouped = data.itens.reduce((acc, item) => {
-            if(!acc[item.dav_numero]) acc[item.dav_numero] = { cliente: item.cliente_nome, bairro: item.bairro, itens: [] };
-            acc[item.dav_numero].itens.push(item); return acc;
-        }, {});
-
-        let html = '';
-        for (const [davNumero, dados] of Object.entries(grouped)) {
-            html += `<div class="border border-gray-200 rounded-lg overflow-hidden shadow-sm mb-4"><div class="bg-gray-100 px-4 py-2 border-b flex justify-between items-center"><span class="font-black text-gray-800 text-sm">DAV #${davNumero.toString().padStart(13, '0')} - <span class="text-gray-600 font-medium">${dados.cliente}</span></span> <span class="text-xs font-bold text-gray-500">${dados.bairro || 'Sem Bairro'}</span></div><div class="divide-y divide-gray-100 bg-white">`;
-            dados.itens.forEach(item => {
-                html += `
-                    <div class="p-3 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                        <p class="text-sm font-bold text-gray-800">${limpaCod(item.produto_codigo)} - ${item.produto_nome}</p>
-                        <p class="text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">${parseFloat(item.quantidade_a_entregar)} ${item.produto_unidade}</p>
-                    </div>`;
-            });
-            html += `</div></div>`;
-        }
-        container.innerHTML = html;
-        
-        modal.classList.remove('hidden');
-        setTimeout(() => modal.classList.remove('opacity-0'), 10);
-
-    } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
-};
-
-// ==========================================================
-//               FUNÇÕES DE UTILIDADE
-// ==========================================================
 function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) return;
-
-    const mapaModulos = {
-        'lancamentos': 'despesas.html',
-        'logistica': 'logistica.html',
-        'entregas': 'entregas.html',
-        'checklist': 'checklist.html',
-        'produtos': 'produtos.html',
-        'configuracoes': 'settings.html'
-    };
-
+    const mapaModulos = { 'lancamentos': 'despesas.html', 'logistica': 'logistica.html', 'entregas': 'entregas.html', 'checklist': 'checklist.html', 'produtos': 'produtos.html', 'configuracoes': 'settings.html' };
     for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
         const permissao = userData.permissoes.find(p => p.nome_modulo === nomeModulo);
         if (!permissao || !permissao.permitido) {
@@ -1628,8 +1523,7 @@ function gerenciarAcessoModulos() {
 
 function handleApiError(response) {
     if (response.status === 401 || response.status === 403) {
-        showToast("Sessão expirada. Faça login novamente.", "error");
-        setTimeout(logout, 2000);
+        showToast("Sessão expirada. Faça login novamente.", "error"); setTimeout(logout, 2000);
     } else {
         response.json().then(data => showToast(`Erro: ${data.error || response.statusText}`, "error")).catch(() => showToast('Erro na API.', "error"));
     }
