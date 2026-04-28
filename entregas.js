@@ -102,6 +102,26 @@ function hideLoader() { const l = document.getElementById('global-loader'); if(l
 function limpaCod(cod) { return cod ? cod.toString().replace(/^0+(?=\d)/, '') : ''; }
 
 // ==========================================================
+//               TRATAMENTO DE DADOS DO ERP
+// ==========================================================
+function formatarEnderecoCompleto(end) {
+    if (!end) return 'Retirada na Loja / Não informado';
+    const partes = end.split(';');
+    const rua = partes[0] ? partes[0].trim() : '';
+    const numComp = (partes[3] && partes[3].trim() !== '0' && partes[3].trim() !== '') ? ', ' + partes[3].trim() : '';
+    return rua + numComp;
+}
+
+function extrairObservacao(obsRaw) {
+    if (!obsRaw) return '';
+    if (typeof obsRaw === 'object' && obsRaw.data) {
+        try { return new TextDecoder('utf-8').decode(new Uint8Array(obsRaw.data)); } 
+        catch(e) { return String.fromCharCode.apply(null, obsRaw.data); }
+    }
+    return String(obsRaw).trim();
+}
+
+// ==========================================================
 //               LAYOUT PADRÃO (ERP) PARA IMPRESSÕES
 // ==========================================================
 function getCabecalhoHtml(logoBase64) {
@@ -119,32 +139,33 @@ function getCabecalhoHtml(logoBase64) {
     `;
 }
 
-function getCabecalhoDavHtml(logoBase64, dataEmissao, davNumber, paginaStr, isReceberLocal = false) {
-    const tagReceber = isReceberLocal ? ` <span style="background:#000; color:#fff; padding:2px 6px; font-size:11px; border-radius:3px;">{ Receber no Local }</span>` : '';
+function getCabecalhoDavHtml(logoBase64, dataEmissao, davNumber, paginaStr, isReceberLocal = false, clienteNome = '', clienteDoc = '') {
+    const tagReceber = isReceberLocal ? ` <span style="background:#000; color:#fff; padding:2px 6px; font-size:10px; border-radius:3px;">{ Receber no Local }</span>` : '';
     return `
-    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 10px;">
-        <div style="display: flex; align-items: flex-start; gap: 15px;">
-            <div style="width: 120px;">
-                ${logoBase64 ? `<img src="${logoBase64}" style="max-width: 100%; height: auto;">` : '<h2 style="margin:0;">LUCA</h2>'}
-            </div>
-            <div style="font-size: 11px; font-family: 'Courier New', Courier, monospace; line-height: 1.2;">
-                <div style="font-weight: bold; font-size: 14px;">LUCA MATERIAL DE CONSTRUCAO LTDA</div>
-                <div>Av Automovel Clube SN Qd 04 Lote 19</div>
-                <div>Parada Angelica Duque De Caxias [RJ] CEP: 25272405</div>
-                <div>CNPJ: 36.671.152/0004-06 ${tagReceber}</div>
-                <div>Tel(s): (21) 2778-3885 | 2739-1480 | 2675-7410</div>
-                <div style="margin-top: 5px; font-weight: bold; font-size: 13px;">DOCUMENTO AUXILIAR DE VENDA</div>
-            </div>
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 5px; margin-bottom: 5px;">
+        <div style="width: 120px;">
+            ${logoBase64 ? `<img src="${logoBase64}" style="max-width: 100%; height: auto;">` : '<h2 style="margin:0;">LUCA</h2>'}
         </div>
-        <div style="font-size: 11px; text-align: right; font-family: 'Courier New', Courier, monospace; line-height: 1.2;">
-            <div>${dataEmissao}</div>
+        <div style="text-align: center; font-size: 11px; font-family: 'Courier New', Courier, monospace; line-height: 1.2; flex: 1;">
+            <div style="font-weight: bold; font-size: 14px;">LUCA MATERIAL DE CONSTRUCAO LTDA</div>
+            <div>Av Automovel Clube SN Qd 04 Lote 19</div>
+            <div>Parada Angelica Duque De Caxias [RJ] CEP: 25272405</div>
+            <div>CNPJ: 36.671.152/0004-06 ${tagReceber}</div>
+            <div>Tel(s): (21) 2778-3885 | 2739-1480 | 2675-7410</div>
+            <div style="margin-top: 5px; font-weight: bold; font-size: 13px;">DOCUMENTO AUXILIAR DE VENDA</div>
+        </div>
+        <div style="font-size: 10px; text-align: right; font-family: 'Courier New', Courier, monospace; line-height: 1.2; width: 130px;">
+            <div>Emissão: ${dataEmissao}</div>
             <div>Pagina: ${paginaStr}</div>
             <div>Relatorio: DAV</div>
-            <div style="margin-top: 10px; font-weight: bold; font-size: 13px;">Nº DAV: ${davNumber.toString().padStart(13, '0')}</div>
+            <div style="margin-top: 10px; font-weight: bold; font-size: 12px;">Nº DAV: ${davNumber.toString().padStart(13, '0')}</div>
         </div>
     </div>
     <div style="font-size: 9px; font-weight: bold; text-align: center; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 4px 0; margin-bottom: 10px; font-family: 'Courier New', monospace;">
         NÃO É DOCUMENTO FISCAL, NÃO É VALIDO COMO RECIBO E COMO GARANTIA DE MERCADORIA, NÃO COMPROVA PAGAMENTO
+    </div>
+    <div style="font-size: 11px; margin-bottom: 5px;">
+        <strong>NOME DO CLIENTE:</strong> ${clienteNome.toUpperCase()} <span style="float:right;"><strong>CPF-CNPJ:</strong> ${clienteDoc || 'Não informado'}</span>
     </div>
     `;
 }
@@ -152,24 +173,20 @@ function getCabecalhoDavHtml(logoBase64, dataEmissao, davNumber, paginaStr, isRe
 function getEstiloImpressao() {
     return `
     <style>
-        @page { margin: 5mm; }
-        body { font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; padding: 0; margin: 0; line-height: 1.3; }
-        
-        table { width: 100%; border-collapse: collapse; margin-top: 5px; margin-bottom: 5px; font-size: 11px; }
-        th, td { border: 1px solid #000; padding: 4px 2px; }
-        th { background-color: #f5f5f5; text-align: center; text-transform: uppercase; font-weight: bold; font-size: 10px; }
+        @page { margin: 3mm; }
+        body { font-family: 'Courier New', Courier, monospace; font-size: 10px; color: #000; padding: 0; margin: 0; line-height: 1.2; }
+        table { width: 100%; border-collapse: collapse; margin-top: 5px; margin-bottom: 5px; font-size: 10px; }
+        th, td { border: 1px solid #000; padding: 3px 2px; }
+        th { background-color: transparent; text-align: center; text-transform: uppercase; font-weight: bold; font-size: 9px; }
         td { vertical-align: middle; }
-        
         .text-center { text-align: center; }
         .text-right { text-align: right; }
         .text-left { text-align: left; }
         .font-bold { font-weight: bold; }
         .page-break { page-break-after: always; }
-        
-        .info-cliente { margin-bottom: 5px; font-size: 11px; border: 1px solid #000; padding: 4px; }
-        .endereco-entrega { border: 1px solid #000; padding: 5px; margin-top: 10px; font-size: 11px;}
-        .totais-box { margin-top: 10px; font-size: 12px; display: flex; justify-content: space-between; border: 1px solid #000; padding: 5px; background: #f9f9f9; }
-        .rodape-observacoes { font-size: 9px; margin-top: 10px; line-height: 1.2; border: 1px solid #000; padding: 5px; }
+        .endereco-entrega { border: 1px solid #000; padding: 5px; margin-top: 10px; font-size: 10px;}
+        .totais-box { margin-top: 5px; font-size: 11px; display: flex; justify-content: space-between; padding: 5px; }
+        .rodape-observacoes { font-size: 9px; margin-top: 10px; line-height: 1.2; }
         @media print { .no-print { display: none; } }
     </style>
     `;
@@ -232,9 +249,6 @@ function updateListTabs() {
     }
 }
 
-// ==========================================================
-//               IMPRESSÕES E RELATÓRIOS (PDF / HTML)
-// ==========================================================
 window.abrirDanfe = async function(chave) {
     showLoader();
     try {
@@ -256,123 +270,7 @@ window.abrirDanfe = async function(chave) {
         setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
     } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
 }
-
-// IMPRESSÃO DE ESPELHO DAV INDIVIDUAL (BALCÃO)
-window.imprimirEspelhoDav = async function(davNumber) {
-    showLoader();
-    try {
-        const res = await fetch(`${apiUrlBase}/entregas/dav/${davNumber}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        const data = await res.json();
-        
-        const logo = localStorage.getItem('company_logo') || '';
-        const printWindow = window.open('', '_blank');
-        const dataEmissao = data.data_hora_pedido ? new Date(data.data_hora_pedido).toLocaleString('pt-BR') : '';
-        const isReceberLocal = (data.cobrar_local === '1' || data.cobrar_local === 'S' || data.cobrar_local === 'T' || data.status_caixa !== '1');
-
-        let itensHtml = '';
-        data.itens.forEach((i, index) => {
-            const numItem = String(index + 1).padStart(3, '0');
-            const fabricante = i.fabricante || i.it_fabr || i.pd_fabr || '';
-            const endereco = i.endereco_prateleira || i.endereco || i.it_ende || i.pd_ende || '';
-            const obsTexto = i.observacao || i.it_obsc || '';
-            const infoAdicional = obsTexto ? `<br><span style="font-size:10px; font-style:italic; color:#333;">↳ ${obsTexto}</span>` : '';
-            
-            const qtd = parseFloat(i.quantidade_total || i.it_quan || 0).toFixed(2);
-            const vlUnit = parseFloat(i.valor_unitario || i.it_prec || i.vl_unitario || 0).toFixed(2);
-            const vlTot = parseFloat(i.valor_total_item || i.it_ctot || i.vl_total || 0).toFixed(2);
-            const saldoRet = parseFloat(i.quantidade_saldo || 0).toFixed(2);
-            
-            itensHtml += `
-                <tr>
-                    <td class="text-center">${numItem}</td>
-                    <td class="text-center">${limpaCod(i.pd_codi)}</td>
-                    <td class="text-left"><b>${i.pd_nome}</b>${infoAdicional}</td>
-                    <td class="text-center">${i.unidade}</td>
-                    <td class="text-center">${qtd}</td>
-                    <td class="text-right">${vlUnit}</td>
-                    <td class="text-right">${vlTot}</td>
-                    <td style="font-size: 9px; text-align:center;">${fabricante}</td>
-                    <td style="font-size: 9px; text-align:center;">${endereco}</td>
-                    <td class="text-center font-bold">${saldoRet}</td>
-                </tr>
-            `;
-        });
-
-        let html = `
-        <html>
-        <head>
-            <title>DAV #${davNumber}</title>
-            ${getEstiloImpressao()}
-        </head>
-        <body>
-            <div class="no-print" style="margin-bottom: 20px; text-align: center;">
-                <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Imprimir Espelho DAV</button>
-            </div>
-            
-            ${getCabecalhoDavHtml(logo, dataEmissao, davNumber, '001 [001]', isReceberLocal)}
-
-            <div class="info-cliente">
-                <table style="margin: 0; border: none; width: 100%;">
-                    <tr>
-                        <td style="border: none; padding: 0;"><strong>NOME DO CLIENTE:</strong> ${data.cliente.nome.toUpperCase()}</td>
-                        <td style="border: none; padding: 0; text-align: right;"><strong>CPF-CNPJ:</strong> ${data.cliente.doc || 'Não informado'}</td>
-                    </tr>
-                </table>
-            </div>
-
-            <table>
-                <thead>
-                    <tr>
-                        <th width="4%">ITEM</th>
-                        <th width="9%">ID-CÓDIGO</th>
-                        <th width="28%" class="text-left">DESCRIÇÃO DOS PRODUTOS</th>
-                        <th width="4%">UN</th>
-                        <th width="8%">QUANTIDADE</th>
-                        <th width="9%" class="text-right">VL.UNITÁRIO</th>
-                        <th width="9%" class="text-right">VALOR TOTAL</th>
-                        <th width="10%">FABRICANTE</th>
-                        <th width="10%">ENDEREÇO</th>
-                        <th width="9%">SALDO A RETIRAR</th>
-                    </tr>
-                </thead>
-                <tbody>${itensHtml}</tbody>
-            </table>
-
-            <div class="endereco-entrega">
-                <div class="font-bold" style="margin-bottom: 5px;">[ ENDEREÇO DE ENTREGA ]</div>
-                <div>${data.endereco.logradouro || 'Retirada na Loja / Não informado'}</div>
-                <div>Bairro: ${data.endereco.bairro || '-'} &nbsp;|&nbsp; Cidade: ${data.endereco.cidade || '-'} &nbsp;|&nbsp; CEP: ${data.endereco.cep || '-'}</div>
-                <div style="margin-top: 5px;"><strong>Referência:</strong> ${data.endereco.referencia || '-'}</div>
-            </div>
-
-            <div class="totais-box">
-                <div><strong>VENDEDOR:</strong> ${data.vendedor || 'N/I'}</div>
-                <div><strong>TOTAL DO DAV:</strong> R$ ${parseFloat(data.valor_total).toLocaleString('pt-BR', {minimumFractionDigits:2})}</div>
-            </div>
-
-            <div class="rodape-observacoes">
-                - DEVOLUCAO/DESISTENCIA SOMENTE NA DATA DA COMPRA.<br>
-                - NAO REALIZAMOS TROCA DE MERCADORIA ADQUIRIDA EM LOJA FISICA EXCETO, COMPROVADO DEFEITO DE FABRICACAO E COM A NOTA.<br>
-                - NAO AGENDAMOS HORARIO DE ENTREGA, E NAO GUARDAMOS PEDIDOS!!<br>
-                - ATENCAO: NAO GUARDAMOS TIJOLOS, POR FAVOR NAO INSISTA.<br>
-                - ENTREGAS DE SEGUNDA A SABADO DE 8H as 18HRS.
-            </div>
-            
-            <div style="margin-top: 60px; text-align: center; width: 80%; margin-left: auto; margin-right: auto; padding-top: 10px; font-weight: bold;">
-                _________________________________________________________________________________<br>
-                Assinatura do Cliente / Ciente e de acordo com o recebimento
-            </div>
-        </body>
-        </html>`;
-        
-        printWindow.document.write(html);
-        printWindow.document.close();
-        setTimeout(() => printWindow.print(), 500);
-
-    } catch (e) { showToast("Erro ao gerar impressão.", "error"); } finally { hideLoader(); }
-};
-
-// IMPRESSÃO DE LOTE DE DAVS (COM CAIXAS, FABRICANTE, ENDEREÇO E OBS)
+// IMPRESSÃO DE LOTE DE DAVS (CARGAS) - XEROX COMPLETO DO ERP
 window.imprimirPedidosCarga = async function(romaneioId) {
     showLoader();
     try {
@@ -405,8 +303,8 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                 const numItem = String(index + 1).padStart(3, '0');
                 const fabricante = i.fabricante || i.it_fabr || i.pd_fabr || '';
                 const endereco = i.endereco_prateleira || i.endereco || i.it_ende || i.pd_ende || '';
-                const obsTexto = i.observacao || i.it_obsc || '';
-                const infoAdicional = obsTexto ? `<br><span style="font-size:10px; font-style:italic; color:#333;">↳ ${obsTexto}</span>` : '';
+                
+                const obsTexto = extrairObservacao(i.observacao || i.it_obsc);
                 
                 const qtd = parseFloat(i.quantidade_total || i.it_quan || 0).toFixed(2);
                 const vlUnit = parseFloat(i.valor_unitario || i.it_prec || i.vl_unitario || 0).toFixed(2);
@@ -416,16 +314,19 @@ window.imprimirPedidosCarga = async function(romaneioId) {
                     <tr>
                         <td class="text-center">${numItem}</td>
                         <td class="text-center">${limpaCod(i.pd_codi)}</td>
-                        <td class="text-left"><b>${i.pd_nome}</b>${infoAdicional}</td>
+                        <td class="text-left">${i.pd_nome}</td>
                         <td class="text-center">${i.unidade}</td>
                         <td class="text-center">${qtd}</td>
                         <td class="text-right">${vlUnit}</td>
                         <td class="text-right">${vlTot}</td>
-                        <td style="font-size: 9px; text-align:center;">${fabricante}</td>
-                        <td style="font-size: 9px; text-align:center;">${endereco}</td>
+                        <td style="font-size: 8px; text-align:center;">${fabricante}</td>
+                        <td style="font-size: 8px; text-align:center;">${endereco}</td>
                         <td class="text-center font-bold">${saldoParaEntregarExibicao.toFixed(2)}</td>
                     </tr>
                 `;
+                if (obsTexto) {
+                    itensHtml += `<tr><td colspan="2" style="border-right: 1px solid #000; border-bottom: 1px dotted #ccc;"></td><td colspan="8" style="font-size:10px; font-weight:bold; padding: 2px 4px;">↳ ${obsTexto}</td></tr>`;
+                }
             });
 
             const dataEmissao = data.data_hora_pedido ? new Date(data.data_hora_pedido).toLocaleString('pt-BR') : '';
@@ -433,30 +334,21 @@ window.imprimirPedidosCarga = async function(romaneioId) {
 
             html += `
             <div class="${idx < davsCompletos.length - 1 ? 'page-break' : ''}">
-                ${getCabecalhoDavHtml(logo, dataEmissao, data.dav_numero, pageStr, isReceberLocal)}
-
-                <div class="info-cliente">
-                    <table style="margin: 0; border: none; width: 100%;">
-                        <tr>
-                            <td style="border: none; padding: 0;"><strong>NOME DO CLIENTE:</strong> ${data.cliente.nome.toUpperCase()}</td>
-                            <td style="border: none; padding: 0; text-align: right;"><strong>CPF-CNPJ:</strong> ${data.cliente.doc || 'Não informado'}</td>
-                        </tr>
-                    </table>
-                </div>
+                ${getCabecalhoDavHtml(logo, dataEmissao, data.dav_numero, pageStr, isReceberLocal, data.cliente.nome, data.cliente.doc)}
 
                 <table>
                     <thead>
                         <tr>
-                            <th width="4%">ITEM</th>
-                            <th width="9%">ID-CÓDIGO</th>
-                            <th width="28%" class="text-left">DESCRIÇÃO DOS PRODUTOS</th>
+                            <th width="4%">Item</th>
+                            <th width="10%">ID-Código</th>
+                            <th width="28%" class="text-left">Descrição dos Produtos</th>
                             <th width="4%">UN</th>
-                            <th width="8%">QUANTIDADE</th>
-                            <th width="9%" class="text-right">VL.UNITÁRIO</th>
-                            <th width="9%" class="text-right">VALOR TOTAL</th>
-                            <th width="10%">FABRICANTE</th>
-                            <th width="10%">ENDEREÇO</th>
-                            <th width="9%">SALDO A RETIRAR</th>
+                            <th width="8%">Quantidade</th>
+                            <th width="9%" class="text-right">Vl.Unitário</th>
+                            <th width="9%" class="text-right">Valor Total</th>
+                            <th width="12%">Referência/Fabricante</th>
+                            <th width="8%">Endereço</th>
+                            <th width="8%">TB Saldo a retirar</th>
                         </tr>
                     </thead>
                     <tbody>${itensHtml}</tbody>
@@ -464,7 +356,7 @@ window.imprimirPedidosCarga = async function(romaneioId) {
 
                 <div class="endereco-entrega">
                     <div class="font-bold" style="margin-bottom: 5px;">[ ENDEREÇO DE ENTREGA ]</div>
-                    <div>${data.endereco.logradouro || 'Retirada na Loja / Não informado'}</div>
+                    <div>${formatarEnderecoCompleto(data.endereco.logradouro)}</div>
                     <div>Bairro: ${data.endereco.bairro || '-'} &nbsp;|&nbsp; Cidade: ${data.endereco.cidade || '-'} &nbsp;|&nbsp; CEP: ${data.endereco.cep || '-'}</div>
                     <div style="margin-top: 5px;"><strong>Referência:</strong> ${data.endereco.referencia || '-'}</div>
                 </div>
@@ -553,7 +445,15 @@ window.imprimirRoteiro = async function(romaneioId) {
                 <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Imprimir Roteiro</button>
             </div>
             
-            ${getCabecalhoHtml(logo)}
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px;">
+                <div style="width: 140px;">
+                    ${logo ? `<img src="${logo}" style="max-width: 100%; height: auto;">` : '<h2>LUCA</h2>'}
+                </div>
+                <div style="text-align: right; font-family: 'Helvetica', sans-serif;">
+                    <div style="font-size: 16px; font-weight: bold; margin-bottom: 3px;">LUCA MATERIAL DE CONSTRUCAO LTDA</div>
+                    <div style="font-size: 11px;">CNPJ: 36.671.152/0004-06 | Tel(s): (21) 2778-3885 | 2739-1480 | 2675-7410</div>
+                </div>
+            </div>
             
             <div class="doc-title">ROTEIRO DE CARGA #${data.id}</div>
             
@@ -572,7 +472,7 @@ window.imprimirRoteiro = async function(romaneioId) {
                     <span>BAIRRO: ${dav.bairro.toUpperCase()}</span>
                 </div>
                 <div class="dav-address">
-                    <strong>ENDEREÇO:</strong> ${dav.logradouro}, ${dav.bairro} - ${dav.cidade}<br>
+                    <strong>ENDEREÇO:</strong> ${formatarEnderecoCompleto(dav.logradouro)}, ${dav.bairro} - ${dav.cidade}<br>
                     <strong>REF:</strong> ${dav.ref} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>TEL:</strong> ${dav.tel}
                 </div>
                 <table>
@@ -583,7 +483,8 @@ window.imprimirRoteiro = async function(romaneioId) {
                         <th width="15%" class="text-center">QTD A ENTREGAR</th>
                     </tr>
                     ${dav.itens.map(i => {
-                        const obsRoteiro = (i.observacao || i.it_obsc) ? `<br><span style="font-size:10px; font-style:italic; color:#333;">↳ ${i.observacao || i.it_obsc}</span>` : '';
+                        const obsDescodificada = extrairObservacao(i.observacao || i.it_obsc);
+                        const obsRoteiro = obsDescodificada ? `<br><span style="font-size:10px; font-style:italic; color:#333;">↳ ${obsDescodificada}</span>` : '';
                         return `
                         <tr>
                             <td class="text-center">${limpaCod(i.produto_codigo)}</td>
@@ -649,7 +550,8 @@ window.abrirVisualizacaoRomaneio = async function(id) {
         for (const [davNumero, dados] of Object.entries(grouped)) {
             html += `<div class="border border-gray-200 rounded-lg overflow-hidden shadow-sm mb-4"><div class="bg-gray-100 px-4 py-2 border-b flex justify-between items-center"><span class="font-black text-gray-800 text-sm">DAV #${davNumero.toString().padStart(13, '0')} - <span class="text-gray-600 font-medium">${dados.cliente}</span></span> <span class="text-xs font-bold text-gray-500">${dados.bairro || 'Sem Bairro'}</span></div><div class="divide-y divide-gray-100 bg-white">`;
             dados.itens.forEach(item => {
-                const obsModal = (item.observacao || item.it_obsc) ? `<br><span class="text-[10px] text-gray-500 italic mt-0.5 block">↳ ${item.observacao || item.it_obsc}</span>` : '';
+                const obsDescodificada = extrairObservacao(item.observacao || item.it_obsc);
+                const obsModal = obsDescodificada ? `<span class="text-[10px] text-gray-500 italic mt-0.5 block">↳ ${obsDescodificada}</span>` : '';
                 html += `
                     <div class="p-3 flex justify-between items-center hover:bg-gray-50 transition-colors">
                         <div>
@@ -720,7 +622,8 @@ function renderDavResults(data) {
                     </thead>
                     <tbody class="divide-y divide-gray-100">
                         ${itens.map(item => {
-                            const obsBalcao = (item.observacao || item.it_obsc) ? `<div class="text-[10px] text-gray-500 italic mt-1 pb-1">↳ ${item.observacao || item.it_obsc}</div>` : '';
+                            const obsDescodificada = extrairObservacao(item.observacao || item.it_obsc);
+                            const obsBalcao = obsDescodificada ? `<div class="text-[10px] text-gray-500 italic mt-1 pb-1">↳ ${obsDescodificada}</div>` : '';
                             return `
                             <tr class="expandable-row hover:bg-gray-50 transition-colors" data-idavs-regi="${item.idavs_regi}">
                                 <td style="border:none;" class="px-3 py-3 font-medium text-gray-800">
@@ -1139,7 +1042,8 @@ function renderPendingList() {
         const tagReceber = dav.cobrar_local ? `<span class="bg-red-600 text-white px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest animate-pulse ml-2 shadow-sm">Receber no Local</span>` : '';
 
         const itensHtml = dav.itens.map(item => {
-            const obsPrateleira = (item.observacao || item.it_obsc) ? `<div class="w-full text-[9px] text-gray-500 italic px-1 pb-1">↳ ${item.observacao || item.it_obsc}</div>` : '';
+            const obsDescodificada = extrairObservacao(item.observacao || item.it_obsc);
+            const obsPrateleira = obsDescodificada ? `<div class="w-full text-[9px] text-gray-500 italic px-1 pb-1">↳ ${obsDescodificada}</div>` : '';
             return `
             <div class="flex flex-col border-b border-indigo-100/50 py-1.5 last:border-0 hover:bg-indigo-50 px-1 rounded transition-colors">
                 <div class="flex justify-between items-center">
@@ -1546,84 +1450,10 @@ async function buscarHistorico() {
     }
 }
 
-window.abrirVisualizacaoRomaneio = async function(id) {
-    showLoader();
-    try {
-        const res = await fetch(`${apiUrlBase}/entregas/romaneios/${id}`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (!res.ok) throw new Error("Erro ao buscar detalhes da carga.");
-        const data = await res.json();
-        
-        const modal = document.getElementById('view-romaneio-modal');
-        if (!modal) {
-            showToast("Modal de visualização não encontrado na página.", "error");
-            return;
-        }
-
-        document.getElementById('view-romaneio-id').textContent = data.id;
-        document.getElementById('view-motorista').textContent = data.nome_motorista;
-        document.getElementById('view-veiculo').textContent = `${data.modelo_veiculo} (${data.placa_veiculo})`;
-        document.getElementById('view-status').textContent = data.status;
-
-        document.getElementById('btn-imprimir-romaneio').onclick = () => window.imprimirRoteiro(data.id);
-        
-        let btnImprimirDavs = document.getElementById('btn-imprimir-davs');
-        if (!btnImprimirDavs) {
-            const container = document.getElementById('btn-imprimir-romaneio').parentNode;
-            btnImprimirDavs = document.createElement('button');
-            btnImprimirDavs.id = 'btn-imprimir-davs';
-            btnImprimirDavs.className = 'action-btn bg-emerald-100 text-emerald-800 hover:bg-emerald-600 hover:text-white shadow-md flex items-center gap-2 transition-colors border border-emerald-200 mr-2';
-            btnImprimirDavs.innerHTML = '<i data-feather="layers" class="w-4 h-4"></i> Imprimir Lote DAVs';
-            container.insertBefore(btnImprimirDavs, document.getElementById('btn-imprimir-romaneio'));
-            if(typeof feather !== 'undefined') feather.replace();
-        }
-        btnImprimirDavs.onclick = () => window.imprimirPedidosCarga(data.id);
-
-        const container = document.getElementById('view-itens-container');
-        const grouped = data.itens.reduce((acc, item) => {
-            if(!acc[item.dav_numero]) acc[item.dav_numero] = { cliente: item.cliente_nome, bairro: item.bairro, itens: [] };
-            acc[item.dav_numero].itens.push(item); return acc;
-        }, {});
-
-        let html = '';
-        for (const [davNumero, dados] of Object.entries(grouped)) {
-            html += `<div class="border border-gray-200 rounded-lg overflow-hidden shadow-sm mb-4"><div class="bg-gray-100 px-4 py-2 border-b flex justify-between items-center"><span class="font-black text-gray-800 text-sm">DAV #${davNumero.toString().padStart(13, '0')} - <span class="text-gray-600 font-medium">${dados.cliente}</span></span> <span class="text-xs font-bold text-gray-500">${dados.bairro || 'Sem Bairro'}</span></div><div class="divide-y divide-gray-100 bg-white">`;
-            dados.itens.forEach(item => {
-                const obsModal = (item.observacao || item.it_obsc) ? `<span class="text-[10px] text-gray-500 italic mt-0.5 block">↳ ${item.observacao || item.it_obsc}</span>` : '';
-                html += `
-                    <div class="p-3 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                        <div>
-                            <p class="text-sm font-bold text-gray-800">${limpaCod(item.produto_codigo)} - ${item.produto_nome}</p>
-                            ${obsModal}
-                        </div>
-                        <p class="text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">${parseFloat(item.quantidade_a_entregar)} ${item.produto_unidade}</p>
-                    </div>`;
-            });
-            html += `</div></div>`;
-        }
-        container.innerHTML = html;
-        
-        modal.classList.remove('hidden');
-        setTimeout(() => modal.classList.remove('opacity-0'), 10);
-
-    } catch(e) { showToast(e.message, "error"); } finally { hideLoader(); }
-};
-
-// ==========================================================
-//               FUNÇÕES DE UTILIDADE
-// ==========================================================
 function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) return;
-
-    const mapaModulos = {
-        'lancamentos': 'despesas.html',
-        'logistica': 'logistica.html',
-        'entregas': 'entregas.html',
-        'checklist': 'checklist.html',
-        'produtos': 'produtos.html',
-        'configuracoes': 'settings.html'
-    };
-
+    const mapaModulos = { 'lancamentos': 'despesas.html', 'logistica': 'logistica.html', 'entregas': 'entregas.html', 'checklist': 'checklist.html', 'produtos': 'produtos.html', 'configuracoes': 'settings.html' };
     for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
         const permissao = userData.permissoes.find(p => p.nome_modulo === nomeModulo);
         if (!permissao || !permissao.permitido) {
@@ -1635,8 +1465,7 @@ function gerenciarAcessoModulos() {
 
 function handleApiError(response) {
     if (response.status === 401 || response.status === 403) {
-        showToast("Sessão expirada. Faça login novamente.", "error");
-        setTimeout(logout, 2000);
+        showToast("Sessão expirada. Faça login novamente.", "error"); setTimeout(logout, 2000);
     } else {
         response.json().then(data => showToast(`Erro: ${data.error || response.statusText}`, "error")).catch(() => showToast('Erro na API.', "error"));
     }
