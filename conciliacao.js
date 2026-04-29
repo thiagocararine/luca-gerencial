@@ -939,7 +939,7 @@ async function salvarFechamentoFinal() {
                 cod_filial: linha.cod_filial,
                 modalidade: linha.modalidade,
                 valor_erp: linha.valor_erp,
-                valor_maq: linha.valor_mp, // Mapeia valor_mp para valor_maq
+                valor_maq: linha.valor_maq, // Mapeia valor_mp para valor_maq
                 taxa_maq: linha.taxa_maq || 0,
                 devolucao_maq: 0,
                 diferenca: linha.diferenca,
@@ -1116,10 +1116,10 @@ function sincronizarTotaisPrincipais() {
         }
 
         // Atualiza os valores da linha
-        linha.valor_mp = sumMaq;
+        linha.valor_maq = sumMaq;
         linha.valor_erp = sumErp;
         linha.diferenca = sumMaq - sumErp;
-        linha.status = (Math.abs(linha.diferenca) <= 0.05) ? 'OK' : 'DIVERGENTE';
+        linha.status = (Math.abs(linha.diferenca) <= 0.05) ? 'Conciliado' : 'Com Diferença';
     });
 
     // Atualiza a tabela principal instantaneamente
