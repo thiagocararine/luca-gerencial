@@ -2311,34 +2311,32 @@ async function lookupCnpj(modalType) {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
 
-        // 1. CHECAGEM DE SEGURANÇA: Verifica se a resposta é realmente JSON
+        // CHECAGEM DE SEGURANÇA: Verifica se a resposta é realmente JSON
         const contentType = response.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
-            throw new Error(`A API não retornou um JSON. Verifique a URL (apiUrlBase). URL chamada: ${response.url}`);
+            throw new Error(`A API não retornou um JSON. Verifique a URL Base no global.js. URL chamada: ${response.url}`);
         }
 
-        // 2. Agora sim, sabemos que é JSON
-        const data = await response.json();
+        // Variável renomeada para evitar o erro de "redeclaration"
+        const dadosCnpj = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.error || data.message || 'Erro ao comunicar com o servidor.');
+            throw new Error(dadosCnpj.error || dadosCnpj.message || 'Erro ao comunicar com o servidor.');
         }
-        
-        const data = await response.json();
 
         const fornecedorResponse = await fetch(`${apiUrlBase}/logistica/fornecedores/cnpj`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
             body: JSON.stringify({
-                cnpj: data.cnpj,
-                razao_social: data.razao_social,
-                nome_fantasia: data.nome_fantasia,
-                logradouro: data.logradouro,
-                numero: data.numero,
-                bairro: data.bairro,
-                municipio: data.municipio,
-                uf: data.uf,
-                cep: data.cep
+                cnpj: dadosCnpj.cnpj,
+                razao_social: dadosCnpj.razao_social,
+                nome_fantasia: dadosCnpj.nome_fantasia,
+                logradouro: dadosCnpj.logradouro,
+                numero: dadosCnpj.numero,
+                bairro: dadosCnpj.bairro,
+                municipio: dadosCnpj.municipio,
+                uf: dadosCnpj.uf,
+                cep: dadosCnpj.cep
             })
         });
 
