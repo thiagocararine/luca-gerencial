@@ -936,7 +936,7 @@ async function salvarFechamentoFinal() {
 
             return {
                 data_venda: dataVenda,
-                cod_filial: document.getElementById('filtro-filial').value,
+                cod_filial: linha.cod_filial,
                 modalidade: linha.modalidade,
                 valor_erp: linha.valor_erp,
                 valor_maq: linha.valor_mp, // Mapeia valor_mp para valor_maq
