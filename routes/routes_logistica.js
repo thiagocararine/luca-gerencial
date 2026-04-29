@@ -1594,15 +1594,23 @@ router.get('/cnpj/:cnpj', authenticateToken, async (req, res) => {
         return res.status(400).json({ error: 'CNPJ é obrigatório.' });
     }
     try {
+        /* IMPORTANTE: Se o seu Node for < 18, o 'fetch' vai dar erro de "not defined".
+           Se for o caso, use a biblioteca axios: const axios = require('axios');
+           e troque por: const response = await axios.get(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+        */
         const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
-        if (!response.ok) {
-            throw new Error('CNPJ não encontrado ou serviço indisponível.');
-        }
         const data = await response.json();
+
+        // Se a BrasilAPI retornar erro (ex: CNPJ inválido), repassamos a mensagem deles
+        if (!response.ok) {
+            return res.status(response.status).json({ error: data.message || 'CNPJ não encontrado na Receita Federal.' });
+        }
+
         res.json(data);
     } catch (error) {
         console.error("Erro ao consultar BrasilAPI:", error);
-        res.status(500).json({ error: 'Erro ao consultar o serviço de CNPJ.' });
+        // Agora, se der erro no servidor (como falta do fetch nativo), ele manda a mensagem real
+        res.status(500).json({ error: error.message || 'Erro interno ao consultar o serviço de CNPJ.' });
     }
 });
 

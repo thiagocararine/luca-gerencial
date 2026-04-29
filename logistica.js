@@ -2311,8 +2311,11 @@ async function lookupCnpj(modalType) {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
 
-        if (!response.ok) throw new Error('CNPJ não encontrado ou serviço indisponível.');
-
+        if (!response.ok) {
+            // Tenta pegar a mensagem de erro que veio do back-end
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || 'Erro ao comunicar com o servidor.');
+        }
         const data = await response.json();
 
         const fornecedorResponse = await fetch(`${apiUrlBase}/logistica/fornecedores/cnpj`, {
