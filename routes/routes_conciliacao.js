@@ -112,26 +112,38 @@ router.post('/verificar', authenticateToken, async (req, res) => {
 // ---------------------------------------------------------
 router.post('/salvar', authenticateToken, async (req, res) => {
     const { fechamentos } = req.body;
-    const nomeUsuario = req.user.nome;
+    const nomeUsuario = req.user.nome_user || req.user.nome || 'Sistema'; // Ajuste para o seu padrão de token
+
+    if (!fechamentos || !Array.isArray(fechamentos)) {
+        return res.status(400).json({ error: 'Dados de fechamento inválidos.' });
+    }
 
     const connection = await gerencialPool.getConnection();
     try {
         await connection.beginTransaction();
 
         for (const item of fechamentos) {
+            // 1. Grava ou Atualiza a "Capa" do Fechamento
             const [capaResult] = await connection.execute(`
                 INSERT INTO conciliacao_fechamentos 
                 (data_venda, cod_filial, modalidade, valor_total_erp, valor_total_maq, taxas_maq, valor_devolucao_maq, diferenca, status, observacao_geral, nome_usuario)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE 
-                valor_total_erp=VALUES(valor_total_erp), valor_total_maq=VALUES(valor_total_maq), taxas_maq=VALUES(taxas_maq), valor_devolucao_maq=VALUES(valor_devolucao_maq), diferenca=VALUES(diferenca), 
-                status=VALUES(status), observacao_geral=VALUES(observacao_geral), nome_usuario=VALUES(nome_usuario)
+                valor_total_erp=VALUES(valor_total_erp), 
+                valor_total_maq=VALUES(valor_total_maq), 
+                taxas_maq=VALUES(taxas_maq), 
+                valor_devolucao_maq=VALUES(valor_devolucao_maq), 
+                diferenca=VALUES(diferenca), 
+                status=VALUES(status), 
+                observacao_geral=VALUES(observacao_geral), 
+                nome_usuario=VALUES(nome_usuario)
             `, [
                 item.data_venda, item.cod_filial, item.modalidade, 
                 item.valor_erp, item.valor_maq, item.taxa_maq || 0, item.devolucao_maq || 0, item.diferenca, 
                 item.status, item.observacao || null, nomeUsuario
             ]);
 
+            // Recupera o ID (novo ou existente)
             let idFechamento = capaResult.insertId;
             if (!idFechamento) {
                 const [rows] = await connection.execute(
@@ -141,8 +153,10 @@ router.post('/salvar', authenticateToken, async (req, res) => {
                 idFechamento = rows[0].id;
             }
 
+            // 2. Limpa divergências antigas para evitar duplicidade ao re-salvar
             await connection.execute('DELETE FROM conciliacao_divergencias WHERE id_fechamento = ?', [idFechamento]);
 
+            // 3. Grava as novas divergências (sobras)
             if (item.divergencias && item.divergencias.length > 0) {
                 for (const div of item.divergencias) {
                     await connection.execute(`
@@ -150,8 +164,12 @@ router.post('/salvar', authenticateToken, async (req, res) => {
                         (id_fechamento, origem, data_hora_transacao, valor_transacao, nsu_ou_doc, detalhes)
                         VALUES (?, ?, ?, ?, ?, ?)
                     `, [
-                        idFechamento, div.origem, div.hora !== '-' ? `${item.data_venda} ${div.hora}` : null,
-                        div.valor, div.doc || null, item.observacao
+                        idFechamento, 
+                        div.origem, 
+                        (div.hora && div.hora !== '-') ? `${item.data_venda} ${div.hora}` : null,
+                        div.valor || 0, 
+                        div.doc || null, 
+                        item.observacao || 'Sobra identificada na auditoria'
                     ]);
                 }
             }
@@ -161,7 +179,7 @@ router.post('/salvar', authenticateToken, async (req, res) => {
         res.json({ message: 'Fechamento salvo com sucesso!' });
     } catch (error) {
         await connection.rollback();
-        console.error("Erro ao salvar:", error);
+        console.error("Erro ao salvar conciliação:", error);
         res.status(500).json({ error: 'Erro ao gravar no banco de dados.' });
     } finally {
         connection.release();
