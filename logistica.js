@@ -2311,11 +2311,19 @@ async function lookupCnpj(modalType) {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
 
-        if (!response.ok) {
-            // Tenta pegar a mensagem de erro que veio do back-end
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || 'Erro ao comunicar com o servidor.');
+        // 1. CHECAGEM DE SEGURANÇA: Verifica se a resposta é realmente JSON
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            throw new Error(`A API não retornou um JSON. Verifique a URL (apiUrlBase). URL chamada: ${response.url}`);
         }
+
+        // 2. Agora sim, sabemos que é JSON
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || data.message || 'Erro ao comunicar com o servidor.');
+        }
+        
         const data = await response.json();
 
         const fornecedorResponse = await fetch(`${apiUrlBase}/logistica/fornecedores/cnpj`, {

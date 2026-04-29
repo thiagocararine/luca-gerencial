@@ -2,7 +2,8 @@
 // assets/global.js - Configurações e Funções Globais do Sistema
 // ==========================================================
 
-const apiUrlBase = '/api';
+//const apiUrlBase = '/api';
+const apiUrlBase = 'http://10.113.0.17:3000/api';
 
 // --- 1. Funções de Autenticação e Utilitários Globais ---
 
