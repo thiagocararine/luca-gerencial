@@ -916,19 +916,23 @@ async function salvarFechamentoFinal() {
     if (btn) btn.disabled = true;
 
     try {
-        // Prepara a lista de fechamentos a partir dos dados que estão na tabela principal
+        // Validação usando Toast nativo
+        const pendentes = dadosConsolidados.filter(d => d.status === 'Com Diferença' && !d.observacao);
+        if (pendentes.length > 0) {
+            showToast("Existem divergências sem justificativa! Preencha a coluna 'Anotar Observação'.", "warning");
+            if (btn) btn.disabled = false;
+            return;
+        }
+
         const fechamentos = dadosConsolidados.map(linha => {
             const chave = linha.chave_id;
             const dataVenda = linha.data_venda;
             
-            // Busca as divergências (sobras) se a auditoria foi aberta para esta linha
             let divergencias = [];
             if (estadoAuditoria[chave]) {
-                // Sobras da Maquininha
                 estadoAuditoria[chave].sobrasMaq.forEach(m => {
                     divergencias.push({ origem: 'MAQUININHA', hora: m.hora, valor: m.valor, doc: 'Sobra MP' });
                 });
-                // Sobras do ERP
                 estadoAuditoria[chave].sobrasERP.forEach(e => {
                     divergencias.push({ origem: 'SISTEMA', hora: e.hora, valor: e.valor, doc: e.dav });
                 });
@@ -939,7 +943,7 @@ async function salvarFechamentoFinal() {
                 cod_filial: linha.cod_filial,
                 modalidade: linha.modalidade,
                 valor_erp: linha.valor_erp,
-                valor_maq: linha.valor_maq, // Mapeia valor_mp para valor_maq
+                valor_maq: linha.valor_maq, 
                 taxa_maq: linha.taxa_maq || 0,
                 devolucao_maq: 0,
                 diferenca: linha.diferenca,
@@ -961,10 +965,16 @@ async function salvarFechamentoFinal() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Erro ao salvar fechamento');
 
-        alert(data.message);
+        // Mostra o Sucesso no padrão do Sistema
+        showToast(data.message || 'Fechamento salvo com sucesso!', "success");
+        
+        // Magia de limpar a tela acontece aqui!
+        resetarTelaConciliacao();
+
     } catch (err) {
         console.error(err);
-        alert("Erro ao salvar: " + err.message);
+        // Mostra Erro no padrão do Sistema
+        showToast("Erro ao salvar: " + err.message, "error");
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -1124,4 +1134,46 @@ function sincronizarTotaisPrincipais() {
 
     // Atualiza a tabela principal instantaneamente
     tablePrincipal.updateData(dadosConsolidados);
+}
+
+// --- FUNÇÃO PARA LIMPAR A TELA APÓS SALVAR ---
+function resetarTelaConciliacao() {
+    // 1. Zera a Tabela Principal
+    if (tablePrincipal) tablePrincipal.setData([]);
+    
+    // 2. Limpa a Memória do Sistema
+    dadosConsolidados = [];
+    transacoesMaqPorChave = {}; 
+    transacoesERPPorChave = {}; 
+    estadoAuditoria = {}; 
+    linhaAtualAuditoria = null;
+    obsAutoPorChave = {};
+
+    // 3. Reseta a Área de Upload de volta para o tamanho gigante
+    const uploadZone = document.getElementById('upload-zone');
+    const dropArea = document.getElementById('drop-area');
+    const iconContainer = document.getElementById('upload-icon-container');
+    const uploadText = document.getElementById('upload-text');
+    const uploadSubtext = document.getElementById('upload-subtext');
+    const fileInput = document.getElementById('file-input');
+
+    if (fileInput) fileInput.value = '';
+
+    if (uploadZone) uploadZone.className = "bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6";
+    if (dropArea) dropArea.className = "border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 flex flex-col items-center justify-center py-10 transition-colors cursor-pointer hover:bg-gray-100 hover:border-indigo-400";
+    
+    if (iconContainer) {
+        iconContainer.className = "p-3 bg-indigo-50 rounded-full mb-3";
+        iconContainer.innerHTML = '<i data-feather="upload-cloud" class="w-6 h-6 text-indigo-600"></i>';
+    }
+    if (uploadText) {
+        uploadText.className = "text-sm font-medium text-gray-700";
+        uploadText.innerHTML = 'Clique para selecionar ou arraste o arquivo <span class="font-bold text-indigo-600">CSV do Mercado Pago</span>';
+    }
+    if (uploadSubtext) {
+        uploadSubtext.className = "text-xs text-gray-500 mt-1";
+        uploadSubtext.textContent = "Apenas arquivos .csv";
+    }
+
+    if (typeof feather !== 'undefined') feather.replace();
 }
