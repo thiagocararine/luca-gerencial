@@ -69,16 +69,18 @@ function openExportModal() {
 
 
 // ==========================================================
-// NOVA FUNÇÃO: IMPRESSÃO PADRÃO ERP EM HTML
+// NOVA FUNÇÃO: IMPRESSÃO PROFISSIONAL DE RELATÓRIOS (HTML)
 // ==========================================================
 async function exportarRelatorioLogisticaHTML() {
     const btn = document.getElementById('generate-pdf-btn');
-    btn.textContent = 'A gerar...';
+    btn.textContent = 'A preparar relatório...';
     btn.disabled = true;
 
-    const reportType = document.getElementById('report-type').value;
-    let reportTitle = document.getElementById('report-type').options[document.getElementById('report-type').selectedIndex].text;
-    reportTitle = reportTitle.replace(/^\d+\s*-\s*/, '').toUpperCase(); // Tira o "1 - " e deixa maiúsculo
+    const reportTypeSelect = document.getElementById('report-type');
+    const reportType = reportTypeSelect.value;
+    
+    // Pega o nome do relatório, tira os números (ex: "1 - ") e deixa maiúsculo
+    let reportTitle = reportTypeSelect.options[reportTypeSelect.selectedIndex].text.replace(/^\d+\s*-\s*/, '').toUpperCase();
 
     let apiUrl = `${apiUrlBase}/logistica/relatorios/${reportType}?export=true`;
     
@@ -108,15 +110,16 @@ async function exportarRelatorioLogisticaHTML() {
             return;
         }
 
-        // PREPARAÇÃO DO HTML
         const printWindow = window.open('', '_blank');
         const logo = LOGO_BASE_64 || localStorage.getItem('company_logo') || '';
+        const userName = document.getElementById('user-name').textContent || 'Usuário';
         
         let headHtml = '';
         let bodyHtml = '';
         let totalGeral = 0;
         let totalGeralLitros = 0;
 
+        // Construção do corpo da tabela
         switch (reportType) {
             case 'custoRateado':
             case 'custoTotalFilial':
@@ -131,7 +134,7 @@ async function exportarRelatorioLogisticaHTML() {
                         <td>${item.tipo_custo}</td>
                         <td>${item.veiculo_info || 'N/A (Rateio)'}</td>
                         <td>${item.servico_info}</td>
-                        <td class="text-right">${parseFloat(item.valor).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+                        <td class="text-right font-semibold text-blue-800">${parseFloat(item.valor).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
                     </tr>`;
                 }).join('');
                 break;
@@ -149,13 +152,13 @@ async function exportarRelatorioLogisticaHTML() {
                         <td>${item.servico_info || 'N/A'}</td>
                         <td>${item.tipo_despesa}</td>
                         <td>${item.fornecedor_nome || 'N/A'}</td>
-                        <td class="text-right">${parseFloat(item.valor).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+                        <td class="text-right font-semibold text-blue-800">${parseFloat(item.valor).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
                     </tr>`;
                 }).join('');
                 break;
 
             case 'listaVeiculos':
-                headHtml = `<tr><th>Placa</th><th>Marca/Modelo</th><th>Filial</th><th>Status</th><th class="text-right">Odômetro</th><th>Última Preventiva</th><th class="text-center">Seguro</th><th class="text-center">Rastreador</th></tr>`;
+                headHtml = `<tr><th>Placa</th><th>Marca/Modelo</th><th>Filial</th><th class="text-center">Status</th><th class="text-right">Odômetro (km)</th><th class="text-center">Última Prev.</th><th class="text-center">Seguro</th><th class="text-center">Rastreador</th></tr>`;
                 bodyHtml = data.map(v => {
                     const ultimaPreventivaFmt = v.ultima_preventiva ? new Date(v.ultima_preventiva).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'Nenhuma';
                     return `<tr>
@@ -163,7 +166,7 @@ async function exportarRelatorioLogisticaHTML() {
                         <td>${v.marca} / ${v.modelo}</td>
                         <td>${v.nome_filial}</td>
                         <td class="text-center">${v.status}</td>
-                        <td class="text-right">${(v.odometro_atual || 0).toLocaleString('pt-BR')}</td>
+                        <td class="text-right font-semibold">${(v.odometro_atual || 0).toLocaleString('pt-BR')}</td>
                         <td class="text-center">${ultimaPreventivaFmt}</td>
                         <td class="text-center">${v.seguro ? 'Sim' : 'Não'}</td>
                         <td class="text-center">${v.rastreador ? 'Sim' : 'Não'}</td>
@@ -174,15 +177,15 @@ async function exportarRelatorioLogisticaHTML() {
             case 'despesaVeiculo':
                 const vehicleData = data.vehicle;
                 const expensesData = data.expenses;
-
                 if (expensesData.length === 0) {
                     alert('Nenhuma despesa encontrada para este veículo no período.');
+                    printWindow.close();
                     return;
                 }
                 
                 reportTitle += ` - ${vehicleData.marca} / ${vehicleData.modelo} (Placa: ${vehicleData.placa})`;
 
-                headHtml = `<tr><th>Data</th><th>NF</th><th>Tipo</th><th>Descrição</th><th>Fornecedor</th><th class="text-right">Valor (R$)</th></tr>`;
+                headHtml = `<tr><th class="text-center">Data</th><th class="text-center">NF</th><th>Tipo</th><th>Descrição</th><th>Fornecedor</th><th class="text-right">Valor (R$)</th></tr>`;
                 bodyHtml = expensesData.map(item => {
                     totalGeral += parseFloat(item.custo);
                     return `<tr>
@@ -191,13 +194,13 @@ async function exportarRelatorioLogisticaHTML() {
                         <td>${item.tipo}</td>
                         <td>${item.descricao}</td>
                         <td>${item.fornecedor_nome || 'N/A'}</td>
-                        <td class="text-right">${parseFloat(item.custo).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+                        <td class="text-right font-semibold text-blue-800">${parseFloat(item.custo).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
                     </tr>`;
                 }).join('');
                 break;
 
             case 'abastecimento':
-                headHtml = `<tr><th>Data</th><th>Filial</th><th>Veículo / Destino</th><th class="text-right">Qtd (L)</th><th class="text-right">Odômetro</th><th class="text-right">Custo Estimado</th></tr>`;
+                headHtml = `<tr><th class="text-center">Data</th><th>Filial</th><th>Veículo / Destino</th><th class="text-right">Qtd (L)</th><th class="text-right">Odômetro (km)</th><th class="text-right">Custo Estimado</th></tr>`;
                 bodyHtml = data.map(item => {
                     const quantidade = parseFloat(item.quantidade) || 0;
                     const custo = parseFloat(item.custo_estimado) || 0;
@@ -208,69 +211,116 @@ async function exportarRelatorioLogisticaHTML() {
                         <td class="text-center">${new Date(item.data_movimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
                         <td>${item.nome_filial}</td>
                         <td>${item.modelo ? `${item.modelo} (${item.placa})` : 'Galão'}</td>
-                        <td class="text-right">${quantidade.toFixed(2)}</td>
+                        <td class="text-right font-semibold">${quantidade.toFixed(2)}</td>
                         <td class="text-right">${item.odometro_no_momento ? item.odometro_no_momento.toLocaleString('pt-BR') : 'N/A'}</td>
-                        <td class="text-right">${custo.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+                        <td class="text-right font-semibold text-blue-800">${custo.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
                     </tr>`;
                 }).join('');
                 break;
         }
 
-        // TOTAIS
+        // Rodapé com Totais
         let footHtml = '';
         if (reportType === 'abastecimento') {
             footHtml = `
-                <tr>
-                    <td colspan="3" class="text-right font-bold">TOTAL GERAL:</td>
-                    <td class="text-right font-bold">${totalGeralLitros.toFixed(2)} L</td>
+                <tr class="tfoot">
+                    <td colspan="3" class="text-right font-bold uppercase">Total Geral do Período:</td>
+                    <td class="text-right font-bold text-gray-900">${totalGeralLitros.toFixed(2)} L</td>
                     <td></td>
-                    <td class="text-right font-bold">R$ ${totalGeral.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+                    <td class="text-right font-bold text-gray-900">R$ ${totalGeral.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
                 </tr>`;
         } else if (['custoTotalFilial', 'custoRateado', 'custoDireto', 'despesaVeiculo'].includes(reportType)) {
              footHtml = `
-                <tr>
-                    <td colspan="${reportType === 'despesaVeiculo' ? 5 : (reportType === 'custoDireto' ? 7 : 6)}" class="text-right font-bold">TOTAL GERAL:</td>
-                    <td class="text-right font-bold">R$ ${totalGeral.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+                <tr class="tfoot">
+                    <td colspan="${reportType === 'despesaVeiculo' ? 5 : (reportType === 'custoDireto' ? 7 : 6)}" class="text-right font-bold uppercase">Custo Total:</td>
+                    <td class="text-right font-bold text-gray-900" style="font-size: 14px;">R$ ${totalGeral.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
                 </tr>`;
         }
 
+        // Captura o texto exato dos filtros aplicados
+        const periodoFiltro = document.getElementById('filter-date-range').value || 'Todo o período';
+        const filialFiltro = document.getElementById('filter-filial').options[document.getElementById('filter-filial').selectedIndex].text || 'Todas';
+        const veiculoFiltro = document.getElementById('filter-vehicle').options[document.getElementById('filter-vehicle').selectedIndex].text || 'Todos';
 
-        // CONSTRUINDO A PÁGINA FINAL
-        const periodoFiltro = document.getElementById('filter-date-range').value || 'Todos';
-        const filialFiltro = document.getElementById('filter-filial').options[document.getElementById('filter-filial').selectedIndex].text;
-
-        // USA AS FUNÇÕES DO SEU ARQUIVO impressao_a4.js AQUI!
+        // O HTML CSS Masterpiece
         let html = `
-        <html>
+        <!DOCTYPE html>
+        <html lang="pt-br">
         <head>
+            <meta charset="UTF-8">
             <title>${reportTitle}</title>
             <style>
-                @page { margin: 5mm; size: landscape; } /* Paisagem para caber colunas */
-                body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 11px; color: #000; padding: 0; margin: 0; line-height: 1.4; }
-                .doc-title { font-size: 14px; font-weight: bold; margin: 10px 0; text-align: center; text-transform: uppercase; background:#eee; padding:5px; border:1px solid #000;}
-                .filter-info { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 10px;}
-                table { width: 100%; border-collapse: collapse; margin-bottom:15px;}
-                th { border: 1px solid #000; text-align: left; padding: 4px; font-size: 10px; text-transform: uppercase; background-color: #f3f4f6;}
-                td { border: 1px solid #000; padding: 4px; font-size: 11px; vertical-align: middle;}
+                /* Configuração de Página A4 Paisagem */
+                @page { margin: 10mm; size: landscape; }
+                
+                /* Reset e Fontes */
+                body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11px; color: #1f2937; margin: 0; padding: 0; line-height: 1.4; -webkit-print-color-adjust: exact; color-adjust: exact; }
+                
+                /* Cabeçalho Empresarial */
+                .header-container { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #1e3a8a; padding-bottom: 15px; margin-bottom: 20px; }
+                .company-logo { max-width: 160px; max-height: 60px; }
+                .company-info { text-align: right; }
+                .company-name { font-size: 18px; font-weight: 800; color: #1e3a8a; margin: 0 0 4px 0; letter-spacing: 0.5px; }
+                .company-details { font-size: 10px; color: #4b5563; margin: 2px 0; }
+                
+                /* Título e Filtros */
+                .report-header { text-align: center; margin-bottom: 25px; }
+                .report-title { font-size: 20px; font-weight: 800; color: #111827; margin: 0 0 15px 0; text-transform: uppercase; letter-spacing: 1px; }
+                .filter-box { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; background-color: #f3f4f6; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb; font-size: 11px; }
+                .filter-item { display: flex; align-items: center; gap: 5px; }
+                .filter-label { font-weight: 700; color: #374151; text-transform: uppercase; font-size: 10px; }
+                .filter-value { color: #1f2937; }
+
+                /* Tabela Principal */
+                table { width: 100%; border-collapse: collapse; margin-bottom: 30px; box-shadow: 0 0 0 1px #e5e7eb; }
+                th { background-color: #1e3a8a; color: #ffffff; padding: 10px 8px; text-transform: uppercase; font-size: 10px; font-weight: 700; border: 1px solid #1e3a8a; }
+                td { padding: 8px; border: 1px solid #d1d5db; vertical-align: middle; }
+                tr:nth-child(even) { background-color: #f9fafb; }
+                tr:hover { background-color: #f3f4f6; }
+                
+                /* Totais (Rodapé da Tabela) */
+                .tfoot td { background-color: #e5e7eb; border-top: 2px solid #9ca3af; padding: 12px 8px; font-size: 12px; }
+
+                /* Utilitários */
                 .text-center { text-align: center; }
                 .text-right { text-align: right; }
+                .text-left { text-align: left; }
                 .font-bold { font-weight: bold; }
-                @media print { .no-print { display: none; } }
+                .font-semibold { font-weight: 600; }
+                .text-blue-800 { color: #1e40af; }
+                
+                /* Rodapé da Página */
+                .page-footer { margin-top: 40px; padding-top: 15px; border-top: 1px dashed #cbd5e1; text-align: center; font-size: 9px; color: #6b7280; }
+                
+                /* Ocultar botão na impressão */
+                @media print { .no-print { display: none !important; } body { background: white; } }
             </style>
         </head>
         <body>
-            <div class="no-print" style="margin-bottom: 15px; text-align: center;">
-                <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Imprimir Relatório</button>
+            <div class="no-print" style="margin-bottom: 20px; text-align: center; padding: 15px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                <button onclick="window.print()" style="padding: 10px 24px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🖨️ Imprimir ou Salvar em PDF</button>
             </div>
             
-            ${typeof getCabecalhoHtml === 'function' ? getCabecalhoHtml(logo) : '<h2>Luca Gerencial</h2>'}
+            <div class="header-container">
+                <div>
+                    ${logo ? `<img src="${logo}" class="company-logo" alt="Logo da Empresa">` : `<h2 style="color:#1e3a8a; margin:0;">LUCA</h2>`}
+                </div>
+                <div class="company-info">
+                    <h1 class="company-name">LUCA MATERIAL DE CONSTRUCAO LTDA</h1>
+                    <p class="company-details">Av. Automóvel Clube SN Qd 04 Lote 19 - Parada Angélica, Duque De Caxias [RJ]</p>
+                    <p class="company-details">CNPJ: 36.671.152/0004-06 | Tel(s): (21) 2778-3885 | 2739-1480</p>
+                </div>
+            </div>
             
-            <div class="doc-title">${reportTitle}</div>
-            
-            <div class="filter-info">
-                <div><strong>Período:</strong> ${periodoFiltro}</div>
-                <div><strong>Filial:</strong> ${filialFiltro}</div>
-                <div><strong>Data Impressão:</strong> ${new Date().toLocaleString('pt-BR')}</div>
+            <div class="report-header">
+                <h2 class="report-title">${reportTitle}</h2>
+                <div class="filter-box">
+                    <div class="filter-item"><span class="filter-label">Período:</span> <span class="filter-value">${periodoFiltro}</span></div>
+                    <div class="filter-item"><span class="filter-label">Filial:</span> <span class="filter-value">${filialFiltro}</span></div>
+                    ${reportType === 'despesaVeiculo' ? `<div class="filter-item"><span class="filter-label">Veículo:</span> <span class="filter-value">${veiculoFiltro}</span></div>` : ''}
+                    <div class="filter-item"><span class="filter-label">Emissão:</span> <span class="filter-value">${new Date().toLocaleString('pt-BR')}</span></div>
+                    <div class="filter-item"><span class="filter-label">Usuário:</span> <span class="filter-value">${userName}</span></div>
+                </div>
             </div>
 
             <table>
@@ -279,25 +329,26 @@ async function exportarRelatorioLogisticaHTML() {
                 <tfoot>${footHtml}</tfoot>
             </table>
             
-            <div style="margin-top: 30px; text-align: right; font-size:9px;">
-                Relatório gerado pelo Módulo de Logística - Luca Gerencial
+            <div class="page-footer">
+                Documento interno gerado pelo Sistema Luca Gerencial - Módulo de Gestão de Frota e Logística.
             </div>
         </body>
         </html>`;
 
         printWindow.document.write(html);
         printWindow.document.close();
-        setTimeout(() => printWindow.print(), 500);
+        
+        // Dá um pequeno tempo para o navegador carregar o logo e a folha de estilo antes de puxar a tela de print
+        setTimeout(() => printWindow.print(), 800);
 
     } catch (error) {
         alert(`Erro ao gerar impressão: ${error.message}`);
     } finally {
-        btn.textContent = 'Gerar Impressão / PDF';
+        btn.textContent = 'Gerar PDF';
         btn.disabled = false;
         document.getElementById('export-pdf-modal').classList.add('hidden');
     }
 }
-// ==========================================================
 
 async function loadCurrentLogo() {
     try {
@@ -327,7 +378,8 @@ function handleReportTypeChange() {
         container.querySelectorAll('input, select').forEach(input => input.disabled = !enabled);
     };
 
-    const needsFilial = ['custoTotalFilial', 'custoRateado', 'custoDireto', 'listaVeiculos', 'abastecimento'].includes(reportType);
+    // A MÁGICA ESTÁ AQUI: Adicionamos o 'despesaVeiculo' na lista do needsFilial!
+    const needsFilial = ['custoTotalFilial', 'custoRateado', 'custoDireto', 'listaVeiculos', 'abastecimento', 'despesaVeiculo'].includes(reportType);
     const needsVehicle = ['despesaVeiculo'].includes(reportType);
     const needsDate = ['custoTotalFilial', 'custoRateado', 'custoDireto', 'despesaVeiculo', 'abastecimento'].includes(reportType);
     const needsStatus = ['listaVeiculos'].includes(reportType);
