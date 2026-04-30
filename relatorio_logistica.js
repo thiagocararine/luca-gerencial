@@ -2,6 +2,7 @@
 
 document.addEventListener('DOMContentLoaded', initRelatoriosPage);
 
+// Variáveis Globais (Sem aquele require maldito do back-end aqui no front!)
 let datepicker = null;
 let LOGO_BASE_64 = null; // Para guardar a logo da empresa
 
