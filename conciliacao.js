@@ -98,7 +98,7 @@ function processarArquivo(file) {
     const codFilial = identificarFilial(file.name);
     
     if (!codFilial) {
-        alert("Não identificamos a filial no nome do arquivo (ex: conciliacao_vendas_santa-cruz.csv)");
+        showToast("Erro: O nome do arquivo CSV não contém a filial correta. Verifique se renomeou o arquivo ou se baixou da conta certa (ex: vendas_santa-cruz.csv).", "error");
         return;
     }
 
@@ -642,7 +642,7 @@ function carregarSobrasTransferencia() {
     
     if (!estadoBusca || estadoBusca.sobrasERP.length === 0) {
         tabelaTransferencia.clearData();
-        return alert(`Não há vendas sobrando no sistema para ${modOrigem} neste dia.`);
+        return showToast(`Não há vendas pendentes de conciliação para ${modOrigem} neste dia. Verifique se o lançamento no ERP está na data correta.`, "error");
     }
 
     let dadosParaTabela = estadoBusca.sobrasERP.map((e, idx) => {
@@ -654,7 +654,7 @@ function carregarSobrasTransferencia() {
 
 function efetivarTransferencia() {
     let selecionados = tabelaTransferencia.getSelectedData();
-    if (selecionados.length === 0) return alert("Marque pelo menos uma venda na tabela para trazer.");
+    if (selecionados.length === 0) return showToast("Selecione pelo menos uma venda da lista clicando na caixa à esquerda.", "warning");
 
     let modOrigem = document.getElementById('select-mod-origem').value;
     let chaveBusca = selecionados[0].chave_origem;
@@ -729,7 +729,7 @@ function renderizarTabelaAuditoria(chave) {
 }
 
 function abrirAuditoriaItemAItem(rowData) {
-    if (rowData.modalidade === 'Dinheiro') return alert("Dinheiro é recebido fisicamente.");
+    if (rowData.modalidade === 'Dinheiro') return showToast("Ação inválida. O Dinheiro não tem auditoria eletrónica, deve ser conferido fisicamente no botão Gaveta.", "warning");
     linhaAtualAuditoria = rowData;
     const chave = rowData.chave_id;
     
@@ -746,7 +746,7 @@ function abrirAuditoriaItemAItem(rowData) {
     }, 10);
 }
 
-function conciliarManualmente() {
+async function conciliarManualmente() {
     let selecionados = tableAuditoria.getSelectedData();
     let selMaq = selecionados.filter(d => d.tipo_sobra === 'maq'); 
     let selErp = selecionados.filter(d => d.tipo_sobra === 'erp');
@@ -757,7 +757,10 @@ function conciliarManualmente() {
     let sumErp = 0; selErp.forEach(curr => sumErp += curr.erp_valor);
 
     if (Math.abs(sumMaq - sumErp) > 0.05) {
-        if (!confirm(`⚠️ ATENÇÃO - VALORES DIFERENTES:\nMercado Pago: R$ ${sumMaq.toFixed(2)}\nSistema: R$ ${sumErp.toFixed(2)}\n\nDeseja forçar a conciliação mesmo com essa diferença?`)) return;
+        const msg = `Mercado Pago: R$ ${sumMaq.toFixed(2)}\nSistema: R$ ${sumErp.toFixed(2)}\n\nDiferença: R$ ${Math.abs(sumMaq - sumErp).toFixed(2)}\n\nDeseja forçar a conciliação mesmo com essa diferença de valores?`;
+        
+        const desejaForcar = await confirmarAcao("⚠️ Valores Diferentes", msg);
+        if (!desejaForcar) return; // Sai silenciosamente se o utilizador cancelar
     }
 
     let chave = linhaAtualAuditoria.chave_id; 
@@ -783,7 +786,7 @@ function conciliarManualmente() {
     tableAuditoria.deselectRow(); 
     renderizarTabelaAuditoria(chave);
 
-    // NOVO: Atualiza a tela principal por trás
+    // Atualiza a tela principal por trás
     sincronizarTotaisPrincipais();
 }
 
@@ -1235,3 +1238,37 @@ document.getElementById('btn-prompt-confirm')?.addEventListener('click', functio
     fecharCustomPrompt();
     if (promptCallback) promptCallback(val);
 });
+
+// 3. Confirmador Customizado (Promessa)
+function confirmarAcao(titulo, mensagem) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('custom-confirm-modal');
+        if (!modal) return resolve(confirm(titulo + '\n\n' + mensagem)); // Proteção caso falte HTML
+        
+        document.getElementById('confirm-title').textContent = titulo;
+        document.getElementById('confirm-message').textContent = mensagem;
+        
+        modal.classList.remove('hidden');
+        setTimeout(() => { 
+            modal.classList.remove('opacity-0'); 
+            modal.querySelector('div').classList.remove('scale-95'); 
+        }, 10);
+        
+        const btnYes = document.getElementById('btn-confirm-yes');
+        const btnCancel = document.getElementById('btn-confirm-cancel');
+        
+        const cleanup = () => {
+            modal.classList.add('opacity-0'); 
+            modal.querySelector('div').classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 200);
+            btnYes.removeEventListener('click', handleYes); 
+            btnCancel.removeEventListener('click', handleCancel);
+        };
+        
+        const handleYes = () => { cleanup(); resolve(true); };
+        const handleCancel = () => { cleanup(); resolve(false); };
+        
+        btnYes.addEventListener('click', handleYes); 
+        btnCancel.addEventListener('click', handleCancel);
+    });
+}

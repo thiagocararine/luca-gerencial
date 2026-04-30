@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="assets/style.css">
     <script src="https://unpkg.com/feather-icons"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
+    <link rel="icon" href="assets/favicon.ico" type="image/x-icon">
     <link href="https://unpkg.com/tabulator-tables@6.2.1/dist/css/tabulator_simple.min.css" rel="stylesheet">
     <script type="text/javascript" src="https://unpkg.com/tabulator-tables@6.2.1/dist/js/tabulator.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -31,6 +31,23 @@
 <body class="h-full text-gray-900 flex flex-col overflow-hidden">
     <!-- Contentor dos Toasts -->
     <div id="toast-container" class="fixed top-20 right-5 z-[150] flex flex-col gap-2 w-80 pointer-events-none"></div>
+
+    <!-- Modal de Confirmação (Sim/Não) com Design do Sistema -->
+    <div id="custom-confirm-modal" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[200] flex items-center justify-center p-4 opacity-0 transition-opacity duration-200">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden transform scale-95 transition-transform duration-200">
+            <div class="p-6 text-center">
+                <div class="w-14 h-14 rounded-full bg-red-100 mx-auto flex items-center justify-center mb-4">
+                    <i data-feather="alert-triangle" class="w-7 h-7 text-red-600"></i>
+                </div>
+                <h3 class="text-lg font-bold text-gray-900 mb-2" id="confirm-title">Atenção</h3>
+                <p class="text-sm text-gray-600 mb-4 whitespace-pre-wrap" id="confirm-message">Mensagem de confirmação.</p>
+            </div>
+            <div class="bg-gray-50 px-6 py-4 flex justify-center gap-3 border-t border-gray-100">
+                <button id="btn-confirm-cancel" class="px-5 py-2 text-sm font-bold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancelar</button>
+                <button id="btn-confirm-yes" class="px-5 py-2 text-sm font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors shadow-md">Confirmar Ação</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Novo Pop-up Nativo para o Dinheiro (Gaveta) -->
     <div id="custom-prompt-modal" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[200] flex items-center justify-center p-4 opacity-0 transition-opacity duration-200">
