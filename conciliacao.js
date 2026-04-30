@@ -290,7 +290,9 @@ async function cruzarComERP(codFilial, datas, dadosCSVAgrupados, taxasCSVAgrupad
                 return `${dia}/${mes}/${ano}`; 
             }).join(', ');
             
-            const confirma = confirm(`⚠️ ATENÇÃO: O Fechamento para as datas (${datasFormatadas}) já foi salvo.\n\nDeseja SOBRESCREVER os dados anteriores?`);
+            const mensagemSobrepor = `O Fechamento para a(s) data(s) (${datasFormatadas}) já foi salvo anteriormente.\n\nDeseja SOBRESCREVER os dados anteriores e refazer a conciliação do zero?`;
+
+            const confirma = await confirmarAcao("⚠️ Fechamento Existente", mensagemSobrepor);
             
             if (!confirma) { 
                 document.getElementById('file-input').value = ''; 
@@ -1141,8 +1143,9 @@ function resetarTelaConciliacao() {
     // 1. Zera a Tabela Principal
     if (tablePrincipal) tablePrincipal.setData([]);
     
-    // 2. Limpa a Memória do Sistema
+    // 2. Limpa a Memória do Sistema (incluindo as despesas!)
     dadosConsolidados = [];
+    despesasDoDia = []; // <-- NOVO: Zera as despesas
     transacoesMaqPorChave = {}; 
     transacoesERPPorChave = {}; 
     estadoAuditoria = {}; 
@@ -1175,6 +1178,22 @@ function resetarTelaConciliacao() {
         uploadSubtext.textContent = "Apenas arquivos .csv";
     }
 
+    // 4. NOVO: Zera todos os painéis (cards) de valores lá em cima
+    document.getElementById('card-total-erp').textContent = "R$ 0,00";
+    document.getElementById('card-total-maq').textContent = "R$ 0,00";
+    document.getElementById('card-total-devolucao').textContent = "R$ 0,00";
+    if (document.getElementById('card-total-despesas')) document.getElementById('card-total-despesas').textContent = "R$ 0,00";
+    document.getElementById('card-total-taxas').textContent = "R$ 0,00";
+    document.getElementById('card-diferenca').textContent = "R$ 0,00";
+
+    // 5. NOVO: Esconde o bloco que tem a tabela e a tabela de despesas inteiras
+    const dashboardContainer = document.getElementById('dashboard-container');
+    if (dashboardContainer) dashboardContainer.classList.add('hidden');
+    
+    const containerDesp = document.getElementById('container-despesas-auditoria');
+    if (containerDesp) containerDesp.classList.add('hidden');
+
+    // Redesenha os ícones nativos
     if (typeof feather !== 'undefined') feather.replace();
 }
 
