@@ -24,10 +24,31 @@
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .drop-active { border-color: #4f46e5 !important; background-color: #eef2ff !important; }
+        @keyframes toastSlideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes toastFadeOut { from { opacity: 1; } to { opacity: 0; } }
     </style>
 </head>
 <body class="h-full text-gray-900 flex flex-col overflow-hidden">
+    <!-- Contentor dos Toasts -->
+    <div id="toast-container" class="fixed top-20 right-5 z-[150] flex flex-col gap-2 w-80 pointer-events-none"></div>
 
+    <!-- Novo Pop-up Nativo para o Dinheiro (Gaveta) -->
+    <div id="custom-prompt-modal" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[200] flex items-center justify-center p-4 opacity-0 transition-opacity duration-200">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden transform scale-95 transition-transform duration-200">
+            <div class="p-6 text-center">
+                <div class="w-12 h-12 rounded-full bg-green-100 mx-auto flex items-center justify-center mb-4">
+                    <i data-feather="dollar-sign" class="w-6 h-6 text-green-600"></i>
+                </div>
+                <h3 class="text-lg font-bold text-gray-900 mb-2" id="prompt-title">Título</h3>
+                <p class="text-sm text-gray-500 mb-4 whitespace-pre-wrap" id="prompt-message">Mensagem</p>
+                <input type="text" id="prompt-input" class="w-full border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2 text-center text-xl font-black text-indigo-700" placeholder="Ex: 1500,50">
+            </div>
+            <div class="bg-gray-50 px-6 py-4 flex justify-center gap-3 border-t border-gray-100">
+                <button onclick="fecharCustomPrompt()" class="px-5 py-2 text-sm font-bold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancelar</button>
+                <button id="btn-prompt-confirm" class="px-5 py-2 text-sm font-bold text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors shadow-md">Confirmar Valor</button>
+            </div>
+        </div>
+    </div>
     <header class="bg-white border-b h-14 flex items-center justify-between px-6 shadow-sm z-30 shrink-0">
         <div class="flex items-center gap-4">
             <a href="index.html" class="text-gray-500 hover:text-indigo-600 flex items-center gap-1.5 font-semibold text-xs transition-colors py-2 px-3 hover:bg-gray-50 rounded-md">

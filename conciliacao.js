@@ -983,41 +983,38 @@ async function salvarFechamentoFinal() {
 // --- AUDITORIA DE GAVETA (DINHEIRO) ---
 
 function informarGaveta(rowData) {
-    let valorInformado = prompt(`CONFERÊNCIA DE CAIXA FÍSICO (DINHEIRO)\n\nO Sistema (ERP) diz que devem haver: R$ ${rowData.valor_erp.toLocaleString('pt-BR', {minimumFractionDigits: 2})}\n\nDigite o valor real que você conferiu na gaveta agora:`);
-
-    if (valorInformado === null || valorInformado.trim() === '') return; // Usuário cancelou
-
-    // Converte o que o usuário digitou para formato de cálculo (ex: de "1.500,50" para "1500.50")
-    let valorLimpo = parseFloat(valorInformado.replace(/\./g, '').replace(',', '.'));
+    const mensagem = `O Sistema (ERP) diz que devem haver:\nR$ ${rowData.valor_erp.toLocaleString('pt-BR', {minimumFractionDigits: 2})}\n\nDigite o valor real que você conferiu na gaveta agora:`;
     
-    if (isNaN(valorLimpo)) {
-        return alert("Valor inválido! Por favor, digite apenas números e vírgula.");
-    }
+    abrirCustomPrompt("Conferência de Caixa Físico", mensagem, function(valorInformado) {
+        if (valorInformado === null || valorInformado.trim() === '') return;
 
-    // Calcula a nova diferença usando a gaveta no lugar do Mercado Pago
-    let novaDiferenca = rowData.valor_erp - valorLimpo;
-    let novoStatus = Math.abs(novaDiferenca) < 0.10 ? 'Conciliado' : 'Com Diferença';
-    let novaObs = rowData.observacao;
+        let valorLimpo = parseFloat(valorInformado.replace(/\./g, '').replace(',', '.'));
+        
+        if (isNaN(valorLimpo)) {
+            return showToast("Valor inválido! Por favor, digite apenas números e vírgula.", "error");
+        }
 
-    // Gera a observação automática
-    if (novoStatus === 'Com Diferença') {
-        let tipoFuro = novaDiferenca > 0 ? 'Falta' : 'Sobra';
-        novaObs = `Conferência Física: ${tipoFuro} de R$ ${Math.abs(novaDiferenca).toLocaleString('pt-BR', {minimumFractionDigits: 2})} na gaveta.`;
-    } else {
-        novaObs = "Conferência Física: Gaveta OK.";
-    }
+        let novaDiferenca = rowData.valor_erp - valorLimpo;
+        let novoStatus = Math.abs(novaDiferenca) < 0.10 ? 'Conciliado' : 'Com Diferença';
+        let novaObs = rowData.observacao;
 
-    // Atualiza a linha viva na tabela
-    tablePrincipal.updateData([{
-        chave_id: rowData.chave_id,
-        valor_maq: valorLimpo, // Substituímos o "Zero" do MP pelo valor que o caixa contou
-        diferenca: novaDiferenca,
-        status: novoStatus,
-        observacao: novaObs
-    }]);
+        if (novoStatus === 'Com Diferença') {
+            let tipoFuro = novaDiferenca > 0 ? 'Falta' : 'Sobra';
+            novaObs = `Conferência Física: ${tipoFuro} de R$ ${Math.abs(novaDiferenca).toLocaleString('pt-BR', {minimumFractionDigits: 2})} na gaveta.`;
+        } else {
+            novaObs = "Conferência Física: Gaveta OK.";
+        }
 
-    // Atualiza os painéis (Cards) coloridos no topo da tela
-    recalcularDashboards();
+        tablePrincipal.updateData([{
+            chave_id: rowData.chave_id,
+            valor_maq: valorLimpo, 
+            diferenca: novaDiferenca,
+            status: novoStatus,
+            observacao: novaObs
+        }]);
+
+        recalcularDashboards();
+    });
 }
 
 function recalcularDashboards() {
@@ -1177,3 +1174,64 @@ function resetarTelaConciliacao() {
 
     if (typeof feather !== 'undefined') feather.replace();
 }
+
+// --- FUNÇÕES DE SISTEMA (NATIVAS) ---
+
+// 1. Mensagens Toast
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    if (!container) { alert(message); return; } // Salva-vidas caso falte o HTML
+    
+    const toast = document.createElement('div');
+    const bgColor = type === 'success' ? 'bg-green-600' : (type === 'error' ? 'bg-red-600' : 'bg-orange-500');
+    const icon = type === 'success' ? 'check-circle' : (type === 'error' ? 'alert-triangle' : 'info');
+    
+    toast.className = `toast flex items-center gap-3 ${bgColor} text-white px-4 py-3 rounded-lg shadow-xl pointer-events-auto border border-white/20`;
+    toast.style.animation = "toastSlideIn 0.3s ease-out forwards";
+    toast.innerHTML = `<i data-feather="${icon}" class="w-5 h-5 shrink-0"></i><p class="text-sm font-bold shadow-sm">${message}</p>`;
+    
+    container.appendChild(toast);
+    if(typeof feather !== 'undefined') feather.replace();
+    
+    setTimeout(() => { 
+        toast.style.animation = "toastFadeOut 0.3s ease-out forwards"; 
+        setTimeout(() => toast.remove(), 300); 
+    }, 4000);
+}
+
+// 2. Pop-up Customizado (Substitui o window.prompt)
+let promptCallback = null;
+
+function abrirCustomPrompt(titulo, mensagem, callback) {
+    document.getElementById('prompt-title').textContent = titulo;
+    document.getElementById('prompt-message').textContent = mensagem;
+    const input = document.getElementById('prompt-input');
+    input.value = '';
+    promptCallback = callback;
+    
+    const modal = document.getElementById('custom-prompt-modal');
+    modal.classList.remove('hidden');
+    setTimeout(() => { 
+        modal.classList.remove('opacity-0'); 
+        modal.querySelector('div').classList.remove('scale-95');
+        input.focus(); 
+    }, 10);
+    
+    // Deixa confirmar dando ENTER no teclado
+    input.onkeypress = function(e) {
+        if(e.key === 'Enter') document.getElementById('btn-prompt-confirm').click();
+    };
+}
+
+function fecharCustomPrompt() {
+    const modal = document.getElementById('custom-prompt-modal');
+    modal.classList.add('opacity-0');
+    modal.querySelector('div').classList.add('scale-95');
+    setTimeout(() => modal.classList.add('hidden'), 200);
+}
+
+document.getElementById('btn-prompt-confirm')?.addEventListener('click', function() {
+    const val = document.getElementById('prompt-input').value;
+    fecharCustomPrompt();
+    if (promptCallback) promptCallback(val);
+});
