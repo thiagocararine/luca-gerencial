@@ -1591,26 +1591,39 @@ router.get('/veiculos/manutencao/a-vencer', authenticateToken, async (req, res) 
 router.get('/cnpj/:cnpj', authenticateToken, async (req, res) => {
     const { cnpj } = req.params;
     if (!cnpj) {
-        return res.status(400).json({ error: 'CNPJ é obrigatório.' });
+        return res.status(400).json({ error: 'O CNPJ é obrigatório.' });
     }
+    
     try {
-        /* IMPORTANTE: Se o seu Node for < 18, o 'fetch' vai dar erro de "not defined".
-           Se for o caso, use a biblioteca axios: const axios = require('axios');
-           e troque por: const response = await axios.get(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
-        */
         const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
-        const data = await response.json();
-
-        // Se a BrasilAPI retornar erro (ex: CNPJ inválido), repassamos a mensagem deles
-        if (!response.ok) {
-            return res.status(response.status).json({ error: data.message || 'CNPJ não encontrado na Receita Federal.' });
+        
+        // 1. Previne o erro "Unexpected token <" se a BrasilAPI cair e retornar uma página de erro HTML
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            return res.status(502).json({ error: 'O serviço da Receita Federal (BrasilAPI) está temporariamente indisponível.' });
         }
 
+        const data = await response.json();
+
+        // 2. Trata os erros específicos que a BrasilAPI devolve
+        if (!response.ok) {
+            if (response.status === 404) {
+                return res.status(404).json({ error: 'CNPJ não encontrado. Verifique se o número está correto.' });
+            }
+            if (response.status === 400) {
+                return res.status(400).json({ error: 'O formato do CNPJ é inválido.' });
+            }
+            // Outros erros da BrasilAPI
+            return res.status(response.status).json({ error: data.message || 'Falha ao consultar o CNPJ.' });
+        }
+
+        // 3. Sucesso! Devolve os dados
         res.json(data);
+        
     } catch (error) {
-        console.error("Erro ao consultar BrasilAPI:", error);
-        // Agora, se der erro no servidor (como falta do fetch nativo), ele manda a mensagem real
-        res.status(500).json({ error: error.message || 'Erro interno ao consultar o serviço de CNPJ.' });
+        console.error("Erro interno ao consultar BrasilAPI:", error);
+        // Cai aqui se houver um erro de rede do próprio servidor Node, ou falta da função fetch
+        res.status(500).json({ error: 'Falha de comunicação no servidor. Tente novamente mais tarde.' });
     }
 });
 
