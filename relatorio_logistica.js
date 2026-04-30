@@ -2,9 +2,6 @@
 
 document.addEventListener('DOMContentLoaded', initRelatoriosPage);
 
-//const apiUrlBase = 'http://10.113.0.17:3000/api';
-//const apiUrlBase = '/api';
-const { authenticateToken, checkPerm, getFiltroFilialSeguro } = require('../middlewares');
 let datepicker = null;
 let LOGO_BASE_64 = null; // Para guardar a logo da empresa
 
@@ -626,7 +623,9 @@ async function populateVehicleSelect() {
         if (!response.ok) throw new Error('Falha ao carregar veículos.');
         const items = await response.json();
         selectElement.innerHTML = `<option value="">-- Selecione um Veículo --</option>`;
-        items.sort((a,b) => a.modelo.localeCompare(b.modelo)).forEach(item => {
+        
+        // CÓDIGO CORRIGIDO AQUI (Evita o crash se a.modelo for nulo)
+        items.sort((a,b) => (a.modelo || '').localeCompare(b.modelo || '')).forEach(item => {
             const option = document.createElement('option');
             option.value = item.id;
             option.textContent = `${item.modelo} - ${item.placa}`;

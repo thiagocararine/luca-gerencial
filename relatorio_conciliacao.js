@@ -1,8 +1,8 @@
 document.addEventListener('DOMContentLoaded', initRelatorio);
 
 const API_BASE = '/api/conciliacao';
-let tabelaRelatorio; 
-let dadosBrutos = []; 
+let tabelaRelatorio;
+let dadosBrutos = [];
 let dateRangePicker;
 
 function initRelatorio() {
