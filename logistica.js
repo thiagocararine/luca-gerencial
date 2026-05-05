@@ -1392,28 +1392,37 @@ function openVehicleCostModal() {
 
     populateMaintenanceTypes('vehicle-cost-type');
     
-    // --- NOVA LÓGICA DE FILTRO AUTOMÁTICO DE CLASSIFICAÇÃO (CORRIGIDA) ---
+    // --- NOVA LÓGICA DE FILTRO AUTOMÁTICO (USANDO ID PARA VINCULAÇÃO) ---
     const classSelect = document.getElementById('vehicle-cost-classification');
     const typeSelect = document.getElementById('vehicle-cost-type');
     
     let classificacoesDisponiveis = [];
+    let tiposDisponiveis = []; // Precisamos dessa lista extra para descobrir os IDs
     
-    // 1. CORREÇÃO: Aqui atualizamos para o novo nome que você definiu nas configurações
+    // 1. Carrega as classificações logísticas
     fetch(`${apiUrlBase}/settings/parametros?cod=Classificação Despesa Logistica`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
         .then(res => res.json())
         .then(data => { classificacoesDisponiveis = data; });
 
+    // 2. Carrega os tipos (para podermos cruzar o Nome selecionado com o ID dele no banco)
+    fetch(`${apiUrlBase}/settings/parametros?cod=Tipo - Manutenção`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
+        .then(res => res.json())
+        .then(data => { tiposDisponiveis = data; });
+
     classSelect.innerHTML = '<option value="">-- Selecione o Tipo Primeiro --</option>';
 
     typeSelect.onchange = (e) => {
-        const tipoSelecionado = e.target.value;
+        const tipoSelecionadoNome = e.target.value;
         classSelect.innerHTML = '<option value="">-- Selecione a Classificação --</option>';
         
-        // FILTRO DINÂMICO PELO BANCO DE DADOS
-        // Pega as classificações onde o campo KEY_VINCULACAO é igual ao nome do Tipo
-        let opcoesFiltradas = classificacoesDisponiveis.filter(c => c.KEY_VINCULACAO === tipoSelecionado);
+        // Descobre qual é o ID do Tipo que o usuário acabou de selecionar
+        const tipoObj = tiposDisponiveis.find(t => t.NOME_PARAMETRO === tipoSelecionadoNome);
+        const tipoId = tipoObj ? tipoObj.ID : null;
 
-        // Preenche o select com as opções filtradas
+        // Filtra as classificações verificando se a KEY_VINCULACAO é igual ao ID do Tipo
+        let opcoesFiltradas = classificacoesDisponiveis.filter(c => c.KEY_VINCULACAO == tipoId);
+
+        // Preenche o select com as opções encontradas
         opcoesFiltradas.forEach(c => {
             const opt = document.createElement('option');
             opt.value = c.NOME_PARAMETRO;
@@ -1421,14 +1430,14 @@ function openVehicleCostModal() {
             classSelect.appendChild(opt);
         });
 
-        // Seleciona automaticamente se sobrar apenas 1 opção
+        // Se só tiver uma opção correspondente, já deixa ela selecionada
         if (opcoesFiltradas.length === 1) {
             classSelect.value = opcoesFiltradas[0].NOME_PARAMETRO;
         }
 
         classSelect.dispatchEvent(new Event('change'));
     };
-    // --- FIM DA NOVA LÓGICA ---
+    // --- FIM DA LÓGICA DE FILTRO ---
 
     populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Itens de Manutenção`, 'vehicle-cost-item-servico', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Nenhum (Serviço Geral) --');
 

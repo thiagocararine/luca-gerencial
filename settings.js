@@ -574,8 +574,8 @@ async function loadAndPopulateVinculacao(codParametroPai) {
         
         selectVinculacao.innerHTML = '<option value="">-- Nenhum --</option>';
         currentParentList.forEach(item => {
-            // Se for vinculação de Tipo, usa o NOME dele como vínculo. Para os antigos, mantém a regra.
-            let valorVinculo = codParametroPai === 'Tipo - Manutenção' ? item.NOME_PARAMETRO : item.KEY_VINCULACAO;
+            // CORREÇÃO: Usamos o ID do Tipo (que é numérico) em vez do nome. O banco aceita sem erros!
+            let valorVinculo = codParametroPai === 'Tipo - Manutenção' ? item.ID : item.KEY_VINCULACAO;
             
             if (valorVinculo) { 
                 const option = document.createElement('option');
