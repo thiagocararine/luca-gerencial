@@ -123,6 +123,10 @@
             <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
                 <h2 class="text-2xl font-bold text-gray-900">Despesas Lançadas</h2>
                 <div class="flex items-center gap-2">
+                    <button id="open-resumo-modal-btn" class="rounded-md bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>
+                        Resumo Dinâmico
+                    </button>
                     <button id="open-export-modal-btn" class="rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600">Exportar Relatório</button>
                     <button id="add-despesa-button" class="rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-700 flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" /></svg>
@@ -301,6 +305,29 @@
             </div>
              <div class="flex justify-end items-center pt-6 border-t mt-6">
                 <button id="generate-pdf-btn" class="w-full sm:w-auto justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">Gerar PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE RESUMO DINÂMICO -->
+    <div id="resumo-dinamico-modal" class="modal hidden fixed inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+        <div class="relative mx-auto border w-full max-w-4xl shadow-2xl rounded-xl bg-white flex flex-col max-h-[90vh]">
+            <div class="flex items-center justify-between p-5 border-b bg-gray-50 rounded-t-xl shrink-0">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2"><i data-feather="pie-chart" class="text-purple-600"></i> Resumo Analítico (Tabela Dinâmica)</h3>
+                    <p class="text-xs text-gray-500 mt-1 font-medium" id="resumo-periodo-texto">Clique nos grupos para expandir os detalhes.</p>
+                </div>
+                <button id="close-resumo-modal-btn" type="button" class="text-gray-400 bg-white hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-2 transition-colors border shadow-sm">
+                    <i data-feather="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-1 bg-gray-50/50" id="resumo-dinamico-content">
+                <!-- A Tabela Dinâmica será injetada aqui via JS -->
+                <div class="flex justify-center p-10"><i data-feather="loader" class="w-8 h-8 animate-spin text-purple-600"></i></div>
+            </div>
+            <div class="p-5 border-t bg-gray-50 rounded-b-xl flex justify-between items-center shrink-0">
+                <span class="text-sm font-bold text-gray-600 uppercase tracking-wider">Total Geral do Período:</span>
+                <span class="text-2xl font-black text-purple-700" id="resumo-total-geral">R$ 0,00</span>
             </div>
         </div>
     </div>

@@ -182,6 +182,8 @@ function setupEventListeners() {
     document.getElementById('form-despesa-modal')?.addEventListener('submit', handleFormSubmit);
     document.getElementById('modal-tipo-despesa')?.addEventListener('change', handleTipoDespesaChange);
     document.getElementById('filter-tipo')?.addEventListener('change', handleFilterTipoChange);
+    document.getElementById('open-resumo-modal-btn')?.addEventListener('click', gerarResumoDinamico);
+    document.getElementById('close-resumo-modal-btn')?.addEventListener('click', () => { document.getElementById('resumo-dinamico-modal').classList.add('hidden'); });
     
     // CORREÇÃO APLICADA AQUI:
     // O mesmo handler de clique agora é aplicado aos contêineres corretos.
@@ -753,4 +755,142 @@ function renderDespesasAsCards(despesas) {
     });
 
     container.appendChild(cardsGrid);
+}
+
+// ==========================================================
+//               MÓDULO: TABELA DINÂMICA (PIVOT)
+// ==========================================================
+async function gerarResumoDinamico() {
+    const modal = document.getElementById('resumo-dinamico-modal');
+    const content = document.getElementById('resumo-dinamico-content');
+    const totalGeralEl = document.getElementById('resumo-total-geral');
+    
+    modal.classList.remove('hidden');
+    content.innerHTML = '<div class="flex flex-col items-center justify-center p-10 text-gray-400"><i data-feather="loader" class="w-8 h-8 animate-spin text-purple-600 mb-2"></i><p class="font-medium text-sm">Processando dados...</p></div>';
+    if(typeof feather !== 'undefined') feather.replace();
+
+    try {
+        const token = getToken();
+        if (!token) return logout();
+
+        // 1. Pegar os filtros atuais da tela
+        const params = new URLSearchParams();
+        const startDate = datepicker.getStartDate();
+        const endDate = datepicker.getEndDate();
+        if (startDate) params.append('dataInicio', formatDate(startDate.toJSDate()));
+        if (endDate) params.append('dataFim', formatDate(endDate.toJSDate()));
+        
+        const statusVal = document.getElementById('filter-status').value;
+        const tipoVal = document.getElementById('filter-tipo').value;
+        const grupoVal = document.getElementById('filter-grupo').value;
+        const filialVal = document.getElementById('filter-filial').value;
+
+        if (statusVal) params.append('status', statusVal);
+        if (tipoVal) params.append('tipo', tipoVal);
+        if (grupoVal) params.append('grupo', grupoVal);
+        if (privilegedRoles.includes(getUserProfile()) && filialVal) params.append('filial', filialVal);
+        
+        // Puxar TODOS os dados (export=true ignora paginação)
+        params.append('export', 'true');
+
+        const response = await fetch(`${despesasApiUrl}?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (response.status >= 400) throw new Error("Falha ao buscar dados.");
+        
+        const despesas = await response.json();
+
+        if (despesas.length === 0) {
+            content.innerHTML = '<div class="text-center p-8 text-gray-500"><i data-feather="inbox" class="w-12 h-12 mx-auto mb-3 opacity-50"></i><p class="font-bold">Nenhum dado encontrado para o filtro atual.</p></div>';
+            totalGeralEl.textContent = 'R$ 0,00';
+            if(typeof feather !== 'undefined') feather.replace();
+            return;
+        }
+
+        // 2. Construir a Tabela Dinâmica (Agrupamento em Objeto)
+        const arvore = {};
+        let totalAcumulado = 0;
+
+        despesas.forEach(d => {
+            // Ignorar despesas canceladas no resumo dinâmico (opcional, mas recomendado)
+            if (d.dsp_status === 2) return; 
+
+            const grupo = d.dsp_grupo || 'NÃO CLASSIFICADO (GRUPO)';
+            const tipo = d.dsp_tipo || 'NÃO CLASSIFICADO (TIPO)';
+            const desc = d.dsp_descricao || 'Sem Descrição';
+            const valor = parseFloat(d.dsp_valordsp) || 0;
+
+            if (!arvore[grupo]) arvore[grupo] = { total: 0, tipos: {} };
+            arvore[grupo].total += valor;
+
+            if (!arvore[grupo].tipos[tipo]) arvore[grupo].tipos[tipo] = { total: 0, descricoes: {} };
+            arvore[grupo].tipos[tipo].total += valor;
+
+            if (!arvore[grupo].tipos[tipo].descricoes[desc]) arvore[grupo].tipos[tipo].descricoes[desc] = 0;
+            arvore[grupo].tipos[tipo].descricoes[desc] += valor;
+
+            totalAcumulado += valor;
+        });
+
+        // 3. Renderizar o HTML da Árvore
+        const formatCurrency = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        let html = `<div class="space-y-3">`;
+        let idCounter = 0;
+
+        // Ordenar os grupos por valor (Maior para menor)
+        const gruposOrdenados = Object.entries(arvore).sort((a, b) => b[1].total - a[1].total);
+
+        for (const [grupo, objGrupo] of gruposOrdenados) {
+            idCounter++;
+            const gId = `resumo-g-${idCounter}`;
+            
+            html += `
+            <div class="border border-gray-200 rounded-lg overflow-hidden shadow-sm bg-white">
+                <div class="bg-purple-50 px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-purple-100 transition-colors border-l-4 border-purple-500" onclick="document.getElementById('${gId}').classList.toggle('hidden')">
+                    <span class="font-black text-purple-900 text-sm flex items-center gap-2"><i data-feather="folder" class="w-4 h-4 text-purple-600"></i> ${grupo}</span>
+                    <span class="font-black text-purple-700 text-base">${formatCurrency(objGrupo.total)}</span>
+                </div>
+                <div id="${gId}" class="hidden divide-y divide-gray-100">
+            `;
+
+            // Ordenar os tipos por valor
+            const tiposOrdenados = Object.entries(objGrupo.tipos).sort((a, b) => b[1].total - a[1].total);
+
+            for (const [tipo, objTipo] of tiposOrdenados) {
+                idCounter++;
+                const tId = `resumo-t-${idCounter}`;
+                
+                html += `
+                    <div class="bg-gray-50">
+                        <div class="px-4 py-2.5 pl-10 flex justify-between items-center cursor-pointer hover:bg-gray-100 transition-colors border-l-4 border-transparent hover:border-gray-300" onclick="document.getElementById('${tId}').classList.toggle('hidden')">
+                            <span class="font-bold text-gray-700 text-xs flex items-center gap-2 uppercase tracking-wide"><i data-feather="corner-down-right" class="w-3 h-3 text-gray-400"></i> ${tipo}</span>
+                            <span class="font-bold text-gray-700 text-sm">${formatCurrency(objTipo.total)}</span>
+                        </div>
+                        <div id="${tId}" class="hidden bg-white divide-y divide-gray-50 shadow-inner">
+                `;
+
+                // Ordenar descrições por valor
+                const descOrdenadas = Object.entries(objTipo.descricoes).sort((a, b) => b[1] - a[1]);
+
+                for (const [desc, val] of descOrdenadas) {
+                    html += `
+                            <div class="px-4 py-2 pl-16 flex justify-between items-center hover:bg-blue-50 transition-colors">
+                                <span class="text-gray-500 text-xs font-medium truncate pr-4" title="${desc}">- ${desc}</span>
+                                <span class="font-semibold text-gray-500 text-xs shrink-0">${formatCurrency(val)}</span>
+                            </div>
+                    `;
+                }
+                html += `</div></div>`;
+            }
+            html += `</div></div>`;
+        }
+        
+        html += `</div>`;
+        
+        content.innerHTML = html;
+        totalGeralEl.textContent = formatCurrency(totalAcumulado);
+        if(typeof feather !== 'undefined') feather.replace();
+
+    } catch (error) {
+        content.innerHTML = `<div class="text-center p-8 text-red-500"><i data-feather="alert-triangle" class="w-12 h-12 mx-auto mb-3"></i><p class="font-bold">Erro ao gerar tabela: ${error.message}</p></div>`;
+        if(typeof feather !== 'undefined') feather.replace();
+    }
 }
