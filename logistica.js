@@ -1392,7 +1392,7 @@ function openVehicleCostModal() {
 
     populateMaintenanceTypes('vehicle-cost-type');
     
-    // --- NOVA LÓGICA DE FILTRO AUTOMÁTICO DE CLASSIFICAÇÃO ---
+    // --- NOVA LÓGICA DE FILTRO AUTOMÁTICO DE CLASSIFICAÇÃO (CORRIGIDA) ---
     const classSelect = document.getElementById('vehicle-cost-classification');
     const typeSelect = document.getElementById('vehicle-cost-type');
     
@@ -1402,25 +1402,19 @@ function openVehicleCostModal() {
         .then(res => res.json())
         .then(data => { classificacoesDisponiveis = data; });
 
-    // 2. Removemos event listeners antigos (evita duplicação ao abrir o modal várias vezes)
-    const newTypeSelect = typeSelect.cloneNode(true);
-    typeSelect.parentNode.replaceChild(newTypeSelect, typeSelect);
-    
     classSelect.innerHTML = '<option value="">-- Selecione o Tipo Primeiro --</option>';
 
-    // 3. Adiciona a regra de filtro quando o "Tipo" muda
-    newTypeSelect.addEventListener('change', (e) => {
+    // 2. Usamos .onchange para evitar sobreposição de eventos sem quebrar o carregamento da API
+    typeSelect.onchange = (e) => {
         const tipoSelecionado = e.target.value;
         classSelect.innerHTML = '<option value="">-- Selecione a Classificação --</option>';
         
         let opcoesFiltradas = classificacoesDisponiveis;
 
-        // REGRA DE NEGÓCIO: Adapte os nomes conforme o que você usa no sistema
+        // REGRA DE NEGÓCIO: Adapte os nomes se necessário
         if (tipoSelecionado === 'Troca de Óleo' || tipoSelecionado.includes('Revisão')) {
-            // Se for troca de óleo, filtra para mostrar apenas "Preventiva"
             opcoesFiltradas = classificacoesDisponiveis.filter(c => c.NOME_PARAMETRO === 'Preventiva');
         } else if (tipoSelecionado === 'Mecânica' || tipoSelecionado === 'Borracharia' || tipoSelecionado === 'Elétrica') {
-            // Se for conserto imprevisto, filtra para "Corretiva"
             opcoesFiltradas = classificacoesDisponiveis.filter(c => c.NOME_PARAMETRO === 'Corretiva');
         }
 
@@ -1432,14 +1426,14 @@ function openVehicleCostModal() {
             classSelect.appendChild(opt);
         });
 
-        // Seleciona automaticamente se sobrar apenas 1 opção (Ex: já crava "Preventiva")
+        // Seleciona automaticamente se sobrar apenas 1 opção
         if (opcoesFiltradas.length === 1) {
             classSelect.value = opcoesFiltradas[0].NOME_PARAMETRO;
         }
 
-        // Dispara o evento 'change' para o sistema atualizar a obrigatoriedade do Odômetro
+        // Dispara o evento para o sistema atualizar a obrigatoriedade do Odômetro
         classSelect.dispatchEvent(new Event('change'));
-    });
+    };
     // --- FIM DA NOVA LÓGICA ---
 
     populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Itens de Manutenção`, 'vehicle-cost-item-servico', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Nenhum (Serviço Geral) --');
