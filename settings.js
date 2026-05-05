@@ -574,9 +574,12 @@ async function loadAndPopulateVinculacao(codParametroPai) {
         
         selectVinculacao.innerHTML = '<option value="">-- Nenhum --</option>';
         currentParentList.forEach(item => {
-            if (item.KEY_VINCULACAO) { 
+            // Se for vinculação de Tipo, usa o NOME dele como vínculo. Para os antigos, mantém a regra.
+            let valorVinculo = codParametroPai === 'Tipo - Manutenção' ? item.NOME_PARAMETRO : item.KEY_VINCULACAO;
+            
+            if (valorVinculo) { 
                 const option = document.createElement('option');
-                option.value = item.KEY_VINCULACAO;
+                option.value = valorVinculo;
                 option.textContent = item.NOME_PARAMETRO;
                 selectVinculacao.appendChild(option);
             }
@@ -646,6 +649,8 @@ async function handleParamCodeChange(e) {
         let tipoPai = null;
         if (currentParamCode === 'Tipo Despesa') tipoPai = 'Grupo Despesa';
         else if (currentParamCode === 'Modelo - Veículo') tipoPai = 'Marca - Veículo';
+        // --- NOVA REGRA PARA LOGÍSTICA ---
+        else if (currentParamCode === 'Classificação Despesa Logistica') tipoPai = 'Tipo - Manutenção';
         
         if (tipoPai) {
             await loadAndPopulateVinculacao(tipoPai);

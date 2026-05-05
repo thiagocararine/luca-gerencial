@@ -1409,23 +1409,9 @@ function openVehicleCostModal() {
         const tipoSelecionado = e.target.value;
         classSelect.innerHTML = '<option value="">-- Selecione a Classificação --</option>';
         
-        let opcoesFiltradas = classificacoesDisponiveis;
-
-        // 2. CORREÇÃO: Ajustando as regras para os nomes reais que você usa no seu sistema
-        // Se a despesa for de prevenção (adicione aqui os nomes exatos do campo Tipo)
-        if (tipoSelecionado === 'Manutencao' || tipoSelecionado === 'Troca de Óleo' || tipoSelecionado === 'Revisão') {
-            
-            // Aqui precisa ser o nome EXATO de como "Preventiva" está cadastrada nas configurações
-            opcoesFiltradas = classificacoesDisponiveis.filter(c => c.NOME_PARAMETRO === 'Preventiva');
-            
-        } 
-        // Se a despesa for de correção
-        else if (tipoSelecionado === 'Borracharia' || tipoSelecionado === 'Elétrica') {
-            
-            // Aqui precisa ser o nome EXATO de como "Corretiva" está cadastrada nas configurações
-            opcoesFiltradas = classificacoesDisponiveis.filter(c => c.NOME_PARAMETRO === 'Corretiva');
-            
-        }
+        // FILTRO DINÂMICO PELO BANCO DE DADOS
+        // Pega as classificações onde o campo KEY_VINCULACAO é igual ao nome do Tipo
+        let opcoesFiltradas = classificacoesDisponiveis.filter(c => c.KEY_VINCULACAO === tipoSelecionado);
 
         // Preenche o select com as opções filtradas
         opcoesFiltradas.forEach(c => {
@@ -1435,6 +1421,7 @@ function openVehicleCostModal() {
             classSelect.appendChild(opt);
         });
 
+        // Seleciona automaticamente se sobrar apenas 1 opção
         if (opcoesFiltradas.length === 1) {
             classSelect.value = opcoesFiltradas[0].NOME_PARAMETRO;
         }
