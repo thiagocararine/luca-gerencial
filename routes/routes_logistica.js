@@ -872,8 +872,8 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
     const { data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_fornecedor, numero_nf, item_servico, odometro_manutencao } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
 
-    if (!data_manutencao || !custo || !tipo_manutencao || !classificacao_custo || id_fornecedor === null || id_fornecedor === undefined) {
-        return res.status(400).json({ error: 'Todos os campos da manutenção são obrigatórios.' });
+    if (!data_manutencao || !custo || !tipo_manutencao || !classificacao_custo || !numero_nf || id_fornecedor === null || id_fornecedor === undefined) {
+        return res.status(400).json({ error: 'Todos os campos da manutenção, incluindo a Nota Fiscal, são obrigatórios.' });
     }
 
     let connection;

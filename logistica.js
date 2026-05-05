@@ -1370,7 +1370,6 @@ async function handleMaintenanceFormSubmit(event) {
     }
 }
 
-// Funções de Custos
 function openVehicleCostModal() {
     const modal = document.getElementById('vehicle-cost-modal');
     const form = modal.querySelector('form');
@@ -1392,12 +1391,60 @@ function openVehicleCostModal() {
         });
 
     populateMaintenanceTypes('vehicle-cost-type');
-    populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Classificação Despesa Veiculo`, 'vehicle-cost-classification', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Selecione a Classificação --');
     
-    // ADICIONAR ESTA LINHA: Popula o novo campo de Item de Serviço
+    // --- NOVA LÓGICA DE FILTRO AUTOMÁTICO DE CLASSIFICAÇÃO ---
+    const classSelect = document.getElementById('vehicle-cost-classification');
+    const typeSelect = document.getElementById('vehicle-cost-type');
+    
+    // 1. Carrega todas as classificações disponíveis no banco
+    let classificacoesDisponiveis = [];
+    fetch(`${apiUrlBase}/settings/parametros?cod=Classificação Despesa Veiculo`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
+        .then(res => res.json())
+        .then(data => { classificacoesDisponiveis = data; });
+
+    // 2. Removemos event listeners antigos (evita duplicação ao abrir o modal várias vezes)
+    const newTypeSelect = typeSelect.cloneNode(true);
+    typeSelect.parentNode.replaceChild(newTypeSelect, typeSelect);
+    
+    classSelect.innerHTML = '<option value="">-- Selecione o Tipo Primeiro --</option>';
+
+    // 3. Adiciona a regra de filtro quando o "Tipo" muda
+    newTypeSelect.addEventListener('change', (e) => {
+        const tipoSelecionado = e.target.value;
+        classSelect.innerHTML = '<option value="">-- Selecione a Classificação --</option>';
+        
+        let opcoesFiltradas = classificacoesDisponiveis;
+
+        // REGRA DE NEGÓCIO: Adapte os nomes conforme o que você usa no sistema
+        if (tipoSelecionado === 'Troca de Óleo' || tipoSelecionado.includes('Revisão')) {
+            // Se for troca de óleo, filtra para mostrar apenas "Preventiva"
+            opcoesFiltradas = classificacoesDisponiveis.filter(c => c.NOME_PARAMETRO === 'Preventiva');
+        } else if (tipoSelecionado === 'Mecânica' || tipoSelecionado === 'Borracharia' || tipoSelecionado === 'Elétrica') {
+            // Se for conserto imprevisto, filtra para "Corretiva"
+            opcoesFiltradas = classificacoesDisponiveis.filter(c => c.NOME_PARAMETRO === 'Corretiva');
+        }
+
+        // Preenche o select com as opções filtradas
+        opcoesFiltradas.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.NOME_PARAMETRO;
+            opt.textContent = c.NOME_PARAMETRO;
+            classSelect.appendChild(opt);
+        });
+
+        // Seleciona automaticamente se sobrar apenas 1 opção (Ex: já crava "Preventiva")
+        if (opcoesFiltradas.length === 1) {
+            classSelect.value = opcoesFiltradas[0].NOME_PARAMETRO;
+        }
+
+        // Dispara o evento 'change' para o sistema atualizar a obrigatoriedade do Odômetro
+        classSelect.dispatchEvent(new Event('change'));
+    });
+    // --- FIM DA NOVA LÓGICA ---
+
     populateSelectWithOptions(`${apiUrlBase}/settings/parametros?cod=Itens de Manutenção`, 'vehicle-cost-item-servico', 'NOME_PARAMETRO', 'NOME_PARAMETRO', '-- Nenhum (Serviço Geral) --');
 
-    // ADICIONAR ESTE BLOCO: Controla a obrigatoriedade do odômetro
+    // Controla a obrigatoriedade do odômetro
     const classificationSelect = document.getElementById('vehicle-cost-classification');
     const odometerInput = document.getElementById('vehicle-cost-odometer');
     const odometerLabel = odometerInput.previousElementSibling;
@@ -1411,7 +1458,7 @@ function openVehicleCostModal() {
             odometerLabel.innerHTML = 'Odômetro do Veículo';
         }
     };
-    classificationSelect.removeEventListener('change', toggleOdometerRequirement); // Previne duplicatas
+    classificationSelect.removeEventListener('change', toggleOdometerRequirement); 
     classificationSelect.addEventListener('change', toggleOdometerRequirement);
     toggleOdometerRequirement();
 
@@ -1434,7 +1481,7 @@ async function handleVehicleCostFormSubmit(event) {
         id_fornecedor: document.getElementById('vehicle-cost-fornecedor-id').value,
         item_servico: document.getElementById('vehicle-cost-item-servico').value,
         odometro_manutencao: document.getElementById('vehicle-cost-odometer').value,
-        numero_nf: document.getElementById('vehicle-cost-nf').value || '0'
+        numero_nf: document.getElementById('vehicle-cost-nf').value
     };
 
     if (!costData.id_veiculo) { alert('Por favor, selecione um veículo.'); saveBtn.disabled = false; return; }
