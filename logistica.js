@@ -1478,7 +1478,7 @@ async function handleVehicleCostFormSubmit(event) {
         id_fornecedor: document.getElementById('vehicle-cost-fornecedor-id').value,
         item_servico: document.getElementById('vehicle-cost-item-servico').value,
         odometro_manutencao: document.getElementById('vehicle-cost-odometer').value,
-        numero_nf: document.getElementById('vehicle-cost-nf').value
+        numero_nf: document.getElementById('vehicle-cost-nf').value.trim() || '0',
     };
 
     if (!costData.id_veiculo) { alert('Por favor, selecione um veículo.'); saveBtn.disabled = false; return; }

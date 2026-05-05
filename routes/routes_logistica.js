@@ -872,8 +872,8 @@ router.post('/veiculos/:id/manutencoes', authenticateToken, async (req, res) => 
     const { data_manutencao, descricao, custo, tipo_manutencao, classificacao_custo, id_fornecedor, numero_nf, item_servico, odometro_manutencao } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
 
-    if (!data_manutencao || !custo || !tipo_manutencao || !classificacao_custo || !numero_nf || id_fornecedor === null || id_fornecedor === undefined) {
-        return res.status(400).json({ error: 'Todos os campos da manutenção, incluindo a Nota Fiscal, são obrigatórios.' });
+    if (!data_manutencao || !custo || !tipo_manutencao || !classificacao_custo || id_fornecedor === null || id_fornecedor === undefined) {
+        return res.status(400).json({ error: 'Todos os campos da manutenção são obrigatórios.' });
     }
 
     let connection;
@@ -1036,7 +1036,7 @@ router.post('/custos-frota', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Você não tem permissão para executar esta ação.' });
     }
     const isInternalExpense = id_fornecedor == '0';
-    if (!descricao || !custo || !data_custo || id_fornecedor == null || !filiais_rateio || !Array.isArray(filiais_rateio) || filiais_rateio.length === 0 || (!isInternalExpense && !numero_nf) ) {
+    if (!descricao || !custo || !data_custo || id_fornecedor == null || !filiais_rateio || !Array.isArray(filiais_rateio) || filiais_rateio.length === 0 ) {
         return res.status(400).json({ error: 'Dados inválidos.' });
     }
 
