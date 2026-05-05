@@ -758,8 +758,83 @@ function renderDespesasAsCards(despesas) {
 }
 
 // ==========================================================
-//               MÓDULO: TABELA DINÂMICA (PIVOT)
+//               MÓDULO: TABELA DINÂMICA (PIVOT) COM CHECKBOXES
 // ==========================================================
+
+window.recalcularArvoresDinamicas = function() {
+    let totalGeral = 0;
+    const formatCurrency = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    // Iterar por todos os Grupos
+    document.querySelectorAll('.grupo-container').forEach(grupoDiv => {
+        let totalGrupo = 0;
+        const groupId = grupoDiv.dataset.groupId;
+        const chkGrupo = document.getElementById(`chk-${groupId}`);
+        let todosTiposChecados = true;
+        let algumTipoChecado = false;
+
+        // Iterar pelos Tipos dentro do Grupo
+        grupoDiv.querySelectorAll('.tipo-container').forEach(tipoDiv => {
+            let totalTipo = 0;
+            const typeId = tipoDiv.dataset.typeId;
+            const chkTipo = document.getElementById(`chk-${typeId}`);
+            let todosDescChecados = true;
+            let algumDescChecado = false;
+
+            const descCheckboxes = tipoDiv.querySelectorAll('.chk-desc');
+            if(descCheckboxes.length === 0) todosDescChecados = false;
+
+            // Somar as descrições checadas
+            descCheckboxes.forEach(chk => {
+                if (chk.checked) {
+                    totalTipo += parseFloat(chk.dataset.valor || 0);
+                    algumDescChecado = true;
+                } else {
+                    todosDescChecados = false;
+                }
+            });
+
+            // Atualiza o Checkbox do Tipo (Marcado, Desmarcado ou Indeterminado)
+            if (chkTipo) {
+                chkTipo.checked = todosDescChecados && descCheckboxes.length > 0;
+                chkTipo.indeterminate = !todosDescChecados && algumDescChecado;
+            }
+
+            // Atualiza o subtotal do Tipo
+            document.getElementById(`total-${typeId}`).textContent = formatCurrency(totalTipo);
+            totalGrupo += totalTipo;
+
+            if (!chkTipo.checked) todosTiposChecados = false;
+            if (chkTipo.checked || chkTipo.indeterminate) algumTipoChecado = true;
+        });
+
+        // Atualiza o Checkbox do Grupo (Marcado, Desmarcado ou Indeterminado)
+        if (chkGrupo) {
+            chkGrupo.checked = todosTiposChecados && grupoDiv.querySelectorAll('.tipo-container').length > 0;
+            chkGrupo.indeterminate = !todosTiposChecados && algumTipoChecado;
+        }
+
+        // Atualiza o subtotal do Grupo
+        document.getElementById(`total-${groupId}`).textContent = formatCurrency(totalGrupo);
+        totalGeral += totalGrupo;
+    });
+
+    // Atualiza o Total Geral do Modal
+    document.getElementById('resumo-total-geral').textContent = formatCurrency(totalGeral);
+};
+
+window.toggleResumoCheckboxes = function(checkboxCentral, containerId) {
+    // Marca ou desmarca todos os filhos baseando-se no pai clicado
+    const container = document.getElementById(containerId);
+    if (container) {
+        container.querySelectorAll('input[type="checkbox"]').forEach(chk => {
+            chk.checked = checkboxCentral.checked;
+            chk.indeterminate = false;
+        });
+    }
+    window.recalcularArvoresDinamicas();
+};
+
 async function gerarResumoDinamico() {
     const modal = document.getElementById('resumo-dinamico-modal');
     const content = document.getElementById('resumo-dinamico-content');
@@ -773,7 +848,6 @@ async function gerarResumoDinamico() {
         const token = getToken();
         if (!token) return logout();
 
-        // 1. Pegar os filtros atuais da tela
         const params = new URLSearchParams();
         const startDate = datepicker.getStartDate();
         const endDate = datepicker.getEndDate();
@@ -789,9 +863,7 @@ async function gerarResumoDinamico() {
         if (tipoVal) params.append('tipo', tipoVal);
         if (grupoVal) params.append('grupo', grupoVal);
         if (privilegedRoles.includes(getUserProfile()) && filialVal) params.append('filial', filialVal);
-        
-        // Puxar TODOS os dados (export=true ignora paginação)
-        params.append('export', 'true');
+        params.append('export', 'true'); // Ignora paginação
 
         const response = await fetch(`${despesasApiUrl}?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token}` } });
         if (response.status >= 400) throw new Error("Falha ao buscar dados.");
@@ -805,13 +877,11 @@ async function gerarResumoDinamico() {
             return;
         }
 
-        // 2. Construir a Tabela Dinâmica (Agrupamento em Objeto)
         const arvore = {};
         let totalAcumulado = 0;
 
         despesas.forEach(d => {
-            // Ignorar despesas canceladas no resumo dinâmico (opcional, mas recomendado)
-            if (d.dsp_status === 2) return; 
+            if (d.dsp_status === 2) return; // Ignora canceladas no resumo
 
             const grupo = d.dsp_grupo || 'NÃO CLASSIFICADO (GRUPO)';
             const tipo = d.dsp_tipo || 'NÃO CLASSIFICADO (TIPO)';
@@ -830,12 +900,10 @@ async function gerarResumoDinamico() {
             totalAcumulado += valor;
         });
 
-        // 3. Renderizar o HTML da Árvore
         const formatCurrency = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         let html = `<div class="space-y-3">`;
         let idCounter = 0;
 
-        // Ordenar os grupos por valor (Maior para menor)
         const gruposOrdenados = Object.entries(arvore).sort((a, b) => b[1].total - a[1].total);
 
         for (const [grupo, objGrupo] of gruposOrdenados) {
@@ -843,15 +911,17 @@ async function gerarResumoDinamico() {
             const gId = `resumo-g-${idCounter}`;
             
             html += `
-            <div class="border border-gray-200 rounded-lg overflow-hidden shadow-sm bg-white">
+            <div class="grupo-container border border-gray-200 rounded-lg overflow-hidden shadow-sm bg-white" data-group-id="${gId}">
                 <div class="bg-purple-50 px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-purple-100 transition-colors border-l-4 border-purple-500" onclick="document.getElementById('${gId}').classList.toggle('hidden')">
-                    <span class="font-black text-purple-900 text-sm flex items-center gap-2"><i data-feather="folder" class="w-4 h-4 text-purple-600"></i> ${grupo}</span>
-                    <span class="font-black text-purple-700 text-base">${formatCurrency(objGrupo.total)}</span>
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" checked id="chk-${gId}" class="w-4 h-4 text-purple-600 rounded border-purple-300 focus:ring-purple-500 cursor-pointer" onclick="event.stopPropagation()" onchange="window.toggleResumoCheckboxes(this, '${gId}')">
+                        <span class="font-black text-purple-900 text-sm flex items-center gap-2"><i data-feather="folder" class="w-4 h-4 text-purple-600"></i> ${grupo}</span>
+                    </div>
+                    <span class="font-black text-purple-700 text-base" id="total-${gId}">${formatCurrency(objGrupo.total)}</span>
                 </div>
                 <div id="${gId}" class="hidden divide-y divide-gray-100">
             `;
 
-            // Ordenar os tipos por valor
             const tiposOrdenados = Object.entries(objGrupo.tipos).sort((a, b) => b[1].total - a[1].total);
 
             for (const [tipo, objTipo] of tiposOrdenados) {
@@ -859,22 +929,27 @@ async function gerarResumoDinamico() {
                 const tId = `resumo-t-${idCounter}`;
                 
                 html += `
-                    <div class="bg-gray-50">
+                    <div class="tipo-container bg-gray-50" data-type-id="${tId}">
                         <div class="px-4 py-2.5 pl-10 flex justify-between items-center cursor-pointer hover:bg-gray-100 transition-colors border-l-4 border-transparent hover:border-gray-300" onclick="document.getElementById('${tId}').classList.toggle('hidden')">
-                            <span class="font-bold text-gray-700 text-xs flex items-center gap-2 uppercase tracking-wide"><i data-feather="corner-down-right" class="w-3 h-3 text-gray-400"></i> ${tipo}</span>
-                            <span class="font-bold text-gray-700 text-sm">${formatCurrency(objTipo.total)}</span>
+                            <div class="flex items-center gap-3">
+                                <input type="checkbox" checked id="chk-${tId}" class="w-3 h-3 text-purple-600 rounded border-gray-300 focus:ring-purple-500 cursor-pointer" onclick="event.stopPropagation()" onchange="window.toggleResumoCheckboxes(this, '${tId}')">
+                                <span class="font-bold text-gray-700 text-xs flex items-center gap-2 uppercase tracking-wide"><i data-feather="corner-down-right" class="w-3 h-3 text-gray-400"></i> ${tipo}</span>
+                            </div>
+                            <span class="font-bold text-gray-700 text-sm" id="total-${tId}">${formatCurrency(objTipo.total)}</span>
                         </div>
                         <div id="${tId}" class="hidden bg-white divide-y divide-gray-50 shadow-inner">
                 `;
 
-                // Ordenar descrições por valor
                 const descOrdenadas = Object.entries(objTipo.descricoes).sort((a, b) => b[1] - a[1]);
 
                 for (const [desc, val] of descOrdenadas) {
                     html += `
                             <div class="px-4 py-2 pl-16 flex justify-between items-center hover:bg-blue-50 transition-colors">
-                                <span class="text-gray-500 text-xs font-medium truncate pr-4" title="${desc}">- ${desc}</span>
-                                <span class="font-semibold text-gray-500 text-xs shrink-0">${formatCurrency(val)}</span>
+                                <div class="flex items-center gap-3 overflow-hidden">
+                                    <input type="checkbox" checked class="chk-desc w-3 h-3 text-purple-600 rounded border-gray-300 focus:ring-purple-500 cursor-pointer shrink-0" data-valor="${val}" onclick="event.stopPropagation()" onchange="window.recalcularArvoresDinamicas()">
+                                    <span class="text-gray-500 text-xs font-medium truncate" title="${desc}">- ${desc}</span>
+                                </div>
+                                <span class="font-semibold text-gray-500 text-xs shrink-0 ml-2">${formatCurrency(val)}</span>
                             </div>
                     `;
                 }
