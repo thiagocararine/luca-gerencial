@@ -1396,26 +1396,35 @@ function openVehicleCostModal() {
     const classSelect = document.getElementById('vehicle-cost-classification');
     const typeSelect = document.getElementById('vehicle-cost-type');
     
-    // 1. Carrega todas as classificações disponíveis no banco
     let classificacoesDisponiveis = [];
-    fetch(`${apiUrlBase}/settings/parametros?cod=Classificação Despesa Veiculo`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
+    
+    // 1. CORREÇÃO: Aqui atualizamos para o novo nome que você definiu nas configurações
+    fetch(`${apiUrlBase}/settings/parametros?cod=Classificação Despesa Logistica`, { headers: { 'Authorization': `Bearer ${getToken()}` } })
         .then(res => res.json())
         .then(data => { classificacoesDisponiveis = data; });
 
     classSelect.innerHTML = '<option value="">-- Selecione o Tipo Primeiro --</option>';
 
-    // 2. Usamos .onchange para evitar sobreposição de eventos sem quebrar o carregamento da API
     typeSelect.onchange = (e) => {
         const tipoSelecionado = e.target.value;
         classSelect.innerHTML = '<option value="">-- Selecione a Classificação --</option>';
         
         let opcoesFiltradas = classificacoesDisponiveis;
 
-        // REGRA DE NEGÓCIO: Adapte os nomes se necessário
-        if (tipoSelecionado === 'Troca de Óleo' || tipoSelecionado.includes('Revisão')) {
+        // 2. CORREÇÃO: Ajustando as regras para os nomes reais que você usa no seu sistema
+        // Se a despesa for de prevenção (adicione aqui os nomes exatos do campo Tipo)
+        if (tipoSelecionado === 'Manutencao' || tipoSelecionado === 'Troca de Óleo' || tipoSelecionado === 'Revisão') {
+            
+            // Aqui precisa ser o nome EXATO de como "Preventiva" está cadastrada nas configurações
             opcoesFiltradas = classificacoesDisponiveis.filter(c => c.NOME_PARAMETRO === 'Preventiva');
-        } else if (tipoSelecionado === 'Mecânica' || tipoSelecionado === 'Borracharia' || tipoSelecionado === 'Elétrica') {
+            
+        } 
+        // Se a despesa for de correção
+        else if (tipoSelecionado === 'Borracharia' || tipoSelecionado === 'Elétrica') {
+            
+            // Aqui precisa ser o nome EXATO de como "Corretiva" está cadastrada nas configurações
             opcoesFiltradas = classificacoesDisponiveis.filter(c => c.NOME_PARAMETRO === 'Corretiva');
+            
         }
 
         // Preenche o select com as opções filtradas
@@ -1426,12 +1435,10 @@ function openVehicleCostModal() {
             classSelect.appendChild(opt);
         });
 
-        // Seleciona automaticamente se sobrar apenas 1 opção
         if (opcoesFiltradas.length === 1) {
             classSelect.value = opcoesFiltradas[0].NOME_PARAMETRO;
         }
 
-        // Dispara o evento para o sistema atualizar a obrigatoriedade do Odômetro
         classSelect.dispatchEvent(new Event('change'));
     };
     // --- FIM DA NOVA LÓGICA ---
