@@ -615,7 +615,12 @@ function setupParametrosTable() {
                     formatter: (cell) => {
                         const key = cell.getValue();
                         if (!key) return "";
-                        const pai = currentParentList.find(p => p.KEY_VINCULACAO == key);
+                        
+                        // CORREÇÃO: Lê pelo ID se for Logística, senão mantém a regra antiga
+                        const pai = currentParentList.find(p => 
+                            currentParamCode === 'Classificação Despesa Logistica' ? p.ID == key : p.KEY_VINCULACAO == key
+                        );
+                        
                         return pai ? pai.NOME_PARAMETRO : `<span style="color:red;">Inválido</span>`;
                     }
                 },
