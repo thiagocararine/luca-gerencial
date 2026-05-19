@@ -330,6 +330,9 @@
                                 <label class="text-[10px] font-bold text-indigo-800 uppercase block mb-1">Veículo Alocado</label>
                                 <select id="select-veiculo" class="w-full border-gray-300 rounded-md text-xs p-2 focus:ring-indigo-500 bg-indigo-50/30 font-semibold text-gray-700"></select>
                             </div>
+                            <button type="button" onclick="if(window.sugerirCargaAutomatica) window.sugerirCargaAutomatica()" class="w-full mt-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-md flex items-center justify-center gap-2 transition-all transform active:scale-95">
+                                <i data-feather="cpu" class="w-4 h-4"></i> Auto-Preencher Camião
+                            </button>
                             <div>
                                 <label class="text-[10px] font-bold text-indigo-800 uppercase block mb-1">Motorista</label>
                                 <input type="text" id="input-motorista" list="motoristas-list" class="w-full border-gray-300 rounded-md text-xs p-2 focus:ring-indigo-500 font-semibold text-gray-700 placeholder-gray-400" placeholder="Nome ou Nome + CPF" autocomplete="off">

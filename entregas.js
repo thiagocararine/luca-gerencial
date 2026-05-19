@@ -1049,3 +1049,75 @@ function handleApiError(response) {
         response.json().then(data => showToast(`Erro: ${data.error || response.statusText}`, "error")).catch(() => showToast('Erro na API.', "error"));
     }
 }
+
+// ==========================================================
+//               AUTO-MONTAGEM DE CARGAS (CLUSTERIZAÇÃO)
+// ==========================================================
+window.sugerirCargaAutomatica = function() {
+    const veiculoId = document.getElementById('select-veiculo').value;
+    if (!veiculoId) {
+        return showToast("Por favor, selecione um veículo primeiro para calcularmos a capacidade.", "info");
+    }
+
+    const veiculo = veiculosDisp.find(v => String(v.id) === String(veiculoId));
+    const capMaxima = parseFloat(veiculo.capacidade_kg || 0);
+
+    if (capMaxima === 0) {
+        return showToast("Este veículo não tem limite de peso definido. Adicione os itens manualmente.", "info");
+    }
+
+    // Calcula o peso que já está no camião
+    let pesoAtual = cartDavs.reduce((acc, dav) => acc + dav.peso_total_dav, 0);
+    let espacoDisponivel = capMaxima - pesoAtual;
+
+    if (espacoDisponivel <= 5) {
+        return showToast("O veículo já está cheio!", "info");
+    }
+
+    // Lógica de Clusterização: 
+    // 1. Prioriza bairros que já têm pedidos dentro do camião (para não espalhar a rota).
+    let bairrosPrioritarios = [...new Set(cartDavs.map(d => d.bairro.trim()))];
+    
+    // 2. Ordena os pendentes com base nessa prioridade e no peso.
+    let pendentesOrdenados = [...pendingDavs].sort((a, b) => {
+        let aPrioridade = bairrosPrioritarios.includes(a.bairro.trim()) ? 1 : 0;
+        let bPrioridade = bairrosPrioritarios.includes(b.bairro.trim()) ? 1 : 0;
+        
+        if (aPrioridade !== bPrioridade) return bPrioridade - aPrioridade; // Bairros prioritários primeiro
+        
+        // Se não há prioridade, agrupa pelo nome do bairro (ordem alfabética para cluster)
+        let bairroComp = a.bairro.localeCompare(b.bairro);
+        if (bairroComp !== 0) return bairroComp;
+        
+        // Dentro do mesmo bairro, tenta encaixar os mais pesados primeiro para otimizar espaço
+        return b.peso_total_dav - a.peso_total_dav;
+    });
+
+    let adicionados = 0;
+
+    // 3. O Robô tenta adicionar pedidos inteiros que caibam no espaço restante
+    // (Usamos slice para não modificar o array original enquanto iteramos)
+    pendentesOrdenados.slice().forEach(dav => {
+        if (dav.peso_total_dav > 0 && dav.peso_total_dav <= espacoDisponivel) {
+            
+            // Reutilizamos a sua função que já move tudo perfeitamente para o carrinho
+            window.adicionarAoCarrinhoCompleto(dav.dav_numero);
+            
+            // Recalcula o espaço para a próxima iteração
+            pesoAtual += dav.peso_total_dav;
+            espacoDisponivel = capMaxima - pesoAtual;
+            adicionados++;
+            
+            // Adiciona este novo bairro aos prioritários para puxar os vizinhos
+            if (!bairrosPrioritarios.includes(dav.bairro.trim())) {
+                bairrosPrioritarios.push(dav.bairro.trim());
+            }
+        }
+    });
+
+    if (adicionados > 0) {
+        showToast(`Auto-Montagem: ${adicionados} pedido(s) adicionado(s) ao camião!`, "success");
+    } else {
+        showToast("Não há pedidos inteiros pendentes que caibam no espaço restante.", "info");
+    }
+};

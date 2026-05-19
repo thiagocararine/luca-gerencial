@@ -1,36 +1,35 @@
 // impressao_a4.js
 
 // ==========================================================
-//               LAYOUT PADRÃO (ERP) PARA IMPRESSÕES A4
+//               FUNÇÕES DE FORMATAÇÃO E LAYOUT
 // ==========================================================
-function getCabecalhoHtml(logoBase64) {
-    return `
-        <div style="display: flex; align-items: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px;">
-            <div style="margin-right: 15px;">
-                ${logoBase64 ? `<img src="${logoBase64}" style="max-width: 140px; max-height: 60px;">` : '<h2>LUCA</h2>'}
-            </div>
-            <div style="text-align: left; font-family: 'Helvetica', sans-serif;">
-                <div style="font-size: 16px; font-weight: bold; margin-bottom: 3px;">LUCA MATERIAL DE CONSTRUCAO LTDA</div>
-                <div style="font-size: 11px;">Av. Automovel Clube SN Qd 04 Lote 19 - Parada Angelica Duque De Caxias [RJ] CEP: 25272405</div>
-                <div style="font-size: 11px;">CNPJ: 36.671.152/0004-06 | Tel(s): (21) 2778-3885 | 2739-1480 | 2675-7410</div>
-            </div>
-        </div>
-    `;
+
+function formatarCNPJ(cnpj) {
+    if(!cnpj) return '';
+    const c = String(cnpj).replace(/\D/g, '');
+    if(c.length === 14) return c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+    return cnpj;
 }
 
-function getCabecalhoDavHtml(logoBase64, dataEmissao, davNumber, paginaStr, isReceberLocal = false, clienteNome = '', clienteDoc = '') {
+function getCabecalhoDavHtml(logoBase64, dataEmissao, davNumber, paginaStr, isReceberLocal = false, clienteNome = '', clienteDoc = '', empresa = null) {
     const tagReceber = isReceberLocal ? ` <span style="background:#000; color:#fff; padding:2px 6px; font-size:10px; border-radius:3px;">{ Receber no Local }</span>` : '';
+    
+    // Dados Dinâmicos da Filial
+    const empNome = empresa?.nome || 'MATERIAL DE CONSTRUCAO LTDA';
+    const empCnpj = formatarCNPJ(empresa?.cnpj) || '';
+    const empEnde = empresa?.endereco ? empresa.endereco.replace(' CEP:', '<br>CEP:') : '';
+    const empTels = empresa?.telefones ? `Tel(s): ${empresa.telefones}` : '';
+
     return `
     <div style="display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 5px; margin-bottom: 5px;">
         <div style="width: 120px;">
             ${logoBase64 ? `<img src="${logoBase64}" style="max-width: 100%; height: auto;">` : '<h2 style="margin:0;">LUCA</h2>'}
         </div>
         <div style="text-align: center; font-size: 11px; font-family: 'Courier New', Courier, monospace; line-height: 1.2; flex: 1;">
-            <div style="font-weight: bold; font-size: 14px;">LUCA MATERIAL DE CONSTRUCAO LTDA</div>
-            <div>Av Automovel Clube SN Qd 04 Lote 19</div>
-            <div>Parada Angelica Duque De Caxias [RJ] CEP: 25272405</div>
-            <div>CNPJ: 36.671.152/0004-06 ${tagReceber}</div>
-            <div>Tel(s): (21) 2778-3885 | 2739-1480 | 2675-7410</div>
+            <div style="font-weight: bold; font-size: 14px;">${empNome}</div>
+            <div>${empEnde}</div>
+            <div>CNPJ: ${empCnpj} ${tagReceber}</div>
+            <div>${empTels}</div>
             <div style="margin-top: 5px; font-weight: bold; font-size: 13px;">DOCUMENTO AUXILIAR DE VENDA</div>
         </div>
         <div style="font-size: 10px; text-align: right; font-family: 'Courier New', Courier, monospace; line-height: 1.2; width: 130px;">
@@ -148,7 +147,7 @@ window.imprimirEspelhoDav = async function(davNumber) {
                 <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Imprimir Espelho DAV</button>
             </div>
             
-            ${getCabecalhoDavHtml(logo, dataEmissao, davNumber, '001 [001]', isReceberLocal, data.cliente.nome, data.cliente.doc)}
+            ${getCabecalhoDavHtml(logo, dataEmissao, davNumber, '001 [001]', isReceberLocal, data.cliente.nome, data.cliente.doc, data.empresa)}
 
             <table>
                 <thead>
@@ -263,7 +262,7 @@ window.imprimirPedidosCarga = async function(romaneioId) {
 
             html += `
             <div class="${idx < davsCompletos.length - 1 ? 'page-break' : ''}">
-                ${getCabecalhoDavHtml(logo, dataEmissao, data.dav_numero, pageStr, isReceberLocal, data.cliente.nome, data.cliente.doc)}
+                ${getCabecalhoDavHtml(logo, dataEmissao, data.dav_numero, pageStr, isReceberLocal, data.cliente.nome, data.cliente.doc, data.empresa)}
 
                 <table>
                     <thead>
@@ -327,6 +326,12 @@ window.imprimirRoteiro = async function(romaneioId) {
         const printWindow = window.open('', '_blank');
         const logo = localStorage.getItem('company_logo') || '';
         
+        // Dados dinâmicos para o cabeçalho do roteiro
+        const emp = data.empresa || {};
+        const empNome = emp.nome || 'MATERIAL DE CONSTRUCAO LTDA';
+        const empCnpj = formatarCNPJ(emp.cnpj) || '';
+        const empTels = emp.telefones ? `Tel(s): ${emp.telefones}` : '';
+        
         const grouped = data.itens.reduce((acc, item) => {
             if(!acc[item.dav_numero]) {
                 acc[item.dav_numero] = { 
@@ -378,8 +383,8 @@ window.imprimirRoteiro = async function(romaneioId) {
                     ${logo ? `<img src="${logo}" style="max-width: 100%; height: auto;">` : '<h2>LUCA</h2>'}
                 </div>
                 <div style="text-align: right; font-family: 'Helvetica', sans-serif;">
-                    <div style="font-size: 16px; font-weight: bold; margin-bottom: 3px;">LUCA MATERIAL DE CONSTRUCAO LTDA</div>
-                    <div style="font-size: 11px;">CNPJ: 36.671.152/0004-06 | Tel(s): (21) 2778-3885 | 2739-1480 | 2675-7410</div>
+                    <div style="font-size: 16px; font-weight: bold; margin-bottom: 3px;">${empNome}</div>
+                    <div style="font-size: 11px;">CNPJ: ${empCnpj} | ${empTels}</div>
                 </div>
             </div>
             
