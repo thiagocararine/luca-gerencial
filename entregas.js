@@ -399,11 +399,7 @@ async function handleConfirmRetirada(davNumber) {
         }
     });
 }
-Aqui tem a **PARTE 2** do seu ficheiro `entregas.js`, limpinha, com as funções vitais todas resolvidas e já com a inteligência do **Robô de Clusterização (Auto-Preencher Camião)** incluída!
 
-Copie o código abaixo e cole-o **exatamente na linha seguinte** de onde terminou a Parte 1 (logo abaixo do final da função `handleConfirmRetirada`).
-
-```javascript
 // ==========================================================
 //               LISTA DE ROMANEIOS EM ANDAMENTO / CONCLUÍDAS
 // ==========================================================
