@@ -48,8 +48,12 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
         const isUsuarioAdmin = ['escritorio', 'escritório (lojas)'].includes(filialUsuario ? filialUsuario.trim().toLowerCase() : '');
 
         let davQuery = `
-            SELECT c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, c.cr_edav, c.cr_hdav, c.cr_udav, c.cr_tnot, c.cr_tipo, c.cr_reca, c.cr_rloc, c.cr_urec, c.cr_erec, c.cr_hrec, c.cr_ecan, c.cr_hcan, c.cr_usac, c.cr_nfem, c.cr_chnf, c.cr_seri, c.cr_tnfs, c.cr_nota, c.cr_fili, c.cr_inde, cl.cl_docume 
-            FROM cdavs c LEFT JOIN clientes cl ON c.cr_cdcl = cl.cl_codigo WHERE CAST(c.cr_ndav AS UNSIGNED) = ?
+            SELECT c.cr_ndav, c.cr_nmcl, c.cr_dade, c.cr_refe, c.cr_ebai, c.cr_ecid, c.cr_ecep, c.cr_edav, c.cr_hdav, c.cr_udav, c.cr_tnot, c.cr_tipo, c.cr_reca, c.cr_rloc, c.cr_urec, c.cr_erec, c.cr_hrec, c.cr_ecan, c.cr_hcan, c.cr_usac, c.cr_nfem, c.cr_chnf, c.cr_seri, c.cr_tnfs, c.cr_nota, c.cr_fili, c.cr_inde, cl.cl_docume,
+            e.ep_nome, e.ep_ende, e.ep_bair, e.ep_cida, e.ep_cepe, e.ep_esta, e.ep_cnpj, e.ep_tels, e.ep_adic
+            FROM cdavs c 
+            LEFT JOIN clientes cl ON c.cr_cdcl = cl.cl_codigo 
+            LEFT JOIN cia e ON c.cr_inde = e.ep_inde
+            WHERE CAST(c.cr_ndav AS UNSIGNED) = ?
         `;
         const queryParams = [davNumber];
 
@@ -80,6 +84,13 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             cobrar_local: davData.cr_rloc,
             filial_pedido_nome: davData.cr_fili, 
             filial_pedido_codigo: davData.cr_inde,
+            empresa: {
+                nome: davData.ep_nome || 'MATERIAL DE CONSTRUCAO LTDA',
+                cnpj: davData.ep_cnpj || '',
+                endereco: `${davData.ep_ende || ''} ${davData.ep_bair || ''} ${davData.ep_cida || ''} [${davData.ep_esta || ''}] CEP: ${davData.ep_cepe || ''}`,
+                telefones: davData.ep_tels || '',
+                rodape: davData.ep_adic || ''
+            },
             cliente: { nome: davData.cr_nmcl, doc: davData.cl_docume },
             endereco: { logradouro: (davData.cr_dade || '').split(';')[0]?.trim(), bairro: davData.cr_ebai, cidade: davData.cr_ecid, cep: davData.cr_ecep, referencia: davData.cr_refe },
             caixa_info: { usuario: davData.cr_urec, data_hora: combineDateTime(davData.cr_erec, davData.cr_hrec) },
@@ -94,7 +105,6 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             UNION ALL
             (SELECT ri.idavs_regi, r.data_criacao as data, ri.quantidade_a_entregar as quantidade, r.nome_motorista COLLATE utf8mb4_unicode_ci as responsavel, 'Saída em Romaneio' as tipo FROM romaneio_itens ri JOIN romaneios r ON ri.id_romaneio = r.id WHERE ri.dav_numero = ?) ORDER BY data DESC`;
 
-        // AJUSTE: INCLUSÃO DE it_prec, it_ctot, it_fabr, it_ende e it_obsc na query
         const allResults = await Promise.all([
             seiPool.execute(`SELECT it_regist, it_ndav, it_item, it_codi, it_nome, it_quan, it_qent, it_qtdv, it_unid, it_entr, it_reti, it_inde, it_prec, it_ctot, it_fabr, it_ende, it_obsc FROM idavs WHERE CAST(it_ndav AS UNSIGNED) = ? AND (it_canc IS NULL OR it_canc <> 1)`, [davNumber]),
             gerencialPool.execute('SELECT idavs_regi, SUM(quantidade_retirada) as total FROM entregas_manuais_log WHERE dav_numero = ? GROUP BY idavs_regi', [davNumber]),
@@ -110,22 +120,12 @@ router.get('/dav/:numero', authenticateToken, async (req, res) => {
             const { saldo, entregue, devolvido } = calcularSaldosItem(item, retiradasManuais.find(r => r.idavs_regi == id), entregasRomaneio.find(r => r.idavs_regi == id));
             
             responseData.itens.push({
-                idavs_regi: id, 
-                pd_codi: item.it_codi, 
-                pd_nome: item.it_nome, 
-                unidade: item.it_unid, 
-                quantidade_total: parseFloat(item.it_quan) || 0, 
-                quantidade_entregue: entregue, 
-                quantidade_saldo: saldo, 
-                quantidade_devolvida: devolvido, 
-                item_filial_codigo: item.it_inde, 
-                responsavel_caixa: parseUsuarioLiberacao(item.it_entr), 
-                historico: historicoCompleto.filter(h => h.idavs_regi == id),
-                valor_unitario: item.it_prec,
-                valor_total_item: item.it_ctot,
-                fabricante: item.it_fabr,
-                endereco_prateleira: item.it_ende,
-                observacao: item.it_obsc // Mapeamento da observação do item
+                idavs_regi: id, pd_codi: item.it_codi, pd_nome: item.it_nome, unidade: item.it_unid, 
+                quantidade_total: parseFloat(item.it_quan) || 0, quantidade_entregue: entregue, 
+                quantidade_saldo: saldo, quantidade_devolvida: devolvido, item_filial_codigo: item.it_inde, 
+                responsavel_caixa: parseUsuarioLiberacao(item.it_entr), historico: historicoCompleto.filter(h => h.idavs_regi == id),
+                valor_unitario: item.it_prec, valor_total_item: item.it_ctot, fabricante: item.it_fabr,
+                endereco_prateleira: item.it_ende, observacao: item.it_obsc 
             });
         }
         res.json(responseData);
@@ -358,6 +358,7 @@ router.post('/romaneios/:id/fechar', authenticateToken, async (req, res) => {
     }
 });
 
+// AQUI ESTÁ A ALTERAÇÃO CHAVE: INCLUÍMOS "c.cr_ecep" NO SELECT
 router.get('/eligible-davs', authenticateToken, async (req, res) => {
     const { data, tipoData, apenasEntregaMarcada, bairro, apenasReceberLocal, filialDav } = req.query;
     const { perfil } = req.user;
@@ -369,7 +370,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
         const dateColumn = tipoData === 'entrega' ? 'c.cr_entr' : 'c.cr_erec';
 
         let query = `
-            SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_inde, c.cr_edav, c.cr_entr, c.cr_udav, c.cr_reca, c.cr_rloc, c.cr_nota, c.cr_chnf
+            SELECT DISTINCT c.cr_ndav, c.cr_nmcl, c.cr_ebai, c.cr_ecid, c.cr_ecep, c.cr_inde, c.cr_edav, c.cr_entr, c.cr_udav, c.cr_reca, c.cr_rloc, c.cr_nota, c.cr_chnf
             FROM cdavs c JOIN idavs i ON c.cr_ndav = i.it_ndav
             WHERE DATE(${dateColumn}) = ? AND (i.it_quan - i.it_qtdv - i.it_qent) > 0 AND c.cr_roma = '' 
         `;
@@ -403,7 +404,6 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
 
         const numerosDav = davsRaw.map(d => parseInt(d.cr_ndav, 10));
 
-        // AJUSTE: Múltiplas colunas essenciais para o frontend
         const [itensRaw] = await seiPool.query(
             `SELECT i.it_regist, i.it_ndav, i.it_codi, i.it_nome, i.it_unid, i.it_quan, i.it_qent, i.it_qtdv, i.it_inde, i.it_prec, i.it_ctot, i.it_fabr, i.it_ende, i.it_obsc, COALESCE(NULLIF(p.pd_pesb, 0), NULLIF(p.pd_pesl, 0), 0) as peso_bruto_unitario
              FROM idavs i LEFT JOIN produtos p ON i.it_codi = p.pd_codi WHERE i.it_ndav IN (?) AND (i.it_canc IS NULL OR i.it_canc <> 1)`, [numerosDav]
@@ -437,7 +437,7 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
             }
 
             return {
-                dav_numero: dav.cr_ndav, cliente: dav.cr_nmcl, vendedor: dav.cr_udav, bairro: dav.cr_ebai || 'N/I', cidade: dav.cr_ecid || 'N/I', filial: dav.cr_inde, data_venda: dav.cr_edav, data_agendada: dav.cr_entr, peso_total_dav: pesoTotalDav, 
+                dav_numero: dav.cr_ndav, cliente: dav.cr_nmcl, vendedor: dav.cr_udav, bairro: dav.cr_ebai || 'N/I', cidade: dav.cr_ecid || 'N/I', cep: dav.cr_ecep || '', filial: dav.cr_inde, data_venda: dav.cr_edav, data_agendada: dav.cr_entr, peso_total_dav: pesoTotalDav, 
                 status_caixa: dav.cr_reca, cobrar_local: dav.cr_rloc, nota_fiscal: dav.cr_nota, chave_nfe: dav.cr_chnf,
                 itens: itensComSaldo
             };
@@ -448,28 +448,37 @@ router.get('/eligible-davs', authenticateToken, async (req, res) => {
     } catch (error) { res.status(500).json({ error: 'Erro interno.' }); }
 });
 
+// AQUI TAMBÉM INCLUÍMOS "c.cr_ecep" PARA QUANDO EDITAR O ROMANEIO
 router.get('/romaneios/:id', authenticateToken, async (req, res) => {
     const romaneioId = parseInt(req.params.id, 10);
     try {
         const [romaneioDetails] = await gerencialPool.execute(`SELECT r.id, r.data_criacao, r.data_conclusao, r.nome_motorista, r.filial_origem, r.status, v.modelo as modelo_veiculo, v.placa as placa_veiculo, IFNULL(v.capacidade_kg, 0) as capacidade_kg FROM romaneios r JOIN veiculos v ON r.id_veiculo = v.id WHERE r.id = ?`, [romaneioId]);
         if (romaneioDetails.length === 0) return res.status(404).json({ error: 'Romaneio não encontrado.' });
 
-        // AJUSTE: Buscando os novos dados para preencher o Roteiro e Visualização da Carga
         const [items] = await gerencialPool.execute(`
             SELECT ri.id as romaneio_item_id, ri.dav_numero, ri.idavs_regi, ri.quantidade_a_entregar, 
                    ri.pd_codi as produto_codigo, ri.pd_nome as produto_nome, 
                    i.it_unid as produto_unidade, c.cr_nmcl as cliente_nome, c.cr_rloc as cobrar_local,
-                   c.cr_dade as logradouro, c.cr_ebai as bairro, c.cr_ecid as cidade, c.cr_refe as referencia, 
+                   c.cr_dade as logradouro, c.cr_ebai as bairro, c.cr_ecid as cidade, c.cr_ecep as cep, c.cr_refe as referencia, 
                    i.it_prec as valor_unitario, i.it_ctot as valor_total_item, i.it_fabr as fabricante, i.it_ende as endereco_prateleira, i.it_obsc as observacao,
-                   COALESCE(NULLIF(p.pd_pesb, 0), NULLIF(p.pd_pesl, 0), 0) as peso_bruto_unitario 
+                   COALESCE(NULLIF(p.pd_pesb, 0), NULLIF(p.pd_pesl, 0), 0) as peso_bruto_unitario,
+                   e.ep_nome, e.ep_ende, e.ep_bair, e.ep_cida, e.ep_esta, e.ep_cepe, e.ep_cnpj, e.ep_tels
             FROM romaneio_itens ri 
             LEFT JOIN ${dbConfigSei.database}.idavs i ON ri.idavs_regi = i.it_regist 
             LEFT JOIN ${dbConfigSei.database}.cdavs c ON ri.dav_numero = c.cr_ndav 
             LEFT JOIN ${dbConfigSei.database}.produtos p ON ri.pd_codi = p.pd_codi 
+            LEFT JOIN ${dbConfigSei.database}.cia e ON c.cr_inde = e.ep_inde
             WHERE ri.id_romaneio = ? 
             ORDER BY c.cr_ebai ASC, ri.dav_numero ASC`, [romaneioId]);
+            
+        const empresaInfo = items.length > 0 ? {
+            nome: items[0].ep_nome || 'MATERIAL DE CONSTRUCAO LTDA',
+            cnpj: items[0].ep_cnpj || '',
+            endereco: `${items[0].ep_ende || ''} ${items[0].ep_bair || ''} ${items[0].ep_cida || ''} [${items[0].ep_esta || ''}] CEP: ${items[0].ep_cepe || ''}`,
+            telefones: items[0].ep_tels || ''
+        } : null;
         
-        res.json({ ...romaneioDetails[0], itens: items });
+        res.json({ ...romaneioDetails[0], empresa: empresaInfo, itens: items });
     } catch (error) { res.status(500).json({ error: 'Erro interno.' }); }
 });
 

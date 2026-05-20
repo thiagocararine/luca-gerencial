@@ -582,8 +582,9 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
 
             const grouped = data.itens.reduce((acc, item) => {
                 if(!acc[item.dav_numero]) {
+                    // ADICIONADO A CAPTURA DO CEP AQUI NA EDIÇÃO
                     acc[item.dav_numero] = {
-                        dav_numero: item.dav_numero, cliente: item.cliente_nome, bairro: 'Bairro no Romaneio', cidade: '', filial: data.filial_origem, peso_total_dav: 0, itens: [], is_existing: true
+                        dav_numero: item.dav_numero, cliente: item.cliente_nome, bairro: item.bairro || 'Bairro no Romaneio', cep: item.cep || '', cidade: '', filial: data.filial_origem, peso_total_dav: 0, itens: [], is_existing: true
                     };
                 }
                 const peso = parseFloat(item.peso_bruto_unitario) * parseFloat(item.quantidade_a_entregar);
@@ -978,71 +979,92 @@ async function finalizarCarga() {
 // ==========================================================
 window.sugerirCargaAutomatica = function() {
     const veiculoId = document.getElementById('select-veiculo').value;
-    if (!veiculoId) {
-        return showToast("Por favor, selecione um veículo primeiro para calcularmos a capacidade.", "info");
-    }
-
-    const veiculo = veiculosDisp.find(v => String(v.id) === String(veiculoId));
-    const capMaxima = parseFloat(veiculo.capacidade_kg || 0);
-
-    if (capMaxima === 0) {
-        return showToast("Este veículo não tem limite de peso definido. Adicione os itens manualmente.", "info");
-    }
-
-    // Calcula o peso que já está no camião
-    let pesoAtual = cartDavs.reduce((acc, dav) => acc + dav.peso_total_dav, 0);
-    let espacoDisponivel = capMaxima - pesoAtual;
-
-    if (espacoDisponivel <= 5) {
-        return showToast("O veículo já está cheio!", "info");
-    }
-
-    // Lógica de Clusterização: 
-    // 1. Prioriza bairros que já têm pedidos dentro do camião (para não espalhar a rota).
-    let bairrosPrioritarios = [...new Set(cartDavs.map(d => d.bairro.trim()))];
     
-    // 2. Ordena os pendentes com base nessa prioridade e no peso.
-    let pendentesOrdenados = [...pendingDavs].sort((a, b) => {
-        let aPrioridade = bairrosPrioritarios.includes(a.bairro.trim()) ? 1 : 0;
-        let bPrioridade = bairrosPrioritarios.includes(b.bairro.trim()) ? 1 : 0;
-        
-        if (aPrioridade !== bPrioridade) return bPrioridade - aPrioridade; // Bairros prioritários primeiro
-        
-        // Se não há prioridade, agrupa pelo nome do bairro (ordem alfabética para cluster)
-        let bairroComp = a.bairro.localeCompare(b.bairro);
-        if (bairroComp !== 0) return bairroComp;
-        
-        // Dentro do mesmo bairro, tenta encaixar os mais pesados primeiro para otimizar espaço
-        return b.peso_total_dav - a.peso_total_dav;
-    });
+    if (!veiculoId && !currentRomaneioId) {
+        return showToast("Por favor, selecione um veículo primeiro.", "info");
+    }
 
-    let adicionados = 0;
+    if (pendingDavs.length === 0) {
+        return showToast("Não há pedidos pendentes na prateleira.", "info");
+    }
 
-    // 3. O Robô tenta adicionar pedidos inteiros que caibam no espaço restante
-    // (Usamos slice para não modificar o array original enquanto iteramos)
-    pendentesOrdenados.slice().forEach(dav => {
-        if (dav.peso_total_dav > 0 && dav.peso_total_dav <= espacoDisponivel) {
+    showCustomPrompt(
+        "Auto-Montagem Inteligente (Por CEP)", 
+        "Quantos PEDIDOS INTEIROS (DAVs) deseja colocar neste veículo na rota de hoje?", 
+        pendingDavs.length + cartDavs.length, 
+        (limitePedidos) => {
+            const limite = parseInt(limitePedidos, 10);
+            if (isNaN(limite) || limite <= 0) return showToast("Quantidade inválida.", "error");
+
+            let espacoDisponivel = limite - cartDavs.length;
+
+            if (espacoDisponivel <= 0) {
+                return showToast(`O veículo já tem ${cartDavs.length} ou mais pedidos alocados.`, "info");
+            }
+
+            // Funções matemáticas para extrair os CEPs do Brasil (5 primeiros dígitos = Setor da Cidade)
+            const limpaCep = (cep) => (cep ? String(cep).replace(/\D/g, '') : '');
+            const getRadical = (cep) => {
+                const c = limpaCep(cep);
+                return c.length >= 5 ? c.substring(0, 5) : '00000';
+            };
+
+            // 1. Descobre os Setores (5 primeiros dígitos) que JÁ ESTÃO no camião para dar prioridade
+            let cepsPrioritarios = [...new Set(cartDavs.map(d => getRadical(d.cep)))].filter(c => c !== '00000');
             
-            // Move tudo para o carrinho
-            window.adicionarAoCarrinhoCompleto(dav.dav_numero);
-            
-            // Recalcula o espaço
-            pesoAtual += dav.peso_total_dav;
-            espacoDisponivel = capMaxima - pesoAtual;
-            adicionados++;
-            
-            // Adiciona este novo bairro aos prioritários
-            if (!bairrosPrioritarios.includes(dav.bairro.trim())) {
-                bairrosPrioritarios.push(dav.bairro.trim());
+            // 2. O Grande Algoritmo de Ordenação
+            let pendentesOrdenados = [...pendingDavs].sort((a, b) => {
+                let radA = getRadical(a.cep);
+                let radB = getRadical(b.cep);
+                let cepCompletoA = limpaCep(a.cep);
+                let cepCompletoB = limpaCep(b.cep);
+                
+                let aPrio = cepsPrioritarios.includes(radA) ? 1 : 0;
+                let bPrio = cepsPrioritarios.includes(radB) ? 1 : 0;
+                
+                // Prioridade 1: Regiões que já têm algum pedido no camião (Para não gastar combustível)
+                if (aPrio !== bPrio) return bPrio - aPrio; 
+                
+                // Prioridade 2: Agrupa pelos 5 primeiros dígitos do CEP (Junta todos os bairros do mesmo setor)
+                let radComp = radA.localeCompare(radB);
+                if (radComp !== 0) return radComp;
+
+                // Prioridade 3: Agrupa pelo CEP completo (O motorista vai entregar tudo na MESMA RUA de uma vez)
+                let cepComp = cepCompletoA.localeCompare(cepCompletoB);
+                if (cepComp !== 0) return cepComp;
+
+                // Prioridade 4 (À prova de balas): Se o cliente não tiver CEP no cadastro, agrupa pelo nome do Bairro
+                return a.bairro.localeCompare(b.bairro);
+            });
+
+            let adicionados = 0;
+
+            // 3. O Robô empilha os pedidos até bater o número que você digitou
+            for (let i = 0; i < pendentesOrdenados.length; i++) {
+                if (espacoDisponivel <= 0) break;
+
+                const dav = pendentesOrdenados[i];
+                
+                // Move o pedido completo para o carrinho
+                window.adicionarAoCarrinhoCompleto(dav.dav_numero);
+                
+                // O Robô aprende em tempo real: ele anota o CEP deste pedido para puxar os vizinhos nas próximas passagens
+                const rad = getRadical(dav.cep);
+                if (rad !== '00000' && !cepsPrioritarios.includes(rad)) {
+                    cepsPrioritarios.push(rad);
+                }
+                
+                espacoDisponivel--;
+                adicionados++;
+            }
+
+            if (adicionados > 0) {
+                showToast(`Sucesso! ${adicionados} pedido(s) otimizados por proximidade de CEP.`, "success");
+            } else {
+                showToast("Nenhum pedido foi adicionado.", "info");
             }
         }
-    });
-
-    if (adicionados > 0) {
-        showToast(`Auto-Montagem: ${adicionados} pedido(s) adicionado(s) ao camião!`, "success");
-    } else {
-        showToast("Não há pedidos inteiros pendentes que caibam no espaço restante.", "info");
-    }
+    );
 };
 
 // ==========================================================
