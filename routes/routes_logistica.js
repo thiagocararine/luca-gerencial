@@ -660,7 +660,7 @@ router.post('/estoque/entrada', authenticateToken, async (req, res) => {
 });
 
 router.post('/estoque/consumo', authenticateToken, async (req, res) => {
-    // Odômetro agora é opcional, filialDestino é nova
+    // 1. AQUI GARANTIMOS QUE O custoTotal É EXTRAÍDO DO FRONTEND
     const { veiculoId, data, quantidade, odometro, isGalao, filialDestino, custoTotal } = req.body;
     const { userId, nome: nomeUsuario, perfil } = req.user;
     
@@ -669,15 +669,11 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Você não tem permissão para esta ação.' });
     }
 
-    // Nova validação flexível
     if ((!isGalao && !veiculoId) || (isGalao && !filialDestino) || !data || !quantidade) {
         return res.status(400).json({ error: 'Campos obrigatórios não preenchidos. Verifique se o veículo ou a filial de destino foi selecionado.' });
     }
 
-    // Pega a hora atual do servidor no formato HH:MM:SS
     const horaAtual = new Date().toTimeString().split(' ')[0]; 
-    
-    // Combina a data enviada pelo formulário com a hora atual
     const dataHoraMovimento = `${data} ${horaAtual}`;
 
     let connection;
@@ -705,7 +701,7 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         let observacao;
         let logDescription;
 
-        // Pega o custo enviado pelo front. Se vier vazio, usa a base do estoque.
+        // 2. LÓGICA DO CUSTO IMPLEMENTADA AQUI
         const valorCustoTotal = custoTotal ? parseFloat(custoTotal) : (parseFloat(quantidade) * parseFloat(item.ultimo_preco_unitario || 0));
         const precoUnitario = parseFloat(quantidade) > 0 ? (valorCustoTotal / parseFloat(quantidade)) : 0;
         
@@ -730,11 +726,10 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         
         await connection.execute(
             'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_veiculo, id_filial, odometro_no_momento, id_usuario, observacao, status, data_movimento) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [itemId, 'Saída', quantidade, veiculoId || null, id_filial_movimento, odometro || null, userId, observacao, 'Ativo', dataHoraMovimento] // <== AQUI USAMOS A NOVA VARIÁVEL
+            [itemId, 'Saída', quantidade, veiculoId || null, id_filial_movimento, odometro || null, userId, observacao, 'Ativo', dataHoraMovimento]
         );
 
         let consumoMedio = null;
-        // Lógica de odômetro e consumo médio só executa se for para um veículo e se o odômetro for informado
         if (!isGalao && veiculoId && odometro) {
             const [ultimoAbastecimento] = await connection.execute(
                 'SELECT odometro_no_momento, quantidade FROM estoque_movimentos WHERE id_veiculo = ? AND tipo_movimento = "Saída" AND status = "Ativo" AND id != LAST_INSERT_ID() ORDER BY data_movimento DESC, id DESC LIMIT 1',
@@ -743,7 +738,7 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
             
             if (ultimoAbastecimento.length > 0) {
                 const odometroAnterior = ultimoAbastecimento[0].odometro_no_momento;
-                const litrosAbastecidosNaquelaVez = quantidade; // Usa a quantidade do abastecimento atual
+                const litrosAbastecidosNaquelaVez = quantidade; 
                 const distancia = odometro - odometroAnterior;
                 if (distancia > 0 && litrosAbastecidosNaquelaVez > 0) {
                     consumoMedio = (distancia / litrosAbastecidosNaquelaVez).toFixed(2);
@@ -765,12 +760,11 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
     } catch (error) {
         if (connection) await connection.rollback();
         console.error("Erro ao registar consumo:", error);
-        res.status(500).json({ error: 'Erro ao registar o consumo.' });
+        res.status(500).json({ error: 'Erro ao registar o consumo: ' + error.message });
     } finally {
         if (connection) await connection.end();
     }
 });
-
 
 router.delete('/estoque/movimento/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
