@@ -133,6 +133,11 @@ function switchView(viewId) {
     if (viewId === 'historico-view') loadVeiculosHistorico();
 }
 
+// SOLUÇÃO DO ERRO: Função declarada corretamente aqui!
+function handleRomaneioClick(event) { 
+    if(event.target.closest('button')) return; 
+}
+
 function setupEventListeners() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('btn-open-retirada')?.addEventListener('click', () => switchView('retirada-view'));
@@ -283,7 +288,7 @@ function renderDavResults(data) {
 
     let nfeBadge = '';
     if (nota_fiscal && nota_fiscal.trim() !== '' && chave_nfe) {
-        nfeBadge = `<button onclick="abrirDanfe('${chave_nfe}')" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-black uppercase bg-blue-100 text-blue-800 hover:bg-blue-600 hover:text-white transition-colors border border-blue-200 shadow-sm" title="Imprimir Nota Fiscal">NFe: ${nota_fiscal} <i data-feather="file-text" class="w-3.5 h-3.5 ml-1"></i></button>`;
+        nfeBadge = `<button onclick="window.abrirDanfe('${chave_nfe}')" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-black uppercase bg-blue-100 text-blue-800 hover:bg-blue-600 hover:text-white transition-colors border border-blue-200 shadow-sm" title="Imprimir Nota Fiscal">NFe: ${nota_fiscal} <i data-feather="file-text" class="w-3.5 h-3.5 ml-1"></i></button>`;
     }
 
     if (status_caixa === '2' || status_caixa === '3') {
@@ -302,7 +307,7 @@ function renderDavResults(data) {
                         ${itens.map(item => {
                             const obsDescodificada = window.extrairObservacao(item.observacao || item.it_obsc);
                             const obsBalcao = obsDescodificada ? `<div class="text-[10px] text-gray-500 italic mt-1 pb-1">↳ ${obsDescodificada}</div>` : '';
-                            const qtdDev = parseFloat(item.quantidade_devolvida || item.devolvido || item.it_qtdv || 0);
+                            const qtdDev = parseFloat(item.quantidade_devolvida || item.devolvido || 0);
                             const tagDev = qtdDev > 0 ? `<span class="bg-red-600 text-white px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ml-2 shadow-sm animate-pulse">Teve Devolução: ${qtdDev}</span>` : '';
                             return `
                             <tr class="expandable-row hover:bg-gray-50 transition-colors" data-idavs-regi="${item.idavs_regi}">
@@ -396,6 +401,119 @@ async function handleConfirmRetirada(davNumber) {
 }
 
 // ==========================================================
+//               LISTA DE ROMANEIOS EM ANDAMENTO / CONCLUÍDAS
+// ==========================================================
+async function loadRomaneiosAtivos(silent = false) {
+    const container = document.getElementById('romaneios-list-container');
+    if (!container) return;
+    
+    if (!silent) {
+        container.innerHTML = '<div class="py-12 flex justify-center"><i data-feather="loader" class="w-8 h-8 text-indigo-500 animate-spin"></i></div>';
+        if(typeof feather !== 'undefined') feather.replace();
+    }
+
+    const dataFiltro = document.getElementById('filter-data-cargas')?.value || '';
+    let queryUrl = `${apiUrlBase}/entregas/romaneios?status=${romaneioListStatus}`;
+    if (dataFiltro) queryUrl += `&data_inicio=${dataFiltro}&data_fim=${dataFiltro}`;
+
+    try {
+        const res = await fetch(queryUrl, { headers: { 'Authorization': `Bearer ${getToken()}` } });
+        if (!res.ok) throw new Error("Falha ao buscar cargas.");
+        const romaneios = await res.json();
+        
+        if (romaneios.length === 0) {
+            const emptyHtml = `
+                <div class="flex flex-col items-center justify-center py-12 text-gray-400">
+                    <i data-feather="truck" class="w-14 h-14 mb-4 opacity-50"></i>
+                    <p class="font-bold text-lg">Nenhuma carga ${romaneioListStatus.toLowerCase()} nesta data.</p>
+                </div>`;
+            if (silent && lastRomaneiosHtml === emptyHtml) return;
+            container.innerHTML = emptyHtml;
+            lastRomaneiosHtml = emptyHtml;
+            if(typeof feather !== 'undefined') feather.replace();
+            return;
+        }
+
+        const newHtml = romaneios.map(r => {
+            let actionButtons = '';
+            if (r.status === 'Em montagem') {
+                actionButtons = `
+                    <div class="flex flex-col sm:flex-row items-end sm:items-center gap-2 mt-4 sm:mt-0">
+                        <button onclick="excluirRomaneio(${r.id})" class="text-red-500 hover:text-white bg-white hover:bg-red-500 border border-red-200 text-xs font-bold px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm" title="Cancelar e Excluir">
+                            <i data-feather="trash-2" class="w-4 h-4"></i> Excluir
+                        </button>
+                        <button onclick="abrirTorreDeControle(${r.id})" class="text-indigo-600 bg-indigo-50 border border-indigo-200 text-xs font-bold hover:bg-indigo-600 hover:text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm shrink-0">
+                            <i data-feather="edit-2" class="w-4 h-4"></i> Editar Carga
+                        </button>
+                        <button onclick="abrirAcertoContas(${r.id})" class="text-white bg-blue-600 border border-blue-700 text-xs font-bold hover:bg-blue-700 px-5 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+                            <i data-feather="check-square" class="w-4 h-4"></i> Acerto de Retorno
+                        </button>
+                    </div>
+                `;
+            } else {
+                 actionButtons = `
+                    <div class="flex items-center gap-2 mt-4 sm:mt-0">
+                        <span class="bg-gray-200 text-gray-600 px-4 py-1.5 rounded-md text-xs font-black uppercase tracking-widest flex items-center gap-1.5"><i data-feather="check" class="w-4 h-4"></i> Concluída</span>
+                    </div>
+                `;
+            }
+
+            return `
+            <div class="border border-gray-200 p-5 rounded-xl bg-white hover:border-indigo-400 transition-all cursor-default mb-4 shadow-sm flex flex-col xl:flex-row xl:justify-between xl:items-center gap-3 group">
+                <div class="flex-1">
+                    <h4 class="font-black text-gray-800 text-lg flex items-center gap-2 mb-1.5">
+                        <i data-feather="package" class="w-5 h-5 text-indigo-500"></i> Carga #${r.id} 
+                        <span class="bg-blue-100 text-blue-800 text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest">${r.status}</span>
+                    </h4>
+                    <p class="text-sm text-gray-600 font-medium ml-7"><i data-feather="user" class="w-4 h-4 inline text-gray-400"></i> ${r.nome_motorista} &nbsp;&bull;&nbsp; <i data-feather="truck" class="w-4 h-4 inline text-gray-400"></i> ${r.modelo_veiculo} (${r.placa_veiculo})</p>
+                    <p class="text-xs text-gray-400 mt-1.5 ml-7 font-bold uppercase tracking-wider">Origem: ${r.filial_origem}</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button onclick="abrirVisualizacaoRomaneio(${r.id})" class="text-gray-600 bg-white border border-gray-300 text-xs font-bold hover:bg-gray-100 px-4 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+                        <i data-feather="eye" class="w-4 h-4"></i> Visualizar
+                    </button>
+                    
+                    <button onclick="if(window.imprimirRoteiro) window.imprimirRoteiro(${r.id})" class="text-indigo-700 bg-indigo-50 border border-indigo-200 text-xs font-bold hover:bg-indigo-600 hover:text-white px-4 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm" title="Imprimir Roteiro (Resumo)">
+                        <i data-feather="printer" class="w-4 h-4"></i> Roteiro
+                    </button>
+
+                    <button onclick="if(window.imprimirPedidosCarga) window.imprimirPedidosCarga(${r.id})" class="text-emerald-800 bg-emerald-50 border border-emerald-200 text-xs font-bold hover:bg-emerald-600 hover:text-white px-4 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm" title="Imprimir Lote de DAVs">
+                        <i data-feather="layers" class="w-4 h-4"></i> Imprimir DAVs
+                    </button>
+                    
+                    ${actionButtons}
+                </div>
+            </div>`;
+        }).join('');
+
+        if (silent && newHtml === lastRomaneiosHtml) return; 
+
+        container.innerHTML = newHtml;
+        lastRomaneiosHtml = newHtml;
+        if(typeof feather !== 'undefined') feather.replace();
+
+    } catch (error) {
+        if (!silent) {
+            container.innerHTML = `<p class="text-center text-red-500 font-bold py-10"><i data-feather="alert-triangle" class="inline-block mr-2"></i> ${error.message}</p>`;
+            if(typeof feather !== 'undefined') feather.replace();
+        }
+    }
+}
+
+window.excluirRomaneio = function(id) {
+    showCustomConfirm("Excluir Carga?", `Deseja realmente excluir a carga #${id}? Os pedidos voltarão para a prateleira.`, async () => {
+        lockUI();
+        try {
+            const res = await fetch(`${apiUrlBase}/entregas/romaneios/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getToken()}` }});
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            showToast("Carga excluída com sucesso.", "success");
+            loadRomaneiosAtivos(); 
+        } catch (e) { showToast(e.message, "error"); } finally { unlockUI(); }
+    });
+};
+
+// ==========================================================
 //               TORRE DE CONTROLE (MONTAGEM E EDIÇÃO)
 // ==========================================================
 async function abrirTorreDeControle(romaneioIdParaEditar = null) {
@@ -464,8 +582,9 @@ async function abrirTorreDeControle(romaneioIdParaEditar = null) {
 
             const grouped = data.itens.reduce((acc, item) => {
                 if(!acc[item.dav_numero]) {
+                    // ADICIONADO A CAPTURA DO CEP AQUI NA EDIÇÃO
                     acc[item.dav_numero] = {
-                        dav_numero: item.dav_numero, cliente: item.cliente_nome, bairro: 'Bairro no Romaneio', cidade: '', filial: data.filial_origem, peso_total_dav: 0, itens: [], is_existing: true
+                        dav_numero: item.dav_numero, cliente: item.cliente_nome, bairro: item.bairro || 'Bairro no Romaneio', cep: item.cep || '', cidade: '', filial: data.filial_origem, peso_total_dav: 0, itens: [], is_existing: true
                     };
                 }
                 const peso = parseFloat(item.peso_bruto_unitario) * parseFloat(item.quantidade_a_entregar);
@@ -856,6 +975,99 @@ async function finalizarCarga() {
 }
 
 // ==========================================================
+//               AUTO-MONTAGEM DE CARGAS (CLUSTERIZAÇÃO)
+// ==========================================================
+window.sugerirCargaAutomatica = function() {
+    const veiculoId = document.getElementById('select-veiculo').value;
+    
+    if (!veiculoId && !currentRomaneioId) {
+        return showToast("Por favor, selecione um veículo primeiro.", "info");
+    }
+
+    if (pendingDavs.length === 0) {
+        return showToast("Não há pedidos pendentes na prateleira.", "info");
+    }
+
+    showCustomPrompt(
+        "Auto-Montagem Inteligente (Por CEP)", 
+        "Quantos PEDIDOS INTEIROS (DAVs) deseja colocar neste veículo na rota de hoje?", 
+        pendingDavs.length + cartDavs.length, 
+        (limitePedidos) => {
+            const limite = parseInt(limitePedidos, 10);
+            if (isNaN(limite) || limite <= 0) return showToast("Quantidade inválida.", "error");
+
+            let espacoDisponivel = limite - cartDavs.length;
+
+            if (espacoDisponivel <= 0) {
+                return showToast(`O veículo já tem ${cartDavs.length} ou mais pedidos alocados.`, "info");
+            }
+
+            // Funções matemáticas para extrair os CEPs do Brasil (5 primeiros dígitos = Setor da Cidade)
+            const limpaCep = (cep) => (cep ? String(cep).replace(/\D/g, '') : '');
+            const getRadical = (cep) => {
+                const c = limpaCep(cep);
+                return c.length >= 5 ? c.substring(0, 5) : '00000';
+            };
+
+            // 1. Descobre os Setores (5 primeiros dígitos) que JÁ ESTÃO no camião para dar prioridade
+            let cepsPrioritarios = [...new Set(cartDavs.map(d => getRadical(d.cep)))].filter(c => c !== '00000');
+            
+            // 2. O Grande Algoritmo de Ordenação
+            let pendentesOrdenados = [...pendingDavs].sort((a, b) => {
+                let radA = getRadical(a.cep);
+                let radB = getRadical(b.cep);
+                let cepCompletoA = limpaCep(a.cep);
+                let cepCompletoB = limpaCep(b.cep);
+                
+                let aPrio = cepsPrioritarios.includes(radA) ? 1 : 0;
+                let bPrio = cepsPrioritarios.includes(radB) ? 1 : 0;
+                
+                // Prioridade 1: Regiões que já têm algum pedido no camião (Para não gastar combustível)
+                if (aPrio !== bPrio) return bPrio - aPrio; 
+                
+                // Prioridade 2: Agrupa pelos 5 primeiros dígitos do CEP (Junta todos os bairros do mesmo setor)
+                let radComp = radA.localeCompare(radB);
+                if (radComp !== 0) return radComp;
+
+                // Prioridade 3: Agrupa pelo CEP completo (O motorista vai entregar tudo na MESMA RUA de uma vez)
+                let cepComp = cepCompletoA.localeCompare(cepCompletoB);
+                if (cepComp !== 0) return cepComp;
+
+                // Prioridade 4 (À prova de balas): Se o cliente não tiver CEP no cadastro, agrupa pelo nome do Bairro
+                return a.bairro.localeCompare(b.bairro);
+            });
+
+            let adicionados = 0;
+
+            // 3. O Robô empilha os pedidos até bater o número que você digitou
+            for (let i = 0; i < pendentesOrdenados.length; i++) {
+                if (espacoDisponivel <= 0) break;
+
+                const dav = pendentesOrdenados[i];
+                
+                // Move o pedido completo para o carrinho
+                window.adicionarAoCarrinhoCompleto(dav.dav_numero);
+                
+                // O Robô aprende em tempo real: ele anota o CEP deste pedido para puxar os vizinhos nas próximas passagens
+                const rad = getRadical(dav.cep);
+                if (rad !== '00000' && !cepsPrioritarios.includes(rad)) {
+                    cepsPrioritarios.push(rad);
+                }
+                
+                espacoDisponivel--;
+                adicionados++;
+            }
+
+            if (adicionados > 0) {
+                showToast(`Sucesso! ${adicionados} pedido(s) otimizados por proximidade de CEP.`, "success");
+            } else {
+                showToast("Nenhum pedido foi adicionado.", "info");
+            }
+        }
+    );
+};
+
+// ==========================================================
 //               ACERTO DE RETORNO E HISTÓRICO
 // ==========================================================
 async function abrirAcertoContas(romaneioId) {
@@ -1049,75 +1261,3 @@ function handleApiError(response) {
         response.json().then(data => showToast(`Erro: ${data.error || response.statusText}`, "error")).catch(() => showToast('Erro na API.', "error"));
     }
 }
-
-// ==========================================================
-//               AUTO-MONTAGEM DE CARGAS (CLUSTERIZAÇÃO)
-// ==========================================================
-window.sugerirCargaAutomatica = function() {
-    const veiculoId = document.getElementById('select-veiculo').value;
-    if (!veiculoId) {
-        return showToast("Por favor, selecione um veículo primeiro para calcularmos a capacidade.", "info");
-    }
-
-    const veiculo = veiculosDisp.find(v => String(v.id) === String(veiculoId));
-    const capMaxima = parseFloat(veiculo.capacidade_kg || 0);
-
-    if (capMaxima === 0) {
-        return showToast("Este veículo não tem limite de peso definido. Adicione os itens manualmente.", "info");
-    }
-
-    // Calcula o peso que já está no camião
-    let pesoAtual = cartDavs.reduce((acc, dav) => acc + dav.peso_total_dav, 0);
-    let espacoDisponivel = capMaxima - pesoAtual;
-
-    if (espacoDisponivel <= 5) {
-        return showToast("O veículo já está cheio!", "info");
-    }
-
-    // Lógica de Clusterização: 
-    // 1. Prioriza bairros que já têm pedidos dentro do camião (para não espalhar a rota).
-    let bairrosPrioritarios = [...new Set(cartDavs.map(d => d.bairro.trim()))];
-    
-    // 2. Ordena os pendentes com base nessa prioridade e no peso.
-    let pendentesOrdenados = [...pendingDavs].sort((a, b) => {
-        let aPrioridade = bairrosPrioritarios.includes(a.bairro.trim()) ? 1 : 0;
-        let bPrioridade = bairrosPrioritarios.includes(b.bairro.trim()) ? 1 : 0;
-        
-        if (aPrioridade !== bPrioridade) return bPrioridade - aPrioridade; // Bairros prioritários primeiro
-        
-        // Se não há prioridade, agrupa pelo nome do bairro (ordem alfabética para cluster)
-        let bairroComp = a.bairro.localeCompare(b.bairro);
-        if (bairroComp !== 0) return bairroComp;
-        
-        // Dentro do mesmo bairro, tenta encaixar os mais pesados primeiro para otimizar espaço
-        return b.peso_total_dav - a.peso_total_dav;
-    });
-
-    let adicionados = 0;
-
-    // 3. O Robô tenta adicionar pedidos inteiros que caibam no espaço restante
-    // (Usamos slice para não modificar o array original enquanto iteramos)
-    pendentesOrdenados.slice().forEach(dav => {
-        if (dav.peso_total_dav > 0 && dav.peso_total_dav <= espacoDisponivel) {
-            
-            // Reutilizamos a sua função que já move tudo perfeitamente para o carrinho
-            window.adicionarAoCarrinhoCompleto(dav.dav_numero);
-            
-            // Recalcula o espaço para a próxima iteração
-            pesoAtual += dav.peso_total_dav;
-            espacoDisponivel = capMaxima - pesoAtual;
-            adicionados++;
-            
-            // Adiciona este novo bairro aos prioritários para puxar os vizinhos
-            if (!bairrosPrioritarios.includes(dav.bairro.trim())) {
-                bairrosPrioritarios.push(dav.bairro.trim());
-            }
-        }
-    });
-
-    if (adicionados > 0) {
-        showToast(`Auto-Montagem: ${adicionados} pedido(s) adicionado(s) ao camião!`, "success");
-    } else {
-        showToast("Não há pedidos inteiros pendentes que caibam no espaço restante.", "info");
-    }
-};
