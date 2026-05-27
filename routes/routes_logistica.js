@@ -661,7 +661,7 @@ router.post('/estoque/entrada', authenticateToken, async (req, res) => {
 
 router.post('/estoque/consumo', authenticateToken, async (req, res) => {
     // Odômetro agora é opcional, filialDestino é nova
-    const { veiculoId, data, quantidade, odometro, isGalao, filialDestino } = req.body;
+    const { veiculoId, data, quantidade, odometro, isGalao, filialDestino, custoTotal } = req.body;
     const { userId, nome: nomeUsuario, perfil } = req.user;
     
     const allowedProfiles = ["Administrador", "Financeiro", "Logistica"];
@@ -705,31 +705,27 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         let observacao;
         let logDescription;
 
-        // NOVO: Resgata o valor unitário que já veio da consulta no banco (linha 505) e calcula o total
-        const precoUnitario = parseFloat(item.ultimo_preco_unitario || 0);
-        const custoTotal = (parseFloat(quantidade) * precoUnitario).toFixed(2);
+        // Pega o custo enviado pelo front. Se vier vazio, usa a base do estoque.
+        const valorCustoTotal = custoTotal ? parseFloat(custoTotal) : (parseFloat(quantidade) * parseFloat(item.ultimo_preco_unitario || 0));
+        const precoUnitario = parseFloat(quantidade) > 0 ? (valorCustoTotal / parseFloat(quantidade)) : 0;
+        
+        const custoTotalFormatado = valorCustoTotal.toFixed(2);
         const precoFormatado = precoUnitario.toFixed(2);
 
         if (isGalao) {
-            // Se for galão, busca o ID da filial pelo nome
             const [filialRows] = await connection.execute("SELECT ID FROM parametro WHERE NOME_PARAMETRO = ? AND COD_PARAMETRO = 'Unidades'", [filialDestino]);
             if (filialRows.length === 0) throw new Error(`Filial "${filialDestino}" não encontrada.`);
             id_filial_movimento = filialRows[0].ID;
             
-            // NOVO: Incluindo os valores financeiros na observação
-            observacao = `Retirada de ${quantidade}L para galão (Destino: ${filialDestino}). Litro: R$ ${precoFormatado} | Total: R$ ${custoTotal}`;
+            observacao = `Retirada de ${quantidade}L para galão (Destino: ${filialDestino}). Litro: R$ ${precoFormatado} | Total: R$ ${custoTotalFormatado}`;
             logDescription = observacao;
         } else {
-            // Se for veículo, busca a filial atual do veículo
             const [vehicleData] = await connection.execute('SELECT id_filial FROM veiculos WHERE id = ?', [veiculoId]);
             if (vehicleData.length === 0) throw new Error('Veículo não encontrado.');
             id_filial_movimento = vehicleData[0].id_filial;
-
-            //Ajustado
             
-            // NOVO: Incluindo os valores financeiros na observação e no log
-            observacao = `Abastecimento de ${quantidade}L. Litro: R$ ${precoFormatado} | Total: R$ ${custoTotal}`;
-            logDescription = `Abasteceu ${quantidade}L no veículo ID ${veiculoId}. Odômetro: ${odometro || 'Não informado'}. Litro: R$ ${precoFormatado} | Total: R$ ${custoTotal}`;
+            observacao = `Abastecimento de ${quantidade}L. Litro: R$ ${precoFormatado} | Total: R$ ${custoTotalFormatado}`;
+            logDescription = `Abasteceu ${quantidade}L no veículo ID ${veiculoId}. Odômetro: ${odometro || 'Não informado'}. Litro: R$ ${precoFormatado} | Total: R$ ${custoTotalFormatado}`;
         }
         
         await connection.execute(

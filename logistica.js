@@ -299,8 +299,11 @@ function setupEventListeners() {
     if (quantityInput && costInput) {
         quantityInput.addEventListener('input', () => {
             const quantity = parseFloat(quantityInput.value) || 0;
-            const estimatedCost = quantity * ultimoPrecoDiesel;
-            costInput.value = estimatedCost.toLocaleString('pt-BR', {style:'currency', currency: 'BRL'});
+            // Preenche automaticamente o custo se o campo estiver vazio
+            if (!costInput.value && ultimoPrecoDiesel > 0) {
+                const estimatedCost = quantity * ultimoPrecoDiesel;
+                costInput.value = estimatedCost.toFixed(2);
+            }
         });
     }
 }
@@ -507,6 +510,7 @@ async function handleFuelConsumptionSubmit(event) {
         data: document.getElementById('consumption-date').value,
         quantidade: document.getElementById('consumption-quantity').value,
         odometro: document.getElementById('consumption-odometer').value,
+        custoTotal: document.getElementById('consumption-cost').value // NOVO: Pega o valor digitado
     };
 
     if (isGalao) {
