@@ -724,6 +724,8 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
             const [vehicleData] = await connection.execute('SELECT id_filial FROM veiculos WHERE id = ?', [veiculoId]);
             if (vehicleData.length === 0) throw new Error('Veículo não encontrado.');
             id_filial_movimento = vehicleData[0].id_filial;
+
+            //Ajustado
             
             // NOVO: Incluindo os valores financeiros na observação e no log
             observacao = `Abastecimento de ${quantidade}L. Litro: R$ ${precoFormatado} | Total: R$ ${custoTotal}`;
