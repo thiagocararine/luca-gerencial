@@ -826,7 +826,9 @@ async function loadAbastecimentosHistory() {
                     <tr>
                         <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
                         <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo / Destino</th>
-                        <th class="px-4 py-2 text-right font-medium text-gray-500">Quantidade (L)</th>
+                        <th class="px-4 py-2 text-right font-medium text-gray-500">Qtd (L)</th>
+                        <th class="px-4 py-2 text-right font-medium text-gray-500">V. Litro</th>
+                        <th class="px-4 py-2 text-right font-medium text-gray-500">Total</th>
                         <th class="px-4 py-2 text-right font-medium text-gray-500">Odômetro (km)</th>
                         <th class="px-4 py-2 text-left font-medium text-gray-500">Utilizador</th>
                         <th class="px-4 py-2 text-center font-medium text-gray-500">Ações</th>
@@ -841,14 +843,17 @@ async function loadAbastecimentosHistory() {
                 const tr = tbody.insertRow();
                 const infoText = `Abastecimento de ${parseFloat(item.quantidade).toFixed(2)}L para ${item.modelo || 'Galão'}`;
                 
-                // CORREÇÃO APLICADA AQUI:
                 const odometroFmt = item.odometro_no_momento ? item.odometro_no_momento.toLocaleString('pt-BR') : 'N/A';
                 const veiculoFmt = item.modelo ? `${item.modelo} (${item.placa})` : 'Retirada para Galão';
+                const valorLitroFmt = item.valor_unitario ? parseFloat(item.valor_unitario).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}) : '-';
+                const custoTotalFmt = item.custo_total ? parseFloat(item.custo_total).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}) : '-';
 
                 tr.innerHTML = `
                     <td class="px-4 py-2">${new Date(item.data_movimento).toLocaleString('pt-BR', { timeZone: 'UTC' })}</td>
                     <td class="px-4 py-2">${veiculoFmt}</td>
                     <td class="px-4 py-2 text-right">${parseFloat(item.quantidade).toFixed(2)}</td>
+                    <td class="px-4 py-2 text-right text-gray-600">${valorLitroFmt}</td>
+                    <td class="px-4 py-2 text-right font-medium text-blue-800">${custoTotalFmt}</td>
                     <td class="px-4 py-2 text-right">${odometroFmt}</td>
                     <td class="px-4 py-2">${item.nome_usuario}</td>
                     <td class="px-4 py-2 text-center">

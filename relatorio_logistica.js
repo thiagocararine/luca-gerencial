@@ -200,10 +200,12 @@ async function exportarRelatorioLogisticaHTML() {
                 break;
 
             case 'abastecimento':
-                headHtml = `<tr><th class="text-center">Data</th><th>Filial</th><th>Veículo / Destino</th><th class="text-right">Qtd (L)</th><th class="text-right">Odômetro (km)</th><th class="text-right">Custo Estimado</th></tr>`;
+                headHtml = `<tr><th class="text-center">Data</th><th>Filial</th><th>Veículo / Destino</th><th class="text-right">Qtd (L)</th><th class="text-right">Valor Litro</th><th class="text-right">Custo Total</th><th class="text-right">Odômetro (km)</th></tr>`;
                 bodyHtml = data.map(item => {
                     const quantidade = parseFloat(item.quantidade) || 0;
-                    const custo = parseFloat(item.custo_estimado) || 0;
+                    const custo = parseFloat(item.custo_total) || 0;
+                    const valorUnitario = item.valor_unitario ? parseFloat(item.valor_unitario) : (quantidade > 0 ? custo / quantidade : 0);
+                    
                     totalGeralLitros += quantidade;
                     totalGeral += custo;
 
@@ -212,8 +214,9 @@ async function exportarRelatorioLogisticaHTML() {
                         <td>${item.nome_filial}</td>
                         <td>${item.modelo ? `${item.modelo} (${item.placa})` : 'Galão'}</td>
                         <td class="text-right font-semibold">${quantidade.toFixed(2)}</td>
+                        <td class="text-right text-gray-600">${valorUnitario.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td>
+                        <td class="text-right font-semibold text-blue-800">${custo.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td>
                         <td class="text-right">${item.odometro_no_momento ? item.odometro_no_momento.toLocaleString('pt-BR') : 'N/A'}</td>
-                        <td class="text-right font-semibold text-blue-800">${custo.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
                     </tr>`;
                 }).join('');
                 break;
@@ -228,6 +231,7 @@ async function exportarRelatorioLogisticaHTML() {
                     <td class="text-right font-bold text-gray-900">${totalGeralLitros.toFixed(2)} L</td>
                     <td></td>
                     <td class="text-right font-bold text-gray-900">R$ ${totalGeral.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+                    <td></td>
                 </tr>`;
         } else if (['custoTotalFilial', 'custoRateado', 'custoDireto', 'despesaVeiculo'].includes(reportType)) {
              footHtml = `
@@ -720,10 +724,11 @@ function renderAbastecimentoReport(data, container) {
             <tr>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Data</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Filial</th>
-                <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo</th>
-                <th class="px-4 py-2 text-right font-medium text-gray-500">Quantidade (L)</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Veículo / Destino</th>
+                <th class="px-4 py-2 text-right font-medium text-gray-500">Qtd (L)</th>
+                <th class="px-4 py-2 text-right font-medium text-gray-500">Valor Litro</th>
+                <th class="px-4 py-2 text-right font-medium text-gray-500">Custo Total</th>
                 <th class="px-4 py-2 text-right font-medium text-gray-500">Odômetro (km)</th>
-                <th class="px-4 py-2 text-right font-medium text-gray-500">Custo Estimado</th>
             </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200"></tbody>
@@ -733,6 +738,7 @@ function renderAbastecimentoReport(data, container) {
                 <td id="total-litros" class="px-4 py-2 text-right"></td>
                 <td class="px-4 py-2"></td>
                 <td id="total-custo" class="px-4 py-2 text-right"></td>
+                <td class="px-4 py-2"></td>
             </tr>
         </tfoot>`;
     const tbody = table.querySelector('tbody');
@@ -742,7 +748,9 @@ function renderAbastecimentoReport(data, container) {
     data.forEach(item => {
         const tr = tbody.insertRow();
         const quantidade = parseFloat(item.quantidade) || 0;
-        const custo = parseFloat(item.custo_estimado) || 0;
+        const custo = parseFloat(item.custo_total) || 0;
+        const valorUnitario = item.valor_unitario ? parseFloat(item.valor_unitario) : (quantidade > 0 ? custo / quantidade : 0);
+        
         totalLitros += quantidade;
         totalCusto += custo;
 
@@ -754,8 +762,9 @@ function renderAbastecimentoReport(data, container) {
             <td class="px-4 py-2">${item.nome_filial}</td>
             <td class="px-4 py-2">${veiculoFmt}</td>
             <td class="px-4 py-2 text-right">${quantidade.toFixed(2)}</td>
+            <td class="px-4 py-2 text-right text-gray-600">${valorUnitario.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td>
+            <td class="px-4 py-2 text-right font-semibold text-blue-800">${custo.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td>
             <td class="px-4 py-2 text-right">${odometroFmt}</td>
-            <td class="px-4 py-2 text-right">${custo.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td>
         `;
     });
     

@@ -614,8 +614,8 @@ router.post('/estoque/entrada', authenticateToken, async (req, res) => {
         );
         
         await connection.execute(
-            'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_usuario, observacao) VALUES (?, ?, ?, ?, ?)',
-            [itemId, 'Entrada', quantidade, userId, `Compra de ${quantidade}L. Custo Total: R$ ${custo}`]
+            'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, valor_unitario, custo_total, id_usuario, observacao) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [itemId, 'Entrada', quantidade, precoUnitario, custo, userId, `Compra de ${quantidade}L. Custo Total: R$ ${custo}`]
         );
 
         const [itemData] = await connection.execute('SELECT nome_item FROM itens_estoque WHERE id = ?', [itemId]);
@@ -725,8 +725,8 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         }
         
         await connection.execute(
-            'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_veiculo, id_filial, odometro_no_momento, id_usuario, observacao, status, data_movimento) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [itemId, 'Saída', quantidade, veiculoId || null, id_filial_movimento, odometro || null, userId, observacao, 'Ativo', dataHoraMovimento]
+            'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_veiculo, id_filial, odometro_no_momento, valor_unitario, custo_total, id_usuario, observacao, status, data_movimento) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [itemId, 'Saída', quantidade, veiculoId || null, id_filial_movimento, odometro || null, precoUnitario, valorCustoTotal, userId, observacao, 'Ativo', dataHoraMovimento]
         );
 
         let consumoMedio = null;
@@ -1653,6 +1653,7 @@ router.get('/abastecimentos', authenticateToken, async (req, res) => {
         const dataQuery = `
             SELECT 
                 em.id, em.data_movimento, em.quantidade, em.odometro_no_momento,
+                em.valor_unitario, em.custo_total,
                 v.placa, v.modelo, u.nome_user as nome_usuario, em.observacao,
                 p.NOME_PARAMETRO as nome_filial
             FROM estoque_movimentos em
@@ -2042,10 +2043,11 @@ router.get('/relatorios/abastecimento', authenticateToken, async (req, res) => {
                 em.data_movimento,
                 em.quantidade,
                 em.odometro_no_momento,
+                em.valor_unitario,
+                IFNULL(em.custo_total, (em.quantidade * ie.ultimo_preco_unitario)) as custo_total,
                 v.placa, 
                 v.modelo, 
-                p.NOME_PARAMETRO as nome_filial,
-                (em.quantidade * ie.ultimo_preco_unitario) as custo_estimado
+                p.NOME_PARAMETRO as nome_filial
             FROM estoque_movimentos em
             LEFT JOIN veiculos v ON em.id_veiculo = v.id
             LEFT JOIN parametro p ON em.id_filial = p.ID
