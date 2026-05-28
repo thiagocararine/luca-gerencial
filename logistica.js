@@ -852,8 +852,8 @@ async function loadAbastecimentosHistory() {
                     <td class="px-4 py-2">${new Date(item.data_movimento).toLocaleString('pt-BR', { timeZone: 'UTC' })}</td>
                     <td class="px-4 py-2">${veiculoFmt}</td>
                     <td class="px-4 py-2 text-right">${parseFloat(item.quantidade).toFixed(2)}</td>
-                    <td class="px-4 py-2 text-right text-gray-600">${valorLitroFmt}</td>
-                    <td class="px-4 py-2 text-right font-medium text-blue-800">${custoTotalFmt}</td>
+                    <td class="px-4 py-2 text-right">${valorLitroFmt}</td>
+                    <td class="px-4 py-2 text-right">${custoTotalFmt}</td>
                     <td class="px-4 py-2 text-right">${odometroFmt}</td>
                     <td class="px-4 py-2">${item.nome_usuario}</td>
                     <td class="px-4 py-2 text-center">

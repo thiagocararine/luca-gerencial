@@ -78,8 +78,6 @@ async function exportarRelatorioLogisticaHTML() {
 
     const reportTypeSelect = document.getElementById('report-type');
     const reportType = reportTypeSelect.value;
-    
-    // Pega o nome do relatório, tira os números (ex: "1 - ") e deixa maiúsculo
     let reportTitle = reportTypeSelect.options[reportTypeSelect.selectedIndex].text.replace(/^\d+\s*-\s*/, '').toUpperCase();
 
     let apiUrl = `${apiUrlBase}/logistica/relatorios/${reportType}?export=true`;
@@ -119,57 +117,54 @@ async function exportarRelatorioLogisticaHTML() {
         let totalGeral = 0;
         let totalGeralLitros = 0;
 
-        // Construção do corpo da tabela
         switch (reportType) {
             case 'custoRateado':
             case 'custoTotalFilial':
-                headHtml = `<tr><th>Data</th><th>NF</th><th>Filial</th><th>Tipo de Custo</th><th>Veículo</th><th>Descrição</th><th class="text-right">Valor (R$)</th></tr>`;
+                headHtml = `<tr><th width="12%">DATA</th><th width="10%">NF</th><th width="18%">FILIAL</th><th width="15%">TIPO</th><th width="15%">VEÍCULO</th><th width="20%" class="text-left">DESCRIÇÃO</th><th width="10%" class="text-right">VALOR (R$)</th></tr>`;
                 bodyHtml = data.map(item => {
                     totalGeral += parseFloat(item.valor);
                     const dataFmt = item.data_despesa ? new Date(item.data_despesa.replace(/-/g, '\/')).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A';
                     return `<tr>
                         <td class="text-center">${dataFmt}</td>
-                        <td class="text-center">${item.numero_nf || 'N/A'}</td>
+                        <td class="text-center">${item.numero_nf || '-'}</td>
                         <td>${item.filial_nome}</td>
                         <td>${item.tipo_custo}</td>
-                        <td>${item.veiculo_info || 'N/A (Rateio)'}</td>
+                        <td>${item.veiculo_info || '-'}</td>
                         <td>${item.servico_info}</td>
-                        <td class="text-right font-semibold text-blue-800">${parseFloat(item.valor).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+                        <td class="text-right font-bold">${parseFloat(item.valor).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
                     </tr>`;
                 }).join('');
                 break;
 
             case 'custoDireto':
-                headHtml = `<tr><th>Data</th><th>NF</th><th>Filial</th><th>Veículo</th><th>Serviço</th><th>Tipo</th><th>Fornecedor</th><th class="text-right">Valor (R$)</th></tr>`;
+                headHtml = `<tr><th width="10%">DATA</th><th width="10%">NF</th><th width="15%">FILIAL</th><th width="15%">VEÍCULO</th><th width="20%">SERVIÇO</th><th width="10%">TIPO</th><th width="10%">FORNECEDOR</th><th width="10%" class="text-right">VALOR (R$)</th></tr>`;
                 bodyHtml = data.map(item => {
                     totalGeral += parseFloat(item.valor);
                     const dataFmt = item.data_despesa ? new Date(item.data_despesa.replace(/-/g, '\/')).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A';
                     return `<tr>
                         <td class="text-center">${dataFmt}</td>
-                        <td class="text-center">${item.numero_nf || 'N/A'}</td>
+                        <td class="text-center">${item.numero_nf || '-'}</td>
                         <td>${item.filial_nome}</td>
                         <td>${item.veiculo_info}</td>
-                        <td>${item.servico_info || 'N/A'}</td>
+                        <td>${item.servico_info || '-'}</td>
                         <td>${item.tipo_despesa}</td>
-                        <td>${item.fornecedor_nome || 'N/A'}</td>
-                        <td class="text-right font-semibold text-blue-800">${parseFloat(item.valor).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+                        <td>${item.fornecedor_nome || '-'}</td>
+                        <td class="text-right font-bold">${parseFloat(item.valor).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
                     </tr>`;
                 }).join('');
                 break;
 
             case 'listaVeiculos':
-                headHtml = `<tr><th>Placa</th><th>Marca/Modelo</th><th>Filial</th><th class="text-center">Status</th><th class="text-right">Odômetro (km)</th><th class="text-center">Última Prev.</th><th class="text-center">Seguro</th><th class="text-center">Rastreador</th></tr>`;
+                headHtml = `<tr><th width="15%">PLACA</th><th width="25%">MARCA/MODELO</th><th width="20%">FILIAL</th><th width="10%">STATUS</th><th width="10%" class="text-right">ODÔMETRO</th><th width="10%">SEGURO</th><th width="10%">RASTREADOR</th></tr>`;
                 bodyHtml = data.map(v => {
-                    const ultimaPreventivaFmt = v.ultima_preventiva ? new Date(v.ultima_preventiva).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'Nenhuma';
                     return `<tr>
                         <td class="font-bold text-center">${v.placa}</td>
                         <td>${v.marca} / ${v.modelo}</td>
                         <td>${v.nome_filial}</td>
                         <td class="text-center">${v.status}</td>
-                        <td class="text-right font-semibold">${(v.odometro_atual || 0).toLocaleString('pt-BR')}</td>
-                        <td class="text-center">${ultimaPreventivaFmt}</td>
-                        <td class="text-center">${v.seguro ? 'Sim' : 'Não'}</td>
-                        <td class="text-center">${v.rastreador ? 'Sim' : 'Não'}</td>
+                        <td class="text-right">${(v.odometro_atual || 0).toLocaleString('pt-BR')}</td>
+                        <td class="text-center">${v.seguro ? 'SIM' : 'NÃO'}</td>
+                        <td class="text-center">${v.rastreador ? 'SIM' : 'NÃO'}</td>
                     </tr>`;
                 }).join('');
                 break;
@@ -182,29 +177,27 @@ async function exportarRelatorioLogisticaHTML() {
                     printWindow.close();
                     return;
                 }
-                
-                reportTitle += ` - ${vehicleData.marca} / ${vehicleData.modelo} (Placa: ${vehicleData.placa})`;
-
-                headHtml = `<tr><th class="text-center">Data</th><th class="text-center">NF</th><th>Tipo</th><th>Descrição</th><th>Fornecedor</th><th class="text-right">Valor (R$)</th></tr>`;
+                reportTitle += ` - ${vehicleData.marca} / ${vehicleData.modelo} (${vehicleData.placa})`;
+                headHtml = `<tr><th width="15%">DATA</th><th width="15%">NF</th><th width="20%">TIPO</th><th width="25%" class="text-left">DESCRIÇÃO</th><th width="15%">FORNECEDOR</th><th width="10%" class="text-right">VALOR (R$)</th></tr>`;
                 bodyHtml = expensesData.map(item => {
                     totalGeral += parseFloat(item.custo);
                     return `<tr>
                         <td class="text-center">${new Date(item.data_evento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
-                        <td class="text-center">${item.numero_nf || 'N/A'}</td>
+                        <td class="text-center">${item.numero_nf || '-'}</td>
                         <td>${item.tipo}</td>
                         <td>${item.descricao}</td>
-                        <td>${item.fornecedor_nome || 'N/A'}</td>
-                        <td class="text-right font-semibold text-blue-800">${parseFloat(item.custo).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+                        <td>${item.fornecedor_nome || '-'}</td>
+                        <td class="text-right font-bold">${parseFloat(item.custo).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
                     </tr>`;
                 }).join('');
                 break;
 
             case 'abastecimento':
-                headHtml = `<tr><th class="text-center">Data</th><th>Filial</th><th>Veículo / Destino</th><th class="text-right">Qtd (L)</th><th class="text-right">Valor Litro</th><th class="text-right">Custo Total</th><th class="text-right">Odômetro (km)</th></tr>`;
+                headHtml = `<tr><th width="10%">DATA</th><th width="20%">FILIAL</th><th width="30%">VEÍCULO / DESTINO</th><th width="10%" class="text-right">QTD (L)</th><th width="10%" class="text-right">VL.LITRO</th><th width="10%" class="text-right">TOTAL (R$)</th><th width="10%" class="text-right">ODÔMETRO</th></tr>`;
                 bodyHtml = data.map(item => {
                     const quantidade = parseFloat(item.quantidade) || 0;
-                    const custo = parseFloat(item.custo_total) || 0;
-                    const valorUnitario = item.valor_unitario ? parseFloat(item.valor_unitario) : (quantidade > 0 ? custo / quantidade : 0);
+                    const custo = parseFloat(item.custo_total || item.custo_estimado || 0);
+                    const valorUnit = parseFloat(item.valor_unitario) || (quantidade > 0 ? custo/quantidade : 0);
                     
                     totalGeralLitros += quantidade;
                     totalGeral += custo;
@@ -213,40 +206,20 @@ async function exportarRelatorioLogisticaHTML() {
                         <td class="text-center">${new Date(item.data_movimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
                         <td>${item.nome_filial}</td>
                         <td>${item.modelo ? `${item.modelo} (${item.placa})` : 'Galão'}</td>
-                        <td class="text-right font-semibold">${quantidade.toFixed(2)}</td>
-                        <td class="text-right text-gray-600">${valorUnitario.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td>
-                        <td class="text-right font-semibold text-blue-800">${custo.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td>
-                        <td class="text-right">${item.odometro_no_momento ? item.odometro_no_momento.toLocaleString('pt-BR') : 'N/A'}</td>
+                        <td class="text-right">${quantidade.toFixed(2)}</td>
+                        <td class="text-right">${valorUnit.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+                        <td class="text-right font-bold">${custo.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+                        <td class="text-right">${item.odometro_no_momento ? item.odometro_no_momento.toLocaleString('pt-BR') : '-'}</td>
                     </tr>`;
                 }).join('');
                 break;
         }
 
-        // Rodapé com Totais
-        let footHtml = '';
-        if (reportType === 'abastecimento') {
-            footHtml = `
-                <tr class="tfoot">
-                    <td colspan="3" class="text-right font-bold uppercase">Total Geral do Período:</td>
-                    <td class="text-right font-bold text-gray-900">${totalGeralLitros.toFixed(2)} L</td>
-                    <td></td>
-                    <td class="text-right font-bold text-gray-900">R$ ${totalGeral.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
-                    <td></td>
-                </tr>`;
-        } else if (['custoTotalFilial', 'custoRateado', 'custoDireto', 'despesaVeiculo'].includes(reportType)) {
-             footHtml = `
-                <tr class="tfoot">
-                    <td colspan="${reportType === 'despesaVeiculo' ? 5 : (reportType === 'custoDireto' ? 7 : 6)}" class="text-right font-bold uppercase">Custo Total:</td>
-                    <td class="text-right font-bold text-gray-900" style="font-size: 14px;">R$ ${totalGeral.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
-                </tr>`;
-        }
+        const periodoFiltro = document.getElementById('filter-date-range').value || 'TODO O PERIODO';
+        const filialFiltro = document.getElementById('filter-filial').options[document.getElementById('filter-filial').selectedIndex].text || 'TODAS';
+        const veiculoFiltro = document.getElementById('filter-vehicle').options[document.getElementById('filter-vehicle').selectedIndex].text || 'TODOS';
 
-        // Captura o texto exato dos filtros aplicados
-        const periodoFiltro = document.getElementById('filter-date-range').value || 'Todo o período';
-        const filialFiltro = document.getElementById('filter-filial').options[document.getElementById('filter-filial').selectedIndex].text || 'Todas';
-        const veiculoFiltro = document.getElementById('filter-vehicle').options[document.getElementById('filter-vehicle').selectedIndex].text || 'Todos';
-
-        // O HTML CSS Masterpiece
+        // HTML EXATAMENTE NOS PADRÕES DO SEU SISTEMA (impressao_a4.js)
         let html = `
         <!DOCTYPE html>
         <html lang="pt-br">
@@ -254,96 +227,74 @@ async function exportarRelatorioLogisticaHTML() {
             <meta charset="UTF-8">
             <title>${reportTitle}</title>
             <style>
-                /* Configuração de Página A4 Paisagem */
-                @page { margin: 10mm; size: landscape; }
-                
-                /* Reset e Fontes */
-                body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11px; color: #1f2937; margin: 0; padding: 0; line-height: 1.4; -webkit-print-color-adjust: exact; color-adjust: exact; }
-                
-                /* Cabeçalho Empresarial */
-                .header-container { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #1e3a8a; padding-bottom: 15px; margin-bottom: 20px; }
-                .company-logo { max-width: 160px; max-height: 60px; }
-                .company-info { text-align: right; }
-                .company-name { font-size: 18px; font-weight: 800; color: #1e3a8a; margin: 0 0 4px 0; letter-spacing: 0.5px; }
-                .company-details { font-size: 10px; color: #4b5563; margin: 2px 0; }
-                
-                /* Título e Filtros */
-                .report-header { text-align: center; margin-bottom: 25px; }
-                .report-title { font-size: 20px; font-weight: 800; color: #111827; margin: 0 0 15px 0; text-transform: uppercase; letter-spacing: 1px; }
-                .filter-box { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; background-color: #f3f4f6; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb; font-size: 11px; }
-                .filter-item { display: flex; align-items: center; gap: 5px; }
-                .filter-label { font-weight: 700; color: #374151; text-transform: uppercase; font-size: 10px; }
-                .filter-value { color: #1f2937; }
-
-                /* Tabela Principal */
-                table { width: 100%; border-collapse: collapse; margin-bottom: 30px; box-shadow: 0 0 0 1px #e5e7eb; }
-                th { background-color: #1e3a8a; color: #ffffff; padding: 10px 8px; text-transform: uppercase; font-size: 10px; font-weight: 700; border: 1px solid #1e3a8a; }
-                td { padding: 8px; border: 1px solid #d1d5db; vertical-align: middle; }
-                tr:nth-child(even) { background-color: #f9fafb; }
-                tr:hover { background-color: #f3f4f6; }
-                
-                /* Totais (Rodapé da Tabela) */
-                .tfoot td { background-color: #e5e7eb; border-top: 2px solid #9ca3af; padding: 12px 8px; font-size: 12px; }
-
-                /* Utilitários */
+                @page { margin: 5mm; }
+                body { font-family: 'Courier New', Courier, monospace; font-size: 10px; color: #000; padding: 0; margin: 0; line-height: 1.2; text-transform: uppercase; }
+                table { width: 100%; border-collapse: collapse; margin-top: 5px; margin-bottom: 5px; font-size: 10px; }
+                th, td { border: 1px solid #000; padding: 3px 2px; }
+                th { background-color: transparent; text-align: center; font-weight: bold; font-size: 9px; }
+                td { vertical-align: middle; }
                 .text-center { text-align: center; }
                 .text-right { text-align: right; }
                 .text-left { text-align: left; }
                 .font-bold { font-weight: bold; }
-                .font-semibold { font-weight: 600; }
-                .text-blue-800 { color: #1e40af; }
-                
-                /* Rodapé da Página */
-                .page-footer { margin-top: 40px; padding-top: 15px; border-top: 1px dashed #cbd5e1; text-align: center; font-size: 9px; color: #6b7280; }
-                
-                /* Ocultar botão na impressão */
-                @media print { .no-print { display: none !important; } body { background: white; } }
+                .totais-box { margin-top: 10px; font-size: 11px; display: flex; justify-content: space-between; padding: 5px; border: 1px solid #000; font-weight: bold;}
+                .filtro-box { margin-bottom: 10px; font-size: 10px; border: 1px dashed #000; padding: 4px; display: flex; justify-content: space-between; flex-wrap: wrap;}
+                @media print { .no-print { display: none; } }
             </style>
         </head>
         <body>
-            <div class="no-print" style="margin-bottom: 20px; text-align: center; padding: 15px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
-                <button onclick="window.print()" style="padding: 10px 24px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🖨️ Imprimir ou Salvar em PDF</button>
+            <div class="no-print" style="margin-bottom: 20px; text-align: center;">
+                <button onclick="window.print()" style="padding: 10px 20px; background: #000; color: white; border: none; font-weight: bold; cursor: pointer; font-family: 'Courier New'; border-radius: 3px;">IMPRIMIR RELATORIO</button>
             </div>
             
-            <div class="header-container">
-                <div>
-                    ${logo ? `<img src="${logo}" class="company-logo" alt="Logo da Empresa">` : `<h2 style="color:#1e3a8a; margin:0;">LUCA</h2>`}
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 5px; margin-bottom: 5px; border-bottom: 1px dashed #000;">
+                <div style="width: 120px;">
+                    ${logo ? `<img src="${logo}" style="max-width: 100%; height: auto;">` : '<h2 style="margin:0;">LUCA</h2>'}
                 </div>
-                <div class="company-info">
-                    <h1 class="company-name">LUCA MATERIAL DE CONSTRUCAO LTDA</h1>
-                    <p class="company-details">Av. Automóvel Clube SN Qd 04 Lote 19 - Parada Angélica, Duque De Caxias [RJ]</p>
-                    <p class="company-details">CNPJ: 36.671.152/0004-06 | Tel(s): (21) 2778-3885 | 2739-1480</p>
+                <div style="text-align: center; font-size: 11px; line-height: 1.2; flex: 1;">
+                    <div style="font-weight: bold; font-size: 14px;">LUCA MATERIAL DE CONSTRUCAO LTDA</div>
+                    <div>CNPJ: 36.671.152/0004-06</div>
+                    <div style="margin-top: 5px; font-weight: bold; font-size: 13px;">${reportTitle}</div>
+                </div>
+                <div style="font-size: 10px; text-align: right; line-height: 1.2; width: 130px;">
+                    <div>EMISSAO: ${new Date().toLocaleDateString('pt-BR')}</div>
+                    <div>HORA: ${new Date().toLocaleTimeString('pt-BR')}</div>
+                    <div>MODULO: LOGISTICA</div>
                 </div>
             </div>
-            
-            <div class="report-header">
-                <h2 class="report-title">${reportTitle}</h2>
-                <div class="filter-box">
-                    <div class="filter-item"><span class="filter-label">Período:</span> <span class="filter-value">${periodoFiltro}</span></div>
-                    <div class="filter-item"><span class="filter-label">Filial:</span> <span class="filter-value">${filialFiltro}</span></div>
-                    ${reportType === 'despesaVeiculo' ? `<div class="filter-item"><span class="filter-label">Veículo:</span> <span class="filter-value">${veiculoFiltro}</span></div>` : ''}
-                    <div class="filter-item"><span class="filter-label">Emissão:</span> <span class="filter-value">${new Date().toLocaleString('pt-BR')}</span></div>
-                    <div class="filter-item"><span class="filter-label">Usuário:</span> <span class="filter-value">${userName}</span></div>
-                </div>
+
+            <div class="filtro-box">
+                <span><strong>PERIODO:</strong> ${periodoFiltro}</span>
+                <span><strong>FILIAL:</strong> ${filialFiltro}</span>
+                ${reportType === 'despesaVeiculo' ? `<span><strong>VEICULO:</strong> ${veiculoFiltro}</span>` : ''}
+                <span><strong>USUARIO:</strong> ${userName}</span>
             </div>
 
             <table>
                 <thead>${headHtml}</thead>
                 <tbody>${bodyHtml}</tbody>
-                <tfoot>${footHtml}</tfoot>
             </table>
             
-            <div class="page-footer">
-                Documento interno gerado pelo Sistema Luca Gerencial - Módulo de Gestão de Frota e Logística.
+            ${(reportType === 'abastecimento') ? `
+            <div class="totais-box">
+                <div>TOTAL DE LITROS: ${totalGeralLitros.toFixed(2)} L</div>
+                <div>CUSTO TOTAL: R$ ${totalGeral.toLocaleString('pt-BR', {minimumFractionDigits:2})}</div>
+            </div>` : 
+            (['custoTotalFilial', 'custoRateado', 'custoDireto', 'despesaVeiculo'].includes(reportType) ? `
+            <div class="totais-box">
+                <div></div>
+                <div>CUSTO TOTAL GERAL: R$ ${totalGeral.toLocaleString('pt-BR', {minimumFractionDigits:2})}</div>
+            </div>` : '')}
+            
+            <div style="margin-top: 20px; font-size: 9px; text-align: center; border-top: 1px solid #000; padding-top: 5px;">
+                NÃO É DOCUMENTO FISCAL. GERADO PELO SISTEMA LUCA GERENCIAL.
             </div>
         </body>
         </html>`;
 
         printWindow.document.write(html);
         printWindow.document.close();
-        
-        // Dá um pequeno tempo para o navegador carregar o logo e a folha de estilo antes de puxar a tela de print
-        setTimeout(() => printWindow.print(), 800);
+        setTimeout(() => printWindow.print(), 600);
 
     } catch (error) {
         alert(`Erro ao gerar impressão: ${error.message}`);
@@ -741,6 +692,7 @@ function renderAbastecimentoReport(data, container) {
                 <td class="px-4 py-2"></td>
             </tr>
         </tfoot>`;
+    
     const tbody = table.querySelector('tbody');
     let totalLitros = 0;
     let totalCusto = 0;
@@ -748,8 +700,9 @@ function renderAbastecimentoReport(data, container) {
     data.forEach(item => {
         const tr = tbody.insertRow();
         const quantidade = parseFloat(item.quantidade) || 0;
-        const custo = parseFloat(item.custo_total) || 0;
-        const valorUnitario = item.valor_unitario ? parseFloat(item.valor_unitario) : (quantidade > 0 ? custo / quantidade : 0);
+        // NOVA LÓGICA: Lê o custo_total e o valor_unitario reais do banco
+        const custo = parseFloat(item.custo_total || item.custo_estimado || 0); 
+        const valorUnitario = parseFloat(item.valor_unitario) || (quantidade > 0 ? custo / quantidade : 0);
         
         totalLitros += quantidade;
         totalCusto += custo;
@@ -758,13 +711,13 @@ function renderAbastecimentoReport(data, container) {
         const veiculoFmt = item.modelo ? `${item.modelo} (${item.placa})` : 'Galão';
         
         tr.innerHTML = `
-            <td class="px-4 py-2">${new Date(item.data_movimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
-            <td class="px-4 py-2">${item.nome_filial}</td>
-            <td class="px-4 py-2">${veiculoFmt}</td>
-            <td class="px-4 py-2 text-right">${quantidade.toFixed(2)}</td>
-            <td class="px-4 py-2 text-right text-gray-600">${valorUnitario.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td>
-            <td class="px-4 py-2 text-right font-semibold text-blue-800">${custo.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td>
-            <td class="px-4 py-2 text-right">${odometroFmt}</td>
+            <td class="px-4 py-2 text-black">${new Date(item.data_movimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+            <td class="px-4 py-2 text-black">${item.nome_filial}</td>
+            <td class="px-4 py-2 text-black">${veiculoFmt}</td>
+            <td class="px-4 py-2 text-right text-black">${quantidade.toFixed(2)}</td>
+            <td class="px-4 py-2 text-right text-black">${valorUnitario.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td>
+            <td class="px-4 py-2 text-right text-black">${custo.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td>
+            <td class="px-4 py-2 text-right text-black">${odometroFmt}</td>
         `;
     });
     
