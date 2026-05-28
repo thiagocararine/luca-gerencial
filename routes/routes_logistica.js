@@ -660,7 +660,7 @@ router.post('/estoque/entrada', authenticateToken, async (req, res) => {
 });
 
 router.post('/estoque/consumo', authenticateToken, async (req, res) => {
-    // 1. AQUI GARANTIMOS QUE O custoTotal É EXTRAÍDO DO FRONTEND
+    // AQUI garantimos que o custoTotal vem do frontend
     const { veiculoId, data, quantidade, odometro, isGalao, filialDestino, custoTotal } = req.body;
     const { userId, nome: nomeUsuario, perfil } = req.user;
     
@@ -670,7 +670,7 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
     }
 
     if ((!isGalao && !veiculoId) || (isGalao && !filialDestino) || !data || !quantidade) {
-        return res.status(400).json({ error: 'Campos obrigatórios não preenchidos. Verifique se o veículo ou a filial de destino foi selecionado.' });
+        return res.status(400).json({ error: 'Campos obrigatórios não preenchidos.' });
     }
 
     const horaAtual = new Date().toTimeString().split(' ')[0]; 
@@ -701,7 +701,7 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
         let observacao;
         let logDescription;
 
-        // 2. LÓGICA DO CUSTO IMPLEMENTADA AQUI
+        // CÁLCULO DAS DUAS NOVAS COLUNAS
         const valorCustoTotal = custoTotal ? parseFloat(custoTotal) : (parseFloat(quantidade) * parseFloat(item.ultimo_preco_unitario || 0));
         const precoUnitario = parseFloat(quantidade) > 0 ? (valorCustoTotal / parseFloat(quantidade)) : 0;
         
@@ -712,18 +712,17 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
             const [filialRows] = await connection.execute("SELECT ID FROM parametro WHERE NOME_PARAMETRO = ? AND COD_PARAMETRO = 'Unidades'", [filialDestino]);
             if (filialRows.length === 0) throw new Error(`Filial "${filialDestino}" não encontrada.`);
             id_filial_movimento = filialRows[0].ID;
-            
             observacao = `Retirada de ${quantidade}L para galão (Destino: ${filialDestino}). Litro: R$ ${precoFormatado} | Total: R$ ${custoTotalFormatado}`;
             logDescription = observacao;
         } else {
             const [vehicleData] = await connection.execute('SELECT id_filial FROM veiculos WHERE id = ?', [veiculoId]);
             if (vehicleData.length === 0) throw new Error('Veículo não encontrado.');
             id_filial_movimento = vehicleData[0].id_filial;
-            
             observacao = `Abastecimento de ${quantidade}L. Litro: R$ ${precoFormatado} | Total: R$ ${custoTotalFormatado}`;
             logDescription = `Abasteceu ${quantidade}L no veículo ID ${veiculoId}. Odômetro: ${odometro || 'Não informado'}. Litro: R$ ${precoFormatado} | Total: R$ ${custoTotalFormatado}`;
         }
         
+        // AQUI ESTÁ O SEGREDO: O INSERT COM AS 12 COLUNAS INCLUINDO valor_unitario E custo_total
         await connection.execute(
             'INSERT INTO estoque_movimentos (id_item, tipo_movimento, quantidade, id_veiculo, id_filial, odometro_no_momento, valor_unitario, custo_total, id_usuario, observacao, status, data_movimento) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [itemId, 'Saída', quantidade, veiculoId || null, id_filial_movimento, odometro || null, precoUnitario, valorCustoTotal, userId, observacao, 'Ativo', dataHoraMovimento]
@@ -738,13 +737,11 @@ router.post('/estoque/consumo', authenticateToken, async (req, res) => {
             
             if (ultimoAbastecimento.length > 0) {
                 const odometroAnterior = ultimoAbastecimento[0].odometro_no_momento;
-                const litrosAbastecidosNaquelaVez = quantidade; 
                 const distancia = odometro - odometroAnterior;
-                if (distancia > 0 && litrosAbastecidosNaquelaVez > 0) {
-                    consumoMedio = (distancia / litrosAbastecidosNaquelaVez).toFixed(2);
+                if (distancia > 0 && quantidade > 0) {
+                    consumoMedio = (distancia / quantidade).toFixed(2);
                 }
             }
-            
             await connection.execute('UPDATE veiculos SET odometro_atual = ? WHERE id = ?', [odometro, veiculoId]);
         }
         
@@ -1641,13 +1638,11 @@ router.get('/abastecimentos', authenticateToken, async (req, res) => {
         const params = [];
         
         if (filial) {
-            // Agora o filtro é aplicado na coluna id_filial do próprio movimento
             conditions.push("em.id_filial = ?");
             params.push(filial);
         }
         
         const whereClause = `WHERE ${conditions.join(' AND ')}`;
-
         const countQuery = `SELECT COUNT(*) as total FROM estoque_movimentos em ${whereClause}`;
             
         const dataQuery = `
@@ -2023,18 +2018,9 @@ router.get('/relatorios/abastecimento', authenticateToken, async (req, res) => {
         const params = [];
         const pageLimit = parseInt(limit) || 1000;
 
-        if (filial) {
-            conditions.push("em.id_filial = ?");
-            params.push(filial);
-        }
-        if (dataInicio) {
-            conditions.push("em.data_movimento >= ?");
-            params.push(dataInicio);
-        }
-        if (dataFim) {
-            conditions.push("em.data_movimento <= ?");
-            params.push(dataFim);
-        }
+        if (filial) { conditions.push("em.id_filial = ?"); params.push(filial); }
+        if (dataInicio) { conditions.push("em.data_movimento >= ?"); params.push(dataInicio); }
+        if (dataFim) { conditions.push("em.data_movimento <= ?"); params.push(dataFim); }
         
         const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
