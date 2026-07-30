@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="pt-br" class="h-full bg-gray-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transporte & Rentabilidade - Luca Gerencial</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" href="assets/favicon.ico" type="image/x-icon">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/style.css">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        [data-feather] { width: 1.25rem; height: 1.25rem; }
+        .modal.hidden { display: none; }
+
+        /* Estilos do fundo abstrato */
+        .page-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+        }
+        .abstract-background {
+            width: 100%;
+            height: 100%;
+            border-radius: 0;
+            aspect-ratio: auto;
+        }
+
+        #sidebar.collapsed { width: 5rem; }
+        #sidebar.collapsed .sidebar-link { justify-content: center; }
+        #sidebar.collapsed .sidebar-text, #sidebar.collapsed #company-logo, #sidebar.collapsed #toggle-icon-collapse { display: none; }
+        #sidebar.collapsed #toggle-icon-expand { display: block; }
+        #sidebar #toggle-icon-expand { display: none; }
+        
+        .action-btn { 
+            padding: 0.5rem 1rem; border-radius: 0.375rem; color: white; 
+            font-size: 0.875rem; font-weight: 600; border: none; cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .action-btn:disabled { background-color: #9ca3af; cursor: not-allowed; }
+
+        .form-input {
+            background-color: #f9fafb;
+            border-color: #d1d5db;
+        }
+        .form-input:focus {
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 1px #4f46e5;
+        }
+    </style>
+</head>
+<body class="h-full">
+
+    <div class="page-background">
+        <div class="abstract-background">
+            <div class="tube tube-1"></div>
+            <div class="tube tube-2"></div>
+            <div class="tube tube-3"></div>
+            <div class="tube tube-4"></div>
+            <div class="tube tube-5"></div>
+            <div class="tube tube-6"></div>
+            <div class="tube tube-7"></div>
+            <div class="tube tube-8"></div>
+        </div>
+    </div>  
+
+    <div id="global-loader" class="fixed inset-0 bg-gray-900 bg-opacity-50 z-[100] flex-col items-center justify-center hidden">
+        <div style="border-top-color: #4f46e5;" class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4 animate-spin"></div>
+        <h2 class="text-center text-white text-xl font-semibold">Aguarde...</h2>
+    </div>
+
+<div class="flex h-full">
+    <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
+    
+    <nav id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-white/80 backdrop-blur-sm shadow-lg z-30 transform -translate-x-full md:relative md:translate-x-0 md:flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
+        <div class="flex flex-col h-full">
+            <div class="h-16 flex items-center justify-center border-b border-gray-200/50 px-4 gap-2">
+                <img id="company-logo" src="" alt="Logo da Empresa" style="display: none;" class="max-h-10 max-w-10">
+                <h1 class="text-xl font-bold text-indigo-600 overflow-hidden"><span class="sidebar-text">Luca Gerencial</span></h1>
+            </div>
+            <div class="flex-grow p-4 overflow-y-auto">
+                <ul class="space-y-2">
+                    <li><a href="index.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="home"></span><span class="sidebar-text">Início / Dashboard</span></a></li>
+                    <li><a href="despesas.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="dollar-sign"></span><span class="sidebar-text">Lançamentos</span></a></li>
+                    <li><a href="logistica.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="truck"></span><span class="sidebar-text">Logística</span></a></li>
+                    
+                    <!-- Novo Link de Transporte (ATIVO NESTA PÁGINA) -->
+                    <li><a href="transporte.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-indigo-700 bg-indigo-50 font-semibold"><span data-feather="map"></span><span class="sidebar-text">Transporte</span></a></li>
+
+                    <li>
+                        <button type="button" class="sidebar-link w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900" onclick="toggleSubmenu('submenu-expedicao')">
+                            <div class="flex items-center gap-3">
+                                <span data-feather="package"></span>
+                                <span class="sidebar-text">Expedição</span>
+                            </div>
+                            <span data-feather="chevron-down" class="w-4 h-4 transition-transform duration-200" id="icon-expedicao"></span>
+                        </button>
+                        <ul id="submenu-expedicao" class="hidden pl-9 mt-1 space-y-1">
+                            <li><a href="entregas.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Entregas</a></li>
+                            <li><a href="checklist.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Checklist Veículos</a></li>
+                            <li><a href="produtos.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Cadastro Produtos</a></li>
+                            <li><a href="estoque.html" class="block px-3 py-2 rounded-md text-sm text-gray-500 hover:text-indigo-600 hover:bg-gray-50">Endereçamento</a></li>
+                        </ul>
+                    </li>
+
+                    <li><a href="settings.html" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"><span data-feather="settings"></span><span class="sidebar-text">Configurações</span></a></li>
+                </ul>
+            </div>
+            
+            <div class="p-2 border-t border-gray-200/50">
+                <button id="sidebar-toggle" class="w-full hidden md:flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none">
+                    <svg id="toggle-icon-collapse" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" /></svg>
+                    <svg id="toggle-icon-expand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 hidden"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="flex-1 flex flex-col min-w-0">
+        <header class="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
+            <button id="mobile-menu-button" class="md:hidden text-gray-600 hover:text-gray-900"><span data-feather="menu"></span></button>
+            <div class="hidden md:block"></div>
+            <div class="flex items-center gap-4 ml-auto">
+                <span class="text-sm text-gray-700">Olá, <strong id="user-name" class="font-medium">Carregando...</strong>!</span>
+                <button id="logout-button" class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500">Sair</button>
+            </div>
+        </header>
+
+        <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
+                <h2 class="text-2xl font-bold text-gray-900">Acerto de Viagens e Rentabilidade</h2>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button id="btn-novo-motorista" class="action-btn bg-gray-600 hover:bg-gray-700 flex items-center gap-2"><span data-feather="users"></span>Motoristas</button>
+                    <button id="btn-nova-viagem" class="action-btn bg-indigo-600 hover:bg-indigo-700 flex items-center gap-2"><span data-feather="plus"></span>Nova Viagem</button>
+                </div>
+            </div>
+
+            <!-- Bloco de Filtro de Mês/Ano -->
+            <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow mb-6 flex flex-col sm:flex-row items-end gap-4">
+                <div class="w-full sm:w-auto">
+                    <label for="filtro-mes" class="block text-sm font-medium text-gray-700">Mês de Referência</label>
+                    <input type="month" id="filtro-mes" class="form-input mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                </div>
+                <button id="btn-filtrar-mes" class="action-btn bg-indigo-600 hover:bg-indigo-700 w-full sm:w-auto flex items-center justify-center gap-2">
+                    <span data-feather="filter" class="w-4 h-4"></span> Filtrar Resultados
+                </button>
+            </div>
+
+            <!-- Container dos Cards de Rentabilidade dos Veículos -->
+            <div id="cards-rentabilidade-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                <!-- O JavaScript injetará os cards aqui -->
+                <p class="text-gray-500 col-span-full">Aguardando dados para exibir a rentabilidade...</p>
+            </div>
+        </main>
+    </div>
+</div>
+
+<!-- Modal Meu Perfil Padrão -->
+<div id="meu-perfil-modal" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden transform scale-95 transition-transform duration-200" id="meu-perfil-content">
+        
+        <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200 bg-indigo-50">
+            <h3 class="text-lg font-bold text-indigo-900 flex items-center gap-2">
+                <i data-feather="user" class="w-5 h-5 text-indigo-600"></i> Meu Perfil
+            </h3>
+            <button onclick="fecharModalPerfil()" class="text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
+        </div>
+
+        <div class="p-6 space-y-6 bg-white">
+            
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 flex flex-col md:flex-row gap-4 shadow-inner">
+                <div class="flex-1">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Cargo Atual</label>
+                    <p class="text-sm font-black text-slate-800" id="perfil-cargo">Carregando...</p>
+                </div>
+                <div class="w-px bg-slate-200 hidden md:block"></div>
+                <div class="flex-1">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Departamento</label>
+                    <p class="text-sm font-black text-slate-800" id="perfil-departamento">Carregando...</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="col-span-2">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Nome Completo</label>
+                    <input type="text" id="perfil-nome" class="w-full border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-none transition-shadow placeholder-gray-400">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">E-mail de Acesso</label>
+                    <input type="email" id="perfil-email" class="w-full border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-none transition-shadow">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">CPF</label>
+                    <input type="text" id="perfil-cpf" class="w-full border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-none transition-shadow" placeholder="000.000.000-00">
+                </div>
+            </div>
+
+            <div class="pt-4 border-t border-gray-100">
+                <label class="block text-sm font-semibold text-gray-700 mb-1 text-indigo-700">Nova Senha</label>
+                <p class="text-[10px] text-gray-500 mb-2 font-medium">Deixe este campo em branco se não quiser alterar a sua senha.</p>
+                <input type="password" id="perfil-senha" class="w-full border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-none transition-shadow" placeholder="Digite uma senha segura">
+            </div>
+        </div>
+
+        <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3 shrink-0">
+            <button onclick="fecharModalPerfil()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm transition-colors">Cancelar</button>
+            <button onclick="salvarMeuPerfil()" class="px-4 py-2 text-sm font-bold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 shadow-sm transition-colors flex items-center gap-2">
+                <i data-feather="save" class="w-4 h-4"></i> Salvar Alterações
+            </button>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script src="transporte.js" defer></script>
+<script src="assets/global.js"></script>
+
+<script>
+    // Função global para o onclick do HTML funcionar (Submenus)
+    window.toggleSubmenu = function(id) {
+        const submenu = document.getElementById(id);
+        const icon = document.getElementById('icon-expedicao');
+        
+        if (submenu.classList.contains('hidden')) {
+            submenu.classList.remove('hidden');
+            if(icon) icon.style.transform = 'rotate(180deg)';
+        } else {
+            submenu.classList.add('hidden');
+            if(icon) icon.style.transform = 'rotate(0deg)';
+        }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        feather.replace();
+
+        const sidebar = document.getElementById('sidebar');
+        const desktopToggleButton = document.getElementById('sidebar-toggle');
+        const mobileMenuButton = document.getElementById('mobile-menu-button');
+        const overlay = document.getElementById('mobile-menu-overlay');
+
+        // Lógica de Colapso (Padronizada com Tailwind)
+        if (desktopToggleButton) {
+            const setDesktopSidebarState = (collapsed) => {
+                sidebar.classList.toggle('w-64', !collapsed);
+                sidebar.classList.toggle('w-20', collapsed);
+                
+                // Controla visibilidade dos elementos internos
+                document.querySelectorAll('.sidebar-text').forEach(el => el.classList.toggle('hidden', collapsed));
+                document.getElementById('company-logo')?.classList.toggle('hidden', collapsed);
+                document.getElementById('toggle-icon-collapse').classList.toggle('hidden', collapsed);
+                document.getElementById('toggle-icon-expand').classList.toggle('hidden', !collapsed);
+                
+                // Ajusta links e setas
+                sidebar.querySelectorAll('.sidebar-link').forEach(link => { 
+                    link.classList.toggle('justify-center', collapsed); 
+                    const arrow = link.querySelector('[data-feather="chevron-down"]');
+                    if(arrow) arrow.style.display = collapsed ? 'none' : 'block';
+                });
+                
+                localStorage.setItem('sidebar_collapsed', collapsed);
+            };
+
+            const isDesktopCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+            setDesktopSidebarState(isDesktopCollapsed);
+
+            desktopToggleButton.addEventListener('click', () => {
+                const currentlyCollapsed = sidebar.classList.contains('w-20');
+                setDesktopSidebarState(!currentlyCollapsed);
+            });
+        }
+
+        // Lógica Mobile
+        if (mobileMenuButton && overlay) {
+            mobileMenuButton.addEventListener('click', () => {
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.remove('hidden');
+            });
+            overlay.addEventListener('click', () => {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+            });
+        }
+    });
+</script>
+</body>
+</html>

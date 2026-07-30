@@ -19,6 +19,7 @@ const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 const ALL_MODULES = {
     'lancamentos': 'Lançamentos',
     'logistica': 'Logística',
+    'transporte': 'Transporte e Fretes',
     'checklist': 'Checklist',
     'produtos': 'Produtos',
     'entregas': 'Entregas',
@@ -844,6 +845,7 @@ function gerenciarAcessoModulos() {
     const mapaModulos = {
         'lancamentos': 'despesas.html',
         'logistica': 'logistica.html',
+        'transporte': 'transporte.html',
         'entregas': 'entregas.html',
         'checklist': 'checklist.html',
         'produtos': 'produtos.html',
