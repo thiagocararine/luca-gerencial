@@ -1,0 +1,31 @@
+# Dependências do Node.js
+node_modules/
+
+# Variáveis de ambiente (contém senhas) - NUNCA versionar
+.env
+.env.local
+.env.*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+*.log
+
+# Uploads gerados em runtime
+uploads/
+
+# Arquivos gerados / temporários
+config_logo.json
+*.tmp
+*.bak
+
+# Sistema operacional
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editores
+.vscode/
+.idea/
