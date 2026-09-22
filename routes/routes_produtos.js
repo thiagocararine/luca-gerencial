@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2/promise');
-const { authenticateToken } = require('../middlewares');
+const { authenticateToken, checkPerm } = require('../middlewares');
 
 const dbConfigSei = {
     host: process.env.DB_HOST,
@@ -22,33 +22,6 @@ const dbConfigGerencial = {
 };
 
 const mainDbName = process.env.DB_DATABASE || 'gerencial_lucamat';
-
-// --- Função Auxiliar de Permissão ---
-async function checkPermission(userId, requiredPerm) {
-    let conn;
-    try {
-        conn = await mysql.createConnection(dbConfigGerencial);
-        const [rows] = await conn.execute(
-            `SELECT p.modulos FROM usuarios u JOIN perfis p ON u.id_perfil = p.id WHERE u.id = ?`, 
-            [userId]
-        );
-        if (rows.length === 0) return false;
-        
-        let modulos = [];
-        try {
-            const raw = rows[0].modulos;
-            modulos = typeof raw === 'string' ? JSON.parse(raw) : raw;
-            if(!Array.isArray(modulos)) modulos = [];
-        } catch(e) { modulos = []; }
-
-        return modulos.includes(requiredPerm) || modulos.includes('estoque_admin'); // Admin supera tudo
-    } catch(e) {
-        console.error("Erro checkPermission:", e);
-        return false;
-    } finally {
-        if(conn) await conn.end();
-    }
-}
 
 // ROTA PRINCIPAL DE BUSCA - ATUALIZADA E COMPLETA
 router.get('/', authenticateToken, async (req, res) => {
@@ -232,15 +205,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
 });
 
 // --- ROTA DE AJUSTE (PROTEGIDA POR PERMISSÃO) ---
-router.post('/ajuste-estoque', authenticateToken, async (req, res) => {
+router.post('/ajuste-estoque', authenticateToken, checkPerm('estoque_admin'), async (req, res) => {
     const { id_produto_regi, codigo_produto, filial_id, nova_quantidade, endereco, motivo } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
-
-    // VERIFICA PERMISSÃO ANTES DE TUDO
-    const podeAjustar = await checkPermission(userId, 'estoque_admin');
-    if (!podeAjustar) {
-        return res.status(403).json({ error: 'Acesso negado. Você não tem permissão para ajustar saldo de estoque (estoque_admin).' });
-    }
 
     if (!id_produto_regi || !filial_id || nova_quantidade === null || !motivo) {
         return res.status(400).json({ error: 'Todos os campos para o ajuste são obrigatórios.' });
