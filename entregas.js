@@ -1244,7 +1244,7 @@ async function buscarHistorico() {
 function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) return;
-    const mapaModulos = { 'lancamentos': 'despesas.html', 'logistica': 'logistica.html', 'entregas': 'entregas.html', 'checklist': 'checklist.html', 'produtos': 'produtos.html', 'configuracoes': 'settings.html' };
+    const mapaModulos = { 'lancamentos': 'despesas.html', 'logistica': 'logistica.html', 'entregas': 'entregas.html', 'checklist': 'checklist.html', 'produtos': 'produtos.html', 'configuracoes': 'settings.html', 'conciliacao': 'conciliacao.html' };
     for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
         const permissao = userData.permissoes.find(p => p.nome_modulo === nomeModulo);
         if (!permissao || !permissao.permitido) {
