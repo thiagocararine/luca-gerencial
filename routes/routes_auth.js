@@ -150,15 +150,19 @@ router.post('/signup', async (req, res) => {
 // PUT /api/auth/me - Atualiza dados do próprio usuário
 router.put('/me', authenticateToken, async (req, res) => {
     const userId = req.user.userId; // ID extraído do token JWT
-    const { email_user, cpf_user, nova_senha } = req.body;
-    
+    const { nome_user, email_user, cpf_user, nova_senha } = req.body;
+
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        
+
         let fieldsToUpdate = [];
         let params = [];
 
+        if (nome_user) {
+            fieldsToUpdate.push('nome_user = ?');
+            params.push(nome_user);
+        }
         if (email_user) {
             fieldsToUpdate.push('email_user = ?');
             params.push(email_user);
