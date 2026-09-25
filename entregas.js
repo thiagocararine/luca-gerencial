@@ -1244,9 +1244,35 @@ async function buscarHistorico() {
 function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) return;
-    const mapaModulos = { 'lancamentos': 'despesas.html', 'logistica': 'logistica.html', 'entregas': 'entregas.html', 'checklist': 'checklist.html', 'produtos': 'produtos.html', 'configuracoes': 'settings.html' };
+    const permissoesDoUsuario = userData.permissoes;
+    const mapaModulos = { 'lancamentos': 'despesas.html', 'logistica': 'logistica.html', 'transporte': 'transporte.html', 'entregas': 'entregas.html', 'checklist': 'checklist.html', 'produtos': 'produtos.html', 'configuracoes': 'settings.html', 'estoque_view': 'estoque.html', 'fin_pagar_view': 'financeiro.html' };
+
+    // Verifica se tem QUALQUER acesso ao estoque (View, Oper ou Admin)
+    const temAcessoEstoque = permissoesDoUsuario.some(p =>
+        (p.nome_modulo === 'estoque_view' || p.nome_modulo === 'estoque_oper' || p.nome_modulo === 'estoque_admin') && p.permitido
+    );
+    // Verifica se tem QUALQUER acesso ao financeiro
+    const temAcessoFinanceiro = permissoesDoUsuario.some(p =>
+        (p.nome_modulo === 'fin_pagar_view' || p.nome_modulo === 'fin_pagar_oper' || p.nome_modulo === 'fin_pagar_admin') && p.permitido
+    );
+
     for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
-        const permissao = userData.permissoes.find(p => p.nome_modulo === nomeModulo);
+        if (nomeModulo === 'estoque_view') {
+            if (!temAcessoEstoque) {
+                const link = document.querySelector(`#sidebar a[href="${href}"]`);
+                if (link && link.parentElement) link.parentElement.style.display = 'none';
+            }
+            continue;
+        }
+        if (nomeModulo === 'fin_pagar_view') {
+            if (!temAcessoFinanceiro) {
+                const link = document.querySelector(`#sidebar a[href="${href}"]`);
+                if (link && link.parentElement) link.parentElement.style.display = 'none';
+            }
+            continue;
+        }
+
+        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
         if (!permissao || !permissao.permitido) {
             const link = document.querySelector(`#sidebar a[href="${href}"]`);
             if (link && link.parentElement) link.parentElement.style.display = 'none';
