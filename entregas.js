@@ -1245,7 +1245,7 @@ function gerenciarAcessoModulos() {
     const userData = getUserData();
     if (!userData || !userData.permissoes) return;
     const permissoesDoUsuario = userData.permissoes;
-    const mapaModulos = { 'lancamentos': 'despesas.html', 'logistica': 'logistica.html', 'transporte': 'transporte.html', 'entregas': 'entregas.html', 'checklist': 'checklist.html', 'produtos': 'produtos.html', 'configuracoes': 'settings.html', 'estoque_view': 'estoque.html', 'fin_pagar_view': 'financeiro.html' };
+    const mapaModulos = { 'lancamentos': 'despesas.html', 'logistica': 'logistica.html', 'transporte': 'transporte.html', 'entregas': 'entregas.html', 'checklist': 'checklist.html', 'produtos': 'produtos.html', 'configuracoes': 'settings.html', 'estoque_view': 'estoque.html', 'fin_pagar_view': 'financeiro.html', 'conciliacao': 'conciliacao.html' };
 
     // Verifica se tem QUALQUER acesso ao estoque (View, Oper ou Admin)
     const temAcessoEstoque = permissoesDoUsuario.some(p =>

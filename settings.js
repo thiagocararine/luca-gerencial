@@ -23,8 +23,9 @@ const ALL_MODULES = {
     'checklist': 'Checklist',
     'produtos': 'Produtos',
     'entregas': 'Entregas',
+    'conciliacao': 'Conciliação Mercado Pago',
     'configuracoes': 'Configurações',
-    
+
     // Módulo Estoque (Endereçamento) ---
     'estoque_view': 'Estoque - Visualizar (Consultas)',
     'estoque_oper': 'Estoque - Operacional (Criar/Vincular)',
