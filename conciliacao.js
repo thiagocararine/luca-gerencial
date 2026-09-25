@@ -683,53 +683,6 @@ function fecharModalTransferencia() {
     setTimeout(() => document.getElementById('modal-transferencia').classList.add('hidden'), 200);
 }
 
-function prepararEstadoAuditoria(chave) {
-    if (estadoAuditoria[chave]) return; 
-
-    let maq = JSON.parse(JSON.stringify(transacoesMaqPorChave[chave] || []));
-    let erp = JSON.parse(JSON.stringify(transacoesERPPorChave[chave] || []));
-    
-    maq.sort((a, b) => b.valor - a.valor); 
-    erp.sort((a, b) => b.valor - a.valor);
-
-    let matches = [];
-    for (let i = maq.length - 1; i >= 0; i--) {
-        let itemMaq = maq[i];
-        let indexERP = erp.findIndex(e => Math.abs(e.valor - itemMaq.valor) < 0.01);
-        if (indexERP !== -1) {
-            matches.push({ maqItem: itemMaq, erpItem: erp[indexERP], tipo: 'auto' });
-            erp.splice(indexERP, 1); 
-            maq.splice(i, 1);
-        }
-    }
-    estadoAuditoria[chave] = { matches, sobrasMaq: maq, sobrasERP: erp };
-}
-
-function renderizarTabelaAuditoria(chave) {
-    let state = estadoAuditoria[chave];
-    let resultado = [];
-
-    state.matches.forEach(m => {
-        let iconeStatus = m.tipo === 'manual' ? '<span class="text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded text-[10px] border border-blue-200">🔗 Manual</span>' : '<span class="text-green-600 font-bold bg-green-50 px-2 py-1 rounded text-[10px] border border-green-200">✓ Automático</span>';
-        if (m.maqItem && m.maqItem.isQRCredito) iconeStatus = '<span class="text-white font-bold bg-red-600 px-2 py-1 rounded text-[10px] border border-red-800 shadow-sm mr-1">🚨 QR CRÉDITO</span><br>' + iconeStatus;
-        resultado.push({ selecionavel: false, status_icone: iconeStatus, maq_hora: m.maqItem.hora, maq_valor: m.maqItem.valor, maq_taxa: m.maqItem.taxa, erp_hora: m.erpItem.hora, erp_dav: m.erpItem.dav, erp_valor: m.erpItem.valor });
-    });
-
-    state.sobrasMaq.forEach((m, idx) => {
-        let iconeStatus = m.isQRCredito ? '<span class="text-white font-bold bg-red-600 px-2 py-1 rounded text-[10px] border border-red-800 animate-pulse shadow-sm">🚨 QR NO CRÉDITO</span>' : '<span class="text-red-600 font-bold bg-red-50 px-2 py-1 rounded text-[10px] border border-red-200">✗ Falta no Sis</span>';
-        resultado.push({ selecionavel: true, tipo_sobra: 'maq', origem_idx: idx, status_icone: iconeStatus, maq_hora: m.hora, maq_valor: m.valor, maq_taxa: m.taxa, erp_hora: '-', erp_dav: '-', erp_valor: 0 });
-    });
-
-    state.sobrasERP.forEach((e, idx) => {
-        let iconeStatus = e.isTransferido ? '<span class="text-purple-600 font-bold bg-purple-50 px-2 py-1 rounded text-[10px] border border-purple-200">⬇️ Trazido</span>' : '<span class="text-yellow-600 font-bold bg-yellow-50 px-2 py-1 rounded text-[10px] border border-yellow-200">! Falta no MP</span>';
-        resultado.push({ selecionavel: true, tipo_sobra: 'erp', origem_idx: idx, status_icone: iconeStatus, maq_hora: '-', maq_valor: 0, maq_taxa: 0, erp_hora: e.hora, erp_dav: e.dav, erp_valor: e.valor, orig_chave: e.original_chave });
-    });
-
-    tableAuditoria.setData(resultado);
-    document.getElementById('btn-conciliar-manual').classList.remove('hidden');
-    atualizarResumoSelecao([]); // Zera a calculadora ao abrir/atualizar
-}
-
 function abrirAuditoriaItemAItem(rowData) {
     if (rowData.modalidade === 'Dinheiro') return showToast("Ação inválida. O Dinheiro não tem auditoria eletrónica, deve ser conferido fisicamente no botão Gaveta.", "warning");
     linhaAtualAuditoria = rowData;
@@ -790,12 +743,6 @@ async function conciliarManualmente() {
 
     // Atualiza a tela principal por trás
     sincronizarTotaisPrincipais();
-}
-
-function fecharModalAuditoria() {
-    document.getElementById('modal-auditoria').classList.add('opacity-0'); 
-    document.getElementById('modal-auditoria-content').classList.add('scale-95');
-    setTimeout(() => document.getElementById('modal-auditoria').classList.add('hidden'), 200);
 }
 
 // --- CONTROLES DA AUDITORIA E DE-PARA MANUAL ---
@@ -903,6 +850,7 @@ function renderizarTabelaAuditoria(chave) {
 
     tableAuditoria.setData(resultado);
     document.getElementById('btn-conciliar-manual').classList.remove('hidden');
+    atualizarResumoSelecao([]); // Zera a calculadora ao abrir/atualizar
 }
 
 function fecharModalAuditoria() {
