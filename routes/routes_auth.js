@@ -125,14 +125,11 @@ router.post('/signup', async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const senha_hash_user = await bcrypt.hash(senha, salt);
 
-        const [maxIdResult] = await connection.execute('SELECT MAX(ID) as maxId FROM cad_user');
-        const newId = (maxIdResult[0].maxId || 0) + 1;
-
         const datacad_user = new Date().toISOString().slice(0, 10);
-        
-        const insertSql = `INSERT INTO cad_user (ID, datacad_user, nome_user, senha_hash_user, depart_user, unidade_user, email_user, cargo_user, cpf_user, status_user, id_perfil) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+        const insertSql = `INSERT INTO cad_user (datacad_user, nome_user, senha_hash_user, depart_user, unidade_user, email_user, cargo_user, cpf_user, status_user, id_perfil) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
         const defaultProfileId = 2; // Perfil "Utilizador" por defeito
-        const params = [newId, datacad_user, nome_user, senha_hash_user, depart_user, unidade_user, email_user, cargo_user, cpf_user, 'Pendente', defaultProfileId];
+        const params = [datacad_user, nome_user, senha_hash_user, depart_user, unidade_user, email_user, cargo_user, cpf_user, 'Pendente', defaultProfileId];
         
         await connection.execute(insertSql, params);
         await connection.commit();
