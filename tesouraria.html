@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-br" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tesouraria</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="assets/style.css">
+    <link rel="icon" href="/assets/favicon.ico" type="image/x-icon">
+    <script src="https://unpkg.com/feather-icons"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link href="https://unpkg.com/tabulator-tables@6.2.1/dist/css/tabulator_simple.min.css" rel="stylesheet">
+    <script type="text/javascript" src="https://unpkg.com/tabulator-tables@6.2.1/dist/js/tabulator.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .tabulator { border: none; background-color: white; font-size: 0.75rem; }
+        .tabulator-header { border-bottom: 2px solid #e5e7eb !important; background-color: #f8fafc !important; color: #475569; font-weight: 700; text-transform: uppercase; font-size: 0.7rem; }
+        .tabulator-header .tabulator-col { background-color: #f8fafc !important; border-right: 1px solid #e2e8f0; }
+        .tabulator-row { border-bottom: 1px solid #f1f5f9; min-height: 32px; }
+        .tabulator-row:hover { background-color: #e0e7ff !important; transition: background 0.1s; }
+        .tabulator-cell { padding: 4px 6px !important; display: flex; align-items: center; height: 100%; }
+    </style>
+</head>
+<body class="h-full text-gray-900 flex flex-col overflow-hidden">
+
+    <header class="bg-white border-b h-14 flex items-center justify-between px-6 shadow-sm z-30 shrink-0">
+        <div class="flex items-center gap-4">
+            <a href="index.html" class="text-gray-500 hover:text-indigo-600 flex items-center gap-1.5 font-semibold text-xs transition-colors py-2 px-3 hover:bg-gray-50 rounded-md">
+                <i data-feather="arrow-left" class="w-4 h-4"></i> MENU PRINCIPAL
+            </a>
+            <div class="h-6 w-px bg-gray-200"></div>
+            <h1 class="text-base font-bold text-gray-800 tracking-tight flex items-center gap-2">
+                <div class="p-1.5 bg-green-50 rounded-md"><i data-feather="briefcase" class="w-4 h-4 text-green-600"></i></div>
+                Tesouraria
+            </h1>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="flex flex-col items-end mr-2">
+                <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Usuário Logado</span>
+                <strong id="user-name" class="text-sm text-gray-700 leading-none">...</strong>
+            </div>
+            <button id="logout-btn" class="text-xs font-bold text-red-600 hover:text-white border border-red-200 hover:bg-red-600 px-3 py-1.5 rounded transition-all duration-200">SAIR</button>
+        </div>
+    </header>
+
+    <div class="bg-white p-3 border-b border-gray-200 shrink-0 shadow-sm z-20">
+        <div class="flex flex-wrap gap-3 items-end">
+            <div>
+                <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-wide">Dia</label>
+                <input type="date" id="filtro-data" class="h-8 border-gray-300 rounded text-xs bg-gray-50 font-medium">
+            </div>
+
+            <button id="btn-novo-lancamento" class="h-8 bg-indigo-600 text-white px-4 rounded text-xs font-bold hover:bg-indigo-700 shadow-sm flex items-center gap-2 transition-all active:scale-95">
+                <i data-feather="plus" class="w-3.5 h-3.5"></i> NOVO LANÇAMENTO
+            </button>
+
+            <div class="ml-auto flex gap-2">
+                <button id="btn-exportar-pdf" class="h-8 bg-gray-700 text-white px-4 rounded text-xs font-bold hover:bg-gray-800 shadow-sm flex items-center gap-2 transition-all">
+                    <i data-feather="file-text" class="w-3.5 h-3.5"></i> EXPORTAR PDF
+                </button>
+                <button id="btn-whatsapp" class="h-8 bg-green-600 text-white px-4 rounded text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-2 transition-all">
+                    <i data-feather="share-2" class="w-3.5 h-3.5"></i> COMPARTILHAR
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-4 space-y-4">
+
+        <div id="cards-contas" class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <!-- Cards de saldo por conta, preenchidos via JS -->
+        </div>
+
+        <div id="painel-pendentes" class="hidden bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+            <h2 class="text-xs font-bold text-yellow-800 uppercase tracking-wide mb-2 flex items-center gap-2">
+                <i data-feather="alert-triangle" class="w-4 h-4"></i>
+                Despesas de caixa do dia ainda não confirmadas na tesouraria
+            </h2>
+            <div id="lista-pendentes" class="space-y-2"></div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-3 py-2 border-b border-gray-100 bg-gray-50">
+                <h2 class="text-xs font-bold text-gray-600 uppercase tracking-wide">Movimentos do dia</h2>
+            </div>
+            <div id="tabela-movimentos" class="w-full"></div>
+        </div>
+
+    </div>
+
+    <!-- Modal: Novo Lançamento -->
+    <div id="modal-lancamento" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden transform scale-95 transition-transform duration-200">
+            <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200 bg-indigo-50">
+                <h3 class="text-lg font-bold text-indigo-900 flex items-center gap-2">
+                    <i data-feather="plus-circle" class="w-5 h-5 text-indigo-600"></i> Novo Lançamento
+                </h3>
+                <button id="btn-fechar-modal-lancamento" class="text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Conta</label>
+                        <select id="lanc-conta" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Centro de Custo</label>
+                        <select id="lanc-centro-custo" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                            <option value="">-- Nenhum --</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Tipo</label>
+                        <select id="lanc-tipo" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                            <option value="saida" selected>Saída (Pagamento)</option>
+                            <option value="entrada">Entrada</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Valor (R$)</label>
+                        <input type="number" step="0.01" min="0.01" id="lanc-valor" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="0,00">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Descrição</label>
+                    <input type="text" id="lanc-descricao" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="Ex: Pagamento fornecedor X">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Favorecido</label>
+                        <input type="text" id="lanc-favorecido" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="Opcional">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Forma de Pagamento</label>
+                        <select id="lanc-forma-pagamento" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                            <option value="dinheiro">Dinheiro</option>
+                            <option value="pix">Pix</option>
+                            <option value="ted">TED/DOC</option>
+                            <option value="cheque">Cheque</option>
+                            <option value="boleto">Boleto</option>
+                            <option value="outro">Outro</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+                <button id="btn-cancelar-lancamento" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm">Cancelar</button>
+                <button id="btn-salvar-lancamento" class="px-4 py-2 text-sm font-bold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 shadow-sm flex items-center gap-2">
+                    <i data-feather="save" class="w-4 h-4"></i> Salvar Lançamento
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Confirmar despesa de caixa pendente -->
+    <div id="modal-confirmar-despesa" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-200">
+            <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200 bg-yellow-50">
+                <h3 class="text-lg font-bold text-yellow-900 flex items-center gap-2">
+                    <i data-feather="check-circle" class="w-5 h-5 text-yellow-600"></i> Confirmar Despesa de Caixa
+                </h3>
+                <button id="btn-fechar-modal-confirmar" class="text-yellow-500 hover:text-yellow-700 hover:bg-yellow-100 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <p id="confirmar-despesa-descricao" class="text-sm text-gray-600 bg-gray-50 p-3 rounded border border-gray-200"></p>
+                <input type="hidden" id="confirmar-despesa-id">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Conta que pagou</label>
+                    <select id="confirmar-conta" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Centro de Custo</label>
+                    <select id="confirmar-centro-custo" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                        <option value="">-- Nenhum --</option>
+                    </select>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+                <button id="btn-cancelar-confirmar" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm">Cancelar</button>
+                <button id="btn-salvar-confirmar" class="px-4 py-2 text-sm font-bold text-white bg-yellow-600 rounded-md hover:bg-yellow-700 shadow-sm flex items-center gap-2">
+                    <i data-feather="check" class="w-4 h-4"></i> Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal "Meu Perfil" (padrão global.js) -->
+    <div id="meu-perfil-modal" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden transform scale-95 transition-transform duration-200" id="meu-perfil-content">
+            <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200 bg-indigo-50">
+                <h3 class="text-lg font-bold text-indigo-900 flex items-center gap-2">
+                    <i data-feather="user" class="w-5 h-5 text-indigo-600"></i> Meu Perfil
+                </h3>
+                <button onclick="fecharModalPerfil()" class="text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 space-y-6 bg-white">
+                <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 flex flex-col md:flex-row gap-4 shadow-inner">
+                    <div class="flex-1">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Cargo Atual</label>
+                        <p class="text-sm font-black text-slate-800" id="perfil-cargo">Carregando...</p>
+                    </div>
+                    <div class="w-px bg-slate-200 hidden md:block"></div>
+                    <div class="flex-1">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Departamento</label>
+                        <p class="text-sm font-black text-slate-800" id="perfil-departamento">Carregando...</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="col-span-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Nome Completo</label>
+                        <input type="text" id="perfil-nome" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">E-mail de Acesso</label>
+                        <input type="email" id="perfil-email" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">CPF</label>
+                        <input type="text" id="perfil-cpf" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="000.000.000-00">
+                    </div>
+                </div>
+                <div class="pt-4 border-t border-gray-100">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1 text-indigo-700">Nova Senha</label>
+                    <input type="password" id="perfil-senha" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="Deixe em branco para não alterar">
+                </div>
+            </div>
+            <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+                <button onclick="fecharModalPerfil()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm">Cancelar</button>
+                <button onclick="salvarMeuPerfil()" class="px-4 py-2 text-sm font-bold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 shadow-sm flex items-center gap-2">
+                    <i data-feather="save" class="w-4 h-4"></i> Salvar Alterações
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="assets/global.js"></script>
+    <script src="tesouraria.js"></script>
+</body>
+</html>
