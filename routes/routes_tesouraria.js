@@ -240,6 +240,9 @@ router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), asyn
     if (!['entrada', 'saida'].includes(tipo)) {
         return res.status(400).json({ error: 'Tipo de movimento inválido.' });
     }
+    if (!(Number(valor) > 0)) {
+        return res.status(400).json({ error: 'O valor deve ser maior que zero.' });
+    }
     if (id_veiculo && !GRUPOS_QUE_EXIGEM_VEICULO.includes(grupo_despesa)) {
         return res.status(400).json({ error: 'Veículo só pode ser informado em despesas do grupo Manutenção ou Combustível.' });
     }
@@ -285,14 +288,20 @@ router.post('/movimentos/:id/estornar', authenticateToken, checkPerm('tesouraria
             await connection.rollback();
             return res.status(409).json({ error: 'Este movimento já foi estornado.' });
         }
+        if (original.id_movimento_estornado) {
+            await connection.rollback();
+            return res.status(409).json({ error: 'Este lançamento já é um estorno e não pode ser estornado.' });
+        }
 
+        // O registro de estorno fica no mesmo dia do original, só como trilha de auditoria:
+        // nem o original (status 'estornado') nem o estorno entram nos totais.
         const tipoEstorno = original.tipo === 'entrada' ? 'saida' : 'entrada';
         await connection.execute(
             `INSERT INTO tesouraria_movimentos
                 (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, valor, descricao, favorecido, forma_pagamento, origem, status, id_movimento_estornado, id_usuario_lancamento, nome_usuario_lancamento)
-             VALUES (?, ?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 'ativo', ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 'ativo', ?, ?, ?)`,
             [
-                original.id_conta, original.id_centro_custo, original.id_veiculo, original.data_despesa, original.numero_nf,
+                original.id_conta, original.id_centro_custo, original.id_veiculo, original.data_movimento, original.data_despesa, original.numero_nf,
                 original.grupo_despesa, original.tipo_despesa, tipoEstorno, original.valor,
                 `Estorno do lançamento #${original.id}: ${original.descricao}`,
                 original.favorecido, original.forma_pagamento, original.id, userId, nomeUsuario
@@ -328,7 +337,7 @@ router.get('/despesa-caixa/pendentes', authenticateToken, checkPerm('tesouraria_
         const [pendentes] = await gerencialPool.query(
             `SELECT d.*
              FROM despesa_caixa d
-             LEFT JOIN tesouraria_movimentos m ON m.origem = 'despesa_caixa' AND m.origem_ref = CAST(d.ID AS CHAR)
+             LEFT JOIN tesouraria_movimentos m ON m.origem = 'despesa_caixa' AND m.origem_ref = CAST(d.ID AS CHAR) AND m.status = 'ativo'
              WHERE d.dsp_datadesp = ? AND d.dsp_status = 1 AND m.id IS NULL
              ORDER BY d.ID ASC`,
             [data]

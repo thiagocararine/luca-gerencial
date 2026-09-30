@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('logout-btn').addEventListener('click', logout);
 
     const inputData = document.getElementById('filtro-data');
-    inputData.value = new Date().toISOString().slice(0, 10);
+    inputData.value = dataLocalHoje();
     inputData.addEventListener('change', () => carregarDia(inputData.value));
 
     setupModais();
@@ -55,6 +55,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     ]);
     await carregarDia(inputData.value);
 });
+
+// toISOString() usa UTC: depois das 21h (horário de Brasília) já devolveria o dia seguinte.
+function dataLocalHoje() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 function apiHeaders(extra = {}) {
     return { 'Authorization': `Bearer ${getToken()}`, ...extra };
@@ -101,7 +107,7 @@ async function carregarVeiculos() {
         veiculosCache = await res.json();
         const select = document.getElementById('lanc-veiculo');
         select.innerHTML = '<option value="">-- Nenhum --</option>' +
-            veiculosCache.map(v => `<option value="${v.id}">${v.modelo} - ${v.placa}</option>`).join('');
+            veiculosCache.map(v => `<option value="${v.id}">${escapeHtml(v.modelo)} - ${escapeHtml(v.placa)}</option>`).join('');
     } catch (err) {
         console.error('Erro ao carregar veículos:', err);
         veiculosCache = [];
@@ -115,7 +121,7 @@ async function carregarFiliais() {
         filiaisCache = await res.json();
         const select = document.getElementById('novo-centro-filial');
         select.innerHTML = '<option value="">-- Vincular a uma Unidade (opcional) --</option>' +
-            filiaisCache.map(f => `<option value="${f.ID}">${f.NOME_PARAMETRO}</option>`).join('');
+            filiaisCache.map(f => `<option value="${f.ID}">${escapeHtml(f.NOME_PARAMETRO)}</option>`).join('');
     } catch (err) {
         console.error('Erro ao carregar unidades:', err);
         filiaisCache = [];
@@ -187,18 +193,19 @@ function atualizarVisibilidadeVeiculo(nomeGrupo) {
     if (!precisaVeiculo) document.getElementById('lanc-veiculo').value = '';
 }
 
+// Sem conta pré-selecionada, para não lançar na conta errada sem perceber.
 function preencherSelectContas(select) {
     if (!select) return;
-    select.innerHTML = contasCache.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+    select.innerHTML = '<option value="">-- Selecione --</option>' +
+        contasCache.map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
 }
 
 function preencherSelectCentros(select) {
     if (!select) return;
     const base = '<option value="">-- Nenhum --</option>';
-    select.innerHTML = base + centrosCustoCache.map(c => {
-        const label = c.tipo === 'veiculo' && c.placa ? `${c.nome} (${c.modelo || ''} - ${c.placa})` : `${c.nome} [${TIPO_CENTRO_LABEL[c.tipo] || c.tipo}]`;
-        return `<option value="${c.id}">${label}</option>`;
-    }).join('');
+    select.innerHTML = base + centrosCustoCache.map(c =>
+        `<option value="${c.id}">${escapeHtml(c.nome)} [${escapeHtml(TIPO_CENTRO_LABEL[c.tipo] || c.tipo)}]</option>`
+    ).join('');
 }
 
 async function carregarDia(data) {
@@ -218,18 +225,23 @@ async function carregarDia(data) {
 
 // --- CARDS DE CONTAS ---
 
+// O valor do card é o líquido do dia (entradas - saídas), não o saldo da conta:
+// saldo de verdade depende de saldo inicial/fechamento, que é a Fase C.
 function renderCardsContas(movimentos) {
     const container = document.getElementById('cards-contas');
     container.innerHTML = contasCache.map(conta => {
-        const movsConta = movimentos.filter(m => m.id_conta === conta.id && m.status === 'ativo');
-        const saldo = movsConta.reduce((acc, m) => acc + (m.tipo === 'entrada' ? Number(m.valor) : -Number(m.valor)), 0);
+        const movsConta = movimentos.filter(m => m.id_conta === conta.id && movimentoEfetivo(m));
+        const totalEntrada = movsConta.filter(m => m.tipo === 'entrada').reduce((a, m) => a + Number(m.valor), 0);
         const totalSaida = movsConta.filter(m => m.tipo === 'saida').reduce((a, m) => a + Number(m.valor), 0);
-        const corSaldo = saldo < 0 ? 'text-red-600' : 'text-gray-800';
+        const liquido = totalEntrada - totalSaida;
+        const corLiquido = liquido < 0 ? 'text-red-600' : 'text-gray-800';
         return `
             <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-3">
-                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wide truncate">${conta.nome}</p>
-                <p class="text-lg font-black ${corSaldo}">${formatarMoeda(saldo)}</p>
-                <p class="text-[10px] text-gray-500">Pago no dia: ${formatarMoeda(totalSaida)}</p>
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wide truncate">${escapeHtml(conta.nome)}</p>
+                <p class="text-lg font-black ${corLiquido}">${formatarMoeda(liquido)}</p>
+                <p class="text-[10px] text-gray-400 -mt-0.5 mb-1">Líquido do dia</p>
+                <p class="text-[10px] text-green-700">Entradas: ${formatarMoeda(totalEntrada)}</p>
+                <p class="text-[10px] text-red-700">Saídas: ${formatarMoeda(totalSaida)}</p>
             </div>`;
     }).join('') || '<p class="text-xs text-gray-400 col-span-full">Nenhuma conta cadastrada ainda.</p>';
 }
@@ -250,13 +262,14 @@ function renderPendentes(pendentes, data) {
     lista.innerHTML = pendentes.map(d => `
         <div class="flex items-center justify-between bg-white border border-yellow-200 rounded px-3 py-2 text-xs">
             <div>
-                <span class="font-bold text-gray-700">${d.dsp_descricao}</span>
-                <span class="text-gray-400"> — ${d.dsp_grupo || ''} / ${d.dsp_tipo || ''} — Filial ${d.dsp_filial || ''}</span>
+                <span class="font-bold text-gray-700">${escapeHtml(d.dsp_descricao)}</span>
+                <span class="text-gray-400"> — ${escapeHtml(d.dsp_grupo || '')} / ${escapeHtml(d.dsp_tipo || '')} — Filial ${escapeHtml(d.dsp_filial || '')}</span>
             </div>
             <div class="flex items-center gap-3">
                 <span class="font-bold text-gray-800">${formatarMoeda(d.dsp_valordsp)}</span>
                 <button class="btn-confirmar-despesa bg-yellow-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-yellow-700"
-                        data-id="${d.ID}" data-descricao="${escapeHtml(d.dsp_descricao)} — ${formatarMoeda(d.dsp_valordsp)}">
+                        data-id="${d.ID}" data-filial="${escapeHtml(d.dsp_filial || '')}"
+                        data-descricao="${escapeHtml(d.dsp_descricao)} — ${formatarMoeda(d.dsp_valordsp)}">
                     Confirmar
                 </button>
             </div>
@@ -264,7 +277,7 @@ function renderPendentes(pendentes, data) {
     `).join('');
 
     lista.querySelectorAll('.btn-confirmar-despesa').forEach(btn => {
-        btn.addEventListener('click', () => abrirModalConfirmarDespesa(btn.dataset.id, btn.dataset.descricao));
+        btn.addEventListener('click', () => abrirModalConfirmarDespesa(btn.dataset.id, btn.dataset.descricao, btn.dataset.filial));
     });
 }
 
@@ -289,12 +302,12 @@ function renderTabelaMovimentos(movimentos) {
                     title: 'Centro de Custo', field: 'nome_centro_custo', widthGrow: 1.2,
                     formatter: cell => {
                         const m = cell.getRow().getData();
-                        const base = cell.getValue() || '-';
+                        const base = escapeHtml(cell.getValue() || '-');
                         if (!m.veiculo_placa) return base;
-                        return `${base} <span class="text-gray-400">· ${m.veiculo_placa}</span>`;
+                        return `${base} <span class="text-gray-400">· ${escapeHtml(m.veiculo_placa)}</span>`;
                     }
                 },
-                { title: 'Tipo Despesa', field: 'tipo_despesa', widthGrow: 1, formatter: cell => cell.getValue() || '-' },
+                { title: 'Tipo Despesa', field: 'tipo_despesa', widthGrow: 1, formatter: cell => escapeHtml(cell.getValue() || '-') },
                 { title: 'Tipo', field: 'tipo', width: 80, formatter: cell => cell.getValue() === 'entrada' ? '<span class="text-green-600 font-bold">Entrada</span>' : '<span class="text-red-600 font-bold">Saída</span>' },
                 { title: 'Valor', field: 'valor', width: 110, hozAlign: 'right', formatter: cell => formatarMoeda(cell.getValue()) },
                 { title: 'Descrição', field: 'descricao', widthGrow: 2 },
@@ -302,13 +315,17 @@ function renderTabelaMovimentos(movimentos) {
                 { title: 'Origem', field: 'origem_label', width: 110 },
                 { title: 'Usuário', field: 'nome_usuario_lancamento', width: 110 },
                 {
-                    title: 'Status', field: 'status', width: 100,
-                    formatter: cell => cell.getValue() === 'estornado'
-                        ? '<span class="text-gray-400 italic">Estornado</span>'
-                        : '<button class="btn-estornar text-red-600 hover:underline text-[11px] font-bold">Estornar</button>',
+                    title: 'Status', field: 'status', width: 110,
+                    formatter: cell => {
+                        const m = cell.getRow().getData();
+                        if (m.id_movimento_estornado) return `<span class="text-gray-400 italic">Estorno de #${Number(m.id_movimento_estornado)}</span>`;
+                        if (m.status === 'estornado') return '<span class="text-gray-400 italic">Estornado</span>';
+                        return '<button class="btn-estornar text-red-600 hover:underline text-[11px] font-bold">Estornar</button>';
+                    },
                     cellClick: (e, cell) => {
-                        if (cell.getValue() === 'estornado') return;
-                        estornarMovimento(cell.getRow().getData().id);
+                        const m = cell.getRow().getData();
+                        if (!movimentoEfetivo(m)) return;
+                        estornarMovimento(m.id);
                     }
                 }
             ]
@@ -427,9 +444,14 @@ async function salvarLancamento() {
     }
 }
 
-function abrirModalConfirmarDespesa(id, descricao) {
+// dsp_filial guarda o nome da Unidade (ex.: "Santa Cruz"), o mesmo nome_filial que vem
+// do JOIN dos centros de custo — então dá para já sugerir o centro de custo da loja.
+function abrirModalConfirmarDespesa(id, descricao, nomeFilial) {
     document.getElementById('confirmar-despesa-id').value = id;
     document.getElementById('confirmar-despesa-descricao').textContent = descricao;
+    document.getElementById('confirmar-conta').value = '';
+    const centroDaLoja = centrosCustoCache.find(c => c.nome_filial && c.nome_filial === nomeFilial);
+    document.getElementById('confirmar-centro-custo').value = centroDaLoja ? String(centroDaLoja.id) : '';
     abrirModal('modal-confirmar-despesa');
 }
 function fecharModalConfirmarDespesa() { fecharModal('modal-confirmar-despesa'); }
@@ -483,7 +505,7 @@ async function renderListaGerenciarContas() {
         preencherSelectContas(document.getElementById('lanc-conta'));
         preencherSelectContas(document.getElementById('confirmar-conta'));
     } catch (err) {
-        container.innerHTML = `<p class="text-xs text-red-500">Erro ao carregar contas: ${err.message}</p>`;
+        container.innerHTML = `<p class="text-xs text-red-500">Erro ao carregar contas: ${escapeHtml(err.message)}</p>`;
     }
 }
 
@@ -511,7 +533,7 @@ async function renderListaGerenciarCentros() {
         preencherSelectCentros(document.getElementById('lanc-centro-custo'));
         preencherSelectCentros(document.getElementById('confirmar-centro-custo'));
     } catch (err) {
-        container.innerHTML = `<p class="text-xs text-red-500">Erro ao carregar centros de custo: ${err.message}</p>`;
+        container.innerHTML = `<p class="text-xs text-red-500">Erro ao carregar centros de custo: ${escapeHtml(err.message)}</p>`;
     }
 }
 
@@ -590,16 +612,26 @@ function formatarMoeda(valor) {
     return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+// Seguro tanto para conteúdo quanto para valores de atributo (escapa aspas).
 function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str || '';
-    return div.innerHTML;
+    return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// Só entra nos totais o que é lançamento válido: nem o original estornado,
+// nem o registro de estorno (que é só trilha de auditoria).
+function movimentoEfetivo(m) {
+    return m.status === 'ativo' && !m.id_movimento_estornado;
 }
 
 function montarResumoPorConta() {
     return contasCache
         .map(conta => {
-            const movsConta = movimentosDoDia.filter(m => m.id_conta === conta.id && m.status === 'ativo');
+            const movsConta = movimentosDoDia.filter(m => m.id_conta === conta.id && movimentoEfetivo(m));
             const saldo = movsConta.reduce((acc, m) => acc + (m.tipo === 'entrada' ? Number(m.valor) : -Number(m.valor)), 0);
             return { conta: conta.nome, saldo, temMovimento: movsConta.length > 0 };
         })
@@ -626,7 +658,7 @@ function gerarPDF() {
     });
 
     const finalY = doc.autoTable.previous.finalY;
-    const ativos = movimentosDoDia.filter(m => m.status === 'ativo');
+    const ativos = movimentosDoDia.filter(movimentoEfetivo);
     doc.autoTable({
         head: [['Conta', 'Centro de Custo', 'Tipo Despesa', 'Tipo', 'Descrição', 'Valor']],
         body: ativos.map(m => [
