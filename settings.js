@@ -34,7 +34,12 @@ const ALL_MODULES = {
     // Módulo Financeiro (Contas a Pagar) ---
     'fin_pagar_view': 'Financeiro (Pagar) - Visualizar',
     'fin_pagar_oper': 'Financeiro (Pagar) - Classificar/Editar Cheques',
-    'fin_pagar_admin': 'Financeiro (Pagar) - Gerencial (Relatórios/Auditoria)'
+    'fin_pagar_admin': 'Financeiro (Pagar) - Gerencial (Relatórios/Auditoria)',
+
+    // Módulo Tesouraria (submódulo do Financeiro) ---
+    'tesouraria_view': 'Tesouraria - Visualizar',
+    'tesouraria_oper': 'Tesouraria - Lançar/Confirmar/Estornar',
+    'tesouraria_admin': 'Tesouraria - Gerencial (Contas/Centros de Custo)'
 };
 
 /**

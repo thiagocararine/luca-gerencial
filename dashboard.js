@@ -331,17 +331,23 @@ function gerenciarAcessoModulos() {
         'configuracoes': 'settings.html',
         // NOVOS MÓDULOS COM LÓGICA GRANULAR
         'estoque_view': 'estoque.html',
-        'fin_pagar_view': 'financeiro.html'
+        'fin_pagar_view': 'financeiro.html',
+        'tesouraria_view': 'tesouraria.html'
     };
 
     // Verifica se tem QUALQUER acesso ao estoque
-    const temAcessoEstoque = permissoesDoUsuario.some(p => 
+    const temAcessoEstoque = permissoesDoUsuario.some(p =>
         (p.nome_modulo === 'estoque_view' || p.nome_modulo === 'estoque_oper' || p.nome_modulo === 'estoque_admin') && p.permitido
     );
 
     // Verifica se tem QUALQUER acesso ao financeiro
-    const temAcessoFinanceiro = permissoesDoUsuario.some(p => 
+    const temAcessoFinanceiro = permissoesDoUsuario.some(p =>
         (p.nome_modulo === 'fin_pagar_view' || p.nome_modulo === 'fin_pagar_oper' || p.nome_modulo === 'fin_pagar_admin') && p.permitido
+    );
+
+    // Verifica se tem QUALQUER acesso à tesouraria
+    const temAcessoTesouraria = permissoesDoUsuario.some(p =>
+        (p.nome_modulo === 'tesouraria_view' || p.nome_modulo === 'tesouraria_oper' || p.nome_modulo === 'tesouraria_admin') && p.permitido
     );
 
     for (const [moduleKey, href] of Object.entries(mapaModulos)) {
@@ -353,6 +359,11 @@ function gerenciarAcessoModulos() {
         // Lógica Financeiro
         if (moduleKey === 'fin_pagar_view') {
             if (!temAcessoFinanceiro) escondeLink(href);
+            continue;
+        }
+        // Lógica Tesouraria
+        if (moduleKey === 'tesouraria_view') {
+            if (!temAcessoTesouraria) escondeLink(href);
             continue;
         }
 
