@@ -66,8 +66,9 @@ const checkPerm = (permNecessaria) => async (req, res, next) => {
 // GET /api/tesouraria/contas
 router.get('/contas', authenticateToken, checkPerm('tesouraria_view'), async (req, res) => {
     try {
+        const whereAtivo = req.query.todos === '1' ? '' : 'WHERE ativo = 1';
         const [contas] = await gerencialPool.query(
-            `SELECT * FROM tesouraria_contas WHERE ativo = 1 ORDER BY ordem ASC, nome ASC`
+            `SELECT * FROM tesouraria_contas ${whereAtivo} ORDER BY ordem ASC, nome ASC`
         );
         res.json(contas);
     } catch (error) {
@@ -109,14 +110,14 @@ router.put('/contas/:id', authenticateToken, checkPerm('tesouraria_admin'), asyn
         const [result] = await gerencialPool.query(
             `UPDATE tesouraria_contas SET
                 nome = COALESCE(?, nome),
-                id_filial = ?,
-                banco_nome = ?,
-                banco_agencia = ?,
-                banco_conta = ?,
+                id_filial = COALESCE(?, id_filial),
+                banco_nome = COALESCE(?, banco_nome),
+                banco_agencia = COALESCE(?, banco_agencia),
+                banco_conta = COALESCE(?, banco_conta),
                 ordem = COALESCE(?, ordem),
                 ativo = COALESCE(?, ativo)
              WHERE id = ?`,
-            [nome, id_filial || null, banco_nome || null, banco_agencia || null, banco_conta || null, ordem, ativo, id]
+            [nome ?? null, id_filial ?? null, banco_nome ?? null, banco_agencia ?? null, banco_conta ?? null, ordem ?? null, ativo ?? null, id]
         );
         if (result.affectedRows === 0) {
             return res.status(404).json({ error: 'Conta não encontrada.' });
@@ -133,11 +134,12 @@ router.put('/contas/:id', authenticateToken, checkPerm('tesouraria_admin'), asyn
 // GET /api/tesouraria/centros-custo
 router.get('/centros-custo', authenticateToken, checkPerm('tesouraria_view'), async (req, res) => {
     try {
+        const whereAtivo = req.query.todos === '1' ? '' : 'WHERE cc.ativo = 1';
         const [centros] = await gerencialPool.query(
-            `SELECT cc.*, v.placa, v.modelo
+            `SELECT cc.*, p.NOME_PARAMETRO AS nome_filial
              FROM tesouraria_centros_custo cc
-             LEFT JOIN veiculos v ON cc.tipo = 'veiculo' AND cc.id_veiculo = v.id
-             WHERE cc.ativo = 1
+             LEFT JOIN parametro p ON cc.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
+             ${whereAtivo}
              ORDER BY cc.tipo ASC, cc.nome ASC`
         );
         res.json(centros);
@@ -149,27 +151,48 @@ router.get('/centros-custo', authenticateToken, checkPerm('tesouraria_view'), as
 
 // POST /api/tesouraria/centros-custo
 router.post('/centros-custo', authenticateToken, checkPerm('tesouraria_admin'), async (req, res) => {
-    const { nome, tipo, id_veiculo } = req.body;
+    const { nome, tipo, id_filial } = req.body;
 
     if (!nome || !tipo) {
         return res.status(400).json({ error: 'Nome e tipo do centro de custo são obrigatórios.' });
     }
-    if (!['loja', 'manutencao', 'veiculo', 'administrativo', 'outro'].includes(tipo)) {
+    if (!['loja', 'transportadora', 'administrativo', 'outro'].includes(tipo)) {
         return res.status(400).json({ error: 'Tipo de centro de custo inválido.' });
-    }
-    if (tipo === 'veiculo' && !id_veiculo) {
-        return res.status(400).json({ error: 'Selecione o veículo para este centro de custo.' });
     }
 
     try {
         const [result] = await gerencialPool.query(
-            `INSERT INTO tesouraria_centros_custo (nome, tipo, id_veiculo) VALUES (?, ?, ?)`,
-            [nome, tipo, tipo === 'veiculo' ? id_veiculo : null]
+            `INSERT INTO tesouraria_centros_custo (nome, tipo, id_filial) VALUES (?, ?, ?)`,
+            [nome, tipo, id_filial || null]
         );
         res.status(201).json({ message: 'Centro de custo criado com sucesso!', id: result.insertId });
     } catch (error) {
         console.error('Erro ao criar centro de custo:', error);
         res.status(500).json({ error: 'Erro interno ao criar o centro de custo.' });
+    }
+});
+
+// PUT /api/tesouraria/centros-custo/:id
+router.put('/centros-custo/:id', authenticateToken, checkPerm('tesouraria_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { nome, id_filial, ativo } = req.body;
+
+    try {
+        const [result] = await gerencialPool.query(
+            `UPDATE tesouraria_centros_custo SET
+                nome = COALESCE(?, nome),
+                id_filial = COALESCE(?, id_filial),
+                ativo = COALESCE(?, ativo)
+             WHERE id = ?`,
+            [nome ?? null, id_filial ?? null, ativo ?? null, id]
+        );
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Centro de custo não encontrado.' });
+        }
+        res.json({ message: 'Centro de custo atualizado com sucesso!' });
+    } catch (error) {
+        console.error('Erro ao atualizar centro de custo:', error);
+        res.status(500).json({ error: 'Erro interno ao atualizar o centro de custo.' });
     }
 });
 
@@ -184,10 +207,12 @@ router.get('/movimentos', authenticateToken, checkPerm('tesouraria_view'), async
 
     try {
         const [movimentos] = await gerencialPool.query(
-            `SELECT m.*, c.nome AS nome_conta, c.tipo AS tipo_conta, cc.nome AS nome_centro_custo
+            `SELECT m.*, c.nome AS nome_conta, c.tipo AS tipo_conta, cc.nome AS nome_centro_custo,
+                    v.placa AS veiculo_placa, v.modelo AS veiculo_modelo
              FROM tesouraria_movimentos m
              JOIN tesouraria_contas c ON m.id_conta = c.id
              LEFT JOIN tesouraria_centros_custo cc ON m.id_centro_custo = cc.id
+             LEFT JOIN veiculos v ON m.id_veiculo = v.id
              WHERE m.data_movimento = ?
              ORDER BY m.data_lancamento DESC`,
             [data]
@@ -201,7 +226,7 @@ router.get('/movimentos', authenticateToken, checkPerm('tesouraria_view'), async
 
 // POST /api/tesouraria/movimentos
 router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
-    const { id_conta, id_centro_custo, data_movimento, tipo, valor, descricao, favorecido, forma_pagamento } = req.body;
+    const { id_conta, id_centro_custo, id_veiculo, categoria_veiculo, data_movimento, tipo, valor, descricao, favorecido, forma_pagamento } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
 
     if (!id_conta || !data_movimento || !tipo || !valor || !descricao) {
@@ -210,13 +235,16 @@ router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), asyn
     if (!['entrada', 'saida'].includes(tipo)) {
         return res.status(400).json({ error: 'Tipo de movimento inválido.' });
     }
+    if (id_veiculo && !['manutencao', 'abastecimento'].includes(categoria_veiculo)) {
+        return res.status(400).json({ error: 'Selecione a categoria do custo do veículo (manutenção ou abastecimento).' });
+    }
 
     try {
         const [result] = await gerencialPool.query(
             `INSERT INTO tesouraria_movimentos
-                (id_conta, id_centro_custo, data_movimento, tipo, valor, descricao, favorecido, forma_pagamento, origem, id_usuario_lancamento, nome_usuario_lancamento)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)`,
-            [id_conta, id_centro_custo || null, data_movimento, tipo, valor, descricao, favorecido || null, forma_pagamento || null, userId, nomeUsuario]
+                (id_conta, id_centro_custo, id_veiculo, categoria_veiculo, data_movimento, tipo, valor, descricao, favorecido, forma_pagamento, origem, id_usuario_lancamento, nome_usuario_lancamento)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)`,
+            [id_conta, id_centro_custo || null, id_veiculo || null, id_veiculo ? categoria_veiculo : null, data_movimento, tipo, valor, descricao, favorecido || null, forma_pagamento || null, userId, nomeUsuario]
         );
         res.status(201).json({ message: 'Lançamento registrado com sucesso!', id: result.insertId });
     } catch (error) {
@@ -252,10 +280,10 @@ router.post('/movimentos/:id/estornar', authenticateToken, checkPerm('tesouraria
         const tipoEstorno = original.tipo === 'entrada' ? 'saida' : 'entrada';
         await connection.execute(
             `INSERT INTO tesouraria_movimentos
-                (id_conta, id_centro_custo, data_movimento, tipo, valor, descricao, favorecido, forma_pagamento, origem, status, id_movimento_estornado, id_usuario_lancamento, nome_usuario_lancamento)
-             VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, 'manual', 'ativo', ?, ?, ?)`,
+                (id_conta, id_centro_custo, id_veiculo, categoria_veiculo, data_movimento, tipo, valor, descricao, favorecido, forma_pagamento, origem, status, id_movimento_estornado, id_usuario_lancamento, nome_usuario_lancamento)
+             VALUES (?, ?, ?, ?, CURDATE(), ?, ?, ?, ?, ?, 'manual', 'ativo', ?, ?, ?)`,
             [
-                original.id_conta, original.id_centro_custo, tipoEstorno, original.valor,
+                original.id_conta, original.id_centro_custo, original.id_veiculo, original.categoria_veiculo, tipoEstorno, original.valor,
                 `Estorno do lançamento #${original.id}: ${original.descricao}`,
                 original.favorecido, original.forma_pagamento, original.id, userId, nomeUsuario
             ]

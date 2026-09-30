@@ -5,12 +5,24 @@ let centrosCustoCache = [];
 let movimentosDoDia = [];
 let tabelaMovimentos = null;
 
-const FORMAS_PAGAMENTO_LABEL = {
+// forma_pagamento guarda tags diferentes conforme o tipo do movimento:
+// numa Saída, é a forma de pagamento; numa Entrada, é a origem do dinheiro.
+// O rótulo exibido ao usuário muda, mas o valor salvo é o mesmo campo.
+const OPCOES_SAIDA = {
     dinheiro: 'Dinheiro', pix: 'Pix', ted: 'TED/DOC', cheque: 'Cheque', boleto: 'Boleto', outro: 'Outro'
 };
-const TIPO_CENTRO_LABEL = {
-    loja: 'Loja', manutencao: 'Manutenção', veiculo: 'Veículo', administrativo: 'Administrativo', outro: 'Outro'
+const OPCOES_ENTRADA = {
+    sangria: 'Sangria de Caixa', sobra: 'Sobra do Dia Anterior', transferencia: 'Transferência entre Contas',
+    aporte: 'Aporte', outro: 'Outro'
 };
+const FORMAS_PAGAMENTO_LABEL = { ...OPCOES_SAIDA, ...OPCOES_ENTRADA };
+const TIPO_CENTRO_LABEL = {
+    loja: 'Loja', transportadora: 'Transportadora', administrativo: 'Administrativo', outro: 'Outro'
+};
+const CATEGORIA_VEICULO_LABEL = { manutencao: 'Manutenção', abastecimento: 'Abastecimento' };
+
+let veiculosCache = [];
+let filiaisCache = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!getToken()) {
@@ -27,9 +39,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     inputData.addEventListener('change', () => carregarDia(inputData.value));
 
     setupModais();
+    document.getElementById('lanc-tipo').addEventListener('change', atualizarOpcoesFormaPagamento);
+    document.getElementById('lanc-veiculo').addEventListener('change', atualizarVisibilidadeCategoriaVeiculo);
+    document.getElementById('novo-centro-tipo').addEventListener('change', atualizarVisibilidadeFilialCentro);
+    atualizarOpcoesFormaPagamento();
+    atualizarVisibilidadeCategoriaVeiculo();
+    atualizarVisibilidadeFilialCentro();
     if (typeof feather !== 'undefined') feather.replace();
 
-    await Promise.all([carregarContas(), carregarCentrosCusto()]);
+    await Promise.all([carregarContas(), carregarCentrosCusto(), carregarVeiculos(), carregarFiliais()]);
     await carregarDia(inputData.value);
 });
 
@@ -68,6 +86,34 @@ async function carregarCentrosCusto() {
     } catch (err) {
         console.error('Erro ao carregar centros de custo:', err);
         centrosCustoCache = [];
+    }
+}
+
+async function carregarVeiculos() {
+    try {
+        const res = await fetch(`${apiUrlBase}/logistica/veiculos`, { headers: apiHeaders() });
+        if (!res.ok) throw new Error('Falha ao buscar veículos.');
+        veiculosCache = await res.json();
+        const select = document.getElementById('lanc-veiculo');
+        select.innerHTML = '<option value="">-- Nenhum --</option>' +
+            veiculosCache.map(v => `<option value="${v.id}">${v.modelo} - ${v.placa}</option>`).join('');
+    } catch (err) {
+        console.error('Erro ao carregar veículos:', err);
+        veiculosCache = [];
+    }
+}
+
+async function carregarFiliais() {
+    try {
+        const res = await fetch(`${apiUrlBase}/settings/parametros?cod=Unidades`, { headers: apiHeaders() });
+        if (!res.ok) throw new Error('Falha ao buscar unidades.');
+        filiaisCache = await res.json();
+        const select = document.getElementById('novo-centro-filial');
+        select.innerHTML = '<option value="">-- Vincular a uma Unidade (opcional) --</option>' +
+            filiaisCache.map(f => `<option value="${f.ID}">${f.NOME_PARAMETRO}</option>`).join('');
+    } catch (err) {
+        console.error('Erro ao carregar unidades:', err);
+        filiaisCache = [];
     }
 }
 
@@ -169,7 +215,15 @@ function renderTabelaMovimentos(movimentos) {
             placeholder: 'Nenhum movimento lançado neste dia.',
             columns: [
                 { title: 'Conta', field: 'nome_conta', widthGrow: 1.2 },
-                { title: 'Centro de Custo', field: 'nome_centro_custo', widthGrow: 1.2, formatter: cell => cell.getValue() || '-' },
+                {
+                    title: 'Centro de Custo', field: 'nome_centro_custo', widthGrow: 1.2,
+                    formatter: cell => {
+                        const m = cell.getRow().getData();
+                        const base = cell.getValue() || '-';
+                        if (!m.veiculo_placa) return base;
+                        return `${base} <span class="text-gray-400">· ${m.veiculo_placa} (${CATEGORIA_VEICULO_LABEL[m.categoria_veiculo] || m.categoria_veiculo})</span>`;
+                    }
+                },
                 { title: 'Tipo', field: 'tipo', width: 80, formatter: cell => cell.getValue() === 'entrada' ? '<span class="text-green-600 font-bold">Entrada</span>' : '<span class="text-red-600 font-bold">Saída</span>' },
                 { title: 'Valor', field: 'valor', width: 110, hozAlign: 'right', formatter: cell => formatarMoeda(cell.getValue()) },
                 { title: 'Descrição', field: 'descricao', widthGrow: 2 },
@@ -217,6 +271,11 @@ function setupModais() {
 
     document.getElementById('btn-exportar-pdf').addEventListener('click', exportarPDF);
     document.getElementById('btn-whatsapp').addEventListener('click', compartilharWhatsApp);
+
+    document.getElementById('btn-gerenciar').addEventListener('click', abrirModalGerenciar);
+    document.getElementById('btn-fechar-modal-gerenciar').addEventListener('click', () => fecharModal('modal-gerenciar'));
+    document.getElementById('btn-add-conta').addEventListener('click', adicionarConta);
+    document.getElementById('btn-add-centro').addEventListener('click', adicionarCentroCusto);
 }
 
 function abrirModal(id) {
@@ -239,14 +298,39 @@ function abrirModalLancamento() {
     document.getElementById('lanc-valor').value = '';
     document.getElementById('lanc-descricao').value = '';
     document.getElementById('lanc-favorecido').value = '';
+    document.getElementById('lanc-veiculo').value = '';
+    atualizarVisibilidadeCategoriaVeiculo();
     abrirModal('modal-lancamento');
 }
 function fecharModalLancamento() { fecharModal('modal-lancamento'); }
 
+function atualizarOpcoesFormaPagamento() {
+    const tipo = document.getElementById('lanc-tipo').value;
+    const label = document.getElementById('lanc-forma-pagamento-label');
+    const select = document.getElementById('lanc-forma-pagamento');
+    const opcoes = tipo === 'entrada' ? OPCOES_ENTRADA : OPCOES_SAIDA;
+
+    label.textContent = tipo === 'entrada' ? 'Origem da Entrada' : 'Forma de Pagamento';
+    select.innerHTML = Object.entries(opcoes).map(([valor, texto]) => `<option value="${valor}">${texto}</option>`).join('');
+}
+
+function atualizarVisibilidadeCategoriaVeiculo() {
+    const temVeiculo = document.getElementById('lanc-veiculo').value !== '';
+    document.getElementById('lanc-categoria-veiculo-wrap').classList.toggle('hidden', !temVeiculo);
+}
+
+function atualizarVisibilidadeFilialCentro() {
+    const ehLoja = document.getElementById('novo-centro-tipo').value === 'loja';
+    document.getElementById('novo-centro-filial').classList.toggle('hidden', !ehLoja);
+}
+
 async function salvarLancamento() {
+    const idVeiculo = document.getElementById('lanc-veiculo').value;
     const payload = {
         id_conta: Number(document.getElementById('lanc-conta').value),
         id_centro_custo: document.getElementById('lanc-centro-custo').value || null,
+        id_veiculo: idVeiculo || null,
+        categoria_veiculo: idVeiculo ? document.getElementById('lanc-categoria-veiculo').value : null,
         data_movimento: document.getElementById('filtro-data').value,
         tipo: document.getElementById('lanc-tipo').value,
         valor: Number(document.getElementById('lanc-valor').value),
@@ -289,6 +373,139 @@ async function salvarConfirmarDespesa() {
         await carregarDia(document.getElementById('filtro-data').value);
     } catch (err) {
         alert('Erro ao confirmar despesa: ' + err.message);
+    }
+}
+
+// --- GERENCIAR CONTAS E CENTROS DE CUSTO ---
+
+async function abrirModalGerenciar() {
+    abrirModal('modal-gerenciar');
+    await Promise.all([renderListaGerenciarContas(), renderListaGerenciarCentros()]);
+    if (typeof feather !== 'undefined') feather.replace();
+}
+
+async function renderListaGerenciarContas() {
+    const container = document.getElementById('lista-gerenciar-contas');
+    try {
+        const todasContas = await apiFetch('/contas?todos=1');
+        container.innerHTML = todasContas.map(c => `
+            <div class="flex items-center justify-between border border-gray-200 rounded px-2 py-1.5 text-xs ${c.ativo ? '' : 'opacity-50'}">
+                <span class="font-medium text-gray-700 truncate">${escapeHtml(c.nome)}</span>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button class="text-indigo-600 hover:underline" data-acao="renomear-conta" data-id="${c.id}" data-nome="${escapeHtml(c.nome)}">Renomear</button>
+                    <button class="${c.ativo ? 'text-red-600' : 'text-green-600'} hover:underline" data-acao="toggle-conta" data-id="${c.id}" data-ativo="${c.ativo}">${c.ativo ? 'Desativar' : 'Reativar'}</button>
+                </div>
+            </div>`).join('') || '<p class="text-xs text-gray-400">Nenhuma conta cadastrada.</p>';
+
+        container.querySelectorAll('[data-acao="renomear-conta"]').forEach(btn => {
+            btn.addEventListener('click', () => renomearConta(btn.dataset.id, btn.dataset.nome));
+        });
+        container.querySelectorAll('[data-acao="toggle-conta"]').forEach(btn => {
+            btn.addEventListener('click', () => alternarAtivoConta(btn.dataset.id, btn.dataset.ativo === '1' || btn.dataset.ativo === 'true'));
+        });
+
+        contasCache = todasContas.filter(c => c.ativo);
+        preencherSelectContas(document.getElementById('lanc-conta'));
+        preencherSelectContas(document.getElementById('confirmar-conta'));
+    } catch (err) {
+        container.innerHTML = `<p class="text-xs text-red-500">Erro ao carregar contas: ${err.message}</p>`;
+    }
+}
+
+async function renderListaGerenciarCentros() {
+    const container = document.getElementById('lista-gerenciar-centros');
+    try {
+        const todosCentros = await apiFetch('/centros-custo?todos=1');
+        container.innerHTML = todosCentros.map(c => `
+            <div class="flex items-center justify-between border border-gray-200 rounded px-2 py-1.5 text-xs ${c.ativo ? '' : 'opacity-50'}">
+                <span class="font-medium text-gray-700 truncate">${escapeHtml(c.nome)} <span class="text-gray-400">[${TIPO_CENTRO_LABEL[c.tipo] || c.tipo}${c.nome_filial ? ' · ' + escapeHtml(c.nome_filial) : ''}]</span></span>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button class="text-indigo-600 hover:underline" data-acao="renomear-centro" data-id="${c.id}" data-nome="${escapeHtml(c.nome)}">Renomear</button>
+                    <button class="${c.ativo ? 'text-red-600' : 'text-green-600'} hover:underline" data-acao="toggle-centro" data-id="${c.id}" data-ativo="${c.ativo}">${c.ativo ? 'Desativar' : 'Reativar'}</button>
+                </div>
+            </div>`).join('') || '<p class="text-xs text-gray-400">Nenhum centro de custo cadastrado.</p>';
+
+        container.querySelectorAll('[data-acao="renomear-centro"]').forEach(btn => {
+            btn.addEventListener('click', () => renomearCentro(btn.dataset.id, btn.dataset.nome));
+        });
+        container.querySelectorAll('[data-acao="toggle-centro"]').forEach(btn => {
+            btn.addEventListener('click', () => alternarAtivoCentro(btn.dataset.id, btn.dataset.ativo === '1' || btn.dataset.ativo === 'true'));
+        });
+
+        centrosCustoCache = todosCentros.filter(c => c.ativo);
+        preencherSelectCentros(document.getElementById('lanc-centro-custo'));
+        preencherSelectCentros(document.getElementById('confirmar-centro-custo'));
+    } catch (err) {
+        container.innerHTML = `<p class="text-xs text-red-500">Erro ao carregar centros de custo: ${err.message}</p>`;
+    }
+}
+
+async function adicionarConta() {
+    const nome = document.getElementById('nova-conta-nome').value.trim();
+    const tipo = document.getElementById('nova-conta-tipo').value;
+    if (!nome) return alert('Informe o nome da conta.');
+
+    try {
+        await apiFetch('/contas', { method: 'POST', body: JSON.stringify({ nome, tipo }) });
+        document.getElementById('nova-conta-nome').value = '';
+        await renderListaGerenciarContas();
+    } catch (err) {
+        alert('Erro ao adicionar conta: ' + err.message);
+    }
+}
+
+async function renomearConta(id, nomeAtual) {
+    const novoNome = prompt('Novo nome da conta:', nomeAtual);
+    if (!novoNome || novoNome.trim() === '' || novoNome === nomeAtual) return;
+    try {
+        await apiFetch(`/contas/${id}`, { method: 'PUT', body: JSON.stringify({ nome: novoNome.trim() }) });
+        await renderListaGerenciarContas();
+    } catch (err) {
+        alert('Erro ao renomear conta: ' + err.message);
+    }
+}
+
+async function alternarAtivoConta(id, ativoAtual) {
+    try {
+        await apiFetch(`/contas/${id}`, { method: 'PUT', body: JSON.stringify({ ativo: ativoAtual ? 0 : 1 }) });
+        await renderListaGerenciarContas();
+    } catch (err) {
+        alert('Erro ao atualizar conta: ' + err.message);
+    }
+}
+
+async function adicionarCentroCusto() {
+    const nome = document.getElementById('novo-centro-nome').value.trim();
+    const tipo = document.getElementById('novo-centro-tipo').value;
+    const id_filial = tipo === 'loja' ? (document.getElementById('novo-centro-filial').value || null) : null;
+    if (!nome) return alert('Informe o nome do centro de custo.');
+
+    try {
+        await apiFetch('/centros-custo', { method: 'POST', body: JSON.stringify({ nome, tipo, id_filial }) });
+        document.getElementById('novo-centro-nome').value = '';
+        await renderListaGerenciarCentros();
+    } catch (err) {
+        alert('Erro ao adicionar centro de custo: ' + err.message);
+    }
+}
+
+async function renomearCentro(id, nomeAtual) {
+    const novoNome = prompt('Novo nome do centro de custo:', nomeAtual);
+    if (!novoNome || novoNome.trim() === '' || novoNome === nomeAtual) return;
+    try {
+        await apiFetch(`/centros-custo/${id}`, { method: 'PUT', body: JSON.stringify({ nome: novoNome.trim() }) });
+        await renderListaGerenciarCentros();
+    } catch (err) {
+        alert('Erro ao renomear centro de custo: ' + err.message);
+    }
+}
+
+async function alternarAtivoCentro(id, ativoAtual) {
+    try {
+        await apiFetch(`/centros-custo/${id}`, { method: 'PUT', body: JSON.stringify({ ativo: ativoAtual ? 0 : 1 }) });
+        await renderListaGerenciarCentros();
+    } catch (err) {
+        alert('Erro ao atualizar centro de custo: ' + err.message);
     }
 }
 
