@@ -121,18 +121,23 @@
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">Veículo (se o custo for de um veículo)</label>
-                        <select id="lanc-veiculo" class="w-full border border-gray-300 rounded-md p-2 text-sm">
-                            <option value="">-- Nenhum --</option>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Tipo de Despesa</label>
+                        <select id="lanc-tipo-despesa" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                            <option value="">-- Selecione --</option>
                         </select>
                     </div>
-                    <div id="lanc-categoria-veiculo-wrap" class="hidden">
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">Categoria do Custo</label>
-                        <select id="lanc-categoria-veiculo" class="w-full border border-gray-300 rounded-md p-2 text-sm">
-                            <option value="manutencao">Manutenção</option>
-                            <option value="abastecimento">Abastecimento</option>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Grupo de Despesa</label>
+                        <select id="lanc-grupo-despesa" disabled class="w-full border border-gray-300 rounded-md p-2 text-sm bg-gray-100 text-gray-500">
+                            <option value="">-- Selecione o Tipo primeiro --</option>
                         </select>
                     </div>
+                </div>
+                <div id="lanc-veiculo-wrap" class="hidden">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Veículo</label>
+                    <select id="lanc-veiculo" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                        <option value="">-- Nenhum --</option>
+                    </select>
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
@@ -145,6 +150,16 @@
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1">Valor (R$)</label>
                         <input type="number" step="0.01" min="0.01" id="lanc-valor" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="0,00">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Data da Despesa/Vencimento</label>
+                        <input type="date" id="lanc-data-despesa" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Número da NF</label>
+                        <input type="text" id="lanc-numero-nf" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="Opcional">
                     </div>
                 </div>
                 <div>

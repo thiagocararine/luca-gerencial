@@ -225,8 +225,13 @@ router.get('/movimentos', authenticateToken, checkPerm('tesouraria_view'), async
 });
 
 // POST /api/tesouraria/movimentos
+const GRUPOS_QUE_EXIGEM_VEICULO = ['Manutenção', 'Combustivel'];
+
 router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
-    const { id_conta, id_centro_custo, id_veiculo, categoria_veiculo, data_movimento, tipo, valor, descricao, favorecido, forma_pagamento } = req.body;
+    const {
+        id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf,
+        grupo_despesa, tipo_despesa, tipo, valor, descricao, favorecido, forma_pagamento
+    } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
 
     if (!id_conta || !data_movimento || !tipo || !valor || !descricao) {
@@ -235,16 +240,20 @@ router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), asyn
     if (!['entrada', 'saida'].includes(tipo)) {
         return res.status(400).json({ error: 'Tipo de movimento inválido.' });
     }
-    if (id_veiculo && !['manutencao', 'abastecimento'].includes(categoria_veiculo)) {
-        return res.status(400).json({ error: 'Selecione a categoria do custo do veículo (manutenção ou abastecimento).' });
+    if (id_veiculo && !GRUPOS_QUE_EXIGEM_VEICULO.includes(grupo_despesa)) {
+        return res.status(400).json({ error: 'Veículo só pode ser informado em despesas do grupo Manutenção ou Combustível.' });
     }
 
     try {
         const [result] = await gerencialPool.query(
             `INSERT INTO tesouraria_movimentos
-                (id_conta, id_centro_custo, id_veiculo, categoria_veiculo, data_movimento, tipo, valor, descricao, favorecido, forma_pagamento, origem, id_usuario_lancamento, nome_usuario_lancamento)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)`,
-            [id_conta, id_centro_custo || null, id_veiculo || null, id_veiculo ? categoria_veiculo : null, data_movimento, tipo, valor, descricao, favorecido || null, forma_pagamento || null, userId, nomeUsuario]
+                (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, valor, descricao, favorecido, forma_pagamento, origem, id_usuario_lancamento, nome_usuario_lancamento)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)`,
+            [
+                id_conta, id_centro_custo || null, id_veiculo || null, data_movimento, data_despesa || null, numero_nf || null,
+                grupo_despesa || null, tipo_despesa || null, tipo, valor, descricao, favorecido || null, forma_pagamento || null,
+                userId, nomeUsuario
+            ]
         );
         res.status(201).json({ message: 'Lançamento registrado com sucesso!', id: result.insertId });
     } catch (error) {
@@ -280,10 +289,11 @@ router.post('/movimentos/:id/estornar', authenticateToken, checkPerm('tesouraria
         const tipoEstorno = original.tipo === 'entrada' ? 'saida' : 'entrada';
         await connection.execute(
             `INSERT INTO tesouraria_movimentos
-                (id_conta, id_centro_custo, id_veiculo, categoria_veiculo, data_movimento, tipo, valor, descricao, favorecido, forma_pagamento, origem, status, id_movimento_estornado, id_usuario_lancamento, nome_usuario_lancamento)
-             VALUES (?, ?, ?, ?, CURDATE(), ?, ?, ?, ?, ?, 'manual', 'ativo', ?, ?, ?)`,
+                (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, valor, descricao, favorecido, forma_pagamento, origem, status, id_movimento_estornado, id_usuario_lancamento, nome_usuario_lancamento)
+             VALUES (?, ?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 'ativo', ?, ?, ?)`,
             [
-                original.id_conta, original.id_centro_custo, original.id_veiculo, original.categoria_veiculo, tipoEstorno, original.valor,
+                original.id_conta, original.id_centro_custo, original.id_veiculo, original.data_despesa, original.numero_nf,
+                original.grupo_despesa, original.tipo_despesa, tipoEstorno, original.valor,
                 `Estorno do lançamento #${original.id}: ${original.descricao}`,
                 original.favorecido, original.forma_pagamento, original.id, userId, nomeUsuario
             ]
@@ -352,11 +362,11 @@ router.post('/despesa-caixa/:id/confirmar', authenticateToken, checkPerm('tesour
 
         await gerencialPool.query(
             `INSERT INTO tesouraria_movimentos
-                (id_conta, id_centro_custo, data_movimento, tipo, valor, descricao, forma_pagamento, origem, origem_ref, id_usuario_lancamento, nome_usuario_lancamento)
-             VALUES (?, ?, ?, 'saida', ?, ?, 'dinheiro', 'despesa_caixa', ?, ?, ?)`,
+                (id_conta, id_centro_custo, data_movimento, data_despesa, grupo_despesa, tipo_despesa, tipo, valor, descricao, forma_pagamento, origem, origem_ref, id_usuario_lancamento, nome_usuario_lancamento)
+             VALUES (?, ?, ?, ?, ?, ?, 'saida', ?, ?, 'dinheiro', 'despesa_caixa', ?, ?, ?)`,
             [
-                id_conta, id_centro_custo || null, despesa.dsp_datadesp, despesa.dsp_valordsp,
-                despesa.dsp_descricao, String(despesa.ID), userId, nomeUsuario
+                id_conta, id_centro_custo || null, despesa.dsp_datadesp, despesa.dsp_datadesp, despesa.dsp_grupo, despesa.dsp_tipo,
+                despesa.dsp_valordsp, despesa.dsp_descricao, String(despesa.ID), userId, nomeUsuario
             ]
         );
 
