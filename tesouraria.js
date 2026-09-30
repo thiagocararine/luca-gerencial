@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupModais();
     document.getElementById('lanc-tipo').addEventListener('change', atualizarOpcoesFormaPagamento);
     document.getElementById('lanc-tipo-despesa').addEventListener('change', handleTipoDespesaChange);
+    document.getElementById('lanc-grupo-despesa').addEventListener('change', (e) => atualizarVisibilidadeVeiculo(e.target.value));
     document.getElementById('novo-centro-tipo').addEventListener('change', atualizarVisibilidadeFilialCentro);
     atualizarOpcoesFormaPagamento();
     atualizarVisibilidadeFilialCentro();
