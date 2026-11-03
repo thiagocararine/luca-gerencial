@@ -31,7 +31,6 @@ async function initPage() {
         return;
     }
 
-    gerenciarAcessoModulos();
     
     document.getElementById('user-name').textContent = getUserName();
     setupDatepickers();
@@ -674,54 +673,6 @@ function handleApiError(response, isExport = false) {
     }
 }
 
-function gerenciarAcessoModulos() {
-    const userData = getUserData();
-    if (!userData || !userData.permissoes) {
-        console.error("Não foi possível obter as permissões do usuário.");
-        return;
-    }
-
-    const permissoesDoUsuario = userData.permissoes;
-
-    // Mapeamento dos nomes dos módulos para os links no HTML
-    const mapaModulos = {
-        'lancamentos': 'despesas.html',
-        'logistica': 'logistica.html',
-        'transporte': 'transporte.html',
-        'checklist': 'checklist.html',
-        'entregas': 'entregas.html',
-        'produtos': 'produtos.html', // <-- LINHA ADICIONADA
-        'configuracoes': 'settings.html',
-        'estoque_view': 'estoque.html'
-    };
-
-    // Verifica se tem QUALQUER acesso ao estoque (View, Oper ou Admin)
-    const temAcessoEstoque = permissoesDoUsuario.some(p =>
-        (p.nome_modulo === 'estoque_view' || p.nome_modulo === 'estoque_oper' || p.nome_modulo === 'estoque_admin') && p.permitido
-    );
-
-    // Itera sobre o mapa de módulos para verificar cada permissão
-    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
-        if (nomeModulo === 'estoque_view') {
-            if (!temAcessoEstoque) {
-                const link = document.querySelector(`#sidebar a[href="${href}"]`);
-                if (link && link.parentElement) link.parentElement.style.display = 'none';
-            }
-            continue;
-        }
-
-        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
-
-        // Se a permissão não existe ou não é permitida (permitido=false)
-        if (!permissao || !permissao.permitido) {
-            // Encontra o link na barra lateral e esconde o item da lista (o <li> pai)
-            const link = document.querySelector(`#sidebar a[href="${href}"]`);
-            if (link && link.parentElement) {
-                link.parentElement.style.display = 'none';
-            }
-        }
-    }
-}
 
 // ADICIONE ESTA NOVA FUNÇÃO EM despesas.js
 function renderDespesasAsCards(despesas) {

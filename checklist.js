@@ -38,56 +38,11 @@ function initChecklistPage() {
         document.getElementById('user-name').textContent = userData.nome || 'Utilizador';
     }
     
-    gerenciarAcessoModulos(); // <-- Chame a função aqui
 
     loadVehiclesForChecklist();
     setupChecklistEventListeners();
 }
 
-// Mesmo padrão usado em produtos.js: cobre todos os links da sidebar do checklist,
-// incluindo o estoque (que nenhuma das duas versões duplicadas desta função verificava).
-function gerenciarAcessoModulos() {
-    const userData = getUserData();
-    if (!userData || !userData.permissoes) {
-        console.error("Não foi possível obter as permissões do usuário.");
-        return;
-    }
-
-    const permissoesDoUsuario = userData.permissoes;
-
-    const mapaModulos = {
-        'lancamentos': 'despesas.html',
-        'logistica': 'logistica.html',
-        'entregas': 'entregas.html',
-        'checklist': 'checklist.html',
-        'produtos': 'produtos.html',
-        'configuracoes': 'settings.html',
-        'estoque_view': 'estoque.html'
-    };
-
-    // Verifica se tem QUALQUER acesso ao estoque (View, Oper ou Admin)
-    const temAcessoEstoque = permissoesDoUsuario.some(p =>
-        (p.nome_modulo === 'estoque_view' || p.nome_modulo === 'estoque_oper' || p.nome_modulo === 'estoque_admin') && p.permitido
-    );
-
-    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
-        if (nomeModulo === 'estoque_view') {
-            if (!temAcessoEstoque) {
-                const link = document.querySelector(`#sidebar a[href="${href}"]`);
-                if (link && link.parentElement) link.parentElement.style.display = 'none';
-            }
-            continue;
-        }
-
-        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
-        if (!permissao || !permissao.permitido) {
-            const link = document.querySelector(`#sidebar a[href="${href}"]`);
-            if (link && link.parentElement) {
-                link.parentElement.style.display = 'none';
-            }
-        }
-    }
-}
 
 async function loadVehiclesForChecklist() {
     const container = document.getElementById('checklist-vehicle-list');

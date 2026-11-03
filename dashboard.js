@@ -16,10 +16,7 @@ async function initDashboardPage() {
         return;
     }
     document.getElementById('user-name').textContent = getUserName();
-    
-    // Aplica as regras de visualização do menu lateral
-    gerenciarAcessoModulos();
-    
+
     setupDashboardEventListeners();
     await setupSharedDashboardFilters();
     loadDashboardData();
@@ -314,77 +311,7 @@ function getUserProfile() { return getUserData()?.perfil || null; }
 function getUserFilial() { return getUserData()?.unidade || null; }
 function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html'; }
 
-// --- CONTROLE DE ACESSO (ATUALIZADO) ---
-function gerenciarAcessoModulos() {
-    const userData = getUserData();
-    if (!userData || !userData.permissoes) return;
-    const permissoesDoUsuario = userData.permissoes;
-    
-    // Mapeamento dos módulos para os arquivos HTML (Links do menu)
-    const mapaModulos = {
-        'lancamentos': 'despesas.html',
-        'logistica': 'logistica.html',
-        'transporte': 'transporte.html',
-        'entregas': 'entregas.html',
-        'checklist': 'checklist.html',
-        'produtos': 'produtos.html',
-        'configuracoes': 'settings.html',
-        // NOVOS MÓDULOS COM LÓGICA GRANULAR
-        'estoque_view': 'estoque.html',
-        'fin_pagar_view': 'financeiro.html',
-        'tesouraria_view': 'tesouraria.html'
-    };
 
-    // Verifica se tem QUALQUER acesso ao estoque
-    const temAcessoEstoque = permissoesDoUsuario.some(p =>
-        (p.nome_modulo === 'estoque_view' || p.nome_modulo === 'estoque_oper' || p.nome_modulo === 'estoque_admin') && p.permitido
-    );
-
-    // Verifica se tem QUALQUER acesso ao financeiro
-    const temAcessoFinanceiro = permissoesDoUsuario.some(p =>
-        (p.nome_modulo === 'fin_pagar_view' || p.nome_modulo === 'fin_pagar_oper' || p.nome_modulo === 'fin_pagar_admin') && p.permitido
-    );
-
-    // Verifica se tem QUALQUER acesso à tesouraria
-    const temAcessoTesouraria = permissoesDoUsuario.some(p =>
-        (p.nome_modulo === 'tesouraria_view' || p.nome_modulo === 'tesouraria_oper' || p.nome_modulo === 'tesouraria_admin') && p.permitido
-    );
-
-    for (const [moduleKey, href] of Object.entries(mapaModulos)) {
-        // Lógica Estoque
-        if (moduleKey === 'estoque_view') {
-            if (!temAcessoEstoque) escondeLink(href);
-            continue;
-        }
-        // Lógica Financeiro
-        if (moduleKey === 'fin_pagar_view') {
-            if (!temAcessoFinanceiro) escondeLink(href);
-            continue;
-        }
-        // Lógica Tesouraria
-        if (moduleKey === 'tesouraria_view') {
-            if (!temAcessoTesouraria) escondeLink(href);
-            continue;
-        }
-
-        // Lógica Padrão (Módulos antigos)
-        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === moduleKey);
-        if (!permissao || !permissao.permitido) {
-            escondeLink(href);
-        }
-    }
-}
-
-// Função auxiliar para esconder o link do menu
-function escondeLink(href) {
-    // Procura o link no sidebar (pode estar no desktop ou mobile)
-    const links = document.querySelectorAll(`a[href="${href}"]`);
-    links.forEach(link => {
-        if (link && link.parentElement) {
-            link.parentElement.style.display = 'none';
-        }
-    });
-}
 
 async function carregarEExibirAlertasDeManutencao() {
     try {

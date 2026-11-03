@@ -53,7 +53,6 @@ async function initSettingsPage() {
     }
     document.getElementById('user-name').textContent = getUserName();
     
-    gerenciarAcessoModulos();
     
     setupEventListenersSettings();
     setupCardEventListeners();
@@ -842,47 +841,6 @@ function handleApiError(response) {
     }
 }
 
-function gerenciarAcessoModulos() {
-    const userData = getUserData();
-    if (!userData || !userData.permissoes) {
-        return;
-    }
-    const permissoesDoUsuario = userData.permissoes;
-    const mapaModulos = {
-        'lancamentos': 'despesas.html',
-        'logistica': 'logistica.html',
-        'transporte': 'transporte.html',
-        'entregas': 'entregas.html',
-        'checklist': 'checklist.html',
-        'produtos': 'produtos.html',
-        'estoque_view': 'estoque.html', // Nova regra para estoque
-        'configuracoes': 'settings.html'
-    };
-    
-    // Verificação especial para o estoque granular: se tiver QUALQUER acesso de estoque, libera o link
-    const temAcessoEstoque = permissoesDoUsuario.some(p => 
-        (p.nome_modulo === 'estoque_view' || p.nome_modulo === 'estoque_oper' || p.nome_modulo === 'estoque_admin') && p.permitido
-    );
-
-    for (const [moduleKey, href] of Object.entries(mapaModulos)) {
-        // Lógica especial para o estoque
-        if (moduleKey === 'estoque_view') {
-            if (!temAcessoEstoque) {
-                const link = document.querySelector(`#sidebar a[href="${href}"]`);
-                if (link && link.parentElement) link.parentElement.style.display = 'none';
-            }
-            continue;
-        }
-
-        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === moduleKey);
-        if (!permissao || !permissao.permitido) {
-            const link = document.querySelector(`#sidebar a[href="${href}"]`);
-            if (link && link.parentElement) {
-                link.parentElement.style.display = 'none';
-            }
-        }
-    }
-}
 
 function renderSettingsCards(data, containerId, type) {
     const container = document.getElementById(containerId);
