@@ -196,6 +196,150 @@ router.put('/centros-custo/:id', authenticateToken, checkPerm('tesouraria_admin'
     }
 });
 
+// --- GRUPOS E TIPOS DE DESPESA (classificação própria da tesouraria) ---
+
+// GET /api/tesouraria/classificacao — grupos, cada um com seus tipos
+router.get('/classificacao', authenticateToken, checkPerm('tesouraria_view'), async (req, res) => {
+    try {
+        const todos = req.query.todos === '1';
+        const [grupos] = await gerencialPool.query(
+            `SELECT * FROM tesouraria_grupos ${todos ? '' : 'WHERE ativo = 1'} ORDER BY nome ASC`
+        );
+        const [tipos] = await gerencialPool.query(
+            `SELECT * FROM tesouraria_tipos ${todos ? '' : 'WHERE ativo = 1'} ORDER BY nome ASC`
+        );
+        res.json(grupos.map(g => ({ ...g, tipos: tipos.filter(t => t.id_grupo === g.id) })));
+    } catch (error) {
+        console.error('Erro ao buscar classificação:', error);
+        res.status(500).json({ error: 'Erro ao buscar grupos e tipos de despesa.' });
+    }
+});
+
+// POST /api/tesouraria/grupos
+router.post('/grupos', authenticateToken, checkPerm('tesouraria_admin'), async (req, res) => {
+    const { nome, exige_veiculo } = req.body;
+    if (!nome || !nome.trim()) {
+        return res.status(400).json({ error: 'Informe o nome do grupo.' });
+    }
+    try {
+        const [result] = await gerencialPool.query(
+            `INSERT INTO tesouraria_grupos (nome, exige_veiculo) VALUES (?, ?)`,
+            [nome.trim(), exige_veiculo ? 1 : 0]
+        );
+        res.status(201).json({ message: 'Grupo criado com sucesso!', id: result.insertId });
+    } catch (error) {
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ error: 'Já existe um grupo com esse nome.' });
+        }
+        console.error('Erro ao criar grupo:', error);
+        res.status(500).json({ error: 'Erro interno ao criar o grupo.' });
+    }
+});
+
+// PUT /api/tesouraria/grupos/:id
+router.put('/grupos/:id', authenticateToken, checkPerm('tesouraria_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { nome, exige_veiculo, ativo } = req.body;
+    try {
+        const [result] = await gerencialPool.query(
+            `UPDATE tesouraria_grupos SET
+                nome = COALESCE(?, nome),
+                exige_veiculo = COALESCE(?, exige_veiculo),
+                ativo = COALESCE(?, ativo)
+             WHERE id = ?`,
+            [nome ? nome.trim() : null, exige_veiculo ?? null, ativo ?? null, id]
+        );
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Grupo não encontrado.' });
+        }
+        res.json({ message: 'Grupo atualizado com sucesso!' });
+    } catch (error) {
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ error: 'Já existe um grupo com esse nome.' });
+        }
+        console.error('Erro ao atualizar grupo:', error);
+        res.status(500).json({ error: 'Erro interno ao atualizar o grupo.' });
+    }
+});
+
+// POST /api/tesouraria/tipos
+router.post('/tipos', authenticateToken, checkPerm('tesouraria_admin'), async (req, res) => {
+    const { id_grupo, nome } = req.body;
+    if (!id_grupo || !nome || !nome.trim()) {
+        return res.status(400).json({ error: 'Informe o grupo e o nome do tipo.' });
+    }
+    try {
+        const [result] = await gerencialPool.query(
+            `INSERT INTO tesouraria_tipos (id_grupo, nome) VALUES (?, ?)`,
+            [id_grupo, nome.trim()]
+        );
+        res.status(201).json({ message: 'Tipo criado com sucesso!', id: result.insertId });
+    } catch (error) {
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ error: 'Esse grupo já tem um tipo com esse nome.' });
+        }
+        if (error.code === 'ER_NO_REFERENCED_ROW_2') {
+            return res.status(400).json({ error: 'Grupo não encontrado.' });
+        }
+        console.error('Erro ao criar tipo:', error);
+        res.status(500).json({ error: 'Erro interno ao criar o tipo.' });
+    }
+});
+
+// PUT /api/tesouraria/tipos/:id
+router.put('/tipos/:id', authenticateToken, checkPerm('tesouraria_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { nome, ativo } = req.body;
+    try {
+        const [result] = await gerencialPool.query(
+            `UPDATE tesouraria_tipos SET nome = COALESCE(?, nome), ativo = COALESCE(?, ativo) WHERE id = ?`,
+            [nome ? nome.trim() : null, ativo ?? null, id]
+        );
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Tipo não encontrado.' });
+        }
+        res.json({ message: 'Tipo atualizado com sucesso!' });
+    } catch (error) {
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ error: 'Esse grupo já tem um tipo com esse nome.' });
+        }
+        console.error('Erro ao atualizar tipo:', error);
+        res.status(500).json({ error: 'Erro interno ao atualizar o tipo.' });
+    }
+});
+
+/**
+ * Confere uma saída contra a classificação da tesouraria: o grupo é obrigatório e
+ * precisa estar ativo, o tipo (opcional) precisa ser desse grupo, e veículo só vale
+ * para grupos marcados como "pede veículo".
+ * Devolve { erro } ou { grupo, tipo } com os nomes como estão no cadastro: a collation
+ * do banco ignora acento/maiúscula, então "Combustivel" acharia "Combustível" e
+ * gravaríamos a grafia errada no movimento.
+ */
+async function validarClassificacao(grupoNome, tipoNome, idVeiculo) {
+    if (!grupoNome) return { erro: 'Selecione o grupo de despesa.' };
+    const [grupos] = await gerencialPool.query(
+        `SELECT id, nome, exige_veiculo FROM tesouraria_grupos WHERE nome = ? AND ativo = 1`,
+        [grupoNome]
+    );
+    if (grupos.length === 0) return { erro: 'Grupo de despesa inválido ou desativado.' };
+    const grupo = grupos[0];
+
+    let tipo = null;
+    if (tipoNome) {
+        const [tipos] = await gerencialPool.query(
+            `SELECT nome FROM tesouraria_tipos WHERE id_grupo = ? AND nome = ? AND ativo = 1`,
+            [grupo.id, tipoNome]
+        );
+        if (tipos.length === 0) return { erro: 'Tipo de despesa não pertence ao grupo escolhido.' };
+        tipo = tipos[0].nome;
+    }
+    if (idVeiculo && !grupo.exige_veiculo) {
+        return { erro: 'Veículo só pode ser informado em grupos que pedem veículo (ex.: Manutenção, Combustível).' };
+    }
+    return { grupo: grupo.nome, tipo };
+}
+
 // --- MOVIMENTOS ---
 
 // GET /api/tesouraria/movimentos?data=YYYY-MM-DD
@@ -225,13 +369,9 @@ router.get('/movimentos', authenticateToken, checkPerm('tesouraria_view'), async
 });
 
 // POST /api/tesouraria/movimentos
-const GRUPOS_QUE_EXIGEM_VEICULO = ['Manutenção', 'Combustivel'];
-
 router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
-    const {
-        id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf,
-        grupo_despesa, tipo_despesa, tipo, valor, descricao, favorecido, forma_pagamento
-    } = req.body;
+    const { id_conta, id_centro_custo, data_movimento, tipo, valor, descricao, favorecido, forma_pagamento } = req.body;
+    let { id_veiculo, data_despesa, numero_nf, grupo_despesa, tipo_despesa } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
 
     if (!id_conta || !data_movimento || !tipo || !valor || !descricao) {
@@ -243,11 +383,17 @@ router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), asyn
     if (!(Number(valor) > 0)) {
         return res.status(400).json({ error: 'O valor deve ser maior que zero.' });
     }
-    if (id_veiculo && !GRUPOS_QUE_EXIGEM_VEICULO.includes(grupo_despesa)) {
-        return res.status(400).json({ error: 'Veículo só pode ser informado em despesas do grupo Manutenção ou Combustível.' });
-    }
 
     try {
+        if (tipo === 'saida') {
+            const classificacao = await validarClassificacao(grupo_despesa, tipo_despesa, id_veiculo);
+            if (classificacao.erro) return res.status(400).json({ error: classificacao.erro });
+            ({ grupo: grupo_despesa, tipo: tipo_despesa } = classificacao);
+        } else {
+            // Entrada não é despesa: não leva classificação, veículo nem dados de nota.
+            id_veiculo = data_despesa = numero_nf = grupo_despesa = tipo_despesa = null;
+        }
+
         const [result] = await gerencialPool.query(
             `INSERT INTO tesouraria_movimentos
                 (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, valor, descricao, favorecido, forma_pagamento, origem, id_usuario_lancamento, nome_usuario_lancamento)
@@ -360,6 +506,10 @@ router.post('/despesa-caixa/:id/confirmar', authenticateToken, checkPerm('tesour
     }
 
     try {
+        // A loja classifica pela lista dela; na tesouraria vale a classificação da tesouraria.
+        const classificacao = await validarClassificacao(req.body.grupo_despesa, req.body.tipo_despesa, null);
+        if (classificacao.erro) return res.status(400).json({ error: classificacao.erro });
+
         const [despesaRows] = await gerencialPool.query(
             `SELECT * FROM despesa_caixa WHERE ID = ? AND dsp_status = 1`,
             [id]
@@ -374,7 +524,7 @@ router.post('/despesa-caixa/:id/confirmar', authenticateToken, checkPerm('tesour
                 (id_conta, id_centro_custo, data_movimento, data_despesa, grupo_despesa, tipo_despesa, tipo, valor, descricao, forma_pagamento, origem, origem_ref, id_usuario_lancamento, nome_usuario_lancamento)
              VALUES (?, ?, ?, ?, ?, ?, 'saida', ?, ?, 'dinheiro', 'despesa_caixa', ?, ?, ?)`,
             [
-                id_conta, id_centro_custo || null, despesa.dsp_datadesp, despesa.dsp_datadesp, despesa.dsp_grupo, despesa.dsp_tipo,
+                id_conta, id_centro_custo || null, despesa.dsp_datadesp, despesa.dsp_datadesp, classificacao.grupo, classificacao.tipo,
                 despesa.dsp_valordsp, despesa.dsp_descricao, String(despesa.ID), userId, nomeUsuario
             ]
         );
