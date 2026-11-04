@@ -41,6 +41,7 @@ const entregasRoutes = require('./routes/routes_entregas');
 const estoqueRoutes = require('./routes/routes_estoque');
 const financeiroRoutes = require('./routes/routes_financeiro');
 const conciliacaoRoutes = require('./routes/routes_conciliacao');
+const tesourariaRoutes = require('./routes/routes_tesouraria');
 
 // 5. Utilização das Rotas da API
 const apiRouter = express.Router();
@@ -54,6 +55,7 @@ apiRouter.use('/entregas', entregasRoutes);
 apiRouter.use('/estoque', estoqueRoutes);
 apiRouter.use('/financeiro', financeiroRoutes);
 apiRouter.use('/conciliacao', conciliacaoRoutes);
+apiRouter.use('/tesouraria', tesourariaRoutes);
 
 app.use('/api', apiRouter);
 
@@ -76,6 +78,7 @@ app.get('/conciliacao', (req, res) => {
 app.get('/entregas', (req, res) => res.sendFile(path.join(__dirname, 'entregas.html')));
 app.get('/produtos', (req, res) => res.sendFile(path.join(__dirname, 'produtos.html')));
 app.get('/settings', (req, res) => res.sendFile(path.join(__dirname, 'settings.html')));
+app.get('/tesouraria', (req, res) => res.sendFile(path.join(__dirname, 'tesouraria.html')));
 // Adicione as demais conforme necessário (login, dashboard/index, etc.)
 
 // 7. Iniciar o Servidor
