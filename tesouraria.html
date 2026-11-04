@@ -62,6 +62,9 @@
             <button id="btn-nova-saida" class="h-8 bg-red-600 text-white px-4 rounded text-xs font-bold hover:bg-red-700 shadow-sm flex items-center gap-2 transition-all active:scale-95">
                 <i data-feather="arrow-up-circle" class="w-3.5 h-3.5"></i> SAÍDA
             </button>
+            <button id="btn-importar-erp" class="h-8 bg-blue-600 text-white px-4 rounded text-xs font-bold hover:bg-blue-700 shadow-sm flex items-center gap-2 transition-all active:scale-95">
+                <i data-feather="download" class="w-3.5 h-3.5"></i> IMPORTAR DO CONTAS A PAGAR
+            </button>
 
             <div class="ml-auto flex gap-2">
                 <button id="btn-gerenciar" class="h-8 bg-white text-gray-700 border border-gray-300 px-4 rounded text-xs font-bold hover:bg-gray-50 shadow-sm flex items-center gap-2 transition-all">
@@ -89,6 +92,14 @@
                 Despesas de caixa do dia ainda não confirmadas na tesouraria
             </h2>
             <div id="lista-pendentes" class="space-y-2"></div>
+        </div>
+
+        <div id="painel-erp-baixados" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between gap-3">
+            <p class="text-xs font-bold text-blue-800 flex items-center gap-2">
+                <i data-feather="alert-circle" class="w-4 h-4 shrink-0"></i>
+                <span id="texto-erp-baixados"></span>
+            </p>
+            <button id="btn-ver-erp-baixados" class="bg-blue-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-blue-700 shrink-0">Ver e importar</button>
         </div>
 
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -170,6 +181,70 @@
                 <button id="btn-salvar-lancamento" class="px-4 py-2 text-sm font-bold text-white rounded-md shadow-sm flex items-center gap-2">
                     <i data-feather="save" class="w-4 h-4"></i> <span id="lanc-salvar-texto">Salvar</span>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Importar títulos do Contas a Pagar (ERP, somente leitura) -->
+    <div id="modal-importar" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-7xl overflow-hidden transform scale-95 transition-transform duration-200 h-[92vh] flex flex-col">
+            <div class="flex justify-between items-center px-6 py-3 border-b border-gray-200 bg-blue-50 shrink-0">
+                <h3 class="text-lg font-bold text-blue-900 flex items-center gap-2">
+                    <i data-feather="download" class="w-5 h-5 text-blue-600"></i> Importar do Contas a Pagar
+                </h3>
+                <button id="btn-fechar-modal-importar" class="text-blue-400 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="px-6 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2 shrink-0">
+                <div id="abas-importar" class="flex flex-wrap gap-1">
+                    <button data-modo="baixados" class="aba-importar px-3 py-1.5 rounded text-xs font-bold border">Pagos no ERP neste dia</button>
+                    <button data-modo="vencidos" class="aba-importar px-3 py-1.5 rounded text-xs font-bold border">Vencidos (60 dias)</button>
+                    <button data-modo="hoje" class="aba-importar px-3 py-1.5 rounded text-xs font-bold border">Vencem neste dia</button>
+                    <button data-modo="proximos" class="aba-importar px-3 py-1.5 rounded text-xs font-bold border">Próximos 7 dias</button>
+                </div>
+                <input type="text" id="busca-importar" placeholder="Buscar fornecedor, NF ou controle..." class="ml-auto h-8 w-64 border border-gray-300 rounded text-xs px-2">
+            </div>
+            <p class="px-6 pt-2 text-[11px] text-gray-500 shrink-0">
+                Marque os títulos, confira a <b>conta</b> e o <b>centro de custo</b> de cada um (dá para mudar clicando na célula) e escolha o grupo embaixo.
+                Os títulos importados entram como saída no dia <b id="dia-importar"></b> e saem desta lista.
+            </p>
+            <div class="flex-1 min-h-0 px-6 py-2">
+                <div id="tabela-importar" class="w-full h-full"></div>
+            </div>
+            <div class="bg-gray-50 px-6 py-3 border-t border-gray-200 shrink-0 space-y-2">
+                <div class="flex flex-wrap items-end gap-3">
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Grupo de Despesa</label>
+                        <select id="imp-grupo-despesa" class="h-8 border border-gray-300 rounded text-xs px-2 w-44"></select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tipo de Despesa</label>
+                        <select id="imp-tipo-despesa" class="h-8 border border-gray-300 rounded text-xs px-2 w-40"></select>
+                    </div>
+                    <div id="imp-veiculo-wrap" class="hidden">
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Veículo</label>
+                        <select id="imp-veiculo" class="h-8 border border-gray-300 rounded text-xs px-2 w-44"></select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Forma de Pagamento</label>
+                        <select id="imp-forma-pagamento" class="h-8 border border-gray-300 rounded text-xs px-2 w-32"></select>
+                    </div>
+                    <div class="flex items-end gap-1">
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Conta dos marcados</label>
+                            <select id="imp-conta-lote" class="h-8 border border-gray-300 rounded text-xs px-2 w-48"></select>
+                        </div>
+                        <button id="btn-aplicar-conta-lote" class="h-8 px-3 bg-white border border-gray-300 rounded text-xs font-bold hover:bg-gray-100">Aplicar</button>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <p id="resumo-importar" class="text-xs font-bold text-gray-700"></p>
+                    <div class="flex gap-3">
+                        <button id="btn-cancelar-importar" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm">Fechar</button>
+                        <button id="btn-confirmar-importar" class="px-4 py-2 text-sm font-bold text-white bg-blue-600 rounded-md hover:bg-blue-700 shadow-sm flex items-center gap-2">
+                            <i data-feather="download" class="w-4 h-4"></i> Importar marcados
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

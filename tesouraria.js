@@ -27,6 +27,11 @@ let classificacaoCache = [];
 // 'entrada' ou 'saida': qual botão abriu o modal de lançamento.
 let modoLancamento = 'saida';
 
+// Importação do Contas a Pagar: aba atual e títulos carregados (cada um com `marcado`).
+let modoImportar = 'baixados';
+let titulosImportar = [];
+let tabelaImportar = null;
+
 document.addEventListener('DOMContentLoaded', async () => {
     if (!getToken()) {
         window.location.href = 'login.html';
@@ -197,6 +202,27 @@ async function carregarDia(data) {
     } catch (err) {
         alert('Erro ao carregar dados do dia: ' + err.message);
     }
+    await carregarAlertaErp(data);
+}
+
+// Aviso de títulos já pagos no ERP neste dia que ainda não entraram na tesouraria.
+// Fica fora do carregamento principal: se o ERP não responder, o dia abre do mesmo jeito.
+async function carregarAlertaErp(data) {
+    const painel = document.getElementById('painel-erp-baixados');
+    try {
+        const titulos = await apiFetch(`/erp/titulos?modo=baixados&data=${data}`);
+        if (!titulos.length) {
+            painel.classList.add('hidden');
+            return;
+        }
+        const total = titulos.reduce((acc, t) => acc + t.valor, 0);
+        document.getElementById('texto-erp-baixados').textContent =
+            `${titulos.length} título(s) pago(s) no ERP neste dia ainda não estão na tesouraria — ${formatarMoeda(total)}`;
+        painel.classList.remove('hidden');
+    } catch (err) {
+        console.error('Erro ao verificar títulos pagos no ERP:', err);
+        painel.classList.add('hidden');
+    }
 }
 
 // --- CARDS DE CONTAS ---
@@ -264,7 +290,7 @@ function renderTabelaMovimentos(movimentos) {
     const dados = movimentos.map(m => ({
         ...m,
         classificacao: textoClassificacao(m),
-        origem_label: m.origem === 'manual' ? 'Manual' : (m.origem === 'despesa_caixa' ? 'Caixa (Despesas)' : 'ERP'),
+        origem_label: m.origem === 'manual' ? 'Manual' : (m.origem === 'despesa_caixa' ? 'Caixa (Despesas)' : 'Contas a Pagar'),
         forma_label: FORMAS_PAGAMENTO_LABEL[m.forma_pagamento] || m.forma_pagamento || '-'
     }));
 
@@ -345,6 +371,18 @@ function setupModais() {
     document.getElementById('btn-add-centro').addEventListener('click', adicionarCentroCusto);
     document.getElementById('btn-add-grupo').addEventListener('click', adicionarGrupo);
     document.getElementById('btn-add-tipo').addEventListener('click', adicionarTipo);
+
+    document.getElementById('btn-importar-erp').addEventListener('click', () => abrirModalImportar('baixados'));
+    document.getElementById('btn-ver-erp-baixados').addEventListener('click', () => abrirModalImportar('baixados'));
+    document.getElementById('btn-fechar-modal-importar').addEventListener('click', () => fecharModal('modal-importar'));
+    document.getElementById('btn-cancelar-importar').addEventListener('click', () => fecharModal('modal-importar'));
+    document.querySelectorAll('.aba-importar').forEach(btn => {
+        btn.addEventListener('click', () => carregarTitulosImportar(btn.dataset.modo));
+    });
+    document.getElementById('busca-importar').addEventListener('input', aplicarBuscaImportar);
+    document.getElementById('imp-grupo-despesa').addEventListener('change', handleGrupoImportarChange);
+    document.getElementById('btn-aplicar-conta-lote').addEventListener('click', aplicarContaLote);
+    document.getElementById('btn-confirmar-importar').addEventListener('click', importarMarcados);
 }
 
 function abrirModal(id) {
@@ -498,6 +536,215 @@ async function salvarConfirmarDespesa() {
     }
 }
 
+// --- IMPORTAR DO CONTAS A PAGAR ---
+
+function formatarDataBR(iso) {
+    if (!iso) return '-';
+    const [ano, mes, dia] = iso.split('-');
+    return `${dia}/${mes}/${ano}`;
+}
+
+function abrirModalImportar(modo) {
+    const dataRef = document.getElementById('filtro-data').value;
+    document.getElementById('dia-importar').textContent = formatarDataBR(dataRef);
+    document.getElementById('busca-importar').value = '';
+
+    preencherSelectGrupos(document.getElementById('imp-grupo-despesa'));
+    handleGrupoImportarChange();
+    document.getElementById('imp-veiculo').innerHTML = document.getElementById('lanc-veiculo').innerHTML;
+    document.getElementById('imp-forma-pagamento').innerHTML =
+        Object.entries(OPCOES_SAIDA).map(([valor, texto]) => `<option value="${valor}" ${valor === 'boleto' ? 'selected' : ''}>${texto}</option>`).join('');
+    preencherSelectContas(document.getElementById('imp-conta-lote'));
+
+    abrirModal('modal-importar');
+    // A tabela só pode ser montada com o modal visível, senão o Tabulator calcula altura zero.
+    requestAnimationFrame(() => carregarTitulosImportar(modo));
+}
+
+function handleGrupoImportarChange() {
+    const nomeGrupo = document.getElementById('imp-grupo-despesa').value;
+    preencherSelectTipos(document.getElementById('imp-tipo-despesa'), nomeGrupo);
+    const grupo = classificacaoCache.find(g => g.nome === nomeGrupo);
+    const precisaVeiculo = !!(grupo && grupo.exige_veiculo);
+    document.getElementById('imp-veiculo-wrap').classList.toggle('hidden', !precisaVeiculo);
+    if (!precisaVeiculo) document.getElementById('imp-veiculo').value = '';
+}
+
+async function carregarTitulosImportar(modo) {
+    modoImportar = modo;
+    document.querySelectorAll('.aba-importar').forEach(btn => {
+        const ativa = btn.dataset.modo === modo;
+        btn.classList.toggle('bg-blue-600', ativa);
+        btn.classList.toggle('text-white', ativa);
+        btn.classList.toggle('border-blue-600', ativa);
+        btn.classList.toggle('bg-white', !ativa);
+        btn.classList.toggle('text-gray-600', !ativa);
+    });
+
+    const dataRef = document.getElementById('filtro-data').value;
+    await montarTabelaImportar();
+    tabelaImportar.setData([]);
+    tabelaImportar.alert('Buscando títulos no Contas a Pagar...');
+    try {
+        const titulos = await apiFetch(`/erp/titulos?modo=${modo}&data=${dataRef}`);
+        titulosImportar = titulos.map(t => ({
+            ...t,
+            marcado: false,
+            id_conta: t.id_conta_sugerida,
+            id_centro_custo: t.id_centro_sugerido || ''
+        }));
+        tabelaImportar.clearAlert();
+        tabelaImportar.setData(titulosImportar);
+        aplicarBuscaImportar();
+    } catch (err) {
+        tabelaImportar.clearAlert();
+        alert('Erro ao buscar títulos: ' + err.message);
+    }
+    atualizarResumoImportar();
+}
+
+// O Tabulator só aceita dados depois do evento tableBuilt; a promessa é reaproveitada nas próximas aberturas.
+let tabelaImportarPronta = null;
+function montarTabelaImportar() {
+    if (tabelaImportarPronta) return tabelaImportarPronta;
+    const opcoesConta = () => contasCache.map(c => ({ label: c.nome, value: c.id }));
+    const opcoesCentro = () => [{ label: '-- Nenhum --', value: '' }, ...centrosCustoCache.map(c => ({ label: c.nome, value: c.id }))];
+
+    tabelaImportar = new Tabulator('#tabela-importar', {
+        data: [],
+        layout: 'fitColumns',
+        height: '100%',
+        index: 'ap_regist',
+        placeholder: 'Nenhum título pendente nesta aba.',
+        columns: [
+            {
+                title: '', field: 'marcado', width: 40, hozAlign: 'center', headerSort: false,
+                titleFormatter: () => '<input type="checkbox" id="imp-marcar-todos" title="Marcar todos os da lista">',
+                formatter: cell => `<input type="checkbox" ${cell.getValue() ? 'checked' : ''}>`,
+                cellClick: (e, cell) => {
+                    cell.getRow().update({ marcado: !cell.getValue() });
+                    atualizarResumoImportar();
+                },
+                headerClick: () => {
+                    const linhas = tabelaImportar.getRows('active');
+                    const marcar = !linhas.every(l => l.getData().marcado);
+                    linhas.forEach(l => l.update({ marcado: marcar }));
+                    atualizarResumoImportar();
+                }
+            },
+            { title: 'Vencimento', field: 'vencimento', width: 95, formatter: cell => formatarDataBR(cell.getValue()) },
+            { title: 'Fornecedor', field: 'fornecedor', widthGrow: 2, minWidth: 170, formatter: cell => escapeHtml(cell.getValue()) },
+            { title: 'NF', field: 'nf', width: 85, formatter: cell => escapeHtml(cell.getValue() || '-') },
+            { title: 'Filial', field: 'filial', width: 65 },
+            { title: 'Indicação', field: 'indicacao', widthGrow: 1.4, minWidth: 150, formatter: cell => escapeHtml(cell.getValue() || '-') },
+            {
+                title: 'Pago pelo ERP em', field: 'chave_pagamento', widthGrow: 1.3, minWidth: 140,
+                formatter: cell => escapeHtml(cell.getValue() || (cell.getRow().getData().pago ? '-' : 'Em aberto'))
+            },
+            {
+                title: 'Conta', field: 'id_conta', widthGrow: 1.5, minWidth: 170, editor: 'list',
+                editorParams: () => ({ values: opcoesConta() }),
+                formatter: cell => {
+                    const conta = contasCache.find(c => c.id === cell.getValue());
+                    return conta ? escapeHtml(conta.nome) : '<span class="text-red-500 font-bold">Escolher ▾</span>';
+                }
+            },
+            {
+                title: 'Centro de Custo', field: 'id_centro_custo', widthGrow: 1.3, minWidth: 130, editor: 'list',
+                editorParams: () => ({ values: opcoesCentro() }),
+                formatter: cell => {
+                    const centro = centrosCustoCache.find(c => c.id === cell.getValue());
+                    return centro ? escapeHtml(centro.nome) : '<span class="text-gray-400">-- ▾</span>';
+                }
+            },
+            {
+                title: 'Valor', field: 'valor', width: 110, hozAlign: 'right', editor: 'number',
+                editorParams: { min: 0.01, step: 0.01 },
+                formatter: cell => formatarMoeda(cell.getValue())
+            }
+        ]
+    });
+    tabelaImportar.on('cellEdited', atualizarResumoImportar);
+    tabelaImportar.on('dataFiltered', () => setTimeout(atualizarResumoImportar));
+    tabelaImportarPronta = new Promise(resolve => tabelaImportar.on('tableBuilt', resolve));
+    return tabelaImportarPronta;
+}
+
+function aplicarBuscaImportar() {
+    if (!tabelaImportar) return;
+    const termo = normalizarNome(document.getElementById('busca-importar').value);
+    if (!termo) {
+        tabelaImportar.clearFilter();
+        return;
+    }
+    tabelaImportar.setFilter(t => [t.fornecedor, t.nf, t.controle].some(v => normalizarNome(v).includes(termo)));
+}
+
+function titulosMarcados() {
+    return tabelaImportar ? tabelaImportar.getData().filter(t => t.marcado) : [];
+}
+
+function atualizarResumoImportar() {
+    const marcados = titulosMarcados();
+    const total = marcados.reduce((acc, t) => acc + Number(t.valor || 0), 0);
+    const linhas = tabelaImportar ? tabelaImportar.getRows('active') : [];
+    document.getElementById('resumo-importar').textContent =
+        `${linhas.length} título(s) na lista · ${marcados.length} marcado(s) · ${formatarMoeda(total)}`;
+    const todos = document.getElementById('imp-marcar-todos');
+    if (todos) todos.checked = linhas.length > 0 && linhas.every(l => l.getData().marcado);
+}
+
+function aplicarContaLote() {
+    const idConta = Number(document.getElementById('imp-conta-lote').value);
+    if (!idConta) return alert('Escolha a conta.');
+    const marcados = tabelaImportar.getRows().filter(l => l.getData().marcado);
+    if (!marcados.length) return alert('Marque os títulos que vão para essa conta.');
+    marcados.forEach(l => l.update({ id_conta: idConta }));
+}
+
+async function importarMarcados() {
+    const marcados = titulosMarcados();
+    if (!marcados.length) return alert('Marque ao menos um título.');
+    const semConta = marcados.filter(t => !t.id_conta);
+    if (semConta.length) {
+        return alert(`Escolha a conta de ${semConta.length} título(s) marcado(s) (coluna Conta em vermelho).`);
+    }
+    if (marcados.some(t => !(Number(t.valor) > 0))) return alert('Há título marcado com valor zerado.');
+
+    const grupo = document.getElementById('imp-grupo-despesa').value;
+    if (!grupo) return alert('Selecione o grupo de despesa.');
+
+    const dataRef = document.getElementById('filtro-data').value;
+    const total = marcados.reduce((acc, t) => acc + Number(t.valor), 0);
+    if (!confirm(`Importar ${marcados.length} título(s), total ${formatarMoeda(total)}, como saída no dia ${formatarDataBR(dataRef)}?`)) return;
+
+    const payload = {
+        data_movimento: dataRef,
+        grupo_despesa: grupo,
+        tipo_despesa: document.getElementById('imp-tipo-despesa').value || null,
+        id_veiculo: document.getElementById('imp-veiculo').value || null,
+        forma_pagamento: document.getElementById('imp-forma-pagamento').value,
+        itens: marcados.map(t => ({
+            ap_regist: t.ap_regist, id_conta: t.id_conta, id_centro_custo: t.id_centro_custo || null, valor: Number(t.valor)
+        }))
+    };
+
+    const botao = document.getElementById('btn-confirmar-importar');
+    botao.disabled = true;
+    try {
+        const resultado = await apiFetch('/erp/importar', { method: 'POST', body: JSON.stringify(payload) });
+        let msg = resultado.message;
+        if (resultado.ja_importados.length) msg += `\n${resultado.ja_importados.length} já estavam na tesouraria e foram ignorados.`;
+        alert(msg);
+        await carregarTitulosImportar(modoImportar);
+        await carregarDia(dataRef);
+    } catch (err) {
+        alert('Erro ao importar: ' + err.message);
+    } finally {
+        botao.disabled = false;
+    }
+}
+
 // --- GERENCIAR CONTAS E CENTROS DE CUSTO ---
 
 async function abrirModalGerenciar() {
@@ -509,15 +756,26 @@ async function abrirModalGerenciar() {
 async function renderListaGerenciarContas() {
     const container = document.getElementById('lista-gerenciar-contas');
     try {
-        const todasContas = await apiFetch('/contas?todos=1');
+        const [todasContas, vinculosErp] = await Promise.all([apiFetch('/contas?todos=1'), apiFetch('/contas-erp')]);
         container.innerHTML = todasContas.map(c => `
-            <div class="flex items-center justify-between border border-gray-200 rounded px-2 py-1.5 text-xs ${c.ativo ? '' : 'opacity-50'}">
-                <span class="font-medium text-gray-700 truncate">${escapeHtml(c.nome)}</span>
-                <div class="flex items-center gap-2 shrink-0">
-                    <button class="text-indigo-600 hover:underline" data-acao="renomear-conta" data-id="${c.id}" data-nome="${escapeHtml(c.nome)}">Renomear</button>
-                    <button class="${c.ativo ? 'text-red-600' : 'text-green-600'} hover:underline" data-acao="toggle-conta" data-id="${c.id}" data-ativo="${c.ativo}">${c.ativo ? 'Desativar' : 'Reativar'}</button>
+            <div class="border border-gray-200 rounded px-2 py-1.5 text-xs ${c.ativo ? '' : 'opacity-50'}">
+                <div class="flex items-center justify-between">
+                    <span class="font-medium text-gray-700 truncate" title="${escapeHtml(c.nome)}">${escapeHtml(c.nome)}</span>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button class="text-indigo-600 hover:underline" data-acao="renomear-conta" data-id="${c.id}" data-nome="${escapeHtml(c.nome)}">Renomear</button>
+                        <button class="${c.ativo ? 'text-red-600' : 'text-green-600'} hover:underline" data-acao="toggle-conta" data-id="${c.id}" data-ativo="${c.ativo}">${c.ativo ? 'Desativar' : 'Reativar'}</button>
+                    </div>
                 </div>
+                ${vinculosErp.filter(v => v.id_conta === c.id).map(v => `
+                    <div class="flex items-center justify-between pl-3 mt-0.5 text-gray-500" title="Pagamentos do ERP com esta conta já vêm com ela sugerida na importação">
+                        <span class="truncate">ERP: ${escapeHtml(v.chave)}</span>
+                        <button class="text-red-500 hover:underline shrink-0" data-acao="remover-vinculo-erp" data-chave="${escapeHtml(v.chave)}">Desvincular</button>
+                    </div>`).join('')}
             </div>`).join('') || '<p class="text-xs text-gray-400">Nenhuma conta cadastrada.</p>';
+
+        container.querySelectorAll('[data-acao="remover-vinculo-erp"]').forEach(btn => {
+            btn.addEventListener('click', () => removerVinculoErp(btn.dataset.chave));
+        });
 
         container.querySelectorAll('[data-acao="renomear-conta"]').forEach(btn => {
             btn.addEventListener('click', () => renomearConta(btn.dataset.id, btn.dataset.nome));
@@ -593,6 +851,16 @@ async function alternarAtivoConta(id, ativoAtual) {
         await renderListaGerenciarContas();
     } catch (err) {
         alert('Erro ao atualizar conta: ' + err.message);
+    }
+}
+
+async function removerVinculoErp(chave) {
+    if (!confirm(`Desvincular "${chave}"? Na próxima importação você escolhe a conta de novo.`)) return;
+    try {
+        await apiFetch(`/contas-erp?chave=${encodeURIComponent(chave)}`, { method: 'DELETE' });
+        await renderListaGerenciarContas();
+    } catch (err) {
+        alert('Erro ao desvincular: ' + err.message);
     }
 }
 
