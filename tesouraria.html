@@ -49,64 +49,90 @@
         </div>
     </header>
 
-    <div class="bg-white p-3 border-b border-gray-200 shrink-0 shadow-sm z-20">
-        <div class="flex flex-wrap gap-3 items-end">
-            <div>
-                <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-wide">Dia</label>
-                <input type="date" id="filtro-data" class="h-8 border-gray-300 rounded text-xs bg-gray-50 font-medium">
+    <div class="bg-white px-4 py-2 border-b border-gray-200 shrink-0 shadow-sm z-20">
+        <div class="flex flex-wrap gap-2 items-center">
+            <div class="flex items-center gap-1">
+                <button id="btn-dia-anterior" class="h-8 w-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50" title="Dia anterior"><i data-feather="chevron-left" class="w-4 h-4"></i></button>
+                <input type="date" id="filtro-data" class="h-8 border-gray-300 rounded text-xs bg-gray-50 font-bold">
+                <button id="btn-dia-seguinte" class="h-8 w-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50" title="Dia seguinte"><i data-feather="chevron-right" class="w-4 h-4"></i></button>
             </div>
+            <div class="h-6 w-px bg-gray-200 mx-1"></div>
 
-            <button id="btn-nova-entrada" class="h-8 bg-green-600 text-white px-4 rounded text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-2 transition-all active:scale-95">
+            <button id="btn-nova-entrada" class="h-8 bg-green-600 text-white px-3 rounded text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
                 <i data-feather="arrow-down-circle" class="w-3.5 h-3.5"></i> ENTRADA
             </button>
-            <button id="btn-nova-saida" class="h-8 bg-red-600 text-white px-4 rounded text-xs font-bold hover:bg-red-700 shadow-sm flex items-center gap-2 transition-all active:scale-95">
+            <button id="btn-nova-saida" class="h-8 bg-red-600 text-white px-3 rounded text-xs font-bold hover:bg-red-700 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
                 <i data-feather="arrow-up-circle" class="w-3.5 h-3.5"></i> SAÍDA
             </button>
-            <button id="btn-importar-erp" class="h-8 bg-blue-600 text-white px-4 rounded text-xs font-bold hover:bg-blue-700 shadow-sm flex items-center gap-2 transition-all active:scale-95">
-                <i data-feather="download" class="w-3.5 h-3.5"></i> IMPORTAR DO CONTAS A PAGAR
+            <button id="btn-importar-erp" class="h-8 bg-blue-600 text-white px-3 rounded text-xs font-bold hover:bg-blue-700 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
+                <i data-feather="download" class="w-3.5 h-3.5"></i> CONTAS A PAGAR
+            </button>
+            <button id="btn-despesas-lojas" class="h-8 bg-amber-500 text-white px-3 rounded text-xs font-bold hover:bg-amber-600 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
+                <i data-feather="shopping-bag" class="w-3.5 h-3.5"></i> DESPESAS DAS LOJAS
             </button>
 
             <div class="ml-auto flex gap-2">
-                <button id="btn-gerenciar" class="h-8 bg-white text-gray-700 border border-gray-300 px-4 rounded text-xs font-bold hover:bg-gray-50 shadow-sm flex items-center gap-2 transition-all">
+                <button id="btn-gerenciar" class="h-8 bg-white text-gray-700 border border-gray-300 px-3 rounded text-xs font-bold hover:bg-gray-50 shadow-sm flex items-center gap-1.5 transition-all">
                     <i data-feather="settings" class="w-3.5 h-3.5"></i> CADASTROS
                 </button>
-                <button id="btn-exportar-pdf" class="h-8 bg-gray-700 text-white px-4 rounded text-xs font-bold hover:bg-gray-800 shadow-sm flex items-center gap-2 transition-all">
-                    <i data-feather="file-text" class="w-3.5 h-3.5"></i> EXPORTAR PDF
+                <button id="btn-exportar-pdf" class="h-8 bg-gray-700 text-white px-3 rounded text-xs font-bold hover:bg-gray-800 shadow-sm flex items-center gap-1.5 transition-all">
+                    <i data-feather="file-text" class="w-3.5 h-3.5"></i> RELATÓRIO PDF
                 </button>
-                <button id="btn-whatsapp" class="h-8 bg-green-600 text-white px-4 rounded text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-2 transition-all">
+                <button id="btn-whatsapp" class="h-8 bg-green-600 text-white px-3 rounded text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-1.5 transition-all">
                     <i data-feather="share-2" class="w-3.5 h-3.5"></i> COMPARTILHAR
                 </button>
             </div>
         </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-4 space-y-4">
+    <div class="flex-1 min-h-0 flex flex-col gap-3 p-3">
 
-        <div id="cards-contas" class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <!-- Cards de saldo por conta, preenchidos via JS -->
-        </div>
-
-        <div id="painel-pendentes" class="hidden bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-            <h2 class="text-xs font-bold text-yellow-800 uppercase tracking-wide mb-2 flex items-center gap-2">
-                <i data-feather="alert-triangle" class="w-4 h-4"></i>
-                Despesas de caixa do dia ainda não confirmadas na tesouraria
-            </h2>
-            <div id="lista-pendentes" class="space-y-2"></div>
-        </div>
-
-        <div id="painel-erp-baixados" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between gap-3">
-            <p class="text-xs font-bold text-blue-800 flex items-center gap-2">
-                <i data-feather="alert-circle" class="w-4 h-4 shrink-0"></i>
-                <span id="texto-erp-baixados"></span>
-            </p>
-            <button id="btn-ver-erp-baixados" class="bg-blue-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-blue-700 shrink-0">Ver e importar</button>
-        </div>
-
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div class="px-3 py-2 border-b border-gray-100 bg-gray-50">
-                <h2 class="text-xs font-bold text-gray-600 uppercase tracking-wide">Movimentos do dia</h2>
+        <!-- Indicadores do dia (só lançamentos válidos: estornos não contam) -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
+            <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-green-500 shadow-sm px-4 py-2.5">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Total de entradas</p>
+                <p id="kpi-entradas" class="text-2xl font-black text-green-700 leading-tight">R$ 0,00</p>
+                <p id="kpi-entradas-qtd" class="text-[11px] text-gray-400">0 lançamento(s)</p>
             </div>
-            <div id="tabela-movimentos" class="w-full"></div>
+            <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-red-500 shadow-sm px-4 py-2.5">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Total de saídas</p>
+                <p id="kpi-saidas" class="text-2xl font-black text-red-700 leading-tight">R$ 0,00</p>
+                <p id="kpi-saidas-qtd" class="text-[11px] text-gray-400">0 lançamento(s)</p>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-indigo-500 shadow-sm px-4 py-2.5">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Líquido do dia</p>
+                <p id="kpi-liquido" class="text-2xl font-black text-gray-800 leading-tight">R$ 0,00</p>
+                <p class="text-[11px] text-gray-400">entradas − saídas</p>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-amber-500 shadow-sm px-4 py-2.5 space-y-1">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Pendências</p>
+                <button id="kpi-pend-lojas" class="w-full flex items-center justify-between gap-2 text-xs hover:bg-amber-50 rounded px-1 -mx-1">
+                    <span class="text-gray-600 text-left">Despesas das lojas a conferir</span>
+                    <span id="kpi-pend-lojas-valor" class="font-bold text-gray-400 whitespace-nowrap">—</span>
+                </button>
+                <button id="kpi-pend-erp" class="w-full flex items-center justify-between gap-2 text-xs hover:bg-blue-50 rounded px-1 -mx-1">
+                    <span class="text-gray-600 text-left">Pagos no ERP fora da tesouraria</span>
+                    <span id="kpi-pend-erp-valor" class="font-bold text-gray-400 whitespace-nowrap">—</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Movimento do dia por conta -->
+        <div id="cards-contas" class="flex flex-wrap gap-2 shrink-0"></div>
+
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex-1 min-h-[16rem] flex flex-col">
+            <div class="px-3 py-2 border-b border-gray-100 bg-gray-50 flex flex-wrap items-center gap-2 shrink-0">
+                <h2 class="text-xs font-bold text-gray-600 uppercase tracking-wide mr-2">Movimentos do dia</h2>
+                <div class="flex gap-1">
+                    <button data-tipo="" class="filtro-tipo px-2.5 py-1 rounded text-[11px] font-bold border">Todos</button>
+                    <button data-tipo="entrada" class="filtro-tipo px-2.5 py-1 rounded text-[11px] font-bold border">Entradas</button>
+                    <button data-tipo="saida" class="filtro-tipo px-2.5 py-1 rounded text-[11px] font-bold border">Saídas</button>
+                </div>
+                <input type="text" id="busca-movimentos" placeholder="Buscar descrição, favorecido, NF..." class="ml-auto h-7 w-64 border border-gray-300 rounded text-xs px-2">
+            </div>
+            <div class="flex-1 min-h-0">
+                <div id="tabela-movimentos" class="w-full h-full"></div>
+            </div>
         </div>
 
     </div>
@@ -249,45 +275,61 @@
         </div>
     </div>
 
-    <!-- Modal: Confirmar despesa de caixa pendente -->
-    <div id="modal-confirmar-despesa" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-200">
-            <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200 bg-yellow-50">
-                <h3 class="text-lg font-bold text-yellow-900 flex items-center gap-2">
-                    <i data-feather="check-circle" class="w-5 h-5 text-yellow-600"></i> Confirmar Despesa de Caixa
+    <!-- Modal: Despesas das Lojas (despesa_caixa) — conferência antes de entrar no relatório -->
+    <div id="modal-lojas" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-7xl overflow-hidden transform scale-95 transition-transform duration-200 h-[92vh] flex flex-col">
+            <div class="flex justify-between items-center px-6 py-3 border-b border-gray-200 bg-amber-50 shrink-0">
+                <h3 class="text-lg font-bold text-amber-900 flex items-center gap-2">
+                    <i data-feather="shopping-bag" class="w-5 h-5 text-amber-600"></i> Despesas das Lojas
                 </h3>
-                <button id="btn-fechar-modal-confirmar" class="text-yellow-500 hover:text-yellow-700 hover:bg-yellow-100 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
+                <button id="btn-fechar-modal-lojas" class="text-amber-500 hover:text-amber-700 hover:bg-amber-100 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
             </div>
-            <div class="p-6 space-y-4">
-                <p id="confirmar-despesa-descricao" class="text-sm text-gray-600 bg-gray-50 p-3 rounded border border-gray-200"></p>
-                <input type="hidden" id="confirmar-despesa-id">
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">Conta que pagou</label>
-                    <select id="confirmar-conta" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select>
+            <div class="px-6 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2 shrink-0">
+                <div class="flex flex-wrap gap-1">
+                    <button data-modo="dia" class="aba-lojas px-3 py-1.5 rounded text-xs font-bold border">Despesas do dia</button>
+                    <button data-modo="pendentes" class="aba-lojas px-3 py-1.5 rounded text-xs font-bold border">Pendentes (últimos 30 dias)</button>
                 </div>
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">Centro de Custo</label>
-                    <select id="confirmar-centro-custo" class="w-full border border-gray-300 rounded-md p-2 text-sm">
-                        <option value="">-- Nenhum --</option>
-                    </select>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">Grupo de Despesa</label>
-                        <select id="confirmar-grupo-despesa" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">Tipo de Despesa</label>
-                        <select id="confirmar-tipo-despesa" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select>
-                    </div>
-                </div>
-                <p id="confirmar-classificacao-loja" class="text-[11px] text-gray-400 -mt-2"></p>
+                <input type="date" id="lojas-data" class="h-8 border-gray-300 rounded text-xs bg-gray-50 font-medium">
+                <select id="lojas-filtro-loja" class="h-8 border border-gray-300 rounded text-xs px-2"></select>
+                <div id="lojas-resumo" class="ml-auto flex gap-3 text-xs"></div>
             </div>
-            <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-                <button id="btn-cancelar-confirmar" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm">Cancelar</button>
-                <button id="btn-salvar-confirmar" class="px-4 py-2 text-sm font-bold text-white bg-yellow-600 rounded-md hover:bg-yellow-700 shadow-sm flex items-center gap-2">
-                    <i data-feather="check" class="w-4 h-4"></i> Confirmar
-                </button>
+            <p class="px-6 pt-2 text-[11px] text-gray-500 shrink-0">
+                O que as lojas lançaram em <b>Lançamentos</b>. Marque as despesas conferidas, confira a <b>conta</b> e a <b>classificação</b> (clique na célula para mudar) e clique em <b>Conferir</b>:
+                elas entram como saída no dia <b id="lojas-dia-movimento"></b> e passam a sair no relatório.
+            </p>
+            <div class="flex-1 min-h-0 px-6 py-2">
+                <div id="tabela-lojas" class="w-full h-full"></div>
+            </div>
+            <div class="bg-gray-50 px-6 py-3 border-t border-gray-200 shrink-0 space-y-2">
+                <div class="flex flex-wrap items-end gap-3">
+                    <div class="flex items-end gap-1">
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Conta dos marcados</label>
+                            <select id="lojas-conta-lote" class="h-8 border border-gray-300 rounded text-xs px-2 w-48"></select>
+                        </div>
+                        <button id="btn-lojas-aplicar-conta" class="h-8 px-3 bg-white border border-gray-300 rounded text-xs font-bold hover:bg-gray-100">Aplicar</button>
+                    </div>
+                    <div class="flex items-end gap-1">
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Grupo dos marcados</label>
+                            <select id="lojas-grupo-lote" class="h-8 border border-gray-300 rounded text-xs px-2 w-40"></select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tipo</label>
+                            <select id="lojas-tipo-lote" class="h-8 border border-gray-300 rounded text-xs px-2 w-40"></select>
+                        </div>
+                        <button id="btn-lojas-aplicar-grupo" class="h-8 px-3 bg-white border border-gray-300 rounded text-xs font-bold hover:bg-gray-100">Aplicar</button>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <p id="lojas-resumo-marcados" class="text-xs font-bold text-gray-700"></p>
+                    <div class="flex gap-3">
+                        <button id="btn-cancelar-lojas" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm">Fechar</button>
+                        <button id="btn-conferir-lojas" class="px-4 py-2 text-sm font-bold text-white bg-amber-600 rounded-md hover:bg-amber-700 shadow-sm flex items-center gap-2">
+                            <i data-feather="check-square" class="w-4 h-4"></i> Conferir marcados
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -402,6 +444,6 @@
     </div>
 
     <script src="assets/global.js?v=20261104"></script>
-    <script src="tesouraria.js?v=20261104c"></script>
+    <script src="tesouraria.js?v=20261105"></script>
 </body>
 </html>

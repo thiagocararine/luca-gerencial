@@ -48,9 +48,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     setupModais();
     document.getElementById('lanc-grupo-despesa').addEventListener('change', handleGrupoLancamentoChange);
-    document.getElementById('confirmar-grupo-despesa').addEventListener('change', (e) => {
-        preencherSelectTipos(document.getElementById('confirmar-tipo-despesa'), e.target.value);
-    });
+    document.getElementById('btn-dia-anterior').addEventListener('click', () => mudarDia(-1));
+    document.getElementById('btn-dia-seguinte').addEventListener('click', () => mudarDia(1));
+    document.querySelectorAll('.filtro-tipo').forEach(btn => btn.addEventListener('click', () => {
+        filtroTipoMovimentos = btn.dataset.tipo;
+        aplicarFiltrosMovimentos();
+    }));
+    document.getElementById('busca-movimentos').addEventListener('input', aplicarFiltrosMovimentos);
     document.getElementById('novo-centro-tipo').addEventListener('change', atualizarVisibilidadeFilialCentro);
     atualizarVisibilidadeFilialCentro();
     if (typeof feather !== 'undefined') feather.replace();
@@ -87,7 +91,6 @@ async function carregarContas() {
     try {
         contasCache = await apiFetch('/contas');
         preencherSelectContas(document.getElementById('lanc-conta'));
-        preencherSelectContas(document.getElementById('confirmar-conta'));
     } catch (err) {
         console.error('Erro ao carregar contas:', err);
         contasCache = [];
@@ -98,7 +101,6 @@ async function carregarCentrosCusto() {
     try {
         centrosCustoCache = await apiFetch('/centros-custo');
         preencherSelectCentros(document.getElementById('lanc-centro-custo'));
-        preencherSelectCentros(document.getElementById('confirmar-centro-custo'));
     } catch (err) {
         console.error('Erro ao carregar centros de custo:', err);
         centrosCustoCache = [];
@@ -141,7 +143,6 @@ async function carregarClassificacao() {
         classificacaoCache = [];
     }
     preencherSelectGrupos(document.getElementById('lanc-grupo-despesa'));
-    preencherSelectGrupos(document.getElementById('confirmar-grupo-despesa'));
     handleGrupoLancamentoChange();
 }
 
@@ -191,152 +192,188 @@ function preencherSelectCentros(select) {
 
 async function carregarDia(data) {
     try {
-        const [movimentos, pendentes] = await Promise.all([
-            apiFetch(`/movimentos?data=${data}`),
-            apiFetch(`/despesa-caixa/pendentes?data=${data}`)
-        ]);
-        movimentosDoDia = movimentos;
-        renderCardsContas(movimentos);
-        renderPendentes(pendentes, data);
-        renderTabelaMovimentos(movimentos);
+        movimentosDoDia = await apiFetch(`/movimentos?data=${data}`);
+        renderKpis(movimentosDoDia);
+        renderCardsContas(movimentosDoDia);
+        renderTabelaMovimentos(movimentosDoDia);
     } catch (err) {
         dialogoAviso('Erro ao carregar dados do dia: ' + err.message, 'erro');
     }
-    await carregarAlertaErp(data);
+    await carregarPendencias(data);
 }
 
-// Aviso de títulos já pagos no ERP neste dia que ainda não entraram na tesouraria.
-// Fica fora do carregamento principal: se o ERP não responder, o dia abre do mesmo jeito.
-async function carregarAlertaErp(data) {
-    const painel = document.getElementById('painel-erp-baixados');
-    try {
-        const titulos = await apiFetch(`/erp/titulos?modo=baixados&data=${data}`);
-        if (!titulos.length) {
-            painel.classList.add('hidden');
-            return;
-        }
-        const total = titulos.reduce((acc, t) => acc + t.valor, 0);
-        document.getElementById('texto-erp-baixados').textContent =
-            `${titulos.length} título(s) pago(s) no ERP neste dia ainda não estão na tesouraria — ${formatarMoeda(total)}`;
-        painel.classList.remove('hidden');
-    } catch (err) {
-        console.error('Erro ao verificar títulos pagos no ERP:', err);
-        painel.classList.add('hidden');
+function somar(lista) {
+    return lista.reduce((acc, m) => acc + Number(m.valor || 0), 0);
+}
+
+function renderKpis(movimentos) {
+    const efetivos = movimentos.filter(movimentoEfetivo);
+    const entradas = efetivos.filter(m => m.tipo === 'entrada');
+    const saidas = efetivos.filter(m => m.tipo === 'saida');
+    const liquido = somar(entradas) - somar(saidas);
+
+    document.getElementById('kpi-entradas').textContent = formatarMoeda(somar(entradas));
+    document.getElementById('kpi-entradas-qtd').textContent = `${entradas.length} lançamento(s)`;
+    document.getElementById('kpi-saidas').textContent = formatarMoeda(somar(saidas));
+    document.getElementById('kpi-saidas-qtd').textContent = `${saidas.length} lançamento(s)`;
+    const elLiquido = document.getElementById('kpi-liquido');
+    elLiquido.textContent = formatarMoeda(liquido);
+    elLiquido.classList.toggle('text-red-700', liquido < 0);
+    elLiquido.classList.toggle('text-gray-800', liquido >= 0);
+}
+
+// Pendências do card de KPI: despesas das lojas a conferir e títulos pagos no ERP que ainda
+// não entraram. Ficam fora do carregamento principal: se uma falhar, o dia abre do mesmo jeito.
+async function carregarPendencias(data) {
+    const [lojas, erp] = await Promise.allSettled([
+        apiFetch(`/despesa-caixa?modo=pendentes&data=${data}`),
+        apiFetch(`/erp/titulos?modo=baixados&data=${data}`)
+    ]);
+
+    const elLojas = document.getElementById('kpi-pend-lojas-valor');
+    if (lojas.status === 'fulfilled') {
+        const pendentes = lojas.value.filter(d => d.situacao === 'pendente');
+        const canceladas = lojas.value.filter(d => d.situacao === 'cancelada_conferida');
+        let texto = pendentes.length ? `${pendentes.length} · ${formatarMoeda(somar(pendentes))}` : 'nenhuma';
+        if (canceladas.length) texto += ` · ${canceladas.length} cancelada(s)!`;
+        mostrarPendencia(elLojas, texto, pendentes.length + canceladas.length > 0, 'text-amber-700');
+    } else {
+        mostrarPendencia(elLojas, 'erro ao consultar', true, 'text-red-600');
+    }
+
+    const elErp = document.getElementById('kpi-pend-erp-valor');
+    if (erp.status === 'fulfilled') {
+        const titulos = erp.value;
+        mostrarPendencia(elErp, titulos.length ? `${titulos.length} · ${formatarMoeda(somar(titulos))}` : 'nenhum', titulos.length > 0, 'text-blue-700');
+    } else {
+        mostrarPendencia(elErp, 'erro ao consultar', true, 'text-red-600');
     }
 }
 
-// --- CARDS DE CONTAS ---
+function mostrarPendencia(el, texto, destacar, cor) {
+    el.textContent = texto;
+    el.className = `font-bold whitespace-nowrap ${destacar ? cor : 'text-gray-400'}`;
+}
 
-// O valor do card é o líquido do dia (entradas - saídas), não o saldo da conta:
+// --- CONTAS (movimento do dia por conta) ---
+
+// O valor é o líquido do dia (entradas - saídas), não o saldo da conta:
 // saldo de verdade depende de saldo inicial/fechamento, que é a Fase C.
 function renderCardsContas(movimentos) {
     const container = document.getElementById('cards-contas');
     container.innerHTML = contasCache.map(conta => {
         const movsConta = movimentos.filter(m => m.id_conta === conta.id && movimentoEfetivo(m));
-        const totalEntrada = movsConta.filter(m => m.tipo === 'entrada').reduce((a, m) => a + Number(m.valor), 0);
-        const totalSaida = movsConta.filter(m => m.tipo === 'saida').reduce((a, m) => a + Number(m.valor), 0);
-        const liquido = totalEntrada - totalSaida;
-        const corLiquido = liquido < 0 ? 'text-red-600' : 'text-gray-800';
+        const entradas = somar(movsConta.filter(m => m.tipo === 'entrada'));
+        const saidas = somar(movsConta.filter(m => m.tipo === 'saida'));
+        const liquido = entradas - saidas;
+        const semMovimento = movsConta.length === 0;
         return `
-            <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-3">
-                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wide truncate">${escapeHtml(conta.nome)}</p>
-                <p class="text-lg font-black ${corLiquido}">${formatarMoeda(liquido)}</p>
-                <p class="text-[10px] text-gray-400 -mt-0.5 mb-1">Líquido do dia</p>
-                <p class="text-[10px] text-green-700">Entradas: ${formatarMoeda(totalEntrada)}</p>
-                <p class="text-[10px] text-red-700">Saídas: ${formatarMoeda(totalSaida)}</p>
+            <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-3 py-1.5 min-w-[11rem] ${semMovimento ? 'opacity-60' : ''}">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide truncate max-w-[14rem]" title="${escapeHtml(conta.nome)}">${escapeHtml(conta.nome)}</p>
+                <p class="text-sm font-black ${liquido < 0 ? 'text-red-600' : 'text-gray-800'}">${formatarMoeda(liquido)}</p>
+                <p class="text-[10px] whitespace-nowrap"><span class="text-green-700">↓ ${formatarMoeda(entradas)}</span> <span class="text-red-700 ml-1">↑ ${formatarMoeda(saidas)}</span></p>
             </div>`;
-    }).join('') || '<p class="text-xs text-gray-400 col-span-full">Nenhuma conta cadastrada ainda.</p>';
-}
-
-// --- PENDENTES (despesa_caixa) ---
-
-function renderPendentes(pendentes, data) {
-    const painel = document.getElementById('painel-pendentes');
-    const lista = document.getElementById('lista-pendentes');
-
-    if (!pendentes || pendentes.length === 0) {
-        painel.classList.add('hidden');
-        lista.innerHTML = '';
-        return;
-    }
-
-    painel.classList.remove('hidden');
-    lista.innerHTML = pendentes.map(d => `
-        <div class="flex items-center justify-between bg-white border border-yellow-200 rounded px-3 py-2 text-xs">
-            <div>
-                <span class="font-bold text-gray-700">${escapeHtml(d.dsp_descricao)}</span>
-                <span class="text-gray-400"> — ${escapeHtml(d.dsp_grupo || '')} / ${escapeHtml(d.dsp_tipo || '')} — Filial ${escapeHtml(d.dsp_filial || '')}</span>
-            </div>
-            <div class="flex items-center gap-3">
-                <span class="font-bold text-gray-800">${formatarMoeda(d.dsp_valordsp)}</span>
-                <button class="btn-confirmar-despesa bg-yellow-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-yellow-700"
-                        data-id="${d.ID}" data-filial="${escapeHtml(d.dsp_filial || '')}"
-                        data-grupo="${escapeHtml(d.dsp_grupo || '')}" data-tipo="${escapeHtml(d.dsp_tipo || '')}"
-                        data-descricao="${escapeHtml(d.dsp_descricao)} — ${formatarMoeda(d.dsp_valordsp)}">
-                    Confirmar
-                </button>
-            </div>
-        </div>
-    `).join('');
-
-    lista.querySelectorAll('.btn-confirmar-despesa').forEach(btn => {
-        btn.addEventListener('click', () => abrirModalConfirmarDespesa(btn.dataset));
-    });
+    }).join('') || '<p class="text-xs text-gray-400">Nenhuma conta cadastrada ainda. Use CADASTROS.</p>';
 }
 
 // --- TABELA DE MOVIMENTOS ---
+
+let filtroTipoMovimentos = '';
 
 function renderTabelaMovimentos(movimentos) {
     const dados = movimentos.map(m => ({
         ...m,
         classificacao: textoClassificacao(m),
-        origem_label: m.origem === 'manual' ? 'Manual' : (m.origem === 'despesa_caixa' ? 'Caixa (Despesas)' : 'Contas a Pagar'),
+        origem_label: ORIGEM_LABEL[m.origem] || m.origem,
         forma_label: FORMAS_PAGAMENTO_LABEL[m.forma_pagamento] || m.forma_pagamento || '-'
     }));
 
-    if (!tabelaMovimentos) {
-        tabelaMovimentos = new Tabulator('#tabela-movimentos', {
-            data: dados,
-            layout: 'fitColumns',
-            height: '360px',
-            placeholder: 'Nenhum movimento lançado neste dia.',
-            columns: [
-                { title: 'Conta', field: 'nome_conta', widthGrow: 1.2 },
-                {
-                    title: 'Centro de Custo', field: 'nome_centro_custo', widthGrow: 1.2,
-                    formatter: cell => {
-                        const m = cell.getRow().getData();
-                        const base = escapeHtml(cell.getValue() || '-');
-                        if (!m.veiculo_placa) return base;
-                        return `${base} <span class="text-gray-400">· ${escapeHtml(m.veiculo_placa)}</span>`;
-                    }
-                },
-                { title: 'Grupo / Tipo', field: 'classificacao', widthGrow: 1.2, formatter: cell => escapeHtml(cell.getValue()) },
-                { title: 'Tipo', field: 'tipo', width: 80, formatter: cell => cell.getValue() === 'entrada' ? '<span class="text-green-600 font-bold">Entrada</span>' : '<span class="text-red-600 font-bold">Saída</span>' },
-                { title: 'Valor', field: 'valor', width: 110, hozAlign: 'right', formatter: cell => formatarMoeda(cell.getValue()) },
-                { title: 'Descrição', field: 'descricao', widthGrow: 2 },
-                { title: 'Forma', field: 'forma_label', width: 90 },
-                { title: 'Origem', field: 'origem_label', width: 110 },
-                { title: 'Usuário', field: 'nome_usuario_lancamento', width: 110 },
-                {
-                    title: 'Status', field: 'status', width: 110,
-                    formatter: cell => {
-                        const m = cell.getRow().getData();
-                        if (m.id_movimento_estornado) return `<span class="text-gray-400 italic">Estorno de #${Number(m.id_movimento_estornado)}</span>`;
-                        if (m.status === 'estornado') return '<span class="text-gray-400 italic">Estornado</span>';
-                        return '<button class="btn-estornar text-red-600 hover:underline text-[11px] font-bold">Estornar</button>';
-                    },
-                    cellClick: (e, cell) => {
-                        const m = cell.getRow().getData();
-                        if (!movimentoEfetivo(m)) return;
-                        estornarMovimento(m.id);
-                    }
-                }
-            ]
-        });
-    } else {
-        tabelaMovimentos.setData(dados);
+    if (tabelaMovimentos) {
+        tabelaMovimentos.setData(dados).then(aplicarFiltrosMovimentos);
+        return;
     }
+
+    tabelaMovimentos = new Tabulator('#tabela-movimentos', {
+        data: dados,
+        layout: 'fitColumns',
+        height: '100%',
+        placeholder: 'Nenhum movimento lançado neste dia.',
+        rowFormatter: row => {
+            if (!movimentoEfetivo(row.getData())) row.getElement().style.opacity = '0.45';
+        },
+        columns: [
+            {
+                title: 'Tipo', field: 'tipo', width: 75,
+                formatter: cell => cell.getValue() === 'entrada'
+                    ? '<span class="text-green-600 font-bold">Entrada</span>' : '<span class="text-red-600 font-bold">Saída</span>'
+            },
+            {
+                title: 'Valor', field: 'valor', width: 115, hozAlign: 'right',
+                formatter: cell => {
+                    const m = cell.getRow().getData();
+                    return `<span class="font-bold ${m.tipo === 'entrada' ? 'text-green-700' : 'text-red-700'}">${formatarMoeda(cell.getValue())}</span>`;
+                }
+            },
+            { title: 'Descrição', field: 'descricao', widthGrow: 2.2, minWidth: 180, formatter: cell => escapeHtml(cell.getValue()) },
+            { title: 'Conta', field: 'nome_conta', widthGrow: 1.2, minWidth: 120, formatter: cell => escapeHtml(cell.getValue()) },
+            {
+                title: 'Centro de Custo', field: 'nome_centro_custo', widthGrow: 1.1, minWidth: 110,
+                formatter: cell => {
+                    const m = cell.getRow().getData();
+                    const base = escapeHtml(cell.getValue() || '-');
+                    return m.veiculo_placa ? `${base} <span class="text-gray-400">· ${escapeHtml(m.veiculo_placa)}</span>` : base;
+                }
+            },
+            { title: 'Grupo / Tipo', field: 'classificacao', widthGrow: 1.3, minWidth: 120, formatter: cell => escapeHtml(cell.getValue()) },
+            { title: 'Favorecido', field: 'favorecido', widthGrow: 1.2, minWidth: 100, formatter: cell => escapeHtml(cell.getValue() || '-') },
+            { title: 'NF', field: 'numero_nf', width: 80, formatter: cell => escapeHtml(cell.getValue() || '-') },
+            { title: 'Forma / Origem', field: 'forma_label', width: 115 },
+            { title: 'Lançado por', field: 'origem_label', width: 120 },
+            { title: 'Usuário', field: 'nome_usuario_lancamento', width: 110, formatter: cell => escapeHtml(cell.getValue()) },
+            {
+                title: 'Status', field: 'status', width: 105, headerSort: false,
+                formatter: cell => {
+                    const m = cell.getRow().getData();
+                    if (m.id_movimento_estornado) return `<span class="text-gray-500 italic">Estorno de #${Number(m.id_movimento_estornado)}</span>`;
+                    if (m.status === 'estornado') return '<span class="text-gray-500 italic">Estornado</span>';
+                    return '<button class="text-red-600 hover:underline text-[11px] font-bold">Estornar</button>';
+                },
+                cellClick: (e, cell) => {
+                    const m = cell.getRow().getData();
+                    if (movimentoEfetivo(m)) estornarMovimento(m.id);
+                }
+            }
+        ]
+    });
+    tabelaMovimentos.on('tableBuilt', aplicarFiltrosMovimentos);
+}
+
+const ORIGEM_LABEL = { manual: 'Manual', despesa_caixa: 'Despesa da loja', erp_apagar: 'Contas a Pagar' };
+
+function aplicarFiltrosMovimentos() {
+    document.querySelectorAll('.filtro-tipo').forEach(btn => {
+        const ativo = btn.dataset.tipo === filtroTipoMovimentos;
+        btn.classList.toggle('bg-gray-700', ativo);
+        btn.classList.toggle('text-white', ativo);
+        btn.classList.toggle('bg-white', !ativo);
+        btn.classList.toggle('text-gray-600', !ativo);
+    });
+    if (!tabelaMovimentos) return;
+    const termo = normalizarNome(document.getElementById('busca-movimentos').value);
+    tabelaMovimentos.setFilter(m => {
+        if (filtroTipoMovimentos && m.tipo !== filtroTipoMovimentos) return false;
+        if (!termo) return true;
+        return [m.descricao, m.favorecido, m.numero_nf, m.nome_conta, m.nome_centro_custo, m.classificacao]
+            .some(v => normalizarNome(v).includes(termo));
+    });
+}
+
+function mudarDia(dias) {
+    const input = document.getElementById('filtro-data');
+    const [ano, mes, dia] = input.value.split('-').map(Number);
+    const d = new Date(ano, mes - 1, dia + dias);
+    input.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    carregarDia(input.value);
 }
 
 async function estornarMovimento(id) {
@@ -358,9 +395,20 @@ function setupModais() {
     document.getElementById('btn-cancelar-lancamento').addEventListener('click', fecharModalLancamento);
     document.getElementById('btn-salvar-lancamento').addEventListener('click', salvarLancamento);
 
-    document.getElementById('btn-fechar-modal-confirmar').addEventListener('click', fecharModalConfirmarDespesa);
-    document.getElementById('btn-cancelar-confirmar').addEventListener('click', fecharModalConfirmarDespesa);
-    document.getElementById('btn-salvar-confirmar').addEventListener('click', salvarConfirmarDespesa);
+    document.getElementById('btn-despesas-lojas').addEventListener('click', () => abrirModalLojas('dia'));
+    document.getElementById('kpi-pend-lojas').addEventListener('click', () => abrirModalLojas('pendentes'));
+    document.getElementById('btn-fechar-modal-lojas').addEventListener('click', () => fecharModal('modal-lojas'));
+    document.getElementById('btn-cancelar-lojas').addEventListener('click', () => fecharModal('modal-lojas'));
+    document.querySelectorAll('.aba-lojas').forEach(btn => btn.addEventListener('click', () => carregarDespesasLojas(btn.dataset.modo)));
+    document.getElementById('lojas-data').addEventListener('change', () => carregarDespesasLojas('dia'));
+    document.getElementById('lojas-filtro-loja').addEventListener('change', e => {
+        if (e.target.value) tabelaLojas.setFilter('loja', '=', e.target.value);
+        else tabelaLojas.clearFilter();
+    });
+    document.getElementById('lojas-grupo-lote').addEventListener('change', e => preencherSelectTipos(document.getElementById('lojas-tipo-lote'), e.target.value));
+    document.getElementById('btn-lojas-aplicar-conta').addEventListener('click', aplicarContaLojas);
+    document.getElementById('btn-lojas-aplicar-grupo').addEventListener('click', aplicarGrupoLojas);
+    document.getElementById('btn-conferir-lojas').addEventListener('click', conferirDespesasLojas);
 
     document.getElementById('btn-exportar-pdf').addEventListener('click', exportarPDF);
     document.getElementById('btn-whatsapp').addEventListener('click', compartilharWhatsApp);
@@ -373,7 +421,7 @@ function setupModais() {
     document.getElementById('btn-add-tipo').addEventListener('click', adicionarTipo);
 
     document.getElementById('btn-importar-erp').addEventListener('click', () => abrirModalImportar('baixados'));
-    document.getElementById('btn-ver-erp-baixados').addEventListener('click', () => abrirModalImportar('baixados'));
+    document.getElementById('kpi-pend-erp').addEventListener('click', () => abrirModalImportar('baixados'));
     document.getElementById('btn-fechar-modal-importar').addEventListener('click', () => fecharModal('modal-importar'));
     document.getElementById('btn-cancelar-importar').addEventListener('click', () => fecharModal('modal-importar'));
     document.querySelectorAll('.aba-importar').forEach(btn => {
@@ -491,48 +539,280 @@ async function salvarLancamento() {
     }
 }
 
-// dsp_filial guarda o nome da Unidade (ex.: "Santa Cruz"), o mesmo nome_filial que vem
-// do JOIN dos centros de custo — então dá para já sugerir o centro de custo da loja.
-// A loja classificou a despesa pela lista dela; aqui vale a lista da tesouraria.
-// Quando o nome bate (ex.: "Pessoal" / "Comissão"), já vem sugerido.
-function abrirModalConfirmarDespesa({ id, descricao, filial, grupo, tipo }) {
-    document.getElementById('confirmar-despesa-id').value = id;
-    document.getElementById('confirmar-despesa-descricao').textContent = descricao;
-    document.getElementById('confirmar-conta').value = '';
-    const centroDaLoja = centrosCustoCache.find(c => c.nome_filial && c.nome_filial === filial);
-    document.getElementById('confirmar-centro-custo').value = centroDaLoja ? String(centroDaLoja.id) : '';
+// --- DESPESAS DAS LOJAS (o que as lojas lançaram em Lançamentos) ---
+// Cada despesa conferida vira uma saída da tesouraria no dia da tela e passa a sair no relatório.
 
-    const grupoSugerido = classificacaoCache.find(g => normalizarNome(g.nome) === normalizarNome(grupo));
-    const selectGrupo = document.getElementById('confirmar-grupo-despesa');
-    selectGrupo.value = grupoSugerido ? grupoSugerido.nome : '';
-    const selectTipo = document.getElementById('confirmar-tipo-despesa');
-    preencherSelectTipos(selectTipo, selectGrupo.value);
-    const tipoSugerido = grupoSugerido && grupoSugerido.tipos.find(t => normalizarNome(t.nome) === normalizarNome(tipo));
-    selectTipo.value = tipoSugerido ? tipoSugerido.nome : '';
+let modoLojas = 'dia';
+let tabelaLojas = null;
+let tabelaLojasPronta = null;
 
-    document.getElementById('confirmar-classificacao-loja').textContent =
-        grupo || tipo ? `Na loja foi lançada como: ${[grupo, tipo].filter(Boolean).join(' / ')}` : '';
-    abrirModal('modal-confirmar-despesa');
+const SITUACAO_LOJA = {
+    pendente: '<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold">A conferir</span>',
+    conferida: '<span class="px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-bold">Conferida</span>',
+    cancelada: '<span class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-bold">Cancelada</span>',
+    cancelada_conferida: '<span class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-bold" title="A loja cancelou depois da conferência: clique em Desfazer">Cancelada!</span>'
+};
+
+function abrirModalLojas(modo = 'dia') {
+    const dataRef = document.getElementById('filtro-data').value;
+    document.getElementById('lojas-data').value = dataRef;
+    document.getElementById('lojas-dia-movimento').textContent = formatarDataBR(dataRef);
+    preencherSelectContas(document.getElementById('lojas-conta-lote'));
+    preencherSelectGrupos(document.getElementById('lojas-grupo-lote'));
+    preencherSelectTipos(document.getElementById('lojas-tipo-lote'), '');
+    abrirModal('modal-lojas');
+    requestAnimationFrame(() => carregarDespesasLojas(modo));
 }
-function fecharModalConfirmarDespesa() { fecharModal('modal-confirmar-despesa'); }
 
-async function salvarConfirmarDespesa() {
-    const id = document.getElementById('confirmar-despesa-id').value;
-    const payload = {
-        id_conta: Number(document.getElementById('confirmar-conta').value),
-        id_centro_custo: document.getElementById('confirmar-centro-custo').value || null,
-        grupo_despesa: document.getElementById('confirmar-grupo-despesa').value || null,
-        tipo_despesa: document.getElementById('confirmar-tipo-despesa').value || null
-    };
-    if (!payload.id_conta) return dialogoAviso('Selecione a conta que pagou.');
-    if (!payload.grupo_despesa) return dialogoAviso('Selecione o grupo de despesa.');
+async function carregarDespesasLojas(modo) {
+    modoLojas = modo;
+    document.querySelectorAll('.aba-lojas').forEach(btn => {
+        const ativa = btn.dataset.modo === modo;
+        btn.classList.toggle('bg-amber-500', ativa);
+        btn.classList.toggle('text-white', ativa);
+        btn.classList.toggle('border-amber-500', ativa);
+        btn.classList.toggle('bg-white', !ativa);
+        btn.classList.toggle('text-gray-600', !ativa);
+    });
+    document.getElementById('lojas-data').classList.toggle('hidden', modo !== 'dia');
 
+    await montarTabelaLojas();
+    tabelaLojas.setData([]);
+    tabelaLojas.alert('Buscando despesas das lojas...');
+    const data = modo === 'dia' ? document.getElementById('lojas-data').value : document.getElementById('filtro-data').value;
     try {
-        await apiFetch(`/despesa-caixa/${id}/confirmar`, { method: 'POST', body: JSON.stringify(payload) });
-        fecharModalConfirmarDespesa();
+        const despesas = await apiFetch(`/despesa-caixa?modo=${modo}&data=${data}`);
+        const linhas = despesas.map(d => {
+            // A loja classifica pela lista dela; quando o nome bate com a lista da tesouraria, já vem sugerido.
+            const grupo = classificacaoCache.find(g => normalizarNome(g.nome) === normalizarNome(d.grupo_loja));
+            const tipo = grupo && grupo.tipos.find(t => normalizarNome(t.nome) === normalizarNome(d.tipo_loja));
+            return {
+                ...d,
+                marcado: false,
+                id_conta: d.id_conta_sugerida,
+                id_centro_custo: d.id_centro_sugerido || '',
+                grupo: grupo ? grupo.nome : '',
+                tipo: tipo ? tipo.nome : ''
+            };
+        });
+        const lojas = [...new Set(linhas.map(l => l.loja).filter(Boolean))].sort();
+        const filtro = document.getElementById('lojas-filtro-loja');
+        filtro.innerHTML = '<option value="">Todas as lojas</option>' + lojas.map(l => `<option>${escapeHtml(l)}</option>`).join('');
+        tabelaLojas.clearAlert();
+        tabelaLojas.setData(linhas);
+        tabelaLojas.clearFilter();
+    } catch (err) {
+        tabelaLojas.clearAlert();
+        dialogoAviso('Erro ao buscar despesas das lojas: ' + err.message, 'erro');
+    }
+    atualizarResumoLojas();
+}
+
+function montarTabelaLojas() {
+    if (tabelaLojasPronta) return tabelaLojasPronta;
+    const pendente = cell => cell.getRow().getData().situacao === 'pendente';
+    const opcoesConta = () => contasCache.map(c => ({ label: c.nome, value: c.id }));
+    const opcoesCentro = () => [{ label: '-- Nenhum --', value: '' }, ...centrosCustoCache.map(c => ({ label: c.nome, value: c.id }))];
+    const opcoesGrupo = () => classificacaoCache.map(g => ({ label: g.nome, value: g.nome }));
+    const opcoesTipo = cell => {
+        const grupo = classificacaoCache.find(g => g.nome === cell.getRow().getData().grupo);
+        return [{ label: '-- Nenhum --', value: '' }, ...(grupo ? grupo.tipos.map(t => ({ label: t.nome, value: t.nome })) : [])];
+    };
+    const escolher = '<span class="text-red-500 font-bold">Escolher ▾</span>';
+
+    tabelaLojas = new Tabulator('#tabela-lojas', {
+        data: [],
+        layout: 'fitColumns',
+        height: '100%',
+        index: 'id',
+        placeholder: 'Nenhuma despesa de loja aqui.',
+        columns: [
+            {
+                title: '', field: 'marcado', width: 40, hozAlign: 'center', headerSort: false,
+                titleFormatter: () => '<input type="checkbox" id="lojas-marcar-todos" title="Marcar todas as que faltam conferir">',
+                formatter: cell => pendente(cell) ? `<input type="checkbox" ${cell.getValue() ? 'checked' : ''}>` : '',
+                cellClick: (e, cell) => {
+                    if (!pendente(cell)) return;
+                    cell.getRow().update({ marcado: !cell.getValue() });
+                    atualizarResumoLojas();
+                },
+                headerClick: () => {
+                    const linhas = tabelaLojas.getRows('active').filter(l => l.getData().situacao === 'pendente');
+                    const marcar = !linhas.every(l => l.getData().marcado);
+                    linhas.forEach(l => l.update({ marcado: marcar }));
+                    atualizarResumoLojas();
+                }
+            },
+            { title: 'Data', field: 'data_despesa', width: 85, formatter: cell => formatarDataBR(cell.getValue()) },
+            { title: 'Loja', field: 'loja', width: 110, formatter: cell => escapeHtml(cell.getValue()) },
+            {
+                title: 'Descrição', field: 'descricao', widthGrow: 2, minWidth: 130,
+                formatter: cell => {
+                    const d = cell.getRow().getData();
+                    return `<span title="Lançado por ${escapeHtml(d.lancado_por || '-')} em ${formatarDataBR(d.data_lancamento)}">${escapeHtml(cell.getValue())}</span>`;
+                }
+            },
+            {
+                title: 'Na loja', field: 'grupo_loja', widthGrow: 1.2, minWidth: 120,
+                formatter: cell => {
+                    const d = cell.getRow().getData();
+                    return `<span class="text-gray-500">${escapeHtml([d.grupo_loja, d.tipo_loja].filter(Boolean).join(' / ') || '-')}</span>`;
+                }
+            },
+            { title: 'Valor', field: 'valor', width: 105, hozAlign: 'right', formatter: cell => `<b>${formatarMoeda(cell.getValue())}</b>` },
+            { title: 'Situação', field: 'situacao', width: 115, formatter: cell => SITUACAO_LOJA[cell.getValue()] || '' },
+            {
+                title: 'Conta', field: 'id_conta', widthGrow: 1.3, minWidth: 130, editor: 'list', editable: pendente,
+                editorParams: () => ({ values: opcoesConta() }),
+                formatter: cell => {
+                    const d = cell.getRow().getData();
+                    if (d.situacao !== 'pendente') return escapeHtml(d.mov_conta || '-');
+                    const conta = contasCache.find(c => c.id === cell.getValue());
+                    return conta ? escapeHtml(conta.nome) : escolher;
+                }
+            },
+            {
+                title: 'Centro', field: 'id_centro_custo', width: 110, editor: 'list', editable: pendente,
+                editorParams: () => ({ values: opcoesCentro() }),
+                formatter: cell => {
+                    if (!pendente(cell)) return '';
+                    const centro = centrosCustoCache.find(c => c.id === cell.getValue());
+                    return centro ? escapeHtml(centro.nome) : '<span class="text-gray-400">-- ▾</span>';
+                }
+            },
+            {
+                title: 'Grupo', field: 'grupo', width: 110, editor: 'list', editable: pendente,
+                editorParams: () => ({ values: opcoesGrupo() }),
+                formatter: cell => {
+                    const d = cell.getRow().getData();
+                    if (d.situacao !== 'pendente') return escapeHtml(d.mov_grupo || '-');
+                    return cell.getValue() ? escapeHtml(cell.getValue()) : escolher;
+                }
+            },
+            {
+                title: 'Tipo', field: 'tipo', width: 105, editor: 'list', editable: pendente,
+                editorParams: cell => ({ values: opcoesTipo(cell) }),
+                formatter: cell => {
+                    const d = cell.getRow().getData();
+                    if (d.situacao !== 'pendente') return escapeHtml(d.mov_tipo || '-');
+                    return escapeHtml(cell.getValue() || '-');
+                }
+            },
+            {
+                title: '', field: 'id_movimento', width: 70, headerSort: false,
+                formatter: cell => cell.getValue() ? '<button class="text-red-600 hover:underline text-[11px] font-bold">Desfazer</button>' : '',
+                cellClick: (e, cell) => { if (cell.getValue()) desfazerConferencia(cell.getRow().getData()); }
+            }
+        ]
+    });
+    tabelaLojas.on('cellEdited', cell => {
+        // Trocou o grupo: o tipo escolhido antes pode não existir no grupo novo.
+        if (cell.getField() === 'grupo') {
+            const grupo = classificacaoCache.find(g => g.nome === cell.getValue());
+            const d = cell.getRow().getData();
+            if (!grupo || !grupo.tipos.some(t => t.nome === d.tipo)) cell.getRow().update({ tipo: '' });
+        }
+        atualizarResumoLojas();
+    });
+    tabelaLojas.on('dataFiltered', () => setTimeout(atualizarResumoLojas));
+    tabelaLojasPronta = new Promise(resolve => tabelaLojas.on('tableBuilt', resolve));
+    return tabelaLojasPronta;
+}
+
+function atualizarResumoLojas() {
+    if (!tabelaLojas) return;
+    const visiveis = tabelaLojas.getRows('active').map(l => l.getData());
+    const por = situacao => visiveis.filter(d => d.situacao === situacao);
+    const bloco = (rotulo, lista, cor) => `<span class="${cor}"><b>${lista.length}</b> ${rotulo} · ${formatarMoeda(somar(lista))}</span>`;
+    let html = bloco('a conferir', por('pendente'), 'text-amber-700') + bloco('conferida(s)', por('conferida'), 'text-green-700');
+    const canceladas = por('cancelada').length;
+    if (canceladas) html += `<span class="text-gray-500"><b>${canceladas}</b> cancelada(s) na loja</span>`;
+    const alerta = por('cancelada_conferida').length;
+    if (alerta) html += `<span class="text-red-600 font-bold">${alerta} cancelada(s) após conferir — desfaça</span>`;
+    document.getElementById('lojas-resumo').innerHTML = html;
+
+    const marcados = tabelaLojas.getData().filter(d => d.marcado);
+    document.getElementById('lojas-resumo-marcados').textContent = `${marcados.length} marcada(s) · ${formatarMoeda(somar(marcados))}`;
+    const pendentesVisiveis = tabelaLojas.getRows('active').filter(l => l.getData().situacao === 'pendente');
+    const todos = document.getElementById('lojas-marcar-todos');
+    if (todos) todos.checked = pendentesVisiveis.length > 0 && pendentesVisiveis.every(l => l.getData().marcado);
+}
+
+function linhasLojasMarcadas() {
+    return tabelaLojas ? tabelaLojas.getRows().filter(l => l.getData().marcado) : [];
+}
+
+function aplicarContaLojas() {
+    const idConta = Number(document.getElementById('lojas-conta-lote').value);
+    if (!idConta) return dialogoAviso('Escolha a conta.');
+    const marcadas = linhasLojasMarcadas();
+    if (!marcadas.length) return dialogoAviso('Marque as despesas que saíram dessa conta.');
+    marcadas.forEach(l => l.update({ id_conta: idConta }));
+}
+
+function aplicarGrupoLojas() {
+    const grupo = document.getElementById('lojas-grupo-lote').value;
+    if (!grupo) return dialogoAviso('Escolha o grupo.');
+    const marcadas = linhasLojasMarcadas();
+    if (!marcadas.length) return dialogoAviso('Marque as despesas que vão para esse grupo.');
+    const tipo = document.getElementById('lojas-tipo-lote').value;
+    marcadas.forEach(l => l.update({ grupo, tipo }));
+}
+
+async function conferirDespesasLojas() {
+    const marcadas = linhasLojasMarcadas().map(l => l.getData());
+    if (!marcadas.length) return dialogoAviso('Marque ao menos uma despesa.');
+    const semConta = marcadas.filter(d => !d.id_conta).length;
+    const semGrupo = marcadas.filter(d => !d.grupo).length;
+    if (semConta || semGrupo) {
+        return dialogoAviso(`Falta escolher ${semConta ? `a conta de ${semConta}` : ''}${semConta && semGrupo ? ' e ' : ''}${semGrupo ? `o grupo de ${semGrupo}` : ''} despesa(s) marcada(s) (células em vermelho).`);
+    }
+
+    const dataRef = document.getElementById('filtro-data').value;
+    const ok = await dialogoConfirmar(
+        `${marcadas.length} despesa(s), total ${formatarMoeda(somar(marcadas))}, entram como saída no dia ${formatarDataBR(dataRef)}.`,
+        { titulo: 'Conferir despesas das lojas?', textoOk: 'Conferir' }
+    );
+    if (!ok) return;
+
+    const botao = document.getElementById('btn-conferir-lojas');
+    botao.disabled = true;
+    try {
+        const resultado = await apiFetch('/despesa-caixa/conferir', {
+            method: 'POST',
+            body: JSON.stringify({
+                data_movimento: dataRef,
+                itens: marcadas.map(d => ({
+                    id: d.id, id_conta: d.id_conta, id_centro_custo: d.id_centro_custo || null,
+                    grupo_despesa: d.grupo, tipo_despesa: d.tipo || null
+                }))
+            })
+        });
+        let msg = resultado.message;
+        if (resultado.ja_conferidas.length) msg += `\n${resultado.ja_conferidas.length} já estavam conferidas e foram ignoradas.`;
+        dialogoAviso(msg, 'sucesso', 'Conferência registrada');
+        await carregarDespesasLojas(modoLojas);
+        await carregarDia(dataRef);
+    } catch (err) {
+        dialogoAviso('Erro ao conferir: ' + err.message, 'erro');
+    } finally {
+        botao.disabled = false;
+    }
+}
+
+// Desfazer = estornar o lançamento da conferência; a despesa volta a ficar "a conferir".
+async function desfazerConferencia(d) {
+    const ok = await dialogoConfirmar(
+        `"${d.descricao}" (${formatarMoeda(d.valor)}) sai da tesouraria${d.mov_data ? ` do dia ${formatarDataBR(d.mov_data)}` : ''} por estorno e volta a ficar a conferir.`,
+        { titulo: 'Desfazer conferência?', textoOk: 'Desfazer', perigo: true }
+    );
+    if (!ok) return;
+    try {
+        await apiFetch(`/movimentos/${d.id_movimento}/estornar`, { method: 'POST' });
+        await carregarDespesasLojas(modoLojas);
         await carregarDia(document.getElementById('filtro-data').value);
     } catch (err) {
-        dialogoAviso('Erro ao confirmar despesa: ' + err.message, 'erro');
+        dialogoAviso('Erro ao desfazer: ' + err.message, 'erro');
     }
 }
 
@@ -786,7 +1066,6 @@ async function renderListaGerenciarContas() {
 
         contasCache = todasContas.filter(c => c.ativo);
         preencherSelectContas(document.getElementById('lanc-conta'));
-        preencherSelectContas(document.getElementById('confirmar-conta'));
     } catch (err) {
         container.innerHTML = `<p class="text-xs text-red-500">Erro ao carregar contas: ${escapeHtml(err.message)}</p>`;
     }
@@ -814,7 +1093,6 @@ async function renderListaGerenciarCentros() {
 
         centrosCustoCache = todosCentros.filter(c => c.ativo);
         preencherSelectCentros(document.getElementById('lanc-centro-custo'));
-        preencherSelectCentros(document.getElementById('confirmar-centro-custo'));
     } catch (err) {
         container.innerHTML = `<p class="text-xs text-red-500">Erro ao carregar centros de custo: ${escapeHtml(err.message)}</p>`;
     }
@@ -944,8 +1222,7 @@ async function renderListaGerenciarGrupos() {
             ativos.map(g => `<option value="${g.id}">${escapeHtml(g.nome)}</option>`).join('');
         classificacaoCache = ativos.map(g => ({ ...g, tipos: g.tipos.filter(t => t.ativo) }));
         preencherSelectGrupos(document.getElementById('lanc-grupo-despesa'));
-        preencherSelectGrupos(document.getElementById('confirmar-grupo-despesa'));
-    } catch (err) {
+        } catch (err) {
         container.innerHTML = `<p class="text-xs text-red-500">Erro ao carregar grupos: ${escapeHtml(err.message)}</p>`;
     }
 }
@@ -1020,83 +1297,243 @@ function movimentoEfetivo(m) {
     return m.status === 'ativo' && !m.id_movimento_estornado;
 }
 
-function montarResumoPorConta() {
-    return contasCache
-        .map(conta => {
-            const movsConta = movimentosDoDia.filter(m => m.id_conta === conta.id && movimentoEfetivo(m));
-            const saldo = movsConta.reduce((acc, m) => acc + (m.tipo === 'entrada' ? Number(m.valor) : -Number(m.valor)), 0);
-            return { conta: conta.nome, saldo, temMovimento: movsConta.length > 0 };
-        })
-        .filter(r => r.temMovimento);
+// Totais do dia usados no PDF e no WhatsApp (estornos não entram).
+function resumoDoDia() {
+    const efetivos = movimentosDoDia.filter(movimentoEfetivo);
+    const entradas = efetivos.filter(m => m.tipo === 'entrada');
+    const saidas = efetivos.filter(m => m.tipo === 'saida');
+
+    const porConta = contasCache.map(conta => {
+        const doConta = efetivos.filter(m => m.id_conta === conta.id);
+        const e = somar(doConta.filter(m => m.tipo === 'entrada'));
+        const s = somar(doConta.filter(m => m.tipo === 'saida'));
+        return { nome: conta.nome, entradas: e, saidas: s, liquido: e - s, qtd: doConta.length };
+    }).filter(c => c.qtd > 0);
+
+    const agruparSaidas = chave => {
+        const mapa = new Map();
+        saidas.forEach(m => {
+            const nome = chave(m) || 'Sem classificação';
+            mapa.set(nome, (mapa.get(nome) || 0) + Number(m.valor));
+        });
+        return [...mapa.entries()].map(([nome, valor]) => ({ nome, valor })).sort((a, b) => b.valor - a.valor);
+    };
+
+    return {
+        efetivos, entradas, saidas,
+        totalEntradas: somar(entradas),
+        totalSaidas: somar(saidas),
+        liquido: somar(entradas) - somar(saidas),
+        porConta,
+        porCentro: agruparSaidas(m => m.nome_centro_custo),
+        porGrupo: agruparSaidas(m => m.grupo_despesa)
+    };
 }
 
+function dataPorExtenso(iso) {
+    const [ano, mes, dia] = iso.split('-').map(Number);
+    const texto = new Date(ano, mes - 1, dia).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+    return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+// A4 paisagem (297 x 210 mm): cabeçalho, 4 indicadores, 3 resumos lado a lado e o detalhe.
 function gerarPDF() {
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const dataRef = document.getElementById('filtro-data').value;
-    const [ano, mes, dia] = dataRef.split('-');
+    const r = resumoDoDia();
+    const largura = doc.internal.pageSize.getWidth();
+    const altura = doc.internal.pageSize.getHeight();
+    const margem = 12;
+    const util = largura - margem * 2;
+    const COR = { indigo: [49, 46, 129], verde: [21, 128, 61], vermelho: [185, 28, 28], cinza: [71, 85, 105], claro: [241, 245, 249] };
 
-    doc.setFontSize(14);
-    doc.text(`Boletim de Tesouraria — ${dia}/${mes}/${ano}`, 14, 15);
+    // Cabeçalho
+    doc.setFillColor(...COR.indigo);
+    doc.rect(0, 0, largura, 22, 'F');
+    doc.setTextColor(255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text('BOLETIM DE TESOURARIA', margem, 10);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(dataPorExtenso(dataRef), margem, 16.5);
+    const agora = new Date();
+    doc.setFontSize(8);
+    doc.text(`Gerado em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`, largura - margem, 10, { align: 'right' });
+    doc.text(`por ${getUserName()}`, largura - margem, 15, { align: 'right' });
 
-    const resumo = montarResumoPorConta();
-    doc.autoTable({
-        head: [['Conta', 'Total do Dia']],
-        body: resumo.map(r => [r.conta, formatarMoeda(r.saldo)]),
-        startY: 22,
+    // Indicadores
+    const indicadores = [
+        { rotulo: 'TOTAL DE ENTRADAS', valor: formatarMoeda(r.totalEntradas), detalhe: `${r.entradas.length} lançamento(s)`, cor: COR.verde },
+        { rotulo: 'TOTAL DE SAÍDAS', valor: formatarMoeda(r.totalSaidas), detalhe: `${r.saidas.length} lançamento(s)`, cor: COR.vermelho },
+        { rotulo: 'LÍQUIDO DO DIA', valor: formatarMoeda(r.liquido), detalhe: 'entradas - saídas', cor: r.liquido < 0 ? COR.vermelho : COR.indigo },
+        { rotulo: 'CONTAS MOVIMENTADAS', valor: String(r.porConta.length), detalhe: `${r.efetivos.length} lançamento(s) no total`, cor: COR.cinza }
+    ];
+    const espaco = 5;
+    const larguraKpi = (util - espaco * 3) / 4;
+    indicadores.forEach((k, i) => {
+        const x = margem + i * (larguraKpi + espaco);
+        doc.setFillColor(...COR.claro);
+        doc.rect(x, 27, larguraKpi, 18, 'F');
+        doc.setFillColor(...k.cor);
+        doc.rect(x, 27, 1.5, 18, 'F');
+        doc.setTextColor(100);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.text(k.rotulo, x + 5, 32);
+        doc.setTextColor(...k.cor);
+        doc.setFontSize(14);
+        doc.text(k.valor, x + 5, 39);
+        doc.setTextColor(130);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.text(k.detalhe, x + 5, 43);
+    });
+
+    // Três resumos lado a lado: "Por conta" tem 3 colunas de valor e fica com 40% da largura.
+    const larguraConta = (util - espaco * 2) * 0.4;
+    const larguraResumo = (util - espaco * 2) * 0.3;
+    const inicioResumos = 51;
+    const estiloResumo = {
         theme: 'grid',
-        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-        styles: { fontSize: 9, cellPadding: 2 }
+        startY: inicioResumos,
+        tableWidth: larguraResumo,
+        styles: { fontSize: 7.5, cellPadding: 1.4, lineColor: [226, 232, 240], lineWidth: 0.1 },
+        headStyles: { fillColor: COR.cinza, textColor: 255, fontStyle: 'bold' },
+        footStyles: { fillColor: [226, 232, 240], textColor: 30, fontStyle: 'bold' }
+    };
+    const percentual = (valor, total) => total ? `${(valor / total * 100).toFixed(1).replace('.', ',')}%` : '-';
+    let fimResumos = inicioResumos;
+
+    doc.autoTable({
+        ...estiloResumo,
+        tableWidth: larguraConta,
+        margin: { left: margem },
+        head: [['Por conta', 'Entradas', 'Saídas', 'Líquido']],
+        body: r.porConta.length ? r.porConta.map(c => [c.nome, formatarMoeda(c.entradas), formatarMoeda(c.saidas), formatarMoeda(c.liquido)]) : [['Sem movimento', '', '', '']],
+        foot: [['Total', formatarMoeda(r.totalEntradas), formatarMoeda(r.totalSaidas), formatarMoeda(r.liquido)]],
+        columnStyles: { 1: { halign: 'right', cellWidth: 22 }, 2: { halign: 'right', cellWidth: 22 }, 3: { halign: 'right', cellWidth: 22 } }
+    });
+    fimResumos = Math.max(fimResumos, doc.lastAutoTable.finalY);
+
+    [[r.porCentro, 'Saídas por centro de custo'], [r.porGrupo, 'Saídas por grupo de despesa']].forEach(([linhas, titulo], i) => {
+        doc.autoTable({
+            ...estiloResumo,
+            margin: { left: margem + larguraConta + espaco + i * (larguraResumo + espaco) },
+            head: [[titulo, 'Valor', '%']],
+            body: linhas.length ? linhas.map(l => [l.nome, formatarMoeda(l.valor), percentual(l.valor, r.totalSaidas)]) : [['Sem saídas', '', '']],
+            foot: [['Total', formatarMoeda(r.totalSaidas), r.totalSaidas ? '100%' : '-']],
+            columnStyles: { 1: { halign: 'right', cellWidth: 22 }, 2: { halign: 'right', cellWidth: 13 } }
+        });
+        fimResumos = Math.max(fimResumos, doc.lastAutoTable.finalY);
     });
 
-    const finalY = doc.autoTable.previous.finalY;
-    const ativos = movimentosDoDia.filter(movimentoEfetivo);
+    // Detalhe
+    doc.setTextColor(...COR.indigo);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('MOVIMENTOS DO DIA', margem, fimResumos + 8);
+
+    const ordenados = [...r.entradas, ...r.saidas];
     doc.autoTable({
-        head: [['Conta', 'Centro de Custo', 'Grupo / Tipo', 'Tipo', 'Descrição', 'Valor']],
-        body: ativos.map(m => [
-            m.nome_conta, m.nome_centro_custo || '-', textoClassificacao(m), m.tipo === 'entrada' ? 'Entrada' : 'Saída',
-            m.descricao, formatarMoeda(m.valor)
-        ]),
-        startY: finalY + 10,
+        startY: fimResumos + 10,
+        margin: { left: margem, right: margem, top: 16, bottom: 14 },
         theme: 'striped',
-        headStyles: { fillColor: [71, 85, 105], textColor: 255 },
-        styles: { fontSize: 8, cellPadding: 2 },
-        columnStyles: { 5: { halign: 'right' } }
+        head: [['Tipo', 'Conta', 'Centro de custo', 'Grupo / Tipo', 'Descrição', 'Favorecido', 'NF', 'Forma / Origem', 'Lançado por', 'Entrada', 'Saída']],
+        body: ordenados.map(m => [
+            m.tipo === 'entrada' ? 'Entrada' : 'Saída',
+            m.nome_conta || '-',
+            m.nome_centro_custo || '-',
+            textoClassificacao(m),
+            m.descricao || '-',
+            m.favorecido || '-',
+            m.numero_nf || '-',
+            FORMAS_PAGAMENTO_LABEL[m.forma_pagamento] || m.forma_pagamento || '-',
+            ORIGEM_LABEL[m.origem] || m.origem,
+            m.tipo === 'entrada' ? formatarMoeda(m.valor) : '',
+            m.tipo === 'saida' ? formatarMoeda(m.valor) : ''
+        ]),
+        foot: [['', '', '', '', '', '', '', '', 'Totais', formatarMoeda(r.totalEntradas), formatarMoeda(r.totalSaidas)]],
+        styles: { fontSize: 7, cellPadding: 1.3, overflow: 'linebreak', valign: 'middle' },
+        headStyles: { fillColor: COR.indigo, textColor: 255, fontStyle: 'bold' },
+        footStyles: { fillColor: [226, 232, 240], textColor: 30, fontStyle: 'bold' },
+        columnStyles: {
+            0: { cellWidth: 14 }, 1: { cellWidth: 30 }, 2: { cellWidth: 26 }, 3: { cellWidth: 30 },
+            4: { cellWidth: 'auto' }, 5: { cellWidth: 30 }, 6: { cellWidth: 15 }, 7: { cellWidth: 22 }, 8: { cellWidth: 22 },
+            9: { cellWidth: 22, halign: 'right', textColor: COR.verde }, 10: { cellWidth: 22, halign: 'right', textColor: COR.vermelho }
+        },
+        didDrawPage: dados => {
+            // Páginas seguintes: cabeçalho curto para não perder a referência do dia.
+            if (dados.pageNumber > 1) {
+                doc.setTextColor(...COR.indigo);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9);
+                doc.text(`Boletim de Tesouraria — ${formatarDataBR(dataRef)} (continuação)`, margem, 10);
+            }
+        }
     });
+
+    // Rodapé com numeração em todas as páginas
+    const totalPaginas = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= totalPaginas; p++) {
+        doc.setPage(p);
+        doc.setDrawColor(203, 213, 225);
+        doc.line(margem, altura - 9, largura - margem, altura - 9);
+        doc.setTextColor(120);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.text('Luca Gerencial · Tesouraria · estornos não aparecem neste relatório', margem, altura - 5);
+        doc.text(`Página ${p} de ${totalPaginas}`, largura - margem, altura - 5, { align: 'right' });
+    }
 
     return doc;
 }
 
 function exportarPDF() {
-    if (!movimentosDoDia.length) return dialogoAviso('Nenhum movimento para exportar neste dia.');
+    if (!movimentosDoDia.some(movimentoEfetivo)) return dialogoAviso('Nenhum movimento válido para o relatório neste dia.');
     const doc = gerarPDF();
+    doc.save(`Tesouraria_${document.getElementById('filtro-data').value}.pdf`);
+}
+
+function textoWhatsApp() {
     const dataRef = document.getElementById('filtro-data').value;
-    doc.save(`Tesouraria_${dataRef}.pdf`);
+    const r = resumoDoDia();
+    let texto = `*Boletim de Tesouraria — ${formatarDataBR(dataRef)}*\n\n`;
+    texto += `Entradas: ${formatarMoeda(r.totalEntradas)}\n`;
+    texto += `Saídas: ${formatarMoeda(r.totalSaidas)}\n`;
+    texto += `*Líquido do dia: ${formatarMoeda(r.liquido)}*\n`;
+    if (r.porConta.length) {
+        texto += `\n*Por conta*\n`;
+        r.porConta.forEach(c => { texto += `• ${c.nome}: ${formatarMoeda(c.liquido)} (↓ ${formatarMoeda(c.entradas)} / ↑ ${formatarMoeda(c.saidas)})\n`; });
+    }
+    if (r.porCentro.length) {
+        texto += `\n*Saídas por centro de custo*\n`;
+        r.porCentro.forEach(c => { texto += `• ${c.nome}: ${formatarMoeda(c.valor)}\n`; });
+    }
+    if (r.porGrupo.length) {
+        texto += `\n*Saídas por grupo*\n`;
+        r.porGrupo.forEach(g => { texto += `• ${g.nome}: ${formatarMoeda(g.valor)}\n`; });
+    }
+    return texto;
 }
 
 async function compartilharWhatsApp() {
     const dataRef = document.getElementById('filtro-data').value;
-    const [ano, mes, dia] = dataRef.split('-');
-    const resumo = montarResumoPorConta();
-    const totalGeral = resumo.reduce((acc, r) => acc + r.saldo, 0);
-
-    let texto = `*Boletim de Tesouraria — ${dia}/${mes}/${ano}*\n\n`;
-    resumo.forEach(r => { texto += `${r.conta}: ${formatarMoeda(r.saldo)}\n`; });
-    texto += `\n*Total do dia: ${formatarMoeda(totalGeral)}*`;
+    const texto = textoWhatsApp();
 
     // No celular, tenta compartilhar o PDF junto do texto. No desktop nem sempre é suportado
     // para arquivos, então cai para abrir o WhatsApp só com o texto (o PDF é baixado à parte).
-    if (movimentosDoDia.length && navigator.canShare) {
+    if (movimentosDoDia.some(movimentoEfetivo) && navigator.canShare) {
         try {
-            const doc = gerarPDF();
-            const blob = doc.output('blob');
+            const blob = gerarPDF().output('blob');
             const file = new File([blob], `Tesouraria_${dataRef}.pdf`, { type: 'application/pdf' });
             if (navigator.canShare({ files: [file] })) {
                 await navigator.share({ text: texto, files: [file], title: 'Boletim de Tesouraria' });
                 return;
             }
         } catch (err) {
-            console.warn('Compartilhamento com arquivo não disponível, usando fallback de texto.', err);
+            console.warn('Compartilhamento com arquivo não disponível, usando o texto.', err);
         }
     }
 

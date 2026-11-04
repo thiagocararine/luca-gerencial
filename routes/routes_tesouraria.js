@@ -705,72 +705,160 @@ router.delete('/contas-erp', authenticateToken, checkPerm('tesouraria_admin'), a
     }
 });
 
-// --- CONFIRMAÇÃO DE DESPESAS DE CAIXA (evita duplicar lançamento) ---
+// --- DESPESAS DAS LOJAS (despesa_caixa): conferência antes de entrar na tesouraria ---
 
-// GET /api/tesouraria/despesa-caixa/pendentes?data=YYYY-MM-DD
-router.get('/despesa-caixa/pendentes', authenticateToken, checkPerm('tesouraria_view'), async (req, res) => {
-    const { data } = req.query;
-    if (!data) {
-        return res.status(400).json({ error: 'Informe a data (data=YYYY-MM-DD).' });
+// Compara nomes ignorando acento e maiúsculas ("Parada Angélica" = "PARADA ANGELICA").
+function nomeComparavel(texto) {
+    return String(texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase();
+}
+
+// GET /api/tesouraria/despesa-caixa?modo=dia|pendentes&data=YYYY-MM-DD
+//   dia: tudo que as lojas lançaram com data de despesa = data (pendente, conferido ou cancelado)
+//   pendentes: dos 30 dias até a data, o que falta conferir e o que foi cancelado na loja
+//              depois de conferido (precisa de estorno na tesouraria)
+router.get('/despesa-caixa', authenticateToken, checkPerm('tesouraria_view'), async (req, res) => {
+    const { modo, data } = req.query;
+    if (!['dia', 'pendentes'].includes(modo) || !data) {
+        return res.status(400).json({ error: 'Informe o modo e a data.' });
     }
 
+    const filtro = modo === 'dia'
+        ? `d.dsp_datadesp = ?`
+        : `d.dsp_datadesp BETWEEN DATE_SUB(?, INTERVAL 30 DAY) AND ?
+           AND ((d.dsp_status = 1 AND m.id IS NULL) OR (d.dsp_status <> 1 AND m.id IS NOT NULL))`;
+    const params = modo === 'dia' ? [data] : [data, data];
+
     try {
-        const [pendentes] = await gerencialPool.query(
-            `SELECT d.*
+        const [despesas] = await gerencialPool.query(
+            `SELECT d.ID, d.dsp_filial, d.dsp_status, d.dsp_datadesp, d.dsp_datalanc, d.dsp_grupo, d.dsp_tipo,
+                    d.dsp_descricao, d.dsp_valordsp, d.dsp_userlanc, d.dsp_usercan,
+                    m.id AS id_movimento, m.data_movimento AS mov_data, m.grupo_despesa AS mov_grupo,
+                    m.tipo_despesa AS mov_tipo, c.nome AS mov_conta
              FROM despesa_caixa d
-             LEFT JOIN tesouraria_movimentos m ON m.origem = 'despesa_caixa' AND m.origem_ref = CAST(d.ID AS CHAR) AND m.status = 'ativo'
-             WHERE d.dsp_datadesp = ? AND d.dsp_status = 1 AND m.id IS NULL
-             ORDER BY d.ID ASC`,
-            [data]
+             LEFT JOIN tesouraria_movimentos m
+                    ON m.origem = 'despesa_caixa' AND m.origem_ref = CAST(d.ID AS CHAR) AND m.status = 'ativo'
+             LEFT JOIN tesouraria_contas c ON c.id = m.id_conta
+             WHERE ${filtro}
+             ORDER BY d.dsp_datadesp ASC, d.dsp_filial ASC, d.ID ASC
+             LIMIT 2000`,
+            params
         );
-        res.json(pendentes);
+
+        // Sugestões: centro de custo da loja (vínculo com a Unidade) e conta cujo nome cita a loja
+        // (ex.: "Caixa Nova Campinas"). Sem sugestão, o usuário escolhe na tela.
+        const [centros] = await gerencialPool.query(
+            `SELECT cc.id, p.NOME_PARAMETRO AS nome_filial
+             FROM tesouraria_centros_custo cc
+             JOIN parametro p ON cc.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
+             WHERE cc.ativo = 1`
+        );
+        const [contas] = await gerencialPool.query(`SELECT id, nome FROM tesouraria_contas WHERE ativo = 1`);
+        const centroPorLoja = new Map(centros.map(c => [nomeComparavel(c.nome_filial), c.id]));
+
+        res.json(despesas.map(d => {
+            const loja = nomeComparavel(d.dsp_filial);
+            const contasDaLoja = contas.filter(c => loja && nomeComparavel(c.nome).includes(loja));
+            const cancelada = d.dsp_status !== 1;
+            return {
+                id: d.ID,
+                loja: d.dsp_filial,
+                data_despesa: dataISO(d.dsp_datadesp),
+                data_lancamento: dataISO(d.dsp_datalanc),
+                descricao: d.dsp_descricao,
+                valor: Number(d.dsp_valordsp),
+                grupo_loja: d.dsp_grupo,
+                tipo_loja: d.dsp_tipo,
+                lancado_por: d.dsp_userlanc,
+                cancelado_por: d.dsp_usercan,
+                situacao: cancelada ? (d.id_movimento ? 'cancelada_conferida' : 'cancelada') : (d.id_movimento ? 'conferida' : 'pendente'),
+                id_movimento: d.id_movimento,
+                mov_data: dataISO(d.mov_data),
+                mov_conta: d.mov_conta,
+                mov_grupo: d.mov_grupo,
+                mov_tipo: d.mov_tipo,
+                id_centro_sugerido: centroPorLoja.get(loja) || null,
+                id_conta_sugerida: contasDaLoja.length === 1 ? contasDaLoja[0].id : null
+            };
+        }));
     } catch (error) {
-        console.error('Erro ao buscar despesas de caixa pendentes:', error);
-        res.status(500).json({ error: 'Erro ao buscar despesas de caixa pendentes.' });
+        console.error('Erro ao buscar despesas das lojas:', error);
+        res.status(500).json({ error: 'Erro ao buscar despesas das lojas.' });
     }
 });
 
-// POST /api/tesouraria/despesa-caixa/:id/confirmar
-router.post('/despesa-caixa/:id/confirmar', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
-    const { id } = req.params;
-    const { id_conta, id_centro_custo } = req.body;
+// POST /api/tesouraria/despesa-caixa/conferir
+// { data_movimento, itens: [{ id, id_conta, id_centro_custo, grupo_despesa, tipo_despesa }] }
+// Cada despesa conferida vira uma saída da tesouraria no dia informado; valor, descrição e
+// data da despesa vêm da própria despesa_caixa, não da tela.
+router.post('/despesa-caixa/conferir', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
+    const { data_movimento, itens } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
 
-    if (!id_conta) {
-        return res.status(400).json({ error: 'Selecione a conta que recebeu este pagamento.' });
+    if (!data_movimento || !Array.isArray(itens) || itens.length === 0) {
+        return res.status(400).json({ error: 'Marque ao menos uma despesa.' });
+    }
+    const semConta = itens.find(i => !i.id || !i.id_conta);
+    if (semConta) {
+        return res.status(400).json({ error: `Despesa ${semConta.id || ''}: escolha a conta.` });
     }
 
+    let connection;
     try {
-        // A loja classifica pela lista dela; na tesouraria vale a classificação da tesouraria.
-        const classificacao = await validarClassificacao(req.body.grupo_despesa, req.body.tipo_despesa, null);
-        if (classificacao.erro) return res.status(400).json({ error: classificacao.erro });
-
-        const [despesaRows] = await gerencialPool.query(
-            `SELECT * FROM despesa_caixa WHERE ID = ? AND dsp_status = 1`,
-            [id]
-        );
-        if (despesaRows.length === 0) {
-            return res.status(404).json({ error: 'Despesa de caixa não encontrada ou cancelada.' });
+        // Valida cada combinação grupo/tipo uma vez só.
+        const classificacoes = new Map();
+        for (const item of itens) {
+            const chave = `${item.grupo_despesa}|${item.tipo_despesa || ''}`;
+            if (!classificacoes.has(chave)) {
+                classificacoes.set(chave, await validarClassificacao(item.grupo_despesa, item.tipo_despesa, null));
+            }
+            const resultado = classificacoes.get(chave);
+            if (resultado.erro) return res.status(400).json({ error: `Despesa ${item.id}: ${resultado.erro}` });
         }
-        const despesa = despesaRows[0];
 
-        await gerencialPool.query(
-            `INSERT INTO tesouraria_movimentos
-                (id_conta, id_centro_custo, data_movimento, data_despesa, grupo_despesa, tipo_despesa, tipo, valor, descricao, forma_pagamento, origem, origem_ref, id_usuario_lancamento, nome_usuario_lancamento)
-             VALUES (?, ?, ?, ?, ?, ?, 'saida', ?, ?, 'dinheiro', 'despesa_caixa', ?, ?, ?)`,
-            [
-                id_conta, id_centro_custo || null, despesa.dsp_datadesp, despesa.dsp_datadesp, classificacao.grupo, classificacao.tipo,
-                despesa.dsp_valordsp, despesa.dsp_descricao, String(despesa.ID), userId, nomeUsuario
-            ]
+        const [despesas] = await gerencialPool.query(
+            `SELECT * FROM despesa_caixa WHERE ID IN (?) AND dsp_status = 1`,
+            [itens.map(i => Number(i.id))]
         );
+        const despesaPorId = new Map(despesas.map(d => [String(d.ID), d]));
+        const cancelada = itens.find(i => !despesaPorId.has(String(i.id)));
+        if (cancelada) {
+            return res.status(400).json({ error: `Despesa ${cancelada.id} não existe mais ou foi cancelada na loja.` });
+        }
 
-        res.status(201).json({ message: 'Despesa de caixa confirmada na tesouraria!' });
+        connection = await mysql.createConnection(dbConfig);
+        await connection.beginTransaction();
+
+        const conferidas = [];
+        const jaConferidas = [];
+        for (const item of itens) {
+            const d = despesaPorId.get(String(item.id));
+            const { grupo, tipo } = classificacoes.get(`${item.grupo_despesa}|${item.tipo_despesa || ''}`);
+            try {
+                await connection.execute(
+                    `INSERT INTO tesouraria_movimentos
+                        (id_conta, id_centro_custo, data_movimento, data_despesa, grupo_despesa, tipo_despesa, tipo, valor,
+                         descricao, forma_pagamento, origem, origem_ref, id_usuario_lancamento, nome_usuario_lancamento)
+                     VALUES (?, ?, ?, ?, ?, ?, 'saida', ?, ?, 'dinheiro', 'despesa_caixa', ?, ?, ?)`,
+                    [
+                        item.id_conta, item.id_centro_custo || null, data_movimento, dataISO(d.dsp_datadesp), grupo, tipo,
+                        d.dsp_valordsp, String(d.dsp_descricao || 'Despesa de caixa').slice(0, 255), String(d.ID), userId, nomeUsuario
+                    ]
+                );
+                conferidas.push(d.ID);
+            } catch (err) {
+                if (err.code !== 'ER_DUP_ENTRY') throw err;
+                jaConferidas.push(d.ID);
+            }
+        }
+
+        await connection.commit();
+        res.status(201).json({ message: `${conferidas.length} despesa(s) conferida(s).`, conferidas, ja_conferidas: jaConferidas });
     } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({ error: 'Esta despesa já foi confirmada na tesouraria.' });
-        }
-        console.error('Erro ao confirmar despesa de caixa:', error);
-        res.status(500).json({ error: 'Erro interno ao confirmar a despesa de caixa.' });
+        if (connection) await connection.rollback();
+        console.error('Erro ao conferir despesas das lojas:', error);
+        res.status(500).json({ error: 'Erro interno ao conferir as despesas.' });
+    } finally {
+        if (connection) await connection.end();
     }
 });
 
