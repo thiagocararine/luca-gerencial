@@ -200,7 +200,7 @@ async function carregarDia(data) {
         renderPendentes(pendentes, data);
         renderTabelaMovimentos(movimentos);
     } catch (err) {
-        alert('Erro ao carregar dados do dia: ' + err.message);
+        dialogoAviso('Erro ao carregar dados do dia: ' + err.message, 'erro');
     }
     await carregarAlertaErp(data);
 }
@@ -340,12 +340,12 @@ function renderTabelaMovimentos(movimentos) {
 }
 
 async function estornarMovimento(id) {
-    if (!confirm('Confirma o estorno deste lançamento? Isso cria um lançamento inverso e não pode ser desfeito.')) return;
+    if (!await dialogoConfirmar('Isso cria um lançamento inverso e não pode ser desfeito.', { titulo: 'Estornar lançamento?', textoOk: 'Estornar', perigo: true })) return;
     try {
         await apiFetch(`/movimentos/${id}/estornar`, { method: 'POST' });
         await carregarDia(document.getElementById('filtro-data').value);
     } catch (err) {
-        alert('Erro ao estornar: ' + err.message);
+        dialogoAviso('Erro ao estornar: ' + err.message, 'erro');
     }
 }
 
@@ -476,10 +476,10 @@ async function salvarLancamento() {
     };
 
     if (!payload.id_conta || !payload.valor || !payload.descricao) {
-        return alert('Preencha conta, valor e descrição.');
+        return dialogoAviso('Preencha conta, valor e descrição.');
     }
     if (ehSaida && !payload.grupo_despesa) {
-        return alert('Selecione o grupo de despesa.');
+        return dialogoAviso('Selecione o grupo de despesa.');
     }
 
     try {
@@ -487,7 +487,7 @@ async function salvarLancamento() {
         fecharModalLancamento();
         await carregarDia(document.getElementById('filtro-data').value);
     } catch (err) {
-        alert('Erro ao salvar lançamento: ' + err.message);
+        dialogoAviso('Erro ao salvar lançamento: ' + err.message, 'erro');
     }
 }
 
@@ -524,15 +524,15 @@ async function salvarConfirmarDespesa() {
         grupo_despesa: document.getElementById('confirmar-grupo-despesa').value || null,
         tipo_despesa: document.getElementById('confirmar-tipo-despesa').value || null
     };
-    if (!payload.id_conta) return alert('Selecione a conta que pagou.');
-    if (!payload.grupo_despesa) return alert('Selecione o grupo de despesa.');
+    if (!payload.id_conta) return dialogoAviso('Selecione a conta que pagou.');
+    if (!payload.grupo_despesa) return dialogoAviso('Selecione o grupo de despesa.');
 
     try {
         await apiFetch(`/despesa-caixa/${id}/confirmar`, { method: 'POST', body: JSON.stringify(payload) });
         fecharModalConfirmarDespesa();
         await carregarDia(document.getElementById('filtro-data').value);
     } catch (err) {
-        alert('Erro ao confirmar despesa: ' + err.message);
+        dialogoAviso('Erro ao confirmar despesa: ' + err.message, 'erro');
     }
 }
 
@@ -598,7 +598,7 @@ async function carregarTitulosImportar(modo) {
         aplicarBuscaImportar();
     } catch (err) {
         tabelaImportar.clearAlert();
-        alert('Erro ao buscar títulos: ' + err.message);
+        dialogoAviso('Erro ao buscar títulos: ' + err.message, 'erro');
     }
     atualizarResumoImportar();
 }
@@ -696,27 +696,27 @@ function atualizarResumoImportar() {
 
 function aplicarContaLote() {
     const idConta = Number(document.getElementById('imp-conta-lote').value);
-    if (!idConta) return alert('Escolha a conta.');
+    if (!idConta) return dialogoAviso('Escolha a conta.');
     const marcados = tabelaImportar.getRows().filter(l => l.getData().marcado);
-    if (!marcados.length) return alert('Marque os títulos que vão para essa conta.');
+    if (!marcados.length) return dialogoAviso('Marque os títulos que vão para essa conta.');
     marcados.forEach(l => l.update({ id_conta: idConta }));
 }
 
 async function importarMarcados() {
     const marcados = titulosMarcados();
-    if (!marcados.length) return alert('Marque ao menos um título.');
+    if (!marcados.length) return dialogoAviso('Marque ao menos um título.');
     const semConta = marcados.filter(t => !t.id_conta);
     if (semConta.length) {
-        return alert(`Escolha a conta de ${semConta.length} título(s) marcado(s) (coluna Conta em vermelho).`);
+        return dialogoAviso(`Escolha a conta de ${semConta.length} título(s) marcado(s) (coluna Conta em vermelho).`);
     }
-    if (marcados.some(t => !(Number(t.valor) > 0))) return alert('Há título marcado com valor zerado.');
+    if (marcados.some(t => !(Number(t.valor) > 0))) return dialogoAviso('Há título marcado com valor zerado.');
 
     const grupo = document.getElementById('imp-grupo-despesa').value;
-    if (!grupo) return alert('Selecione o grupo de despesa.');
+    if (!grupo) return dialogoAviso('Selecione o grupo de despesa.');
 
     const dataRef = document.getElementById('filtro-data').value;
     const total = marcados.reduce((acc, t) => acc + Number(t.valor), 0);
-    if (!confirm(`Importar ${marcados.length} título(s), total ${formatarMoeda(total)}, como saída no dia ${formatarDataBR(dataRef)}?`)) return;
+    if (!await dialogoConfirmar(`${marcados.length} título(s), total ${formatarMoeda(total)}, entram como saída no dia ${formatarDataBR(dataRef)}.`, { titulo: 'Importar títulos?', textoOk: 'Importar' })) return;
 
     const payload = {
         data_movimento: dataRef,
@@ -735,11 +735,11 @@ async function importarMarcados() {
         const resultado = await apiFetch('/erp/importar', { method: 'POST', body: JSON.stringify(payload) });
         let msg = resultado.message;
         if (resultado.ja_importados.length) msg += `\n${resultado.ja_importados.length} já estavam na tesouraria e foram ignorados.`;
-        alert(msg);
+        dialogoAviso(msg, 'sucesso', 'Importação concluída');
         await carregarTitulosImportar(modoImportar);
         await carregarDia(dataRef);
     } catch (err) {
-        alert('Erro ao importar: ' + err.message);
+        dialogoAviso('Erro ao importar: ' + err.message, 'erro');
     } finally {
         botao.disabled = false;
     }
@@ -823,25 +823,25 @@ async function renderListaGerenciarCentros() {
 async function adicionarConta() {
     const nome = document.getElementById('nova-conta-nome').value.trim();
     const tipo = document.getElementById('nova-conta-tipo').value;
-    if (!nome) return alert('Informe o nome da conta.');
+    if (!nome) return dialogoAviso('Informe o nome da conta.');
 
     try {
         await apiFetch('/contas', { method: 'POST', body: JSON.stringify({ nome, tipo }) });
         document.getElementById('nova-conta-nome').value = '';
         await renderListaGerenciarContas();
     } catch (err) {
-        alert('Erro ao adicionar conta: ' + err.message);
+        dialogoAviso('Erro ao adicionar conta: ' + err.message, 'erro');
     }
 }
 
 async function renomearConta(id, nomeAtual) {
-    const novoNome = prompt('Novo nome da conta:', nomeAtual);
+    const novoNome = await dialogoTexto('Novo nome da conta', nomeAtual);
     if (!novoNome || novoNome.trim() === '' || novoNome === nomeAtual) return;
     try {
         await apiFetch(`/contas/${id}`, { method: 'PUT', body: JSON.stringify({ nome: novoNome.trim() }) });
         await renderListaGerenciarContas();
     } catch (err) {
-        alert('Erro ao renomear conta: ' + err.message);
+        dialogoAviso('Erro ao renomear conta: ' + err.message, 'erro');
     }
 }
 
@@ -850,17 +850,17 @@ async function alternarAtivoConta(id, ativoAtual) {
         await apiFetch(`/contas/${id}`, { method: 'PUT', body: JSON.stringify({ ativo: ativoAtual ? 0 : 1 }) });
         await renderListaGerenciarContas();
     } catch (err) {
-        alert('Erro ao atualizar conta: ' + err.message);
+        dialogoAviso('Erro ao atualizar conta: ' + err.message, 'erro');
     }
 }
 
 async function removerVinculoErp(chave) {
-    if (!confirm(`Desvincular "${chave}"? Na próxima importação você escolhe a conta de novo.`)) return;
+    if (!await dialogoConfirmar(`"${chave}" deixa de sugerir esta conta. Na próxima importação você escolhe a conta de novo.`, { titulo: 'Desvincular conta do ERP?', textoOk: 'Desvincular', perigo: true })) return;
     try {
         await apiFetch(`/contas-erp?chave=${encodeURIComponent(chave)}`, { method: 'DELETE' });
         await renderListaGerenciarContas();
     } catch (err) {
-        alert('Erro ao desvincular: ' + err.message);
+        dialogoAviso('Erro ao desvincular: ' + err.message, 'erro');
     }
 }
 
@@ -868,25 +868,25 @@ async function adicionarCentroCusto() {
     const nome = document.getElementById('novo-centro-nome').value.trim();
     const tipo = document.getElementById('novo-centro-tipo').value;
     const id_filial = tipo === 'loja' ? (document.getElementById('novo-centro-filial').value || null) : null;
-    if (!nome) return alert('Informe o nome do centro de custo.');
+    if (!nome) return dialogoAviso('Informe o nome do centro de custo.');
 
     try {
         await apiFetch('/centros-custo', { method: 'POST', body: JSON.stringify({ nome, tipo, id_filial }) });
         document.getElementById('novo-centro-nome').value = '';
         await renderListaGerenciarCentros();
     } catch (err) {
-        alert('Erro ao adicionar centro de custo: ' + err.message);
+        dialogoAviso('Erro ao adicionar centro de custo: ' + err.message, 'erro');
     }
 }
 
 async function renomearCentro(id, nomeAtual) {
-    const novoNome = prompt('Novo nome do centro de custo:', nomeAtual);
+    const novoNome = await dialogoTexto('Novo nome do centro de custo', nomeAtual);
     if (!novoNome || novoNome.trim() === '' || novoNome === nomeAtual) return;
     try {
         await apiFetch(`/centros-custo/${id}`, { method: 'PUT', body: JSON.stringify({ nome: novoNome.trim() }) });
         await renderListaGerenciarCentros();
     } catch (err) {
-        alert('Erro ao renomear centro de custo: ' + err.message);
+        dialogoAviso('Erro ao renomear centro de custo: ' + err.message, 'erro');
     }
 }
 
@@ -895,7 +895,7 @@ async function alternarAtivoCentro(id, ativoAtual) {
         await apiFetch(`/centros-custo/${id}`, { method: 'PUT', body: JSON.stringify({ ativo: ativoAtual ? 0 : 1 }) });
         await renderListaGerenciarCentros();
     } catch (err) {
-        alert('Erro ao atualizar centro de custo: ' + err.message);
+        dialogoAviso('Erro ao atualizar centro de custo: ' + err.message, 'erro');
     }
 }
 
@@ -928,10 +928,10 @@ async function renderListaGerenciarGrupos() {
             </div>`).join('') || '<p class="text-xs text-gray-400">Nenhum grupo cadastrado.</p>';
 
         const acoes = {
-            'renomear-grupo': btn => renomearItem('grupos', btn.dataset.id, btn.dataset.nome, 'Novo nome do grupo:'),
+            'renomear-grupo': btn => renomearItem('grupos', btn.dataset.id, btn.dataset.nome, 'Novo nome do grupo'),
             'veiculo-grupo': btn => atualizarItem('grupos', btn.dataset.id, { exige_veiculo: btn.dataset.valor === '1' ? 0 : 1 }),
             'toggle-grupo': btn => atualizarItem('grupos', btn.dataset.id, { ativo: btn.dataset.valor === '1' ? 0 : 1 }),
-            'renomear-tipo': btn => renomearItem('tipos', btn.dataset.id, btn.dataset.nome, 'Novo nome do tipo:'),
+            'renomear-tipo': btn => renomearItem('tipos', btn.dataset.id, btn.dataset.nome, 'Novo nome do tipo'),
             'toggle-tipo': btn => atualizarItem('tipos', btn.dataset.id, { ativo: btn.dataset.valor === '1' ? 0 : 1 })
         };
         container.querySelectorAll('[data-acao]').forEach(btn => {
@@ -953,34 +953,34 @@ async function renderListaGerenciarGrupos() {
 async function adicionarGrupo() {
     const nome = document.getElementById('novo-grupo-nome').value.trim();
     const exige_veiculo = document.getElementById('novo-grupo-veiculo').checked;
-    if (!nome) return alert('Informe o nome do grupo.');
+    if (!nome) return dialogoAviso('Informe o nome do grupo.');
     try {
         await apiFetch('/grupos', { method: 'POST', body: JSON.stringify({ nome, exige_veiculo }) });
         document.getElementById('novo-grupo-nome').value = '';
         document.getElementById('novo-grupo-veiculo').checked = false;
         await renderListaGerenciarGrupos();
     } catch (err) {
-        alert('Erro ao adicionar grupo: ' + err.message);
+        dialogoAviso('Erro ao adicionar grupo: ' + err.message, 'erro');
     }
 }
 
 async function adicionarTipo() {
     const id_grupo = document.getElementById('novo-tipo-grupo').value;
     const nome = document.getElementById('novo-tipo-nome').value.trim();
-    if (!id_grupo || !nome) return alert('Escolha o grupo e informe o nome do tipo.');
+    if (!id_grupo || !nome) return dialogoAviso('Escolha o grupo e informe o nome do tipo.');
     try {
         await apiFetch('/tipos', { method: 'POST', body: JSON.stringify({ id_grupo: Number(id_grupo), nome }) });
         document.getElementById('novo-tipo-nome').value = '';
         await renderListaGerenciarGrupos();
         document.getElementById('novo-tipo-grupo').value = id_grupo;
     } catch (err) {
-        alert('Erro ao adicionar tipo: ' + err.message);
+        dialogoAviso('Erro ao adicionar tipo: ' + err.message, 'erro');
     }
 }
 
 // recurso: 'grupos' ou 'tipos'.
 async function renomearItem(recurso, id, nomeAtual, pergunta) {
-    const novoNome = prompt(pergunta, nomeAtual);
+    const novoNome = await dialogoTexto(pergunta, nomeAtual);
     if (!novoNome || novoNome.trim() === '' || novoNome === nomeAtual) return;
     await atualizarItem(recurso, id, { nome: novoNome.trim() });
 }
@@ -990,7 +990,7 @@ async function atualizarItem(recurso, id, dados) {
         await apiFetch(`/${recurso}/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
         await renderListaGerenciarGrupos();
     } catch (err) {
-        alert('Erro ao atualizar: ' + err.message);
+        dialogoAviso('Erro ao atualizar: ' + err.message, 'erro');
     }
 }
 
@@ -1068,7 +1068,7 @@ function gerarPDF() {
 }
 
 function exportarPDF() {
-    if (!movimentosDoDia.length) return alert('Nenhum movimento para exportar neste dia.');
+    if (!movimentosDoDia.length) return dialogoAviso('Nenhum movimento para exportar neste dia.');
     const doc = gerarPDF();
     const dataRef = document.getElementById('filtro-data').value;
     doc.save(`Tesouraria_${dataRef}.pdf`);
