@@ -13,19 +13,19 @@ const OPCOES_SAIDA = {
 };
 const OPCOES_ENTRADA = {
     sangria: 'Sangria de Caixa', sobra: 'Sobra do Dia Anterior', transferencia: 'Transferência entre Contas',
-    aporte: 'Aporte', outro: 'Outro'
+    emprestimo: 'Empréstimo Recebido', aporte: 'Aporte', outro: 'Outro'
 };
 const FORMAS_PAGAMENTO_LABEL = { ...OPCOES_SAIDA, ...OPCOES_ENTRADA };
 const TIPO_CENTRO_LABEL = {
     loja: 'Loja', transportadora: 'Transportadora', administrativo: 'Administrativo', outro: 'Outro'
 };
-// Grupos de Despesa (Configurações > Parâmetros) que exigem informar o veículo.
-const GRUPOS_QUE_EXIGEM_VEICULO = ['Manutenção', 'Combustivel'];
 
 let veiculosCache = [];
 let filiaisCache = [];
-let tiposDespesaCache = [];
-let gruposDespesaCache = [];
+// Grupos de despesa da própria tesouraria, cada um com seus tipos (não é a lista das lojas).
+let classificacaoCache = [];
+// 'entrada' ou 'saida': qual botão abriu o modal de lançamento.
+let modoLancamento = 'saida';
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!getToken()) {
@@ -42,16 +42,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     inputData.addEventListener('change', () => carregarDia(inputData.value));
 
     setupModais();
-    document.getElementById('lanc-tipo').addEventListener('change', atualizarOpcoesFormaPagamento);
-    document.getElementById('lanc-tipo-despesa').addEventListener('change', handleTipoDespesaChange);
-    document.getElementById('lanc-grupo-despesa').addEventListener('change', (e) => atualizarVisibilidadeVeiculo(e.target.value));
+    document.getElementById('lanc-grupo-despesa').addEventListener('change', handleGrupoLancamentoChange);
+    document.getElementById('confirmar-grupo-despesa').addEventListener('change', (e) => {
+        preencherSelectTipos(document.getElementById('confirmar-tipo-despesa'), e.target.value);
+    });
     document.getElementById('novo-centro-tipo').addEventListener('change', atualizarVisibilidadeFilialCentro);
-    atualizarOpcoesFormaPagamento();
     atualizarVisibilidadeFilialCentro();
     if (typeof feather !== 'undefined') feather.replace();
 
     await Promise.all([
-        carregarContas(), carregarCentrosCusto(), carregarVeiculos(), carregarFiliais(), carregarClassificacaoDespesa()
+        carregarContas(), carregarCentrosCusto(), carregarVeiculos(), carregarFiliais(), carregarClassificacao()
     ]);
     await carregarDia(inputData.value);
 });
@@ -128,69 +128,45 @@ async function carregarFiliais() {
     }
 }
 
-// Reaproveita a mesma classificação Grupo Despesa / Tipo Despesa que despesas.js já usa
-// (Configurações > Parâmetros), para não duplicar essa lista em outro lugar.
-async function carregarClassificacaoDespesa() {
+async function carregarClassificacao() {
     try {
-        const [resTipos, resGrupos] = await Promise.all([
-            fetch(`${apiUrlBase}/settings/parametros?cod=Tipo Despesa`, { headers: apiHeaders() }),
-            fetch(`${apiUrlBase}/settings/parametros?cod=Grupo Despesa`, { headers: apiHeaders() })
-        ]);
-        if (!resTipos.ok || !resGrupos.ok) throw new Error('Falha ao buscar classificação de despesa.');
-        tiposDespesaCache = await resTipos.json();
-        gruposDespesaCache = await resGrupos.json();
-
-        const select = document.getElementById('lanc-tipo-despesa');
-        select.innerHTML = '<option value="">-- Selecione --</option>' +
-            tiposDespesaCache.map(t => `<option value="${escapeHtml(t.NOME_PARAMETRO)}">${escapeHtml(t.NOME_PARAMETRO)}</option>`).join('');
+        classificacaoCache = await apiFetch('/classificacao');
     } catch (err) {
-        console.error('Erro ao carregar classificação de despesa:', err);
-        tiposDespesaCache = [];
-        gruposDespesaCache = [];
+        console.error('Erro ao carregar grupos e tipos de despesa:', err);
+        classificacaoCache = [];
     }
+    preencherSelectGrupos(document.getElementById('lanc-grupo-despesa'));
+    preencherSelectGrupos(document.getElementById('confirmar-grupo-despesa'));
+    handleGrupoLancamentoChange();
 }
 
-// Mesma lógica de despesas.js (handleTipoDespesaChange): o Grupo é derivado do Tipo
-// escolhido via KEY_VINCULACAO, e travado — exceto para "Não Classificado".
-function handleTipoDespesaChange() {
-    const tipoNome = document.getElementById('lanc-tipo-despesa').value;
-    const grupoSelect = document.getElementById('lanc-grupo-despesa');
-
-    if (!tipoNome) {
-        grupoSelect.innerHTML = '<option value="">-- Selecione o Tipo primeiro --</option>';
-        grupoSelect.disabled = true;
-        atualizarVisibilidadeVeiculo(null);
-        return;
-    }
-
-    if (tipoNome === 'Não Classificado') {
-        grupoSelect.innerHTML = '<option value="">-- Selecione um Grupo --</option>' +
-            gruposDespesaCache.map(g => `<option value="${escapeHtml(g.NOME_PARAMETRO)}">${escapeHtml(g.NOME_PARAMETRO)}</option>`).join('');
-        grupoSelect.disabled = false;
-        atualizarVisibilidadeVeiculo(null);
-        return;
-    }
-
-    const tipoObj = tiposDespesaCache.find(t => t.NOME_PARAMETRO === tipoNome);
-    const grupoObj = tipoObj && tipoObj.KEY_VINCULACAO != null
-        ? gruposDespesaCache.find(g => g.KEY_VINCULACAO == tipoObj.KEY_VINCULACAO)
-        : null;
-
-    if (grupoObj) {
-        grupoSelect.innerHTML = `<option value="${escapeHtml(grupoObj.NOME_PARAMETRO)}" selected>${escapeHtml(grupoObj.NOME_PARAMETRO)}</option>`;
-        grupoSelect.disabled = true;
-        atualizarVisibilidadeVeiculo(grupoObj.NOME_PARAMETRO);
-    } else {
-        grupoSelect.innerHTML = '<option value="">-- Sem grupo vinculado --</option>';
-        grupoSelect.disabled = true;
-        atualizarVisibilidadeVeiculo(null);
-    }
+function preencherSelectGrupos(select) {
+    select.innerHTML = '<option value="">-- Selecione --</option>' +
+        classificacaoCache.map(g => `<option value="${escapeHtml(g.nome)}">${escapeHtml(g.nome)}</option>`).join('');
 }
 
-function atualizarVisibilidadeVeiculo(nomeGrupo) {
-    const precisaVeiculo = GRUPOS_QUE_EXIGEM_VEICULO.includes(nomeGrupo);
+// Tipo é opcional: um grupo pode ainda não ter tipos cadastrados.
+function preencherSelectTipos(select, nomeGrupo) {
+    const grupo = classificacaoCache.find(g => g.nome === nomeGrupo);
+    const tipos = grupo ? grupo.tipos : [];
+    select.innerHTML = `<option value="">${tipos.length ? '-- Selecione --' : '-- Nenhum --'}</option>` +
+        tipos.map(t => `<option value="${escapeHtml(t.nome)}">${escapeHtml(t.nome)}</option>`).join('');
+    select.disabled = tipos.length === 0;
+}
+
+// O veículo só aparece nos grupos marcados como "pede veículo" no cadastro.
+function handleGrupoLancamentoChange() {
+    const nomeGrupo = document.getElementById('lanc-grupo-despesa').value;
+    preencherSelectTipos(document.getElementById('lanc-tipo-despesa'), nomeGrupo);
+    const grupo = classificacaoCache.find(g => g.nome === nomeGrupo);
+    const precisaVeiculo = !!(grupo && grupo.exige_veiculo);
     document.getElementById('lanc-veiculo-wrap').classList.toggle('hidden', !precisaVeiculo);
     if (!precisaVeiculo) document.getElementById('lanc-veiculo').value = '';
+}
+
+// Compara nomes sem acento e sem diferença de maiúsculas ("Combustivel" = "Combustível").
+function normalizarNome(str) {
+    return String(str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
 }
 
 // Sem conta pré-selecionada, para não lançar na conta errada sem perceber.
@@ -269,6 +245,7 @@ function renderPendentes(pendentes, data) {
                 <span class="font-bold text-gray-800">${formatarMoeda(d.dsp_valordsp)}</span>
                 <button class="btn-confirmar-despesa bg-yellow-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-yellow-700"
                         data-id="${d.ID}" data-filial="${escapeHtml(d.dsp_filial || '')}"
+                        data-grupo="${escapeHtml(d.dsp_grupo || '')}" data-tipo="${escapeHtml(d.dsp_tipo || '')}"
                         data-descricao="${escapeHtml(d.dsp_descricao)} — ${formatarMoeda(d.dsp_valordsp)}">
                     Confirmar
                 </button>
@@ -277,7 +254,7 @@ function renderPendentes(pendentes, data) {
     `).join('');
 
     lista.querySelectorAll('.btn-confirmar-despesa').forEach(btn => {
-        btn.addEventListener('click', () => abrirModalConfirmarDespesa(btn.dataset.id, btn.dataset.descricao, btn.dataset.filial));
+        btn.addEventListener('click', () => abrirModalConfirmarDespesa(btn.dataset));
     });
 }
 
@@ -286,6 +263,7 @@ function renderPendentes(pendentes, data) {
 function renderTabelaMovimentos(movimentos) {
     const dados = movimentos.map(m => ({
         ...m,
+        classificacao: textoClassificacao(m),
         origem_label: m.origem === 'manual' ? 'Manual' : (m.origem === 'despesa_caixa' ? 'Caixa (Despesas)' : 'ERP'),
         forma_label: FORMAS_PAGAMENTO_LABEL[m.forma_pagamento] || m.forma_pagamento || '-'
     }));
@@ -307,7 +285,7 @@ function renderTabelaMovimentos(movimentos) {
                         return `${base} <span class="text-gray-400">· ${escapeHtml(m.veiculo_placa)}</span>`;
                     }
                 },
-                { title: 'Tipo Despesa', field: 'tipo_despesa', widthGrow: 1, formatter: cell => escapeHtml(cell.getValue() || '-') },
+                { title: 'Grupo / Tipo', field: 'classificacao', widthGrow: 1.2, formatter: cell => escapeHtml(cell.getValue()) },
                 { title: 'Tipo', field: 'tipo', width: 80, formatter: cell => cell.getValue() === 'entrada' ? '<span class="text-green-600 font-bold">Entrada</span>' : '<span class="text-red-600 font-bold">Saída</span>' },
                 { title: 'Valor', field: 'valor', width: 110, hozAlign: 'right', formatter: cell => formatarMoeda(cell.getValue()) },
                 { title: 'Descrição', field: 'descricao', widthGrow: 2 },
@@ -348,7 +326,8 @@ async function estornarMovimento(id) {
 // --- MODAIS ---
 
 function setupModais() {
-    document.getElementById('btn-novo-lancamento').addEventListener('click', abrirModalLancamento);
+    document.getElementById('btn-nova-entrada').addEventListener('click', () => abrirModalLancamento('entrada'));
+    document.getElementById('btn-nova-saida').addEventListener('click', () => abrirModalLancamento('saida'));
     document.getElementById('btn-fechar-modal-lancamento').addEventListener('click', fecharModalLancamento);
     document.getElementById('btn-cancelar-lancamento').addEventListener('click', fecharModalLancamento);
     document.getElementById('btn-salvar-lancamento').addEventListener('click', salvarLancamento);
@@ -364,6 +343,8 @@ function setupModais() {
     document.getElementById('btn-fechar-modal-gerenciar').addEventListener('click', () => fecharModal('modal-gerenciar'));
     document.getElementById('btn-add-conta').addEventListener('click', adicionarConta);
     document.getElementById('btn-add-centro').addEventListener('click', adicionarCentroCusto);
+    document.getElementById('btn-add-grupo').addEventListener('click', adicionarGrupo);
+    document.getElementById('btn-add-tipo').addEventListener('click', adicionarTipo);
 }
 
 function abrirModal(id) {
@@ -382,28 +363,55 @@ function fecharModal(id) {
     setTimeout(() => modal.classList.add('hidden'), 200);
 }
 
-function abrirModalLancamento() {
-    document.getElementById('lanc-valor').value = '';
-    document.getElementById('lanc-descricao').value = '';
-    document.getElementById('lanc-favorecido').value = '';
-    document.getElementById('lanc-veiculo').value = '';
-    document.getElementById('lanc-numero-nf').value = '';
-    document.getElementById('lanc-data-despesa').value = '';
-    document.getElementById('lanc-tipo-despesa').value = '';
-    handleTipoDespesaChange();
+// Entrada e Saída usam o mesmo modal, mas cada botão abre só os campos que fazem sentido:
+// uma entrada (sangria, sobra...) não tem grupo de despesa, NF, veículo nem favorecido.
+const MODOS_LANCAMENTO = {
+    entrada: {
+        titulo: 'Nova Entrada', icone: 'arrow-down-circle', corCabecalho: 'bg-green-50', corTitulo: 'text-green-900',
+        corBotao: ['bg-green-600', 'hover:bg-green-700'], textoBotao: 'Salvar Entrada',
+        labelConta: 'Conta onde entrou', labelCentro: 'Loja / Origem do valor', labelForma: 'Origem da Entrada',
+        opcoesForma: OPCOES_ENTRADA, placeholderDescricao: 'Ex: Sangria do caixa 2 da loja Santa Cruz'
+    },
+    saida: {
+        titulo: 'Nova Saída', icone: 'arrow-up-circle', corCabecalho: 'bg-red-50', corTitulo: 'text-red-900',
+        corBotao: ['bg-red-600', 'hover:bg-red-700'], textoBotao: 'Salvar Saída',
+        labelConta: 'Conta de onde saiu', labelCentro: 'Centro de Custo', labelForma: 'Forma de Pagamento',
+        opcoesForma: OPCOES_SAIDA, placeholderDescricao: 'Ex: Pagamento fornecedor X'
+    }
+};
+
+function abrirModalLancamento(modo) {
+    modoLancamento = modo;
+    const cfg = MODOS_LANCAMENTO[modo];
+
+    const cabecalho = document.getElementById('lanc-cabecalho');
+    cabecalho.classList.remove('bg-green-50', 'bg-red-50');
+    cabecalho.classList.add(cfg.corCabecalho);
+    const titulo = document.getElementById('lanc-titulo');
+    titulo.className = `text-lg font-bold flex items-center gap-2 ${cfg.corTitulo}`;
+    titulo.innerHTML = `<i data-feather="${cfg.icone}" class="w-5 h-5"></i> ${cfg.titulo}`;
+    const botao = document.getElementById('btn-salvar-lancamento');
+    botao.classList.remove('bg-green-600', 'hover:bg-green-700', 'bg-red-600', 'hover:bg-red-700');
+    botao.classList.add(...cfg.corBotao);
+    document.getElementById('lanc-salvar-texto').textContent = cfg.textoBotao;
+
+    document.getElementById('lanc-conta-label').textContent = cfg.labelConta;
+    document.getElementById('lanc-centro-custo-label').textContent = cfg.labelCentro;
+    document.getElementById('lanc-forma-pagamento-label').textContent = cfg.labelForma;
+    document.getElementById('lanc-forma-pagamento').innerHTML =
+        Object.entries(cfg.opcoesForma).map(([valor, texto]) => `<option value="${valor}">${texto}</option>`).join('');
+    document.getElementById('lanc-descricao').placeholder = cfg.placeholderDescricao;
+
+    ['lanc-conta', 'lanc-centro-custo', 'lanc-valor', 'lanc-descricao', 'lanc-favorecido', 'lanc-veiculo',
+        'lanc-numero-nf', 'lanc-data-despesa', 'lanc-grupo-despesa'].forEach(id => { document.getElementById(id).value = ''; });
+
+    document.querySelectorAll('#modal-lancamento .campo-saida').forEach(el => el.classList.toggle('hidden', modo !== 'saida'));
+    if (modo === 'saida') handleGrupoLancamentoChange();
+
+    if (typeof feather !== 'undefined') feather.replace();
     abrirModal('modal-lancamento');
 }
 function fecharModalLancamento() { fecharModal('modal-lancamento'); }
-
-function atualizarOpcoesFormaPagamento() {
-    const tipo = document.getElementById('lanc-tipo').value;
-    const label = document.getElementById('lanc-forma-pagamento-label');
-    const select = document.getElementById('lanc-forma-pagamento');
-    const opcoes = tipo === 'entrada' ? OPCOES_ENTRADA : OPCOES_SAIDA;
-
-    label.textContent = tipo === 'entrada' ? 'Origem da Entrada' : 'Forma de Pagamento';
-    select.innerHTML = Object.entries(opcoes).map(([valor, texto]) => `<option value="${valor}">${texto}</option>`).join('');
-}
 
 function atualizarVisibilidadeFilialCentro() {
     const ehLoja = document.getElementById('novo-centro-tipo').value === 'loja';
@@ -411,28 +419,29 @@ function atualizarVisibilidadeFilialCentro() {
 }
 
 async function salvarLancamento() {
-    const idVeiculo = document.getElementById('lanc-veiculo').value;
+    const ehSaida = modoLancamento === 'saida';
+    const valorCampo = id => document.getElementById(id).value.trim() || null;
     const payload = {
+        tipo: modoLancamento,
         id_conta: Number(document.getElementById('lanc-conta').value),
-        id_centro_custo: document.getElementById('lanc-centro-custo').value || null,
-        id_veiculo: idVeiculo || null,
-        tipo_despesa: document.getElementById('lanc-tipo-despesa').value || null,
-        grupo_despesa: document.getElementById('lanc-grupo-despesa').value || null,
-        numero_nf: document.getElementById('lanc-numero-nf').value.trim() || null,
-        data_despesa: document.getElementById('lanc-data-despesa').value || null,
+        id_centro_custo: valorCampo('lanc-centro-custo'),
         data_movimento: document.getElementById('filtro-data').value,
-        tipo: document.getElementById('lanc-tipo').value,
         valor: Number(document.getElementById('lanc-valor').value),
         descricao: document.getElementById('lanc-descricao').value.trim(),
-        favorecido: document.getElementById('lanc-favorecido').value.trim() || null,
-        forma_pagamento: document.getElementById('lanc-forma-pagamento').value
+        forma_pagamento: document.getElementById('lanc-forma-pagamento').value,
+        grupo_despesa: ehSaida ? valorCampo('lanc-grupo-despesa') : null,
+        tipo_despesa: ehSaida ? valorCampo('lanc-tipo-despesa') : null,
+        id_veiculo: ehSaida ? valorCampo('lanc-veiculo') : null,
+        numero_nf: ehSaida ? valorCampo('lanc-numero-nf') : null,
+        data_despesa: ehSaida ? valorCampo('lanc-data-despesa') : null,
+        favorecido: ehSaida ? valorCampo('lanc-favorecido') : null
     };
 
     if (!payload.id_conta || !payload.valor || !payload.descricao) {
         return alert('Preencha conta, valor e descrição.');
     }
-    if (idVeiculo && !GRUPOS_QUE_EXIGEM_VEICULO.includes(payload.grupo_despesa)) {
-        return alert('O campo Veículo só se aplica a despesas do grupo Manutenção ou Combustível.');
+    if (ehSaida && !payload.grupo_despesa) {
+        return alert('Selecione o grupo de despesa.');
     }
 
     try {
@@ -446,12 +455,25 @@ async function salvarLancamento() {
 
 // dsp_filial guarda o nome da Unidade (ex.: "Santa Cruz"), o mesmo nome_filial que vem
 // do JOIN dos centros de custo — então dá para já sugerir o centro de custo da loja.
-function abrirModalConfirmarDespesa(id, descricao, nomeFilial) {
+// A loja classificou a despesa pela lista dela; aqui vale a lista da tesouraria.
+// Quando o nome bate (ex.: "Pessoal" / "Comissão"), já vem sugerido.
+function abrirModalConfirmarDespesa({ id, descricao, filial, grupo, tipo }) {
     document.getElementById('confirmar-despesa-id').value = id;
     document.getElementById('confirmar-despesa-descricao').textContent = descricao;
     document.getElementById('confirmar-conta').value = '';
-    const centroDaLoja = centrosCustoCache.find(c => c.nome_filial && c.nome_filial === nomeFilial);
+    const centroDaLoja = centrosCustoCache.find(c => c.nome_filial && c.nome_filial === filial);
     document.getElementById('confirmar-centro-custo').value = centroDaLoja ? String(centroDaLoja.id) : '';
+
+    const grupoSugerido = classificacaoCache.find(g => normalizarNome(g.nome) === normalizarNome(grupo));
+    const selectGrupo = document.getElementById('confirmar-grupo-despesa');
+    selectGrupo.value = grupoSugerido ? grupoSugerido.nome : '';
+    const selectTipo = document.getElementById('confirmar-tipo-despesa');
+    preencherSelectTipos(selectTipo, selectGrupo.value);
+    const tipoSugerido = grupoSugerido && grupoSugerido.tipos.find(t => normalizarNome(t.nome) === normalizarNome(tipo));
+    selectTipo.value = tipoSugerido ? tipoSugerido.nome : '';
+
+    document.getElementById('confirmar-classificacao-loja').textContent =
+        grupo || tipo ? `Na loja foi lançada como: ${[grupo, tipo].filter(Boolean).join(' / ')}` : '';
     abrirModal('modal-confirmar-despesa');
 }
 function fecharModalConfirmarDespesa() { fecharModal('modal-confirmar-despesa'); }
@@ -460,9 +482,12 @@ async function salvarConfirmarDespesa() {
     const id = document.getElementById('confirmar-despesa-id').value;
     const payload = {
         id_conta: Number(document.getElementById('confirmar-conta').value),
-        id_centro_custo: document.getElementById('confirmar-centro-custo').value || null
+        id_centro_custo: document.getElementById('confirmar-centro-custo').value || null,
+        grupo_despesa: document.getElementById('confirmar-grupo-despesa').value || null,
+        tipo_despesa: document.getElementById('confirmar-tipo-despesa').value || null
     };
     if (!payload.id_conta) return alert('Selecione a conta que pagou.');
+    if (!payload.grupo_despesa) return alert('Selecione o grupo de despesa.');
 
     try {
         await apiFetch(`/despesa-caixa/${id}/confirmar`, { method: 'POST', body: JSON.stringify(payload) });
@@ -477,7 +502,7 @@ async function salvarConfirmarDespesa() {
 
 async function abrirModalGerenciar() {
     abrirModal('modal-gerenciar');
-    await Promise.all([renderListaGerenciarContas(), renderListaGerenciarCentros()]);
+    await Promise.all([renderListaGerenciarContas(), renderListaGerenciarCentros(), renderListaGerenciarGrupos()]);
     if (typeof feather !== 'undefined') feather.replace();
 }
 
@@ -606,7 +631,106 @@ async function alternarAtivoCentro(id, ativoAtual) {
     }
 }
 
+async function renderListaGerenciarGrupos() {
+    const container = document.getElementById('lista-gerenciar-grupos');
+    try {
+        const todosGrupos = await apiFetch('/classificacao?todos=1');
+        container.innerHTML = todosGrupos.map(g => `
+            <div class="border border-gray-200 rounded px-2 py-1.5 text-xs ${g.ativo ? '' : 'opacity-50'}">
+                <div class="flex items-center justify-between">
+                    <span class="font-bold text-gray-700 truncate" title="${escapeHtml(g.nome)}">${escapeHtml(g.nome)}</span>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <label class="flex items-center gap-1 text-gray-600 cursor-pointer" title="Pede o veículo no lançamento">
+                            <input type="checkbox" data-acao="veiculo-grupo" data-id="${g.id}" data-valor="${g.exige_veiculo ? 1 : 0}" ${g.exige_veiculo ? 'checked' : ''}> veículo
+                        </label>
+                        <button class="text-indigo-600 hover:underline" data-acao="renomear-grupo" data-id="${g.id}" data-nome="${escapeHtml(g.nome)}">Renomear</button>
+                        <button class="${g.ativo ? 'text-red-600' : 'text-green-600'} hover:underline" data-acao="toggle-grupo" data-id="${g.id}" data-valor="${g.ativo ? 1 : 0}">${g.ativo ? 'Desativar' : 'Reativar'}</button>
+                    </div>
+                </div>
+                <div class="mt-1 pl-3 space-y-0.5">
+                    ${g.tipos.map(t => `
+                        <div class="flex items-center justify-between ${t.ativo ? '' : 'opacity-50'}">
+                            <span class="text-gray-600 truncate">• ${escapeHtml(t.nome)}</span>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <button class="text-indigo-600 hover:underline" data-acao="renomear-tipo" data-id="${t.id}" data-nome="${escapeHtml(t.nome)}">Renomear</button>
+                                <button class="${t.ativo ? 'text-red-600' : 'text-green-600'} hover:underline" data-acao="toggle-tipo" data-id="${t.id}" data-valor="${t.ativo ? 1 : 0}">${t.ativo ? 'Desativar' : 'Reativar'}</button>
+                            </div>
+                        </div>`).join('') || '<p class="text-gray-400 italic">Sem tipos cadastrados</p>'}
+                </div>
+            </div>`).join('') || '<p class="text-xs text-gray-400">Nenhum grupo cadastrado.</p>';
+
+        const acoes = {
+            'renomear-grupo': btn => renomearItem('grupos', btn.dataset.id, btn.dataset.nome, 'Novo nome do grupo:'),
+            'veiculo-grupo': btn => atualizarItem('grupos', btn.dataset.id, { exige_veiculo: btn.dataset.valor === '1' ? 0 : 1 }),
+            'toggle-grupo': btn => atualizarItem('grupos', btn.dataset.id, { ativo: btn.dataset.valor === '1' ? 0 : 1 }),
+            'renomear-tipo': btn => renomearItem('tipos', btn.dataset.id, btn.dataset.nome, 'Novo nome do tipo:'),
+            'toggle-tipo': btn => atualizarItem('tipos', btn.dataset.id, { ativo: btn.dataset.valor === '1' ? 0 : 1 })
+        };
+        container.querySelectorAll('[data-acao]').forEach(btn => {
+            btn.addEventListener('click', () => acoes[btn.dataset.acao](btn));
+        });
+
+        // Só grupos ativos recebem tipos novos e aparecem nos lançamentos.
+        const ativos = todosGrupos.filter(g => g.ativo);
+        document.getElementById('novo-tipo-grupo').innerHTML = '<option value="">-- Grupo do novo tipo --</option>' +
+            ativos.map(g => `<option value="${g.id}">${escapeHtml(g.nome)}</option>`).join('');
+        classificacaoCache = ativos.map(g => ({ ...g, tipos: g.tipos.filter(t => t.ativo) }));
+        preencherSelectGrupos(document.getElementById('lanc-grupo-despesa'));
+        preencherSelectGrupos(document.getElementById('confirmar-grupo-despesa'));
+    } catch (err) {
+        container.innerHTML = `<p class="text-xs text-red-500">Erro ao carregar grupos: ${escapeHtml(err.message)}</p>`;
+    }
+}
+
+async function adicionarGrupo() {
+    const nome = document.getElementById('novo-grupo-nome').value.trim();
+    const exige_veiculo = document.getElementById('novo-grupo-veiculo').checked;
+    if (!nome) return alert('Informe o nome do grupo.');
+    try {
+        await apiFetch('/grupos', { method: 'POST', body: JSON.stringify({ nome, exige_veiculo }) });
+        document.getElementById('novo-grupo-nome').value = '';
+        document.getElementById('novo-grupo-veiculo').checked = false;
+        await renderListaGerenciarGrupos();
+    } catch (err) {
+        alert('Erro ao adicionar grupo: ' + err.message);
+    }
+}
+
+async function adicionarTipo() {
+    const id_grupo = document.getElementById('novo-tipo-grupo').value;
+    const nome = document.getElementById('novo-tipo-nome').value.trim();
+    if (!id_grupo || !nome) return alert('Escolha o grupo e informe o nome do tipo.');
+    try {
+        await apiFetch('/tipos', { method: 'POST', body: JSON.stringify({ id_grupo: Number(id_grupo), nome }) });
+        document.getElementById('novo-tipo-nome').value = '';
+        await renderListaGerenciarGrupos();
+        document.getElementById('novo-tipo-grupo').value = id_grupo;
+    } catch (err) {
+        alert('Erro ao adicionar tipo: ' + err.message);
+    }
+}
+
+// recurso: 'grupos' ou 'tipos'.
+async function renomearItem(recurso, id, nomeAtual, pergunta) {
+    const novoNome = prompt(pergunta, nomeAtual);
+    if (!novoNome || novoNome.trim() === '' || novoNome === nomeAtual) return;
+    await atualizarItem(recurso, id, { nome: novoNome.trim() });
+}
+
+async function atualizarItem(recurso, id, dados) {
+    try {
+        await apiFetch(`/${recurso}/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
+        await renderListaGerenciarGrupos();
+    } catch (err) {
+        alert('Erro ao atualizar: ' + err.message);
+    }
+}
+
 // --- EXPORTAÇÃO ---
+
+function textoClassificacao(m) {
+    return [m.grupo_despesa, m.tipo_despesa].filter(Boolean).join(' / ') || '-';
+}
 
 function formatarMoeda(valor) {
     return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -660,9 +784,9 @@ function gerarPDF() {
     const finalY = doc.autoTable.previous.finalY;
     const ativos = movimentosDoDia.filter(movimentoEfetivo);
     doc.autoTable({
-        head: [['Conta', 'Centro de Custo', 'Tipo Despesa', 'Tipo', 'Descrição', 'Valor']],
+        head: [['Conta', 'Centro de Custo', 'Grupo / Tipo', 'Tipo', 'Descrição', 'Valor']],
         body: ativos.map(m => [
-            m.nome_conta, m.nome_centro_custo || '-', m.tipo_despesa || '-', m.tipo === 'entrada' ? 'Entrada' : 'Saída',
+            m.nome_conta, m.nome_centro_custo || '-', textoClassificacao(m), m.tipo === 'entrada' ? 'Entrada' : 'Saída',
             m.descricao, formatarMoeda(m.valor)
         ]),
         startY: finalY + 10,
