@@ -15,97 +15,8 @@ function getToken() { return localStorage.getItem('lucaUserToken'); }
 function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
 function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html';}
 
-// --- LÓGICA DA SIDEBAR ---
-function setupSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    if (!sidebar) return;
 
-    const desktopToggleButton = document.getElementById('sidebar-toggle');
-    if (desktopToggleButton) {
-        const setDesktopSidebarState = (collapsed) => {
-            sidebar.classList.toggle('w-64', !collapsed);
-            sidebar.classList.toggle('w-20', collapsed);
-            document.querySelectorAll('.sidebar-text').forEach(el => el.classList.toggle('hidden', collapsed));
-            document.getElementById('toggle-icon-collapse').classList.toggle('hidden', collapsed);
-            document.getElementById('toggle-icon-expand').classList.toggle('hidden', !collapsed);
-            localStorage.setItem('sidebar_collapsed', collapsed);
-        };
-        const isDesktopCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
-        setDesktopSidebarState(isDesktopCollapsed);
-        desktopToggleButton.addEventListener('click', () => {
-            const currentlyCollapsed = sidebar.classList.contains('w-20');
-            setDesktopSidebarState(!currentlyCollapsed);
-        });
-    }
 
-    const mobileMenuButton = document.getElementById('mobile-menu-button');
-    const overlay = document.getElementById('mobile-menu-overlay');
-    if (mobileMenuButton && overlay) {
-        mobileMenuButton.addEventListener('click', () => {
-            sidebar.classList.remove('-translate-x-full');
-            overlay.classList.remove('hidden');
-        });
-        overlay.addEventListener('click', () => {
-            sidebar.classList.add('-translate-x-full');
-            overlay.classList.add('hidden');
-        });
-    }
-}
-
-function loadCompanyLogo() {
-    const companyLogo = document.getElementById('company-logo');
-    if (!companyLogo) return;
-    const logoBase64 = localStorage.getItem('company_logo');
-    if (logoBase64) {
-        companyLogo.src = logoBase64;
-        companyLogo.style.display = 'block';
-    }
-}
-
-// --- CONTROLE DE ACESSO (ATUALIZADO PARA O NOVO PADRÃO) ---
-function gerenciarAcessoModulos() {
-    const userData = getUserData();
-    if (!userData || !userData.permissoes) return;
-    
-    const permissoesDoUsuario = userData.permissoes;
-    
-    // Mapeamento: 'permissao_no_banco': 'arquivo_destino.html'
-    const mapaModulos = {
-        'lancamentos': 'despesas.html',
-        'logistica': 'logistica.html',
-        'transporte': 'transporte.html',
-        'entregas': 'entregas.html',
-        'checklist': 'checklist.html',
-        'produtos': 'produtos.html',
-        'configuracoes': 'settings.html',
-        'estoque_view': 'estoque.html' // Nova chave para o link da sidebar
-    };
-
-    // Verifica se tem QUALQUER acesso ao estoque (View, Oper ou Admin)
-    const temAcessoEstoque = permissoesDoUsuario.some(p => 
-        (p.nome_modulo === 'estoque_view' || p.nome_modulo === 'estoque_oper' || p.nome_modulo === 'estoque_admin') && p.permitido
-    );
-
-    for (const [nomeModulo, href] of Object.entries(mapaModulos)) {
-        // Lógica especial para o estoque
-        if (nomeModulo === 'estoque_view') {
-            if (!temAcessoEstoque) {
-                const link = document.querySelector(`#sidebar a[href="${href}"]`);
-                if (link && link.parentElement) link.parentElement.style.display = 'none';
-            }
-            continue;
-        }
-
-        // Lógica padrão para os outros módulos
-        const permissao = permissoesDoUsuario.find(p => p.nome_modulo === nomeModulo);
-        if (!permissao || !permissao.permitido) {
-            const link = document.querySelector(`#sidebar a[href="${href}"]`);
-            if (link && link.parentElement) {
-                link.parentElement.style.display = 'none';
-            }
-        }
-    }
-}
 
 async function initProductsPage() {
     if (!getToken()) {
@@ -113,8 +24,6 @@ async function initProductsPage() {
         return;
     }
     feather.replace();
-    setupSidebar();
-    loadCompanyLogo();
     
     const userData = getUserData();
     if (userData && document.getElementById('user-name')) {
@@ -122,7 +31,6 @@ async function initProductsPage() {
     }
     document.getElementById('logout-button')?.addEventListener('click', logout);
     
-    gerenciarAcessoModulos(); // Aplica as permissões na barra lateral
     
     await populateFilialFilter();
     await initializeFilterSelects();
