@@ -61,6 +61,9 @@
             <button id="btn-nova-entrada" class="h-8 bg-green-600 text-white px-3 rounded text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
                 <i data-feather="arrow-down-circle" class="w-3.5 h-3.5"></i> ENTRADA
             </button>
+            <button id="btn-apurado" class="h-8 bg-emerald-700 text-white px-3 rounded text-xs font-bold hover:bg-emerald-800 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
+                <i data-feather="dollar-sign" class="w-3.5 h-3.5"></i> APURADO DAS LOJAS
+            </button>
             <button id="btn-nova-saida" class="h-8 bg-red-600 text-white px-3 rounded text-xs font-bold hover:bg-red-700 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
                 <i data-feather="arrow-up-circle" class="w-3.5 h-3.5"></i> SAÍDA
             </button>
@@ -275,6 +278,46 @@
         </div>
     </div>
 
+    <!-- Modal: Apurado das Lojas (ERP Contas a Receber) — entradas por loja e modalidade -->
+    <div id="modal-apurado" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-7xl overflow-hidden transform scale-95 transition-transform duration-200 h-[92vh] flex flex-col">
+            <div class="flex justify-between items-center px-6 py-3 border-b border-gray-200 bg-emerald-50 shrink-0">
+                <h3 class="text-lg font-bold text-emerald-900 flex items-center gap-2">
+                    <i data-feather="dollar-sign" class="w-5 h-5 text-emerald-700"></i> Apurado das Lojas · <span id="dia-apurado"></span>
+                </h3>
+                <button id="btn-fechar-modal-apurado" class="text-emerald-400 hover:text-emerald-700 hover:bg-emerald-100 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
+            </div>
+            <p class="px-6 pt-2 text-[11px] text-gray-500 shrink-0">
+                Valores recebidos no ERP neste dia, por loja e modalidade. Confira o <b>valor</b>, digite a <b>taxa</b> das maquininhas
+                (em R$, ou em % terminando com %, ex.: <b>3,5%</b>) e escolha a <b>conta</b> onde o dinheiro entra.
+                Cada linha vira uma entrada pelo valor bruto e, se tiver taxa, uma saída da taxa na mesma conta.
+            </p>
+            <div class="flex-1 min-h-0 px-6 py-2">
+                <div id="tabela-apurado" class="w-full h-full"></div>
+            </div>
+            <div class="bg-gray-50 px-6 py-3 border-t border-gray-200 shrink-0 space-y-2">
+                <div class="flex flex-wrap items-end gap-3">
+                    <div class="flex items-end gap-1">
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Conta dos marcados</label>
+                            <select id="apurado-conta-lote" class="h-8 border border-gray-300 rounded text-xs px-2 w-56"></select>
+                        </div>
+                        <button id="btn-apurado-aplicar-conta" class="h-8 px-3 bg-white border border-gray-300 rounded text-xs font-bold hover:bg-gray-100">Aplicar</button>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <p id="resumo-apurado" class="text-xs font-bold text-gray-700"></p>
+                    <div class="flex gap-3">
+                        <button id="btn-cancelar-apurado" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm">Fechar</button>
+                        <button id="btn-lancar-apurado" class="px-4 py-2 text-sm font-bold text-white bg-emerald-700 rounded-md hover:bg-emerald-800 shadow-sm flex items-center gap-2">
+                            <i data-feather="check" class="w-4 h-4"></i> Lançar marcados
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: Despesas das Lojas (despesa_caixa) — conferência antes de entrar no relatório -->
     <div id="modal-lojas" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
         <div class="bg-white rounded-xl shadow-xl w-full max-w-7xl overflow-hidden transform scale-95 transition-transform duration-200 h-[92vh] flex flex-col">
@@ -444,6 +487,6 @@
     </div>
 
     <script src="assets/global.js?v=20261104"></script>
-    <script src="tesouraria.js?v=20261105"></script>
+    <script src="tesouraria.js?v=20261105b"></script>
 </body>
 </html>

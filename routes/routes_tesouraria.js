@@ -421,6 +421,24 @@ router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), asyn
     }
 });
 
+// O registro de estorno fica no mesmo dia do original, só como trilha de auditoria:
+// nem o original (status 'estornado') nem o estorno entram nos totais.
+async function registrarEstorno(connection, original, userId, nomeUsuario) {
+    const tipoEstorno = original.tipo === 'entrada' ? 'saida' : 'entrada';
+    await connection.execute(
+        `INSERT INTO tesouraria_movimentos
+            (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, valor, descricao, favorecido, forma_pagamento, origem, status, id_movimento_estornado, id_usuario_lancamento, nome_usuario_lancamento)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 'ativo', ?, ?, ?)`,
+        [
+            original.id_conta, original.id_centro_custo, original.id_veiculo, original.data_movimento, original.data_despesa, original.numero_nf,
+            original.grupo_despesa, original.tipo_despesa, tipoEstorno, original.valor,
+            `Estorno do lançamento #${original.id}: ${original.descricao}`,
+            original.favorecido, original.forma_pagamento, original.id, userId, nomeUsuario
+        ]
+    );
+    await connection.execute(`UPDATE tesouraria_movimentos SET status = 'estornado' WHERE id = ?`, [original.id]);
+}
+
 // POST /api/tesouraria/movimentos/:id/estornar
 router.post('/movimentos/:id/estornar', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
     const { id } = req.params;
@@ -449,25 +467,17 @@ router.post('/movimentos/:id/estornar', authenticateToken, checkPerm('tesouraria
             return res.status(409).json({ error: 'Este lançamento já é um estorno e não pode ser estornado.' });
         }
 
-        // O registro de estorno fica no mesmo dia do original, só como trilha de auditoria:
-        // nem o original (status 'estornado') nem o estorno entram nos totais.
-        const tipoEstorno = original.tipo === 'entrada' ? 'saida' : 'entrada';
-        await connection.execute(
-            `INSERT INTO tesouraria_movimentos
-                (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, valor, descricao, favorecido, forma_pagamento, origem, status, id_movimento_estornado, id_usuario_lancamento, nome_usuario_lancamento)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 'ativo', ?, ?, ?)`,
-            [
-                original.id_conta, original.id_centro_custo, original.id_veiculo, original.data_movimento, original.data_despesa, original.numero_nf,
-                original.grupo_despesa, original.tipo_despesa, tipoEstorno, original.valor,
-                `Estorno do lançamento #${original.id}: ${original.descricao}`,
-                original.favorecido, original.forma_pagamento, original.id, userId, nomeUsuario
-            ]
-        );
+        await registrarEstorno(connection, original, userId, nomeUsuario);
 
-        await connection.execute(
-            `UPDATE tesouraria_movimentos SET status = 'estornado' WHERE id = ?`,
-            [id]
-        );
+        // A entrada do apurado leva junto a saída da taxa dela, senão a taxa fica solta
+        // e impede lançar a linha de novo.
+        if (original.origem === 'erp_receber' && !String(original.origem_ref).endsWith('|taxa')) {
+            const [taxas] = await connection.execute(
+                `SELECT * FROM tesouraria_movimentos WHERE origem = 'erp_receber' AND origem_ref = ? AND status = 'ativo' FOR UPDATE`,
+                [`${original.origem_ref}|taxa`]
+            );
+            for (const taxa of taxas) await registrarEstorno(connection, taxa, userId, nomeUsuario);
+        }
 
         await connection.commit();
         res.json({ message: 'Lançamento estornado com sucesso!' });
@@ -857,6 +867,225 @@ router.post('/despesa-caixa/conferir', authenticateToken, checkPerm('tesouraria_
         if (connection) await connection.rollback();
         console.error('Erro ao conferir despesas das lojas:', error);
         res.status(500).json({ error: 'Erro interno ao conferir as despesas.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// --- APURADO DAS LOJAS (ERP receber/cdavs): entradas por loja e modalidade ---
+
+// Mesmo de/para de filial usado na Conciliação de Recebíveis:
+// `cod` é a filial no receber (rc_indefi), `fili` é a filial no cdavs (cr_fili).
+const LOJAS_APURADO = [
+    { cod: 'TNASC', fili: '2', nome: 'Parada Angelica' },
+    { cod: 'LCMAT', fili: '6', nome: 'Nova Campinas' },
+    { cod: 'LUCAM', fili: '7', nome: 'Santa Cruz' },
+    { cod: 'VMNAF', fili: '8', nome: 'Piabeta' }
+];
+
+// Forma de recebimento do ERP (rc_formar) -> modalidade da tesouraria.
+// `taxa` é o tipo do grupo "Taxas Financeiras" usado na saída da taxa; null = modalidade sem taxa.
+const MODALIDADES_APURADO = {
+    '01-Dinheiro': { chave: 'dinheiro', nome: 'Dinheiro', taxa: null },
+    '11-Deposito Conta': { chave: 'pix', nome: 'Pix / Depósito', taxa: 'Pix' },
+    '04-Cartao Credito': { chave: 'cartao_credito', nome: 'Cartão de Crédito', taxa: 'Cartão de Crédito' },
+    '05-Cartao Debito': { chave: 'cartao_debito', nome: 'Cartão de Débito', taxa: 'Cartão de Débito' },
+    '06-Boleto': { chave: 'boleto', nome: 'Boleto', taxa: 'Boleto' },
+    '07-Carteira': { chave: 'carteira', nome: 'Carteira', taxa: null },
+    '13-Venda Site (Merc. Pago)': { chave: 'site_mp', nome: 'Venda Site (Mercado Pago)', taxa: 'Mercado Pago' }
+};
+const MODALIDADE_POR_CHAVE = new Map(Object.values(MODALIDADES_APURADO).map(m => [m.chave, m]));
+const GRUPO_TAXAS = 'Taxas Financeiras';
+
+// GET /api/tesouraria/apurado?data=YYYY-MM-DD
+// Uma linha por loja e modalidade com o total recebido no ERP no dia, já cruzado com o que
+// foi lançado na tesouraria. Dinheiro soma o receber e o caixa do balcão (cdavs), como na Conciliação.
+router.get('/apurado', authenticateToken, checkPerm('tesouraria_view'), async (req, res) => {
+    const { data } = req.query;
+    if (!data) return res.status(400).json({ error: 'Informe a data.' });
+
+    try {
+        const [recebidos] = await seiPool.query(
+            `SELECT rc_indefi AS cod, rc_formar AS formar, SUM(rc_vlbaix) AS total, COUNT(*) AS qtd
+             FROM receber
+             WHERE rc_dtbaix = ? AND rc_status IN ('1', '2') AND rc_indefi IN (?) AND rc_formar IN (?)
+             GROUP BY rc_indefi, rc_formar`,
+            [data, LOJAS_APURADO.map(l => l.cod), Object.keys(MODALIDADES_APURADO)]
+        );
+        const [balcao] = await seiPool.query(
+            `SELECT cr_fili AS fili, SUM(cr_dinh) AS total, COUNT(*) AS qtd
+             FROM cdavs
+             WHERE cr_erec = ? AND cr_reca = '1' AND cr_fili IN (?)
+               AND (cr_rece = '01-Dinheiro' OR (cr_rece = '20-Diversos' AND LENGTH(TRIM(cr_dinh)) > 0))
+             GROUP BY cr_fili`,
+            [data, LOJAS_APURADO.map(l => l.fili)]
+        );
+
+        const linhas = new Map();
+        const linha = (loja, modalidade) => {
+            const chave = `${loja.cod}|${modalidade.chave}`;
+            if (!linhas.has(chave)) {
+                linhas.set(chave, {
+                    chave, cod_filial: loja.cod, loja: loja.nome, modalidade: modalidade.chave,
+                    nome_modalidade: modalidade.nome, aceita_taxa: !!modalidade.taxa, valor_erp: 0, qtd: 0
+                });
+            }
+            return linhas.get(chave);
+        };
+        for (const r of recebidos) {
+            const l = linha(LOJAS_APURADO.find(x => x.cod === r.cod), MODALIDADES_APURADO[r.formar]);
+            l.valor_erp += Number(r.total || 0);
+            l.qtd += Number(r.qtd);
+        }
+        for (const b of balcao) {
+            const l = linha(LOJAS_APURADO.find(x => x.fili === String(b.fili)), MODALIDADES_APURADO['01-Dinheiro']);
+            l.valor_erp += Number(b.total || 0);
+            l.qtd += Number(b.qtd);
+        }
+
+        // O que já entrou na tesouraria neste dia (entrada e taxa de cada linha).
+        const [lancados] = await gerencialPool.query(
+            `SELECT m.id, m.origem_ref, m.tipo, m.valor, c.nome AS nome_conta
+             FROM tesouraria_movimentos m
+             JOIN tesouraria_contas c ON c.id = m.id_conta
+             WHERE m.origem = 'erp_receber' AND m.status = 'ativo' AND m.origem_ref LIKE ?`,
+            [`${data}|%`]
+        );
+        for (const m of lancados) {
+            const [, cod, modalidade, sufixo] = m.origem_ref.split('|');
+            const loja = LOJAS_APURADO.find(x => x.cod === cod);
+            const mod = MODALIDADE_POR_CHAVE.get(modalidade);
+            if (!loja || !mod) continue;
+            const l = linha(loja, mod);
+            if (sufixo === 'taxa') {
+                l.id_movimento_taxa = m.id;
+                l.taxa_lancada = Number(m.valor);
+            } else {
+                l.id_movimento = m.id;
+                l.valor_lancado = Number(m.valor);
+                l.conta_lancada = m.nome_conta;
+            }
+        }
+
+        // Sugestões: centro de custo pela Unidade da loja e a última conta usada na mesma loja/modalidade.
+        const [centros] = await gerencialPool.query(
+            `SELECT cc.id, p.NOME_PARAMETRO AS nome_filial
+             FROM tesouraria_centros_custo cc
+             JOIN parametro p ON cc.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
+             WHERE cc.ativo = 1`
+        );
+        const centroPorLoja = new Map(centros.map(c => [nomeComparavel(c.nome_filial), c.id]));
+        const [ultimas] = await gerencialPool.query(
+            `SELECT m.origem_ref, m.id_conta
+             FROM tesouraria_movimentos m
+             JOIN tesouraria_contas c ON c.id = m.id_conta AND c.ativo = 1
+             WHERE m.origem = 'erp_receber' AND m.tipo = 'entrada'
+             ORDER BY m.id DESC
+             LIMIT 500`
+        );
+        const contaPorLinha = new Map();
+        for (const u of ultimas) {
+            const [, cod, modalidade] = u.origem_ref.split('|');
+            const chave = `${cod}|${modalidade}`;
+            if (!contaPorLinha.has(chave)) contaPorLinha.set(chave, u.id_conta);
+        }
+
+        const ordemModalidade = Object.values(MODALIDADES_APURADO).map(m => m.chave);
+        const resultado = [...linhas.values()]
+            .map(l => ({
+                ...l,
+                valor_erp: Math.round(l.valor_erp * 100) / 100,
+                id_centro_sugerido: centroPorLoja.get(nomeComparavel(l.loja)) || null,
+                id_conta_sugerida: contaPorLinha.get(l.chave) || null
+            }))
+            .sort((a, b) => a.loja.localeCompare(b.loja) || ordemModalidade.indexOf(a.modalidade) - ordemModalidade.indexOf(b.modalidade));
+        res.json(resultado);
+    } catch (error) {
+        console.error('Erro ao buscar o apurado das lojas:', error);
+        res.status(500).json({ error: 'Erro ao buscar o apurado no ERP.' });
+    }
+});
+
+// POST /api/tesouraria/apurado/lancar
+// { data_movimento, itens: [{ cod_filial, modalidade, valor, taxa, id_conta, id_centro_custo }] }
+// Cada item vira uma entrada pelo valor bruto e, se tiver taxa, uma saída da taxa na mesma conta.
+router.post('/apurado/lancar', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
+    const { data_movimento, itens } = req.body;
+    const { userId, nome: nomeUsuario } = req.user;
+
+    if (!data_movimento || !Array.isArray(itens) || itens.length === 0) {
+        return res.status(400).json({ error: 'Marque ao menos uma linha do apurado.' });
+    }
+
+    const preparados = [];
+    for (const item of itens) {
+        const loja = LOJAS_APURADO.find(l => l.cod === item.cod_filial);
+        const modalidade = MODALIDADE_POR_CHAVE.get(item.modalidade);
+        if (!loja || !modalidade) return res.status(400).json({ error: 'Loja ou modalidade inválida.' });
+        const rotulo = `${loja.nome} · ${modalidade.nome}`;
+        const valor = Math.round(Number(item.valor) * 100) / 100;
+        const taxa = Math.round(Number(item.taxa || 0) * 100) / 100;
+        if (!item.id_conta) return res.status(400).json({ error: `${rotulo}: escolha a conta.` });
+        if (!(valor > 0)) return res.status(400).json({ error: `${rotulo}: valor inválido.` });
+        if (taxa < 0 || taxa >= valor) return res.status(400).json({ error: `${rotulo}: a taxa precisa ser menor que o valor.` });
+        if (taxa > 0 && !modalidade.taxa) return res.status(400).json({ error: `${rotulo}: esta modalidade não tem taxa.` });
+        preparados.push({ item, loja, modalidade, valor, taxa });
+    }
+
+    let connection;
+    try {
+        // A taxa usa o grupo "Taxas Financeiras" da própria tesouraria; valida cada tipo uma vez.
+        const tiposTaxa = new Map();
+        for (const p of preparados.filter(p => p.taxa > 0)) {
+            if (tiposTaxa.has(p.modalidade.taxa)) continue;
+            const resultado = await validarClassificacao(GRUPO_TAXAS, p.modalidade.taxa, null);
+            if (resultado.erro) {
+                return res.status(400).json({ error: `Taxa ${p.modalidade.nome}: ${resultado.erro} (cadastre em CADASTROS → Grupos).` });
+            }
+            tiposTaxa.set(p.modalidade.taxa, resultado);
+        }
+
+        connection = await mysql.createConnection(dbConfig);
+        await connection.beginTransaction();
+
+        const lancados = [];
+        const jaLancados = [];
+        for (const { item, loja, modalidade, valor, taxa } of preparados) {
+            const ref = `${data_movimento}|${loja.cod}|${modalidade.chave}`;
+            try {
+                await connection.execute(
+                    `INSERT INTO tesouraria_movimentos
+                        (id_conta, id_centro_custo, data_movimento, tipo, valor, descricao, forma_pagamento,
+                         origem, origem_ref, id_usuario_lancamento, nome_usuario_lancamento)
+                     VALUES (?, ?, ?, 'entrada', ?, ?, ?, 'erp_receber', ?, ?, ?)`,
+                    [item.id_conta, item.id_centro_custo || null, data_movimento, valor,
+                     `Apurado ${loja.nome} - ${modalidade.nome}`, modalidade.chave, ref, userId, nomeUsuario]
+                );
+            } catch (err) {
+                if (err.code !== 'ER_DUP_ENTRY') throw err;
+                jaLancados.push(`${loja.nome} · ${modalidade.nome}`);
+                continue;
+            }
+            if (taxa > 0) {
+                const { grupo, tipo } = tiposTaxa.get(modalidade.taxa);
+                await connection.execute(
+                    `INSERT INTO tesouraria_movimentos
+                        (id_conta, id_centro_custo, data_movimento, grupo_despesa, tipo_despesa, tipo, valor, descricao,
+                         forma_pagamento, origem, origem_ref, id_usuario_lancamento, nome_usuario_lancamento)
+                     VALUES (?, ?, ?, ?, ?, 'saida', ?, ?, ?, 'erp_receber', ?, ?, ?)`,
+                    [item.id_conta, item.id_centro_custo || null, data_movimento, grupo, tipo, taxa,
+                     `Taxa ${modalidade.nome} - apurado ${loja.nome}`, modalidade.chave, `${ref}|taxa`, userId, nomeUsuario]
+                );
+            }
+            lancados.push(`${loja.nome} · ${modalidade.nome}`);
+        }
+
+        await connection.commit();
+        res.status(201).json({ message: `${lancados.length} linha(s) do apurado lançada(s).`, lancados, ja_lancados: jaLancados });
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error('Erro ao lançar o apurado:', error);
+        res.status(500).json({ error: 'Erro interno ao lançar o apurado.' });
     } finally {
         if (connection) await connection.end();
     }

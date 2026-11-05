@@ -15,7 +15,12 @@ const OPCOES_ENTRADA = {
     sangria: 'Sangria de Caixa', sobra: 'Sobra do Dia Anterior', transferencia: 'Transferência entre Contas',
     emprestimo: 'Empréstimo Recebido', aporte: 'Aporte', outro: 'Outro'
 };
-const FORMAS_PAGAMENTO_LABEL = { ...OPCOES_SAIDA, ...OPCOES_ENTRADA };
+// Modalidades do apurado das lojas (entradas vindas do ERP): mesmas chaves salvas pelo backend.
+const MODALIDADES_APURADO_LABEL = {
+    dinheiro: 'Dinheiro', pix: 'Pix / Depósito', cartao_credito: 'Cartão de Crédito', cartao_debito: 'Cartão de Débito',
+    boleto: 'Boleto', carteira: 'Carteira', site_mp: 'Venda Site (Mercado Pago)'
+};
+const FORMAS_PAGAMENTO_LABEL = { ...MODALIDADES_APURADO_LABEL, ...OPCOES_SAIDA, ...OPCOES_ENTRADA };
 const TIPO_CENTRO_LABEL = {
     loja: 'Loja', transportadora: 'Transportadora', administrativo: 'Administrativo', outro: 'Outro'
 };
@@ -348,7 +353,7 @@ function renderTabelaMovimentos(movimentos) {
     tabelaMovimentos.on('tableBuilt', aplicarFiltrosMovimentos);
 }
 
-const ORIGEM_LABEL = { manual: 'Manual', despesa_caixa: 'Despesa da loja', erp_apagar: 'Contas a Pagar' };
+const ORIGEM_LABEL = { manual: 'Manual', despesa_caixa: 'Despesa da loja', erp_apagar: 'Contas a Pagar', erp_receber: 'Apurado da loja' };
 
 function aplicarFiltrosMovimentos() {
     document.querySelectorAll('.filtro-tipo').forEach(btn => {
@@ -394,6 +399,12 @@ function setupModais() {
     document.getElementById('btn-fechar-modal-lancamento').addEventListener('click', fecharModalLancamento);
     document.getElementById('btn-cancelar-lancamento').addEventListener('click', fecharModalLancamento);
     document.getElementById('btn-salvar-lancamento').addEventListener('click', salvarLancamento);
+
+    document.getElementById('btn-apurado').addEventListener('click', abrirModalApurado);
+    document.getElementById('btn-fechar-modal-apurado').addEventListener('click', () => fecharModal('modal-apurado'));
+    document.getElementById('btn-cancelar-apurado').addEventListener('click', () => fecharModal('modal-apurado'));
+    document.getElementById('btn-apurado-aplicar-conta').addEventListener('click', aplicarContaApurado);
+    document.getElementById('btn-lancar-apurado').addEventListener('click', lancarApurado);
 
     document.getElementById('btn-despesas-lojas').addEventListener('click', () => abrirModalLojas('dia'));
     document.getElementById('kpi-pend-lojas').addEventListener('click', () => abrirModalLojas('pendentes'));
@@ -810,6 +821,249 @@ async function desfazerConferencia(d) {
     try {
         await apiFetch(`/movimentos/${d.id_movimento}/estornar`, { method: 'POST' });
         await carregarDespesasLojas(modoLojas);
+        await carregarDia(document.getElementById('filtro-data').value);
+    } catch (err) {
+        dialogoAviso('Erro ao desfazer: ' + err.message, 'erro');
+    }
+}
+
+// --- APURADO DAS LOJAS (ERP Contas a Receber) ---
+
+let tabelaApurado = null;
+let tabelaApuradoPronta = null;
+
+function abrirModalApurado() {
+    document.getElementById('dia-apurado').textContent = formatarDataBR(document.getElementById('filtro-data').value);
+    preencherSelectContas(document.getElementById('apurado-conta-lote'));
+    abrirModal('modal-apurado');
+    // A tabela só pode ser montada com o modal visível, senão o Tabulator calcula altura zero.
+    requestAnimationFrame(carregarApurado);
+}
+
+async function carregarApurado() {
+    const dataRef = document.getElementById('filtro-data').value;
+    await montarTabelaApurado();
+    tabelaApurado.setData([]);
+    tabelaApurado.alert('Buscando o apurado no ERP...');
+    try {
+        const linhas = await apiFetch(`/apurado?data=${dataRef}`);
+        tabelaApurado.clearAlert();
+        tabelaApurado.setData(linhas.map(l => ({
+            ...l,
+            marcado: false,
+            valor: l.valor_erp,
+            taxa: 0,
+            id_conta: l.id_conta_sugerida,
+            id_centro_custo: l.id_centro_sugerido
+        })));
+    } catch (err) {
+        tabelaApurado.clearAlert();
+        dialogoAviso('Erro ao buscar o apurado: ' + err.message, 'erro');
+    }
+    atualizarResumoApurado();
+}
+
+// Aceita a taxa em reais ("12,50") ou em percentual do valor ("3,5%").
+function interpretarTaxa(texto, valor) {
+    let s = String(texto ?? '').trim().replace(/\s|R\$/g, '');
+    if (!s) return 0;
+    const percentual = s.endsWith('%');
+    s = s.replace('%', '');
+    if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+    const numero = Number(s);
+    if (!Number.isFinite(numero) || numero < 0) return 0;
+    const taxa = percentual ? Number(valor || 0) * numero / 100 : numero;
+    return Math.round(taxa * 100) / 100;
+}
+
+function linhaApuradoLancada(l) {
+    return !!l.id_movimento;
+}
+
+function montarTabelaApurado() {
+    if (tabelaApuradoPronta) return tabelaApuradoPronta;
+    const opcoesConta = () => contasCache.map(c => ({ label: c.nome, value: c.id }));
+    const editavel = cell => !linhaApuradoLancada(cell.getRow().getData());
+
+    tabelaApurado = new Tabulator('#tabela-apurado', {
+        data: [],
+        layout: 'fitColumns',
+        height: '100%',
+        index: 'chave',
+        groupBy: 'loja',
+        groupHeader: (loja, qtd, linhas) => {
+            const total = linhas.reduce((acc, l) => acc + Number(l.valor_erp || 0), 0);
+            return `${escapeHtml(loja)} <span class="text-gray-500 font-normal ml-2">ERP: ${formatarMoeda(total)}</span>`;
+        },
+        placeholder: 'Nenhum recebimento no ERP neste dia.',
+        rowFormatter: row => {
+            if (linhaApuradoLancada(row.getData())) row.getElement().style.background = '#f0fdf4';
+        },
+        columns: [
+            {
+                title: '', field: 'marcado', width: 40, hozAlign: 'center', headerSort: false,
+                titleFormatter: () => '<input type="checkbox" id="apurado-marcar-todos" title="Marcar todas as linhas a lançar">',
+                formatter: cell => linhaApuradoLancada(cell.getRow().getData())
+                    ? '<i class="text-emerald-600 font-bold">✓</i>'
+                    : `<input type="checkbox" ${cell.getValue() ? 'checked' : ''}>`,
+                cellClick: (e, cell) => {
+                    if (linhaApuradoLancada(cell.getRow().getData())) return;
+                    cell.getRow().update({ marcado: !cell.getValue() });
+                    atualizarResumoApurado();
+                },
+                headerClick: () => {
+                    const linhas = tabelaApurado.getRows().filter(l => !linhaApuradoLancada(l.getData()));
+                    const marcar = !linhas.every(l => l.getData().marcado);
+                    linhas.forEach(l => l.update({ marcado: marcar }));
+                    atualizarResumoApurado();
+                }
+            },
+            { title: 'Modalidade', field: 'nome_modalidade', widthGrow: 1.4, minWidth: 150, headerSort: false },
+            { title: 'Qtd', field: 'qtd', width: 55, hozAlign: 'right', headerSort: false },
+            { title: 'Valor ERP', field: 'valor_erp', width: 110, hozAlign: 'right', headerSort: false, formatter: cell => formatarMoeda(cell.getValue()) },
+            {
+                title: 'Valor a lançar', field: 'valor', width: 120, hozAlign: 'right', headerSort: false,
+                editor: 'number', editorParams: { min: 0, step: 0.01 }, editable: editavel,
+                formatter: cell => {
+                    const l = cell.getRow().getData();
+                    if (linhaApuradoLancada(l)) return formatarMoeda(l.valor_lancado);
+                    const difere = Math.abs(Number(cell.getValue() || 0) - Number(l.valor_erp || 0)) >= 0.01;
+                    return `<span class="font-bold ${difere ? 'text-amber-700' : ''}" ${difere ? 'title="Diferente do ERP"' : ''}>${formatarMoeda(cell.getValue())}</span>`;
+                }
+            },
+            {
+                title: 'Taxa', field: 'taxa', width: 110, hozAlign: 'right', headerSort: false,
+                editor: 'input', editable: cell => editavel(cell) && cell.getRow().getData().aceita_taxa,
+                mutatorEdit: (valor, dados) => interpretarTaxa(valor, dados.valor),
+                formatter: cell => {
+                    const l = cell.getRow().getData();
+                    if (linhaApuradoLancada(l)) return l.taxa_lancada ? formatarMoeda(l.taxa_lancada) : '-';
+                    if (!l.aceita_taxa) return '<span class="text-gray-300">—</span>';
+                    const taxa = Number(cell.getValue() || 0);
+                    if (!taxa) return '<span class="text-gray-400">digitar ▾</span>';
+                    const pct = Number(l.valor) > 0 ? (taxa / Number(l.valor) * 100).toFixed(2).replace('.', ',') : '0';
+                    return `<span class="text-red-700">${formatarMoeda(taxa)}</span> <span class="text-gray-400 text-[10px]">${pct}%</span>`;
+                }
+            },
+            {
+                title: 'Líquido', field: 'liquido', width: 115, hozAlign: 'right', headerSort: false,
+                formatter: cell => {
+                    const l = cell.getRow().getData();
+                    const liquido = linhaApuradoLancada(l)
+                        ? Number(l.valor_lancado || 0) - Number(l.taxa_lancada || 0)
+                        : Number(l.valor || 0) - Number(l.taxa || 0);
+                    return `<span class="font-bold text-green-700">${formatarMoeda(liquido)}</span>`;
+                }
+            },
+            {
+                title: 'Conta', field: 'id_conta', widthGrow: 1.5, minWidth: 170, headerSort: false,
+                editor: 'list', editorParams: () => ({ values: opcoesConta() }), editable: editavel,
+                formatter: cell => {
+                    const l = cell.getRow().getData();
+                    if (linhaApuradoLancada(l)) return escapeHtml(l.conta_lancada);
+                    const conta = contasCache.find(c => c.id === cell.getValue());
+                    return conta ? escapeHtml(conta.nome) : '<span class="text-red-500 font-bold">Escolher ▾</span>';
+                }
+            },
+            {
+                title: 'Situação', field: 'id_movimento', width: 140, headerSort: false,
+                formatter: cell => linhaApuradoLancada(cell.getRow().getData())
+                    ? '<span class="text-emerald-700 font-bold">Lançado</span> <button class="text-red-600 hover:underline text-[11px] font-bold ml-1">Desfazer</button>'
+                    : '<span class="text-gray-500">A lançar</span>',
+                cellClick: (e, cell) => {
+                    const l = cell.getRow().getData();
+                    if (linhaApuradoLancada(l) && e.target.tagName === 'BUTTON') desfazerApurado(l);
+                }
+            }
+        ]
+    });
+    tabelaApurado.on('cellEdited', cell => {
+        // Valor ou taxa mudou: redesenha a linha para atualizar o % e o líquido.
+        if (cell.getField() === 'valor' || cell.getField() === 'taxa') cell.getRow().reformat();
+        atualizarResumoApurado();
+    });
+    tabelaApuradoPronta = new Promise(resolve => tabelaApurado.on('tableBuilt', resolve));
+    return tabelaApuradoPronta;
+}
+
+function linhasApuradoMarcadas() {
+    return tabelaApurado ? tabelaApurado.getData().filter(l => l.marcado && !linhaApuradoLancada(l)) : [];
+}
+
+function atualizarResumoApurado() {
+    const dados = tabelaApurado ? tabelaApurado.getData() : [];
+    const marcadas = linhasApuradoMarcadas();
+    const bruto = marcadas.reduce((acc, l) => acc + Number(l.valor || 0), 0);
+    const taxas = marcadas.reduce((acc, l) => acc + Number(l.taxa || 0), 0);
+    const lancadas = dados.filter(linhaApuradoLancada).length;
+    document.getElementById('resumo-apurado').textContent =
+        `${dados.length} linha(s) · ${lancadas} já lançada(s) · ${marcadas.length} marcada(s): ` +
+        `bruto ${formatarMoeda(bruto)} − taxas ${formatarMoeda(taxas)} = líquido ${formatarMoeda(bruto - taxas)}`;
+    const todos = document.getElementById('apurado-marcar-todos');
+    const pendentes = dados.filter(l => !linhaApuradoLancada(l));
+    if (todos) todos.checked = pendentes.length > 0 && pendentes.every(l => l.marcado);
+}
+
+function aplicarContaApurado() {
+    const idConta = Number(document.getElementById('apurado-conta-lote').value);
+    if (!idConta) return dialogoAviso('Escolha a conta.');
+    const marcadas = tabelaApurado.getRows().filter(l => l.getData().marcado && !linhaApuradoLancada(l.getData()));
+    if (!marcadas.length) return dialogoAviso('Marque as linhas que vão para essa conta.');
+    marcadas.forEach(l => l.update({ id_conta: idConta }));
+}
+
+async function lancarApurado() {
+    const marcadas = linhasApuradoMarcadas();
+    if (!marcadas.length) return dialogoAviso('Marque ao menos uma linha.');
+    const semConta = marcadas.filter(l => !l.id_conta);
+    if (semConta.length) return dialogoAviso(`Escolha a conta de ${semConta.length} linha(s) marcada(s) (coluna Conta em vermelho).`);
+    if (marcadas.some(l => !(Number(l.valor) > 0))) return dialogoAviso('Há linha marcada com valor zerado.');
+    const taxaInvalida = marcadas.find(l => Number(l.taxa || 0) >= Number(l.valor));
+    if (taxaInvalida) return dialogoAviso(`${taxaInvalida.loja} · ${taxaInvalida.nome_modalidade}: a taxa precisa ser menor que o valor.`);
+
+    const dataRef = document.getElementById('filtro-data').value;
+    const bruto = marcadas.reduce((acc, l) => acc + Number(l.valor), 0);
+    const taxas = marcadas.reduce((acc, l) => acc + Number(l.taxa || 0), 0);
+    const semTaxa = marcadas.filter(l => l.aceita_taxa && !Number(l.taxa)).length;
+    let mensagem = `${marcadas.length} linha(s) entram no dia ${formatarDataBR(dataRef)}: entradas de ${formatarMoeda(bruto)}`;
+    mensagem += taxas ? ` e saídas de taxa de ${formatarMoeda(taxas)}.` : '.';
+    if (semTaxa) mensagem += `\n${semTaxa} linha(s) de cartão/Pix estão sem taxa.`;
+    if (!await dialogoConfirmar(mensagem, { titulo: 'Lançar apurado?', textoOk: 'Lançar' })) return;
+
+    const payload = {
+        data_movimento: dataRef,
+        itens: marcadas.map(l => ({
+            cod_filial: l.cod_filial, modalidade: l.modalidade, valor: Number(l.valor), taxa: Number(l.taxa || 0),
+            id_conta: l.id_conta, id_centro_custo: l.id_centro_custo || null
+        }))
+    };
+
+    const botao = document.getElementById('btn-lancar-apurado');
+    botao.disabled = true;
+    try {
+        const resultado = await apiFetch('/apurado/lancar', { method: 'POST', body: JSON.stringify(payload) });
+        let msg = resultado.message;
+        if (resultado.ja_lancados.length) msg += `\nJá estavam lançadas e foram ignoradas: ${resultado.ja_lancados.join(', ')}.`;
+        dialogoAviso(msg, 'sucesso', 'Apurado lançado');
+        await carregarApurado();
+        await carregarDia(dataRef);
+    } catch (err) {
+        dialogoAviso('Erro ao lançar o apurado: ' + err.message, 'erro');
+    } finally {
+        botao.disabled = false;
+    }
+}
+
+async function desfazerApurado(l) {
+    const taxa = l.taxa_lancada ? ` e a taxa de ${formatarMoeda(l.taxa_lancada)}` : '';
+    const ok = await dialogoConfirmar(
+        `A entrada de ${formatarMoeda(l.valor_lancado)} (${l.loja} · ${l.nome_modalidade})${taxa} ${taxa ? 'saem' : 'sai'} da tesouraria por estorno e a linha volta a ficar a lançar.`,
+        { titulo: 'Desfazer lançamento?', textoOk: 'Desfazer', perigo: true }
+    );
+    if (!ok) return;
+    try {
+        await apiFetch(`/movimentos/${l.id_movimento}/estornar`, { method: 'POST' });
+        await carregarApurado();
         await carregarDia(document.getElementById('filtro-data').value);
     } catch (err) {
         dialogoAviso('Erro ao desfazer: ' + err.message, 'erro');
