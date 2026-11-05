@@ -381,7 +381,7 @@ router.get('/movimentos', authenticateToken, checkPerm('tesouraria_view'), async
 // POST /api/tesouraria/movimentos
 router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
     const { id_conta, id_centro_custo, data_movimento, tipo, valor, descricao, favorecido, forma_pagamento } = req.body;
-    let { id_veiculo, data_despesa, numero_nf, grupo_despesa, tipo_despesa } = req.body;
+    let { id_veiculo, data_despesa, numero_nf, grupo_despesa, tipo_despesa, valor_juros } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
 
     if (!id_conta || !data_movimento || !tipo || !valor || !descricao) {
@@ -393,6 +393,9 @@ router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), asyn
     if (!(Number(valor) > 0)) {
         return res.status(400).json({ error: 'O valor deve ser maior que zero.' });
     }
+    if (tipo === 'saida' && jurosInvalidos(valor, valor_juros)) {
+        return res.status(400).json({ error: 'Os juros precisam ser menores que o valor total.' });
+    }
 
     try {
         if (tipo === 'saida') {
@@ -401,16 +404,16 @@ router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), asyn
             ({ grupo: grupo_despesa, tipo: tipo_despesa } = classificacao);
         } else {
             // Entrada não é despesa: não leva classificação, veículo nem dados de nota.
-            id_veiculo = data_despesa = numero_nf = grupo_despesa = tipo_despesa = null;
+            id_veiculo = data_despesa = numero_nf = grupo_despesa = tipo_despesa = valor_juros = null;
         }
 
         const [result] = await gerencialPool.query(
             `INSERT INTO tesouraria_movimentos
-                (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, valor, descricao, favorecido, forma_pagamento, origem, id_usuario_lancamento, nome_usuario_lancamento)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)`,
+                (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, valor, valor_juros, descricao, favorecido, forma_pagamento, origem, id_usuario_lancamento, nome_usuario_lancamento)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)`,
             [
                 id_conta, id_centro_custo || null, id_veiculo || null, data_movimento, data_despesa || null, numero_nf || null,
-                grupo_despesa || null, tipo_despesa || null, tipo, valor, descricao, favorecido || null, forma_pagamento || null,
+                grupo_despesa || null, tipo_despesa || null, tipo, valor, valorJuros(valor_juros), descricao, favorecido || null, forma_pagamento || null,
                 userId, nomeUsuario
             ]
         );
@@ -421,17 +424,28 @@ router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), asyn
     }
 });
 
+// Juros/multa fazem parte do valor total pago; aqui só se guarda quanto dele foi juros.
+function jurosInvalidos(valor, juros) {
+    const j = Number(juros || 0);
+    return !Number.isFinite(j) || j < 0 || (j > 0 && j >= Number(valor));
+}
+
+function valorJuros(juros) {
+    const j = Math.round(Number(juros || 0) * 100) / 100;
+    return j > 0 ? j : null;
+}
+
 // O registro de estorno fica no mesmo dia do original, só como trilha de auditoria:
 // nem o original (status 'estornado') nem o estorno entram nos totais.
 async function registrarEstorno(connection, original, userId, nomeUsuario) {
     const tipoEstorno = original.tipo === 'entrada' ? 'saida' : 'entrada';
     await connection.execute(
         `INSERT INTO tesouraria_movimentos
-            (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, valor, descricao, favorecido, forma_pagamento, origem, status, id_movimento_estornado, id_usuario_lancamento, nome_usuario_lancamento)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 'ativo', ?, ?, ?)`,
+            (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, valor, valor_juros, descricao, favorecido, forma_pagamento, origem, status, id_movimento_estornado, id_usuario_lancamento, nome_usuario_lancamento)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 'ativo', ?, ?, ?)`,
         [
             original.id_conta, original.id_centro_custo, original.id_veiculo, original.data_movimento, original.data_despesa, original.numero_nf,
-            original.grupo_despesa, original.tipo_despesa, tipoEstorno, original.valor,
+            original.grupo_despesa, original.tipo_despesa, tipoEstorno, original.valor, original.valor_juros,
             `Estorno do lançamento #${original.id}: ${original.descricao}`,
             original.favorecido, original.forma_pagamento, original.id, userId, nomeUsuario
         ]
@@ -510,7 +524,7 @@ const FILTROS_TITULOS = {
 };
 
 const CAMPOS_TITULO = `ap_regist, ap_ctrlcm, ap_parcel, ap_nomefo, ap_numenf, ap_filial, ap_pagame,
-    ap_dtvenc, ap_valord, ap_dtbaix, ap_valorb, ap_status, ap_fpagam`;
+    ap_dtvenc, ap_valord, ap_dtbaix, ap_valorb, ap_jurosm, ap_status, ap_fpagam`;
 
 // A conta de pagamento vem escrita de vários jeitos ("PAGBANK ZE", " pagbank ze", "PG ITAU ZE"):
 // maiúsculas, sem acento, espaços colapsados e sem o "PG " do começo.
@@ -587,6 +601,8 @@ router.get('/erp/titulos', authenticateToken, checkPerm('tesouraria_view'), asyn
                 baixa: dataISO(t.ap_dtbaix),
                 pago,
                 valor: Number(pago ? t.ap_valorb : t.ap_valord),
+                // Juros/multa só vem preenchido de título já pago; em aberto, o usuário digita se houver.
+                juros: pago ? Number(t.ap_jurosm || 0) : 0,
                 indicacao_cod: indicacao,
                 indicacao: INDICACOES_ERP[indicacao] || (indicacao ? `Código ${indicacao}` : ''),
                 // Mais de uma conta no mesmo título: não sugere, o usuário escolhe.
@@ -604,7 +620,7 @@ router.get('/erp/titulos', authenticateToken, checkPerm('tesouraria_view'), asyn
 
 // POST /api/tesouraria/erp/importar
 // { data_movimento, grupo_despesa, tipo_despesa, forma_pagamento, id_veiculo,
-//   itens: [{ ap_regist, id_conta, id_centro_custo, valor }] }
+//   itens: [{ ap_regist, id_conta, id_centro_custo, valor, juros }] }   (valor = total pago, juros incluso)
 // Fornecedor, NF e vencimento são relidos do ERP aqui, não vêm da tela.
 router.post('/erp/importar', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
     const { data_movimento, forma_pagamento, id_veiculo, itens } = req.body;
@@ -616,6 +632,10 @@ router.post('/erp/importar', authenticateToken, checkPerm('tesouraria_oper'), as
     const itemInvalido = itens.find(i => !i.ap_regist || !i.id_conta || !(Number(i.valor) > 0));
     if (itemInvalido) {
         return res.status(400).json({ error: `Título ${itemInvalido.ap_regist || ''}: informe a conta e um valor maior que zero.` });
+    }
+    const jurosInvalido = itens.find(i => jurosInvalidos(i.valor, i.juros));
+    if (jurosInvalido) {
+        return res.status(400).json({ error: `Título ${jurosInvalido.ap_regist}: os juros precisam ser menores que o valor pago.` });
     }
 
     let connection;
@@ -649,11 +669,11 @@ router.post('/erp/importar', authenticateToken, checkPerm('tesouraria_oper'), as
                 await connection.execute(
                     `INSERT INTO tesouraria_movimentos
                         (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa,
-                         tipo, valor, descricao, favorecido, forma_pagamento, origem, origem_ref, id_usuario_lancamento, nome_usuario_lancamento)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'saida', ?, ?, ?, ?, 'erp_apagar', ?, ?, ?)`,
+                         tipo, valor, valor_juros, descricao, favorecido, forma_pagamento, origem, origem_ref, id_usuario_lancamento, nome_usuario_lancamento)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'saida', ?, ?, ?, ?, ?, 'erp_apagar', ?, ?, ?)`,
                     [
                         item.id_conta, item.id_centro_custo || null, id_veiculo || null, data_movimento, dataISO(t.ap_dtvenc),
-                        t.ap_numenf || null, classificacao.grupo, classificacao.tipo, Number(item.valor), descricao,
+                        t.ap_numenf || null, classificacao.grupo, classificacao.tipo, Number(item.valor), valorJuros(item.juros), descricao,
                         t.ap_nomefo || null, forma_pagamento || null, String(t.ap_regist), userId, nomeUsuario
                     ]
                 );

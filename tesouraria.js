@@ -236,7 +236,9 @@ function renderKpis(movimentos) {
     document.getElementById('kpi-entradas').textContent = formatarMoeda(somar(entradas));
     document.getElementById('kpi-entradas-qtd').textContent = `${entradas.length} lançamento(s)`;
     document.getElementById('kpi-saidas').textContent = formatarMoeda(somar(saidas));
-    document.getElementById('kpi-saidas-qtd').textContent = `${saidas.length} lançamento(s)`;
+    const juros = saidas.reduce((acc, m) => acc + Number(m.valor_juros || 0), 0);
+    document.getElementById('kpi-saidas-qtd').textContent =
+        `${saidas.length} lançamento(s)${juros ? ` · juros ${formatarMoeda(juros)}` : ''}`;
     const elLiquido = document.getElementById('kpi-liquido');
     elLiquido.textContent = formatarMoeda(liquido);
     elLiquido.classList.toggle('text-red-700', liquido < 0);
@@ -324,35 +326,39 @@ function renderTabelaMovimentos(movimentos) {
         },
         columns: [
             {
-                title: 'Tipo', field: 'tipo', width: 75,
+                title: 'Tipo', field: 'tipo', width: 65,
                 formatter: cell => cell.getValue() === 'entrada'
                     ? '<span class="text-green-600 font-bold">Entrada</span>' : '<span class="text-red-600 font-bold">Saída</span>'
             },
             {
-                title: 'Valor', field: 'valor', width: 115, hozAlign: 'right',
+                title: 'Valor', field: 'valor', width: 105, hozAlign: 'right',
                 formatter: cell => {
                     const m = cell.getRow().getData();
                     return `<span class="font-bold ${m.tipo === 'entrada' ? 'text-green-700' : 'text-red-700'}">${formatarMoeda(cell.getValue())}</span>`;
                 }
             },
-            { title: 'Descrição', field: 'descricao', widthGrow: 2.2, minWidth: 180, formatter: cell => escapeHtml(cell.getValue()) },
-            { title: 'Conta', field: 'nome_conta', widthGrow: 1.2, minWidth: 120, formatter: cell => escapeHtml(cell.getValue()) },
             {
-                title: 'Centro de Custo', field: 'nome_centro_custo', widthGrow: 1.1, minWidth: 110,
+                title: 'Juros', field: 'valor_juros', width: 80, hozAlign: 'right',
+                formatter: cell => Number(cell.getValue()) > 0 ? `<span class="text-amber-700 font-bold">${formatarMoeda(cell.getValue())}</span>` : '<span class="text-gray-300">-</span>'
+            },
+            { title: 'Descrição', field: 'descricao', widthGrow: 2.2, minWidth: 160, formatter: cell => escapeHtml(cell.getValue()) },
+            { title: 'Conta', field: 'nome_conta', widthGrow: 1.2, minWidth: 110, formatter: cell => escapeHtml(cell.getValue()) },
+            {
+                title: 'Centro de Custo', field: 'nome_centro_custo', widthGrow: 1.1, minWidth: 100,
                 formatter: cell => {
                     const m = cell.getRow().getData();
                     const base = escapeHtml(cell.getValue() || '-');
                     return m.veiculo_placa ? `${base} <span class="text-gray-400">· ${escapeHtml(m.veiculo_placa)}</span>` : base;
                 }
             },
-            { title: 'Grupo / Tipo', field: 'classificacao', widthGrow: 1.3, minWidth: 120, formatter: cell => escapeHtml(cell.getValue()) },
-            { title: 'Favorecido', field: 'favorecido', widthGrow: 1.2, minWidth: 100, formatter: cell => escapeHtml(cell.getValue() || '-') },
-            { title: 'NF', field: 'numero_nf', width: 80, formatter: cell => escapeHtml(cell.getValue() || '-') },
-            { title: 'Forma / Origem', field: 'forma_label', width: 115 },
-            { title: 'Lançado por', field: 'origem_label', width: 120 },
-            { title: 'Usuário', field: 'nome_usuario_lancamento', width: 110, formatter: cell => escapeHtml(cell.getValue()) },
+            { title: 'Grupo / Tipo', field: 'classificacao', widthGrow: 1.3, minWidth: 110, formatter: cell => escapeHtml(cell.getValue()) },
+            { title: 'Favorecido', field: 'favorecido', widthGrow: 1.2, minWidth: 90, formatter: cell => escapeHtml(cell.getValue() || '-') },
+            { title: 'NF', field: 'numero_nf', width: 70, formatter: cell => escapeHtml(cell.getValue() || '-') },
+            { title: 'Forma / Origem', field: 'forma_label', width: 100 },
+            { title: 'Lançado por', field: 'origem_label', width: 105 },
+            { title: 'Usuário', field: 'nome_usuario_lancamento', width: 95, formatter: cell => escapeHtml(cell.getValue()) },
             {
-                title: 'Status', field: 'status', width: 105, headerSort: false,
+                title: 'Status', field: 'status', width: 90, headerSort: false,
                 formatter: cell => {
                     const m = cell.getRow().getData();
                     if (m.id_movimento_estornado) return `<span class="text-gray-500 italic">Estorno de #${Number(m.id_movimento_estornado)}</span>`;
@@ -415,6 +421,7 @@ function setupModais() {
     document.getElementById('btn-fechar-modal-lancamento').addEventListener('click', fecharModalLancamento);
     document.getElementById('btn-cancelar-lancamento').addEventListener('click', fecharModalLancamento);
     document.getElementById('btn-salvar-lancamento').addEventListener('click', salvarLancamento);
+    ['lanc-valor', 'lanc-juros'].forEach(id => document.getElementById(id).addEventListener('input', atualizarResumoJurosLancamento));
 
     document.getElementById('btn-apurado').addEventListener('click', abrirModalApurado);
     document.getElementById('btn-fechar-modal-apurado').addEventListener('click', () => fecharModal('modal-apurado'));
@@ -482,13 +489,13 @@ const MODOS_LANCAMENTO = {
     entrada: {
         titulo: 'Nova Entrada', icone: 'arrow-down-circle', corCabecalho: 'bg-green-50', corTitulo: 'text-green-900',
         corBotao: ['bg-green-600', 'hover:bg-green-700'], textoBotao: 'Salvar Entrada',
-        labelConta: 'Conta onde entrou', labelCentro: 'Loja / Origem do valor', labelForma: 'Origem da Entrada',
+        labelConta: 'Conta onde entrou', labelCentro: 'Loja / Origem do valor', labelForma: 'Origem da Entrada', labelValor: 'Valor (R$)',
         opcoesForma: OPCOES_ENTRADA, placeholderDescricao: 'Ex: Sangria do caixa 2 da loja Santa Cruz'
     },
     saida: {
         titulo: 'Nova Saída', icone: 'arrow-up-circle', corCabecalho: 'bg-red-50', corTitulo: 'text-red-900',
         corBotao: ['bg-red-600', 'hover:bg-red-700'], textoBotao: 'Salvar Saída',
-        labelConta: 'Conta de onde saiu', labelCentro: 'Centro de Custo', labelForma: 'Forma de Pagamento',
+        labelConta: 'Conta de onde saiu', labelCentro: 'Centro de Custo', labelForma: 'Forma de Pagamento', labelValor: 'Valor total pago (R$)',
         opcoesForma: OPCOES_SAIDA, placeholderDescricao: 'Ex: Pagamento fornecedor X'
     }
 };
@@ -511,20 +518,31 @@ function abrirModalLancamento(modo) {
     document.getElementById('lanc-conta-label').textContent = cfg.labelConta;
     document.getElementById('lanc-centro-custo-label').textContent = cfg.labelCentro;
     document.getElementById('lanc-forma-pagamento-label').textContent = cfg.labelForma;
+    document.getElementById('lanc-valor-label').textContent = cfg.labelValor;
     document.getElementById('lanc-forma-pagamento').innerHTML =
         Object.entries(cfg.opcoesForma).map(([valor, texto]) => `<option value="${valor}">${texto}</option>`).join('');
     document.getElementById('lanc-descricao').placeholder = cfg.placeholderDescricao;
 
-    ['lanc-conta', 'lanc-centro-custo', 'lanc-valor', 'lanc-descricao', 'lanc-favorecido', 'lanc-veiculo',
+    ['lanc-conta', 'lanc-centro-custo', 'lanc-valor', 'lanc-juros', 'lanc-descricao', 'lanc-favorecido', 'lanc-veiculo',
         'lanc-numero-nf', 'lanc-data-despesa', 'lanc-grupo-despesa'].forEach(id => { document.getElementById(id).value = ''; });
 
     document.querySelectorAll('#modal-lancamento .campo-saida').forEach(el => el.classList.toggle('hidden', modo !== 'saida'));
     if (modo === 'saida') handleGrupoLancamentoChange();
+    atualizarResumoJurosLancamento();
 
     if (typeof feather !== 'undefined') feather.replace();
     abrirModal('modal-lancamento');
 }
 function fecharModalLancamento() { fecharModal('modal-lancamento'); }
+
+// Mostra quanto do total pago é o título e quanto é juros, para não haver dúvida se o juros soma ou não.
+function atualizarResumoJurosLancamento() {
+    const total = Number(document.getElementById('lanc-valor').value || 0);
+    const juros = Number(document.getElementById('lanc-juros').value || 0);
+    document.getElementById('lanc-juros-resumo').textContent = juros > 0
+        ? `Título ${formatarMoeda(total - juros)} + juros ${formatarMoeda(juros)} = ${formatarMoeda(total)}`
+        : 'Os juros já estão dentro do valor total pago.';
+}
 
 function atualizarVisibilidadeFilialCentro() {
     const ehLoja = document.getElementById('novo-centro-tipo').value === 'loja';
@@ -540,6 +558,7 @@ async function salvarLancamento() {
         id_centro_custo: valorCampo('lanc-centro-custo'),
         data_movimento: document.getElementById('filtro-data').value,
         valor: Number(document.getElementById('lanc-valor').value),
+        valor_juros: ehSaida ? Number(document.getElementById('lanc-juros').value || 0) : null,
         descricao: document.getElementById('lanc-descricao').value.trim(),
         forma_pagamento: document.getElementById('lanc-forma-pagamento').value,
         grupo_despesa: ehSaida ? valorCampo('lanc-grupo-despesa') : null,
@@ -555,6 +574,9 @@ async function salvarLancamento() {
     }
     if (ehSaida && !payload.grupo_despesa) {
         return dialogoAviso('Selecione o grupo de despesa.');
+    }
+    if (ehSaida && payload.valor_juros && payload.valor_juros >= payload.valor) {
+        return dialogoAviso('Os juros precisam ser menores que o valor total pago.');
     }
 
     try {
@@ -1141,7 +1163,9 @@ async function carregarTitulosImportar(modo) {
             ...t,
             marcado: false,
             id_conta: t.id_conta_sugerida,
-            id_centro_custo: t.id_centro_sugerido || ''
+            id_centro_custo: t.id_centro_sugerido || '',
+            // Título em aberto: o juros digitado soma ao valor do título. Pago: o ERP já traz o total com juros.
+            valor_titulo: t.pago ? null : t.valor
         }));
         tabelaImportar.clearAlert();
         tabelaImportar.setData(titulosImportar);
@@ -1183,10 +1207,10 @@ function montarTabelaImportar() {
                 }
             },
             { title: 'Vencimento', field: 'vencimento', width: 95, formatter: cell => formatarDataBR(cell.getValue()) },
-            { title: 'Fornecedor', field: 'fornecedor', widthGrow: 2, minWidth: 170, formatter: cell => escapeHtml(cell.getValue()) },
+            { title: 'Fornecedor', field: 'fornecedor', widthGrow: 2, minWidth: 160, formatter: cell => escapeHtml(cell.getValue()) },
             { title: 'NF', field: 'nf', width: 85, formatter: cell => escapeHtml(cell.getValue() || '-') },
             { title: 'Filial', field: 'filial', width: 65 },
-            { title: 'Indicação', field: 'indicacao', widthGrow: 1.4, minWidth: 150, formatter: cell => escapeHtml(cell.getValue() || '-') },
+            { title: 'Indicação', field: 'indicacao', widthGrow: 1.4, minWidth: 135, formatter: cell => escapeHtml(cell.getValue() || '-') },
             {
                 title: 'Pago pelo ERP em', field: 'chave_pagamento', widthGrow: 1.3, minWidth: 140,
                 formatter: cell => escapeHtml(cell.getValue() || (cell.getRow().getData().pago ? '-' : 'Em aberto'))
@@ -1208,13 +1232,26 @@ function montarTabelaImportar() {
                 }
             },
             {
-                title: 'Valor', field: 'valor', width: 110, hozAlign: 'right', editor: 'number',
+                title: 'Juros', field: 'juros', width: 90, hozAlign: 'right', editor: 'number',
+                editorParams: { min: 0, step: 0.01 },
+                formatter: cell => Number(cell.getValue()) > 0
+                    ? `<span class="text-amber-700 font-bold">${formatarMoeda(cell.getValue())}</span>`
+                    : '<span class="text-gray-400">- ▾</span>'
+            },
+            {
+                title: 'Total pago', field: 'valor', width: 110, hozAlign: 'right', editor: 'number',
                 editorParams: { min: 0.01, step: 0.01 },
                 formatter: cell => formatarMoeda(cell.getValue())
             }
         ]
     });
-    tabelaImportar.on('cellEdited', atualizarResumoImportar);
+    tabelaImportar.on('cellEdited', cell => {
+        const t = cell.getRow().getData();
+        if (cell.getField() === 'juros' && t.valor_titulo != null) {
+            cell.getRow().update({ valor: Math.round((Number(t.valor_titulo) + Number(t.juros || 0)) * 100) / 100 });
+        }
+        atualizarResumoImportar();
+    });
     tabelaImportar.on('dataFiltered', () => setTimeout(atualizarResumoImportar));
     tabelaImportarPronta = new Promise(resolve => tabelaImportar.on('tableBuilt', resolve));
     return tabelaImportarPronta;
@@ -1237,9 +1274,11 @@ function titulosMarcados() {
 function atualizarResumoImportar() {
     const marcados = titulosMarcados();
     const total = marcados.reduce((acc, t) => acc + Number(t.valor || 0), 0);
+    const juros = marcados.reduce((acc, t) => acc + Number(t.juros || 0), 0);
     const linhas = tabelaImportar ? tabelaImportar.getRows('active') : [];
     document.getElementById('resumo-importar').textContent =
-        `${linhas.length} título(s) na lista · ${marcados.length} marcado(s) · ${formatarMoeda(total)}`;
+        `${linhas.length} título(s) na lista · ${marcados.length} marcado(s) · ${formatarMoeda(total)}` +
+        (juros ? ` (juros ${formatarMoeda(juros)})` : '');
     const todos = document.getElementById('imp-marcar-todos');
     if (todos) todos.checked = linhas.length > 0 && linhas.every(l => l.getData().marcado);
 }
@@ -1260,6 +1299,8 @@ async function importarMarcados() {
         return dialogoAviso(`Escolha a conta de ${semConta.length} título(s) marcado(s) (coluna Conta em vermelho).`);
     }
     if (marcados.some(t => !(Number(t.valor) > 0))) return dialogoAviso('Há título marcado com valor zerado.');
+    const jurosAlto = marcados.find(t => Number(t.juros) > 0 && Number(t.juros) >= Number(t.valor));
+    if (jurosAlto) return dialogoAviso(`${jurosAlto.fornecedor}: os juros precisam ser menores que o total pago.`);
 
     const grupo = document.getElementById('imp-grupo-despesa').value;
     if (!grupo) return dialogoAviso('Selecione o grupo de despesa.');
@@ -1275,7 +1316,8 @@ async function importarMarcados() {
         id_veiculo: document.getElementById('imp-veiculo').value || null,
         forma_pagamento: document.getElementById('imp-forma-pagamento').value,
         itens: marcados.map(t => ({
-            ap_regist: t.ap_regist, id_conta: t.id_conta, id_centro_custo: t.id_centro_custo || null, valor: Number(t.valor)
+            ap_regist: t.ap_regist, id_conta: t.id_conta, id_centro_custo: t.id_centro_custo || null,
+            valor: Number(t.valor), juros: Number(t.juros || 0)
         }))
     };
 
@@ -1589,8 +1631,10 @@ function resumoDoDia() {
         return [...mapa.entries()].map(([nome, valor]) => ({ nome, valor })).sort((a, b) => b.valor - a.valor);
     };
 
+    const comJuros = saidas.filter(m => Number(m.valor_juros) > 0);
     return {
-        efetivos, entradas, saidas,
+        efetivos, entradas, saidas, comJuros,
+        totalJuros: comJuros.reduce((acc, m) => acc + Number(m.valor_juros), 0),
         totalEntradas: somar(entradas),
         totalSaidas: somar(saidas),
         liquido: somar(entradas) - somar(saidas),
@@ -1633,12 +1677,14 @@ function gerarPDF() {
     doc.text(`Gerado em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`, largura - margem, 10, { align: 'right' });
     doc.text(`por ${getUserName()}`, largura - margem, 15, { align: 'right' });
 
+    const percentual = (valor, total) => total ? `${(valor / total * 100).toFixed(1).replace('.', ',')}%` : '-';
+
     // Indicadores
     const indicadores = [
         { rotulo: 'TOTAL DE ENTRADAS', valor: formatarMoeda(r.totalEntradas), detalhe: `${r.entradas.length} lançamento(s)`, cor: COR.verde },
         { rotulo: 'TOTAL DE SAÍDAS', valor: formatarMoeda(r.totalSaidas), detalhe: `${r.saidas.length} lançamento(s)`, cor: COR.vermelho },
         { rotulo: 'LÍQUIDO DO DIA', valor: formatarMoeda(r.liquido), detalhe: 'entradas - saídas', cor: r.liquido < 0 ? COR.vermelho : COR.indigo },
-        { rotulo: 'CONTAS MOVIMENTADAS', valor: String(r.porConta.length), detalhe: `${r.efetivos.length} lançamento(s) no total`, cor: COR.cinza }
+        { rotulo: 'JUROS E MULTAS PAGOS', valor: formatarMoeda(r.totalJuros), detalhe: r.comJuros.length ? `${r.comJuros.length} pagamento(s) com juros · ${percentual(r.totalJuros, r.totalSaidas)} das saídas` : 'nenhum pagamento com juros', cor: r.totalJuros ? [180, 83, 9] : COR.cinza }
     ];
     const espaco = 5;
     const larguraKpi = (util - espaco * 3) / 4;
@@ -1673,7 +1719,6 @@ function gerarPDF() {
         headStyles: { fillColor: COR.cinza, textColor: 255, fontStyle: 'bold' },
         footStyles: { fillColor: [226, 232, 240], textColor: 30, fontStyle: 'bold' }
     };
-    const percentual = (valor, total) => total ? `${(valor / total * 100).toFixed(1).replace('.', ',')}%` : '-';
     let fimResumos = inicioResumos;
 
     doc.autoTable({
@@ -1710,7 +1755,7 @@ function gerarPDF() {
         startY: fimResumos + 10,
         margin: { left: margem, right: margem, top: 16, bottom: 14 },
         theme: 'striped',
-        head: [['Tipo', 'Conta', 'Centro de custo', 'Grupo / Tipo', 'Descrição', 'Favorecido', 'NF', 'Forma / Origem', 'Lançado por', 'Entrada', 'Saída']],
+        head: [['Tipo', 'Conta', 'Centro de custo', 'Grupo / Tipo', 'Descrição', 'Favorecido', 'NF', 'Forma / Origem', 'Lançado por', 'Entrada', 'Juros', 'Saída']],
         body: ordenados.map(m => [
             m.tipo === 'entrada' ? 'Entrada' : 'Saída',
             m.nome_conta || '-',
@@ -1722,16 +1767,18 @@ function gerarPDF() {
             FORMAS_PAGAMENTO_LABEL[m.forma_pagamento] || m.forma_pagamento || '-',
             ORIGEM_LABEL[m.origem] || m.origem,
             m.tipo === 'entrada' ? formatarMoeda(m.valor) : '',
+            Number(m.valor_juros) > 0 ? formatarMoeda(m.valor_juros) : '',
             m.tipo === 'saida' ? formatarMoeda(m.valor) : ''
         ]),
-        foot: [['', '', '', '', '', '', '', '', 'Totais', formatarMoeda(r.totalEntradas), formatarMoeda(r.totalSaidas)]],
+        foot: [['', '', '', '', '', '', '', '', 'Totais', formatarMoeda(r.totalEntradas), r.totalJuros ? formatarMoeda(r.totalJuros) : '', formatarMoeda(r.totalSaidas)]],
         styles: { fontSize: 7, cellPadding: 1.3, overflow: 'linebreak', valign: 'middle' },
         headStyles: { fillColor: COR.indigo, textColor: 255, fontStyle: 'bold' },
         footStyles: { fillColor: [226, 232, 240], textColor: 30, fontStyle: 'bold' },
         columnStyles: {
-            0: { cellWidth: 14 }, 1: { cellWidth: 30 }, 2: { cellWidth: 26 }, 3: { cellWidth: 30 },
-            4: { cellWidth: 'auto' }, 5: { cellWidth: 30 }, 6: { cellWidth: 15 }, 7: { cellWidth: 22 }, 8: { cellWidth: 22 },
-            9: { cellWidth: 22, halign: 'right', textColor: COR.verde }, 10: { cellWidth: 22, halign: 'right', textColor: COR.vermelho }
+            0: { cellWidth: 14 }, 1: { cellWidth: 26 }, 2: { cellWidth: 24 }, 3: { cellWidth: 28 },
+            4: { cellWidth: 'auto' }, 5: { cellWidth: 26 }, 6: { cellWidth: 15 }, 7: { cellWidth: 22 }, 8: { cellWidth: 20 },
+            9: { cellWidth: 22, halign: 'right', textColor: COR.verde }, 10: { cellWidth: 18, halign: 'right', textColor: [180, 83, 9] },
+            11: { cellWidth: 22, halign: 'right', textColor: COR.vermelho }
         },
         didDrawPage: dados => {
             // Páginas seguintes: cabeçalho curto para não perder a referência do dia.
@@ -1753,7 +1800,7 @@ function gerarPDF() {
         doc.setTextColor(120);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7);
-        doc.text('Luca Gerencial · Tesouraria · estornos não aparecem neste relatório', margem, altura - 5);
+        doc.text('Luca Gerencial · Tesouraria · estornos não aparecem neste relatório · os juros já estão somados na coluna Saída', margem, altura - 5);
         doc.text(`Página ${p} de ${totalPaginas}`, largura - margem, altura - 5, { align: 'right' });
     }
 
@@ -1772,6 +1819,7 @@ function textoWhatsApp() {
     let texto = `*Boletim de Tesouraria — ${formatarDataBR(dataRef)}*\n\n`;
     texto += `Entradas: ${formatarMoeda(r.totalEntradas)}\n`;
     texto += `Saídas: ${formatarMoeda(r.totalSaidas)}\n`;
+    if (r.totalJuros) texto += `  (das quais juros e multas: ${formatarMoeda(r.totalJuros)})\n`;
     texto += `*Líquido do dia: ${formatarMoeda(r.liquido)}*\n`;
     if (r.porConta.length) {
         texto += `\n*Por conta*\n`;
