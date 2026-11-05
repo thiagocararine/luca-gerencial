@@ -86,8 +86,24 @@ async function apiFetch(path, options = {}) {
         headers: { ...apiHeaders(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) }
     });
     const data = await res.json().catch(() => ({}));
+    // 401, ou 403 sem mensagem, vem do authenticateToken: login vencido (o token dura 8h).
+    // Um 403 com mensagem é falta de permissão e segue como erro normal.
+    // A promessa fica pendente de propósito: a página vai para o login, sem uma pilha de avisos de erro.
+    if (res.status === 401 || (res.status === 403 && !data.error)) {
+        avisarSessaoExpirada();
+        return new Promise(() => {});
+    }
     if (!res.ok) throw new Error(data.error || 'Erro na requisição.');
     return data;
+}
+
+// Várias chamadas falham juntas quando o login vence; avisa uma vez só e volta para o login.
+let sessaoExpiradaAvisada = false;
+async function avisarSessaoExpirada() {
+    if (sessaoExpiradaAvisada) return;
+    sessaoExpiradaAvisada = true;
+    await dialogoAviso('Seu login venceu. Entre novamente para continuar.', 'aviso', 'Sessão expirada');
+    logout();
 }
 
 // --- CARREGAMENTO ---
