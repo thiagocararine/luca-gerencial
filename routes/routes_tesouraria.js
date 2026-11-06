@@ -382,6 +382,8 @@ router.get('/movimentos', authenticateToken, checkPerm('tesouraria_view'), async
 router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
     const { id_conta, id_centro_custo, data_movimento, tipo, valor, descricao, favorecido, forma_pagamento } = req.body;
     let { id_veiculo, data_despesa, numero_nf, grupo_despesa, tipo_despesa, valor_juros } = req.body;
+    // sem_classificacao: o fechamento do dia aceita pagamento sem grupo, classificado depois por fornecedor.
+    const { natureza = 'normal', sem_classificacao } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
 
     if (!id_conta || !data_movimento || !tipo || !valor || !descricao) {
@@ -396,9 +398,14 @@ router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), asyn
     if (tipo === 'saida' && jurosInvalidos(valor, valor_juros)) {
         return res.status(400).json({ error: 'Os juros precisam ser menores que o valor total.' });
     }
+    if (!NATUREZAS.includes(natureza)) {
+        return res.status(400).json({ error: 'Natureza do lançamento inválida.' });
+    }
 
     try {
-        if (tipo === 'saida') {
+        if (tipo === 'saida' && sem_classificacao && !grupo_despesa) {
+            grupo_despesa = tipo_despesa = id_veiculo = null;
+        } else if (tipo === 'saida') {
             const classificacao = await validarClassificacao(grupo_despesa, tipo_despesa, id_veiculo);
             if (classificacao.erro) return res.status(400).json({ error: classificacao.erro });
             ({ grupo: grupo_despesa, tipo: tipo_despesa } = classificacao);
@@ -409,11 +416,11 @@ router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), asyn
 
         const [result] = await gerencialPool.query(
             `INSERT INTO tesouraria_movimentos
-                (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, valor, valor_juros, descricao, favorecido, forma_pagamento, origem, id_usuario_lancamento, nome_usuario_lancamento)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)`,
+                (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, natureza, valor, valor_juros, descricao, favorecido, forma_pagamento, origem, id_usuario_lancamento, nome_usuario_lancamento)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)`,
             [
                 id_conta, id_centro_custo || null, id_veiculo || null, data_movimento, data_despesa || null, numero_nf || null,
-                grupo_despesa || null, tipo_despesa || null, tipo, valor, valorJuros(valor_juros), descricao, favorecido || null, forma_pagamento || null,
+                grupo_despesa || null, tipo_despesa || null, tipo, natureza, valor, valorJuros(valor_juros), descricao, favorecido || null, forma_pagamento || null,
                 userId, nomeUsuario
             ]
         );
@@ -423,6 +430,9 @@ router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), asyn
         res.status(500).json({ error: 'Erro interno ao registrar o lançamento.' });
     }
 });
+
+// normal entra no resultado; transferência (dinheiro mudando de lugar) e fundo (controle do caixa da loja) não.
+const NATUREZAS = ['normal', 'transferencia', 'fundo'];
 
 // Juros/multa fazem parte do valor total pago; aqui só se guarda quanto dele foi juros.
 function jurosInvalidos(valor, juros) {
@@ -441,11 +451,11 @@ async function registrarEstorno(connection, original, userId, nomeUsuario) {
     const tipoEstorno = original.tipo === 'entrada' ? 'saida' : 'entrada';
     await connection.execute(
         `INSERT INTO tesouraria_movimentos
-            (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, valor, valor_juros, descricao, favorecido, forma_pagamento, origem, status, id_movimento_estornado, id_usuario_lancamento, nome_usuario_lancamento)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 'ativo', ?, ?, ?)`,
+            (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, natureza, valor, valor_juros, descricao, favorecido, forma_pagamento, origem, status, id_movimento_estornado, id_usuario_lancamento, nome_usuario_lancamento)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 'ativo', ?, ?, ?)`,
         [
             original.id_conta, original.id_centro_custo, original.id_veiculo, original.data_movimento, original.data_despesa, original.numero_nf,
-            original.grupo_despesa, original.tipo_despesa, tipoEstorno, original.valor, original.valor_juros,
+            original.grupo_despesa, original.tipo_despesa, tipoEstorno, original.natureza, original.valor, original.valor_juros,
             `Estorno do lançamento #${original.id}: ${original.descricao}`,
             original.favorecido, original.forma_pagamento, original.id, userId, nomeUsuario
         ]
@@ -545,6 +555,21 @@ function chavesPagamento(fpagam) {
     return [...new Set(chaves)];
 }
 
+// Indicação de Pagamento do ERP (ap_pagame) -> centro de custo da tesouraria.
+async function mapaCentroPorIndicacao() {
+    const [centros] = await gerencialPool.query(
+        `SELECT id, indicacoes_erp FROM tesouraria_centros_custo WHERE ativo = 1 AND indicacoes_erp IS NOT NULL`
+    );
+    const mapa = new Map();
+    centros.forEach(c => c.indicacoes_erp.split(',').forEach(cod => mapa.set(cod.trim(), c.id)));
+    return mapa;
+}
+
+function descricaoTitulo(t) {
+    const parcela = t.ap_parcel ? ` (parc. ${t.ap_parcel})` : '';
+    return `${t.ap_nomefo || 'Título'}${t.ap_numenf ? ' — NF ' + t.ap_numenf : ''}${parcela}`.slice(0, 255);
+}
+
 function dataISO(d) {
     if (!d) return null;
     if (!(d instanceof Date)) return String(d).slice(0, 10);
@@ -580,11 +605,7 @@ router.get('/erp/titulos', authenticateToken, checkPerm('tesouraria_view'), asyn
              JOIN tesouraria_contas c ON c.id = e.id_conta AND c.ativo = 1`
         );
         const contaPorChave = new Map(vinculosConta.map(v => [v.chave, v.id_conta]));
-        const [centros] = await gerencialPool.query(
-            `SELECT id, indicacoes_erp FROM tesouraria_centros_custo WHERE ativo = 1 AND indicacoes_erp IS NOT NULL`
-        );
-        const centroPorIndicacao = new Map();
-        centros.forEach(c => c.indicacoes_erp.split(',').forEach(cod => centroPorIndicacao.set(cod.trim(), c.id)));
+        const centroPorIndicacao = await mapaCentroPorIndicacao();
 
         const resultado = titulos.filter(t => !jaImportados.has(String(t.ap_regist))).map(t => {
             const chaves = chavesPagamento(t.ap_fpagam);
@@ -663,8 +684,7 @@ router.post('/erp/importar', authenticateToken, checkPerm('tesouraria_oper'), as
         const jaImportados = [];
         for (const item of itens) {
             const t = tituloPorId.get(String(item.ap_regist));
-            const parcela = t.ap_parcel ? ` (parc. ${t.ap_parcel})` : '';
-            const descricao = `${t.ap_nomefo || 'Título'}${t.ap_numenf ? ' — NF ' + t.ap_numenf : ''}${parcela}`.slice(0, 255);
+            const descricao = descricaoTitulo(t);
             try {
                 await connection.execute(
                     `INSERT INTO tesouraria_movimentos
@@ -1010,13 +1030,32 @@ router.get('/apurado', authenticateToken, checkPerm('tesouraria_view'), async (r
             if (!contaPorLinha.has(chave)) contaPorLinha.set(chave, u.id_conta);
         }
 
+        // Taxa % sugerida: a da última taxa lançada na mesma modalidade (qualquer loja).
+        const [recentes] = await gerencialPool.query(
+            `SELECT origem_ref, valor FROM tesouraria_movimentos
+             WHERE origem = 'erp_receber' AND status = 'ativo'
+             ORDER BY id DESC
+             LIMIT 400`
+        );
+        const valorPorRef = new Map(recentes.map(m => [m.origem_ref, Number(m.valor)]));
+        const pctPorModalidade = new Map();
+        for (const m of recentes) {
+            if (!m.origem_ref.endsWith('|taxa')) continue;
+            const base = valorPorRef.get(m.origem_ref.slice(0, -5));
+            const modalidade = m.origem_ref.split('|')[2];
+            if (base > 0 && !pctPorModalidade.has(modalidade)) {
+                pctPorModalidade.set(modalidade, Math.round(Number(m.valor) / base * 10000) / 100);
+            }
+        }
+
         const ordemModalidade = Object.values(MODALIDADES_APURADO).map(m => m.chave);
         const resultado = [...linhas.values()]
             .map(l => ({
                 ...l,
                 valor_erp: Math.round(l.valor_erp * 100) / 100,
                 id_centro_sugerido: centroPorLoja.get(nomeComparavel(l.loja)) || null,
-                id_conta_sugerida: contaPorLinha.get(l.chave) || null
+                id_conta_sugerida: contaPorLinha.get(l.chave) || null,
+                taxa_pct_sugerida: pctPorModalidade.get(l.modalidade) ?? null
             }))
             .sort((a, b) => a.loja.localeCompare(b.loja) || ordemModalidade.indexOf(a.modalidade) - ordemModalidade.indexOf(b.modalidade));
         res.json(resultado);
@@ -1108,6 +1147,120 @@ router.post('/apurado/lancar', authenticateToken, checkPerm('tesouraria_oper'), 
         res.status(500).json({ error: 'Erro interno ao lançar o apurado.' });
     } finally {
         if (connection) await connection.end();
+    }
+});
+
+// --- FECHAMENTO DO DIA ---
+
+// Fase 1 do fechamento: tudo entra na conta geral.
+async function idContaGeral() {
+    const [rows] = await gerencialPool.query(`SELECT id FROM tesouraria_contas WHERE nome = 'Conta Geral' AND ativo = 1 LIMIT 1`);
+    return rows.length ? rows[0].id : null;
+}
+
+// POST /api/tesouraria/fechamento/puxar-pagamentos { data_movimento }
+// Traz de uma vez tudo que o ERP baixou no dia e ainda não está na tesouraria: conta geral,
+// centro pela indicação de pagamento, juros do ERP e a classificação já aprendida do fornecedor.
+router.post('/fechamento/puxar-pagamentos', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
+    const { data_movimento } = req.body;
+    const { userId, nome: nomeUsuario } = req.user;
+    if (!data_movimento) return res.status(400).json({ error: 'Informe a data.' });
+
+    let connection;
+    try {
+        const idConta = await idContaGeral();
+        if (!idConta) return res.status(400).json({ error: 'Cadastre (ou reative) a conta "Conta Geral" em CADASTROS.' });
+
+        const [titulos] = await seiPool.query(
+            `SELECT ${CAMPOS_TITULO} FROM apagar WHERE ${FILTROS_TITULOS.baixados} ORDER BY ap_nomefo, ap_regist`,
+            [data_movimento]
+        );
+        if (titulos.length === 0) return res.json({ message: 'Nenhum pagamento no ERP neste dia.', importados: 0, total: 0, sem_classificacao: 0 });
+
+        const [importados] = await gerencialPool.query(
+            `SELECT origem_ref FROM tesouraria_movimentos WHERE origem = 'erp_apagar' AND status = 'ativo' AND origem_ref IN (?)`,
+            [titulos.map(t => String(t.ap_regist))]
+        );
+        const jaImportados = new Set(importados.map(m => m.origem_ref));
+        const novos = titulos.filter(t => !jaImportados.has(String(t.ap_regist)));
+        if (novos.length === 0) return res.json({ message: 'Todos os pagamentos do ERP deste dia já estão no fechamento.', importados: 0, total: 0, sem_classificacao: 0 });
+
+        const centroPorIndicacao = await mapaCentroPorIndicacao();
+        const chaves = [...new Set(novos.map(t => normalizarChaveErp(t.ap_nomefo)).filter(Boolean))];
+        const [aprendidas] = await gerencialPool.query(
+            `SELECT chave, grupo_despesa, tipo_despesa FROM tesouraria_classificacao_fornecedor WHERE chave IN (?)`,
+            [chaves.length ? chaves : ['']]
+        );
+        const classificacaoPorFornecedor = new Map(aprendidas.map(a => [a.chave, a]));
+
+        connection = await mysql.createConnection(dbConfig);
+        await connection.beginTransaction();
+        let total = 0;
+        let semClassificacao = 0;
+        let quantidade = 0;
+        for (const t of novos) {
+            const cls = classificacaoPorFornecedor.get(normalizarChaveErp(t.ap_nomefo));
+            if (!cls) semClassificacao++;
+            try {
+                await connection.execute(
+                    `INSERT INTO tesouraria_movimentos
+                        (id_conta, id_centro_custo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa,
+                         tipo, valor, valor_juros, descricao, favorecido, origem, origem_ref, id_usuario_lancamento, nome_usuario_lancamento)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, 'saida', ?, ?, ?, ?, 'erp_apagar', ?, ?, ?)`,
+                    [
+                        idConta, centroPorIndicacao.get(String(t.ap_pagame || '').trim()) || null, data_movimento, dataISO(t.ap_dtvenc),
+                        t.ap_numenf || null, cls ? cls.grupo_despesa : null, cls ? cls.tipo_despesa : null,
+                        Number(t.ap_valorb), valorJuros(t.ap_jurosm), descricaoTitulo(t), String(t.ap_nomefo || '').trim() || null,
+                        String(t.ap_regist), userId, nomeUsuario
+                    ]
+                );
+                total += Number(t.ap_valorb);
+                quantidade++;
+            } catch (err) {
+                if (err.code !== 'ER_DUP_ENTRY') throw err;
+            }
+        }
+        await connection.commit();
+        res.status(201).json({
+            message: `${quantidade} pagamento(s) trazido(s) do ERP.`,
+            importados: quantidade, total: Math.round(total * 100) / 100, sem_classificacao: semClassificacao
+        });
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error('Erro ao puxar pagamentos do ERP:', error);
+        res.status(500).json({ error: 'Erro interno ao puxar os pagamentos do ERP.' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// POST /api/tesouraria/fechamento/classificar { ids, fornecedor, grupo_despesa, tipo_despesa }
+// Classifica os pagamentos de um fornecedor e guarda a escolha para os próximos.
+router.post('/fechamento/classificar', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
+    const { ids, fornecedor, grupo_despesa, tipo_despesa } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Nenhum pagamento informado.' });
+
+    try {
+        const classificacao = await validarClassificacao(grupo_despesa, tipo_despesa, null);
+        if (classificacao.erro) return res.status(400).json({ error: classificacao.erro });
+
+        const [result] = await gerencialPool.query(
+            `UPDATE tesouraria_movimentos SET grupo_despesa = ?, tipo_despesa = ?
+             WHERE id IN (?) AND tipo = 'saida' AND status = 'ativo' AND id_movimento_estornado IS NULL`,
+            [classificacao.grupo, classificacao.tipo, ids.map(Number)]
+        );
+        const chave = normalizarChaveErp(fornecedor);
+        if (chave) {
+            await gerencialPool.query(
+                `INSERT INTO tesouraria_classificacao_fornecedor (chave, grupo_despesa, tipo_despesa) VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE grupo_despesa = VALUES(grupo_despesa), tipo_despesa = VALUES(tipo_despesa)`,
+                [chave.slice(0, 255), classificacao.grupo, classificacao.tipo]
+            );
+        }
+        res.json({ message: `${result.affectedRows} pagamento(s) classificado(s).` });
+    } catch (error) {
+        console.error('Erro ao classificar pagamentos:', error);
+        res.status(500).json({ error: 'Erro interno ao classificar.' });
     }
 });
 

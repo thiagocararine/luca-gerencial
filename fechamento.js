@@ -1,0 +1,602 @@
+// fechamento.js
+// Tela "Fechamento do dia": a mesma dinâmica da planilha da operadora (pagamentos, recursos,
+// caixa das lojas e resultado), com o que vem do ERP já preenchido. Usa o estado e os helpers
+// de tesouraria.js (movimentosDoDia, apiFetch, contasCache, formatarMoeda, dialogo*...).
+
+const ORDEM_MODALIDADES = ['dinheiro', 'pix', 'cartao_credito', 'cartao_debito', 'boleto', 'carteira', 'site_mp'];
+const GRUPO_TAXAS_FECHAMENTO = 'Taxas Financeiras';
+
+let vistaAtual = null;
+let apuradoFechamento = [];
+let pagamentosPendentesErp = [];
+const fornecedoresAbertos = new Set();
+// Evita que a resposta de um dia anterior sobrescreva a do dia que está na tela.
+let sequenciaFechamento = 0;
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.btn-vista').forEach(btn => btn.addEventListener('click', () => trocarVista(btn.dataset.vista)));
+    document.getElementById('btn-fech-puxar-pagamentos').addEventListener('click', puxarPagamentosErp);
+    document.getElementById('btn-fech-novo-pagamento').addEventListener('click', abrirNovoPagamento);
+    document.getElementById('btn-fech-puxar-apurado').addEventListener('click', abrirPuxarApurado);
+    document.getElementById('btn-fech-novo-recurso').addEventListener('click', abrirNovoRecurso);
+    document.getElementById('btn-fech-modal-fechar').addEventListener('click', fecharModalFechamento);
+    document.getElementById('btn-fech-modal-cancelar').addEventListener('click', fecharModalFechamento);
+    document.getElementById('btn-fech-modal-ok').addEventListener('click', confirmarModalFechamento);
+
+    let vista = 'fechamento';
+    try { vista = localStorage.getItem('tesouraria_vista') || vista; } catch (e) { /* sem storage: usa o padrão */ }
+    trocarVista(vista, false);
+});
+
+function trocarVista(vista, recarregar = true) {
+    vistaAtual = vista === 'movimentos' ? 'movimentos' : 'fechamento';
+    const noFechamento = vistaAtual === 'fechamento';
+    document.getElementById('vista-fechamento').classList.toggle('hidden', !noFechamento);
+    document.getElementById('vista-movimentos').classList.toggle('hidden', noFechamento);
+    document.querySelectorAll('.so-movimentos').forEach(el => el.classList.toggle('hidden', noFechamento));
+    document.querySelectorAll('.btn-vista').forEach(btn => {
+        const ativa = btn.dataset.vista === vistaAtual;
+        btn.classList.toggle('bg-indigo-600', ativa);
+        btn.classList.toggle('text-white', ativa);
+        btn.classList.toggle('bg-white', !ativa);
+        btn.classList.toggle('text-gray-600', !ativa);
+    });
+    try { localStorage.setItem('tesouraria_vista', vistaAtual); } catch (e) { /* preferência só desta sessão */ }
+
+    if (!recarregar) return;
+    // A tabela de movimentos foi montada escondida: precisa recalcular a altura ao aparecer.
+    if (!noFechamento && tabelaMovimentos) tabelaMovimentos.redraw(true);
+    if (noFechamento) renderFechamento();
+}
+
+function idContaGeral() {
+    const conta = contasCache.find(c => c.nome === 'Conta Geral' && (c.ativo === 1 || c.ativo === true));
+    return conta ? conta.id : null;
+}
+
+function exigirContaGeral() {
+    const id = idContaGeral();
+    if (!id) dialogoAviso('Cadastre (ou reative) a conta "Conta Geral" em CADASTROS.');
+    return id;
+}
+
+// --- MONTAGEM DA TELA ---
+
+function renderFechamento() {
+    if (vistaAtual !== 'fechamento') return;
+    renderBlocosFechamento();
+    carregarDadosErpFechamento();
+}
+
+// Partes que só dependem dos movimentos já carregados por carregarDia().
+function renderBlocosFechamento() {
+    const c = classificarMovimentosDoDia();
+    renderPagamentosFechamento(c.pagamentos);
+    renderRecursosFechamento(c);
+    renderResultadoFechamento(c);
+}
+
+function classificarMovimentosDoDia() {
+    const ativos = movimentosDoDia.filter(movimentoEfetivo);
+    const noResultado = ativos.filter(entraNoResultado);
+    const saidas = noResultado.filter(m => m.tipo === 'saida');
+    const taxas = saidas.filter(m => m.origem === 'erp_receber');
+    const gastosLojas = saidas.filter(m => m.origem === 'caixa_loja' || m.origem === 'despesa_caixa');
+    const pagamentos = saidas.filter(m => !taxas.includes(m) && !gastosLojas.includes(m));
+    return {
+        entradas: ativos.filter(m => m.tipo === 'entrada'),
+        recursos: noResultado.filter(m => m.tipo === 'entrada'),
+        taxas, gastosLojas, pagamentos
+    };
+}
+
+// Dados do ERP (apurado e pagamentos ainda fora) vêm depois, sem travar o resto da tela.
+async function carregarDadosErpFechamento() {
+    const sequencia = ++sequenciaFechamento;
+    const dataRef = document.getElementById('filtro-data').value;
+    const [apurado, pendentes] = await Promise.allSettled([
+        apiFetch(`/apurado?data=${dataRef}`),
+        apiFetch(`/erp/titulos?modo=baixados&data=${dataRef}`)
+    ]);
+    if (sequencia !== sequenciaFechamento) return;
+    apuradoFechamento = apurado.status === 'fulfilled' ? apurado.value : [];
+    pagamentosPendentesErp = pendentes.status === 'fulfilled' ? pendentes.value : [];
+
+    mostrarContador('fech-pag-pendentes', pagamentosPendentesErp.length);
+    const linhasPendentes = apuradoFechamento.filter(l => !l.id_movimento && l.valor_erp > 0);
+    mostrarContador('fech-apurado-pendente', new Set(linhasPendentes.map(l => l.modalidade)).size);
+    renderBlocosFechamento();
+}
+
+function mostrarContador(id, quantidade) {
+    const el = document.getElementById(id);
+    el.textContent = quantidade;
+    el.classList.toggle('hidden', !quantidade);
+}
+
+// --- 1. PAGAMENTOS ---
+
+function agruparPorFornecedor(pagamentos) {
+    const grupos = new Map();
+    pagamentos.forEach(m => {
+        const nome = String(m.favorecido || m.descricao || 'Sem favorecido').trim();
+        const chave = normalizarNome(nome);
+        if (!grupos.has(chave)) grupos.set(chave, { chave, nome, itens: [] });
+        grupos.get(chave).itens.push(m);
+    });
+    return [...grupos.values()].map(g => ({
+        ...g,
+        total: somar(g.itens),
+        juros: g.itens.reduce((acc, m) => acc + Number(m.valor_juros || 0), 0),
+        semClassificacao: g.itens.filter(m => !m.grupo_despesa),
+        classificacoes: [...new Set(g.itens.filter(m => m.grupo_despesa).map(textoClassificacao))]
+    })).sort((a, b) => b.total - a.total);
+}
+
+function renderPagamentosFechamento(pagamentos) {
+    const el = document.getElementById('fech-pagamentos');
+    const grupos = agruparPorFornecedor(pagamentos);
+    const pendentes = pagamentosPendentesErp;
+
+    let html = '';
+    if (pendentes.length) {
+        const total = pendentes.reduce((acc, t) => acc + Number(t.valor || 0), 0);
+        html += `<div class="mx-4 mt-3 px-3 py-2 rounded bg-blue-50 border border-blue-200 text-blue-800 flex items-center gap-2">
+            <i data-feather="info" class="w-3.5 h-3.5"></i>
+            ${pendentes.length} pagamento(s) do ERP deste dia ainda fora do fechamento (${formatarMoeda(total)}). Use "Puxar pagos do ERP".
+        </div>`;
+    }
+    if (!grupos.length) {
+        el.innerHTML = html + '<p class="px-4 py-6 text-center text-gray-400">Nenhum pagamento neste dia.</p>';
+        if (typeof feather !== 'undefined') feather.replace();
+        return;
+    }
+
+    html += `<table class="w-full mt-1">
+        <thead><tr class="text-[10px] uppercase text-gray-500 border-b border-gray-100">
+            <th class="text-left font-bold px-4 py-1.5">Favorecido</th>
+            <th class="text-left font-bold px-2 py-1.5">Classificação</th>
+            <th class="text-right font-bold px-2 py-1.5 w-10">Qtd</th>
+            <th class="text-right font-bold px-2 py-1.5 w-24">Juros</th>
+            <th class="text-right font-bold px-4 py-1.5 w-28">Total pago</th>
+        </tr></thead><tbody>`;
+    grupos.forEach(g => {
+        const aberto = fornecedoresAbertos.has(g.chave);
+        const classificacao = g.semClassificacao.length
+            ? `<button class="fech-classificar px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold hover:bg-amber-200" data-chave="${escapeHtml(g.chave)}">Classificar ▾</button>`
+            : `<button class="fech-classificar text-gray-600 hover:underline text-left" data-chave="${escapeHtml(g.chave)}" title="Mudar a classificação">${escapeHtml(g.classificacoes.join(', '))}</button>`;
+        html += `<tr class="border-b border-gray-50 hover:bg-gray-50">
+            <td class="px-4 py-1.5">
+                <button class="fech-abrir font-semibold text-gray-800 flex items-center gap-1 text-left" data-chave="${escapeHtml(g.chave)}">
+                    <span class="text-gray-400 w-3">${g.itens.length > 1 ? (aberto ? '▾' : '▸') : ''}</span>${escapeHtml(g.nome)}
+                </button>
+            </td>
+            <td class="px-2 py-1.5">${classificacao}</td>
+            <td class="px-2 py-1.5 text-right text-gray-500">${g.itens.length}</td>
+            <td class="px-2 py-1.5 text-right ${g.juros ? 'text-amber-700 font-bold' : 'text-gray-300'}">${g.juros ? formatarMoeda(g.juros) : '-'}</td>
+            <td class="px-4 py-1.5 text-right font-bold whitespace-nowrap">${formatarMoeda(g.total)}${g.itens.length === 1 ? botaoEstornar(g.itens[0]) : ''}</td>
+        </tr>`;
+        if (aberto && g.itens.length > 1) {
+            g.itens.forEach(m => {
+                html += `<tr class="bg-gray-50/60 text-gray-600">
+                    <td class="pl-10 pr-2 py-1" colspan="2">${escapeHtml(m.descricao)}${m.nome_centro_custo ? ` <span class="text-gray-400">· ${escapeHtml(m.nome_centro_custo)}</span>` : ''}</td>
+                    <td></td>
+                    <td class="px-2 py-1 text-right">${Number(m.valor_juros) > 0 ? formatarMoeda(m.valor_juros) : ''}</td>
+                    <td class="px-4 py-1 text-right whitespace-nowrap">${formatarMoeda(m.valor)}${botaoEstornar(m)}</td>
+                </tr>`;
+            });
+        }
+    });
+    const total = somar(pagamentos);
+    const juros = pagamentos.reduce((acc, m) => acc + Number(m.valor_juros || 0), 0);
+    html += `</tbody><tfoot><tr class="font-bold bg-gray-50 border-t border-gray-200">
+        <td class="px-4 py-2" colspan="2">Total</td>
+        <td class="px-2 py-2 text-right">${pagamentos.length}</td>
+        <td class="px-2 py-2 text-right text-amber-700">${juros ? formatarMoeda(juros) : '-'}</td>
+        <td class="px-4 py-2 text-right">${formatarMoeda(total)}</td>
+    </tr></tfoot></table>`;
+    el.innerHTML = html;
+
+    el.querySelectorAll('.fech-abrir').forEach(btn => btn.addEventListener('click', () => {
+        const chave = btn.dataset.chave;
+        fornecedoresAbertos.has(chave) ? fornecedoresAbertos.delete(chave) : fornecedoresAbertos.add(chave);
+        renderBlocosFechamento();
+    }));
+    el.querySelectorAll('.fech-classificar').forEach(btn => btn.addEventListener('click', () => {
+        abrirClassificarFornecedor(grupos.find(g => g.chave === btn.dataset.chave));
+    }));
+    ligarBotoesEstornar(el);
+    if (typeof feather !== 'undefined') feather.replace();
+}
+
+function botaoEstornar(m) {
+    return `<button class="fech-estornar ml-2 text-gray-300 hover:text-red-600" data-id="${Number(m.id)}" title="Desfazer este lançamento">✕</button>`;
+}
+
+function ligarBotoesEstornar(el) {
+    el.querySelectorAll('.fech-estornar').forEach(btn => btn.addEventListener('click', e => {
+        e.stopPropagation();
+        estornarMovimento(Number(btn.dataset.id));
+    }));
+}
+
+async function puxarPagamentosErp() {
+    if (!exigirContaGeral()) return;
+    const dataRef = document.getElementById('filtro-data').value;
+    if (!pagamentosPendentesErp.length) {
+        return dialogoAviso('Não há pagamentos do ERP neste dia fora do fechamento.', 'aviso', 'Nada para puxar');
+    }
+    const total = pagamentosPendentesErp.reduce((acc, t) => acc + Number(t.valor || 0), 0);
+    const ok = await dialogoConfirmar(
+        `${pagamentosPendentesErp.length} pagamento(s) baixado(s) no ERP em ${formatarDataBR(dataRef)}, total ${formatarMoeda(total)}, entram no fechamento.`,
+        { titulo: 'Puxar pagos do ERP?', textoOk: 'Puxar' }
+    );
+    if (!ok) return;
+    try {
+        const r = await apiFetch('/fechamento/puxar-pagamentos', { method: 'POST', body: JSON.stringify({ data_movimento: dataRef }) });
+        let msg = r.message;
+        if (r.sem_classificacao) msg += `\n${r.sem_classificacao} ainda sem classificação: use "Classificar" ao lado do fornecedor. Na próxima vez ele já vem classificado.`;
+        dialogoAviso(msg, 'sucesso', 'Pagamentos trazidos');
+        await carregarDia(dataRef);
+    } catch (err) {
+        dialogoAviso('Erro ao puxar pagamentos: ' + err.message, 'erro');
+    }
+}
+
+function abrirClassificarFornecedor(grupo) {
+    if (!grupo) return;
+    abrirModalFechamento({
+        titulo: `Classificar ${grupo.nome}`,
+        textoOk: 'Classificar',
+        corpo: `
+            <p class="text-gray-600">${grupo.itens.length} pagamento(s) deste fornecedor neste dia. A escolha fica guardada e os próximos pagamentos dele já vêm classificados.</p>
+            <div class="grid grid-cols-2 gap-3">
+                <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Grupo</label><select id="fech-cls-grupo" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select></div>
+                <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tipo</label><select id="fech-cls-tipo" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select></div>
+            </div>`,
+        aoAbrir: () => {
+            const selGrupo = document.getElementById('fech-cls-grupo');
+            const selTipo = document.getElementById('fech-cls-tipo');
+            preencherSelectGrupos(selGrupo);
+            const atual = grupo.itens.find(m => m.grupo_despesa);
+            if (atual) selGrupo.value = atual.grupo_despesa;
+            preencherSelectTipos(selTipo, selGrupo.value);
+            if (atual && atual.tipo_despesa) selTipo.value = atual.tipo_despesa;
+            selGrupo.addEventListener('change', () => preencherSelectTipos(selTipo, selGrupo.value));
+        },
+        aoConfirmar: async () => {
+            const grupoDespesa = document.getElementById('fech-cls-grupo').value;
+            if (!grupoDespesa) { dialogoAviso('Escolha o grupo.'); return false; }
+            await apiFetch('/fechamento/classificar', {
+                method: 'POST',
+                body: JSON.stringify({
+                    ids: grupo.itens.map(m => m.id), fornecedor: grupo.nome,
+                    grupo_despesa: grupoDespesa, tipo_despesa: document.getElementById('fech-cls-tipo').value || null
+                })
+            });
+        }
+    });
+}
+
+function abrirNovoPagamento() {
+    if (!exigirContaGeral()) return;
+    abrirModalFechamento({
+        titulo: 'Novo pagamento',
+        textoOk: 'Lançar pagamento',
+        corpo: `
+            <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Favorecido / descrição</label>
+                <input id="fech-pg-favorecido" type="text" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="Barros"></div>
+            <div class="grid grid-cols-2 gap-3">
+                <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Valor total pago (R$)</label>
+                    <input id="fech-pg-valor" type="number" step="0.01" min="0.01" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="0,00"></div>
+                <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Juros / multa (R$)</label>
+                    <input id="fech-pg-juros" type="number" step="0.01" min="0" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="0,00"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Grupo <span class="font-normal normal-case text-gray-400">opcional</span></label><select id="fech-pg-grupo" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select></div>
+                <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tipo</label><select id="fech-pg-tipo" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select></div>
+            </div>
+            <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Loja / centro de custo <span class="font-normal normal-case text-gray-400">opcional</span></label><select id="fech-pg-centro" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select></div>`,
+        aoAbrir: () => {
+            const selGrupo = document.getElementById('fech-pg-grupo');
+            const selTipo = document.getElementById('fech-pg-tipo');
+            preencherSelectGrupos(selGrupo);
+            preencherSelectTipos(selTipo, '');
+            selGrupo.addEventListener('change', () => preencherSelectTipos(selTipo, selGrupo.value));
+            preencherSelectCentros(document.getElementById('fech-pg-centro'));
+            document.getElementById('fech-pg-favorecido').focus();
+        },
+        aoConfirmar: async () => {
+            const favorecido = document.getElementById('fech-pg-favorecido').value.trim();
+            const valor = Number(document.getElementById('fech-pg-valor').value);
+            const juros = Number(document.getElementById('fech-pg-juros').value || 0);
+            if (!favorecido || !(valor > 0)) { dialogoAviso('Informe o favorecido e o valor.'); return false; }
+            if (juros && juros >= valor) { dialogoAviso('Os juros precisam ser menores que o valor total pago.'); return false; }
+            await apiFetch('/movimentos', {
+                method: 'POST',
+                body: JSON.stringify({
+                    tipo: 'saida', id_conta: idContaGeral(), data_movimento: document.getElementById('filtro-data').value,
+                    valor, valor_juros: juros, descricao: favorecido, favorecido,
+                    grupo_despesa: document.getElementById('fech-pg-grupo').value || null,
+                    tipo_despesa: document.getElementById('fech-pg-tipo').value || null,
+                    id_centro_custo: document.getElementById('fech-pg-centro').value || null,
+                    sem_classificacao: true
+                })
+            });
+        }
+    });
+}
+
+// --- 2. RECURSOS ---
+
+function renderRecursosFechamento(c) {
+    const el = document.getElementById('fech-recursos');
+    const doErp = c.entradas.filter(m => m.origem === 'erp_receber');
+    const manuais = c.entradas.filter(m => m.origem !== 'erp_receber');
+
+    const modalidades = ORDEM_MODALIDADES.map(chave => {
+        const entradas = doErp.filter(m => m.forma_pagamento === chave);
+        const taxas = c.taxas.filter(m => m.forma_pagamento === chave);
+        const linhasErp = apuradoFechamento.filter(l => l.modalidade === chave);
+        const lancadas = linhasErp.filter(l => l.id_movimento);
+        return {
+            chave,
+            nome: MODALIDADES_APURADO_LABEL[chave],
+            entradas,
+            valor: somar(entradas),
+            taxa: somar(taxas),
+            lojas: new Set(entradas.map(m => m.id_centro_custo)).size,
+            pendente: linhasErp.filter(l => !l.id_movimento).reduce((acc, l) => acc + l.valor_erp, 0),
+            // O ERP continua recebendo durante o dia: avisa se o que foi lançado ficou diferente.
+            mudouNoErp: lancadas.some(l => Math.abs(l.valor_erp - Number(l.valor_lancado || 0)) >= 0.01)
+        };
+    }).filter(m => m.valor > 0 || m.pendente > 0);
+
+    if (!modalidades.length && !manuais.length) {
+        el.innerHTML = '<p class="px-4 py-6 text-center text-gray-400">Nenhum recurso lançado neste dia.</p>';
+        return;
+    }
+
+    let html = `<table class="w-full mt-1">
+        <thead><tr class="text-[10px] uppercase text-gray-500 border-b border-gray-100">
+            <th class="text-left font-bold px-4 py-1.5">Origem</th>
+            <th class="text-right font-bold px-2 py-1.5">Taxa</th>
+            <th class="text-right font-bold px-4 py-1.5">Valor</th>
+        </tr></thead><tbody>`;
+    modalidades.forEach(m => {
+        const pct = m.valor ? (m.taxa / m.valor * 100).toFixed(2).replace('.', ',') : '';
+        let aviso = '';
+        if (m.pendente > 0) aviso += `<span class="block text-[10px] text-amber-700">ERP: ${formatarMoeda(m.pendente)} a puxar</span>`;
+        if (m.mudouNoErp) aviso += `<span class="block text-[10px] text-amber-700">valor mudou no ERP · <button class="fech-refazer underline font-bold" data-modalidade="${m.chave}">refazer</button></span>`;
+        html += `<tr class="border-b border-gray-50">
+            <td class="px-4 py-1.5"><span class="font-semibold text-gray-800">${escapeHtml(m.nome)}</span>
+                ${m.lojas ? `<span class="ml-1 text-[10px] px-1.5 rounded bg-emerald-50 text-emerald-700">ERP · ${m.lojas} loja(s)</span>` : ''}${aviso}</td>
+            <td class="px-2 py-1.5 text-right ${m.taxa ? 'text-red-700' : 'text-gray-300'}">${m.taxa ? `${formatarMoeda(m.taxa)} <span class="text-gray-400 text-[10px]">${pct}%</span>` : '-'}</td>
+            <td class="px-4 py-1.5 text-right font-bold whitespace-nowrap">${m.valor ? formatarMoeda(m.valor) : '<span class="text-gray-300">-</span>'}
+                ${m.valor ? `<button class="fech-desfazer-modalidade ml-2 text-gray-300 hover:text-red-600" data-modalidade="${m.chave}" title="Desfazer esta modalidade">✕</button>` : ''}</td>
+        </tr>`;
+    });
+    manuais.forEach(m => {
+        const naoSoma = !entraNoResultado(m);
+        html += `<tr class="border-b border-gray-50 ${naoSoma ? 'text-gray-400' : ''}">
+            <td class="px-4 py-1.5"><span class="font-semibold ${naoSoma ? '' : 'text-gray-800'}">${escapeHtml(m.descricao)}</span>
+                <span class="ml-1 text-[10px] px-1.5 rounded bg-gray-100 text-gray-500">${naoSoma ? 'dinheiro das lojas · não soma' : 'manual'}</span></td>
+            <td class="px-2 py-1.5 text-right text-gray-300">-</td>
+            <td class="px-4 py-1.5 text-right font-bold whitespace-nowrap ${naoSoma ? 'line-through' : ''}">${formatarMoeda(m.valor)}${botaoEstornar(m)}</td>
+        </tr>`;
+    });
+    html += `</tbody><tfoot><tr class="font-bold bg-gray-50 border-t border-gray-200">
+        <td class="px-4 py-2">Total</td>
+        <td class="px-2 py-2 text-right text-red-700">${formatarMoeda(somar(c.taxas))}</td>
+        <td class="px-4 py-2 text-right">${formatarMoeda(somar(c.recursos))}</td>
+    </tr></tfoot></table>`;
+    el.innerHTML = html;
+
+    el.querySelectorAll('.fech-desfazer-modalidade').forEach(btn => btn.addEventListener('click', () => desfazerModalidade(btn.dataset.modalidade)));
+    el.querySelectorAll('.fech-refazer').forEach(btn => btn.addEventListener('click', () => desfazerModalidade(btn.dataset.modalidade, true)));
+    ligarBotoesEstornar(el);
+}
+
+// Desfaz todas as lojas de uma modalidade (a taxa vai junto no estorno). Com `refazer`,
+// abre em seguida o "Puxar apurado" para lançar de novo com o valor atual do ERP.
+async function desfazerModalidade(modalidade, refazer = false) {
+    const entradas = movimentosDoDia.filter(m => movimentoEfetivo(m) && m.tipo === 'entrada'
+        && m.origem === 'erp_receber' && m.forma_pagamento === modalidade);
+    if (!entradas.length) return;
+    const nome = MODALIDADES_APURADO_LABEL[modalidade];
+    const ok = await dialogoConfirmar(
+        `${nome}: ${entradas.length} lançamento(s), ${formatarMoeda(somar(entradas))}, e as taxas deles saem do fechamento por estorno.` +
+        (refazer ? ' Depois você lança de novo com o valor atual do ERP.' : ''),
+        { titulo: refazer ? `Refazer ${nome}?` : `Desfazer ${nome}?`, textoOk: refazer ? 'Refazer' : 'Desfazer', perigo: true }
+    );
+    if (!ok) return;
+    try {
+        for (const m of entradas) await apiFetch(`/movimentos/${m.id}/estornar`, { method: 'POST' });
+        await carregarDia(document.getElementById('filtro-data').value);
+        if (refazer) {
+            await carregarDadosErpFechamento();
+            abrirPuxarApurado();
+        }
+    } catch (err) {
+        dialogoAviso('Erro ao desfazer: ' + err.message, 'erro');
+        await carregarDia(document.getElementById('filtro-data').value);
+    }
+}
+
+// Lojas de uma modalidade que ainda não entraram, com a taxa % (sugerida pela última usada).
+function abrirPuxarApurado() {
+    if (!exigirContaGeral()) return;
+    const pendentes = apuradoFechamento.filter(l => !l.id_movimento && l.valor_erp > 0);
+    if (!pendentes.length) {
+        return dialogoAviso('Todo o apurado do ERP deste dia já está no fechamento.', 'aviso', 'Nada para puxar');
+    }
+    const modalidades = ORDEM_MODALIDADES.map(chave => {
+        const linhas = pendentes.filter(l => l.modalidade === chave);
+        const sugerida = linhas.find(l => l.taxa_pct_sugerida != null);
+        return { chave, linhas, aceitaTaxa: linhas.some(l => l.aceita_taxa), pct: sugerida ? sugerida.taxa_pct_sugerida : '' };
+    }).filter(m => m.linhas.length);
+
+    abrirModalFechamento({
+        titulo: `Puxar apurado do ERP · ${formatarDataBR(document.getElementById('filtro-data').value)}`,
+        textoOk: 'Lançar apurado',
+        corpo: `
+            <p class="text-gray-600">Valores recebidos no ERP, somando as lojas. Digite a <b>taxa %</b> das maquininhas; o sistema calcula a taxa de cada loja.</p>
+            <table class="w-full text-sm">
+                <thead><tr class="text-[10px] uppercase text-gray-500 border-b"><th class="text-left py-1">Modalidade</th><th class="text-right py-1">Valor</th><th class="text-right py-1 w-24">Taxa %</th><th class="text-right py-1">Taxa</th></tr></thead>
+                <tbody>${modalidades.map(m => `
+                    <tr class="border-b border-gray-100">
+                        <td class="py-1.5">${escapeHtml(MODALIDADES_APURADO_LABEL[m.chave])} <span class="text-[10px] text-gray-400">${m.linhas.length} loja(s)</span></td>
+                        <td class="py-1.5 text-right font-bold">${formatarMoeda(m.linhas.reduce((acc, l) => acc + l.valor_erp, 0))}</td>
+                        <td class="py-1.5 text-right">${m.aceitaTaxa
+                            ? `<input type="number" step="0.01" min="0" max="99" class="fech-pct w-20 border border-gray-300 rounded p-1 text-right text-sm" data-modalidade="${m.chave}" value="${m.pct}">`
+                            : '<span class="text-gray-300">-</span>'}</td>
+                        <td class="py-1.5 text-right text-red-700 fech-taxa-calc" data-modalidade="${m.chave}">-</td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+            <p id="fech-apurado-resumo" class="text-xs font-bold text-gray-700"></p>`,
+        aoAbrir: () => {
+            const atualizar = () => {
+                let bruto = 0;
+                let taxas = 0;
+                modalidades.forEach(m => {
+                    const taxa = taxasPorLinha(m.linhas, pctDaModalidade(m.chave)).reduce((acc, t) => acc + t, 0);
+                    bruto += m.linhas.reduce((acc, l) => acc + l.valor_erp, 0);
+                    taxas += taxa;
+                    const cel = document.querySelector(`.fech-taxa-calc[data-modalidade="${m.chave}"]`);
+                    cel.textContent = taxa ? formatarMoeda(taxa) : '-';
+                });
+                document.getElementById('fech-apurado-resumo').textContent =
+                    `Entradas ${formatarMoeda(bruto)} − taxas ${formatarMoeda(taxas)} = líquido ${formatarMoeda(bruto - taxas)}`;
+            };
+            document.querySelectorAll('.fech-pct').forEach(inp => inp.addEventListener('input', atualizar));
+            atualizar();
+        },
+        aoConfirmar: async () => {
+            const itens = [];
+            for (const m of modalidades) {
+                const pct = pctDaModalidade(m.chave);
+                if (pct < 0 || pct >= 100) { dialogoAviso(`${MODALIDADES_APURADO_LABEL[m.chave]}: taxa % inválida.`); return false; }
+                const taxas = taxasPorLinha(m.linhas, pct);
+                m.linhas.forEach((l, i) => itens.push({
+                    cod_filial: l.cod_filial, modalidade: l.modalidade, valor: l.valor_erp, taxa: taxas[i],
+                    id_conta: idContaGeral(), id_centro_custo: l.id_centro_sugerido || null
+                }));
+            }
+            const r = await apiFetch('/apurado/lancar', {
+                method: 'POST',
+                body: JSON.stringify({ data_movimento: document.getElementById('filtro-data').value, itens })
+            });
+            if (r.ja_lancados && r.ja_lancados.length) dialogoAviso(`Já estavam lançadas e foram ignoradas: ${r.ja_lancados.join(', ')}.`);
+        }
+    });
+}
+
+function pctDaModalidade(chave) {
+    const inp = document.querySelector(`.fech-pct[data-modalidade="${chave}"]`);
+    return inp ? Number(String(inp.value).replace(',', '.') || 0) : 0;
+}
+
+function taxasPorLinha(linhas, pct) {
+    return linhas.map(l => (l.aceita_taxa && pct > 0) ? Math.round(l.valor_erp * pct) / 100 : 0);
+}
+
+function abrirNovoRecurso() {
+    if (!exigirContaGeral()) return;
+    abrirModalFechamento({
+        titulo: 'Novo recurso',
+        textoOk: 'Lançar recurso',
+        corpo: `
+            <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Descrição</label>
+                <input id="fech-rc-descricao" type="text" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="Mendes"></div>
+            <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Valor (R$)</label>
+                <input id="fech-rc-valor" type="number" step="0.01" min="0.01" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="0,00"></div>
+            <label class="flex items-start gap-2 p-3 rounded bg-gray-50 border border-gray-200 cursor-pointer">
+                <input id="fech-rc-transferencia" type="checkbox" class="mt-0.5">
+                <span><b>É dinheiro das lojas sendo depositado</b><br>
+                <span class="text-xs text-gray-500">Esse dinheiro já foi contado no Dinheiro do ERP: aparece riscado e não soma no resultado.</span></span>
+            </label>`,
+        aoAbrir: () => document.getElementById('fech-rc-descricao').focus(),
+        aoConfirmar: async () => {
+            const descricao = document.getElementById('fech-rc-descricao').value.trim();
+            const valor = Number(document.getElementById('fech-rc-valor').value);
+            if (!descricao || !(valor > 0)) { dialogoAviso('Informe a descrição e o valor.'); return false; }
+            const transferencia = document.getElementById('fech-rc-transferencia').checked;
+            await apiFetch('/movimentos', {
+                method: 'POST',
+                body: JSON.stringify({
+                    tipo: 'entrada', id_conta: idContaGeral(), data_movimento: document.getElementById('filtro-data').value,
+                    valor, descricao, forma_pagamento: transferencia ? 'transferencia' : 'outro',
+                    natureza: transferencia ? 'transferencia' : 'normal'
+                })
+            });
+        }
+    });
+}
+
+// --- 4. RESULTADO ---
+
+function renderResultadoFechamento(c) {
+    const recursos = somar(c.recursos);
+    const taxas = somar(c.taxas);
+    const pagamentos = somar(c.pagamentos);
+    const juros = c.pagamentos.reduce((acc, m) => acc + Number(m.valor_juros || 0), 0);
+    const gastos = somar(c.gastosLojas);
+    const resultado = recursos - taxas - pagamentos - gastos;
+
+    const linha = (rotulo, valor, extra = '', classe = '') => `
+        <div class="flex justify-between items-baseline px-4 py-1.5 border-b border-gray-50 ${classe}">
+            <span>${rotulo} ${extra}</span><span class="tabular-nums">${valor}</span>
+        </div>`;
+    document.getElementById('fech-resultado').innerHTML =
+        linha('Recursos', formatarMoeda(recursos)) +
+        linha('(−) Taxas das maquininhas', formatarMoeda(-taxas)) +
+        linha('(−) Pagamentos', formatarMoeda(-pagamentos), juros ? `<span class="text-amber-700 text-[10px]">incl. ${formatarMoeda(juros)} de juros</span>` : '') +
+        linha('(−) Gastos das lojas', formatarMoeda(-gastos)) +
+        linha('Resultado do dia', formatarMoeda(resultado), '', `font-bold text-sm bg-gray-50 ${resultado < 0 ? 'text-red-700' : 'text-green-700'}`);
+
+    document.getElementById('fech-kpi-recursos').textContent = formatarMoeda(recursos);
+    document.getElementById('fech-kpi-recursos-sub').textContent = `taxas ${formatarMoeda(taxas)}`;
+    document.getElementById('fech-kpi-pagamentos').textContent = formatarMoeda(pagamentos);
+    document.getElementById('fech-kpi-pagamentos-sub').textContent = `${c.pagamentos.length} pagamento(s) · juros ${formatarMoeda(juros)}`;
+    document.getElementById('fech-kpi-lojas').textContent = formatarMoeda(gastos);
+    const elResultado = document.getElementById('fech-kpi-resultado');
+    elResultado.textContent = formatarMoeda(resultado);
+    elResultado.classList.toggle('text-red-700', resultado < 0);
+    elResultado.classList.toggle('text-gray-800', resultado >= 0);
+}
+
+// --- MODAL GENÉRICO ---
+
+let acaoModalFechamento = null;
+
+function abrirModalFechamento({ titulo, corpo, textoOk, aoAbrir, aoConfirmar }) {
+    document.getElementById('fech-modal-titulo').textContent = titulo;
+    document.getElementById('fech-modal-corpo').innerHTML = corpo;
+    document.getElementById('btn-fech-modal-ok').textContent = textoOk;
+    acaoModalFechamento = aoConfirmar;
+    abrirModal('modal-fech');
+    if (aoAbrir) aoAbrir();
+}
+
+function fecharModalFechamento() {
+    acaoModalFechamento = null;
+    fecharModal('modal-fech');
+}
+
+// aoConfirmar devolve false para manter o modal aberto (validação); erro de API também mantém.
+async function confirmarModalFechamento() {
+    if (!acaoModalFechamento) return;
+    const botao = document.getElementById('btn-fech-modal-ok');
+    botao.disabled = true;
+    try {
+        const resultado = await acaoModalFechamento();
+        if (resultado === false) return;
+        fecharModalFechamento();
+        await carregarDia(document.getElementById('filtro-data').value);
+    } catch (err) {
+        dialogoAviso('Erro: ' + err.message, 'erro');
+    } finally {
+        botao.disabled = false;
+    }
+}

@@ -217,6 +217,7 @@ async function carregarDia(data) {
         renderKpis(movimentosDoDia);
         renderCardsContas(movimentosDoDia);
         renderTabelaMovimentos(movimentosDoDia);
+        if (typeof renderFechamento === 'function') renderFechamento();
     } catch (err) {
         dialogoAviso('Erro ao carregar dados do dia: ' + err.message, 'erro');
     }
@@ -228,7 +229,7 @@ function somar(lista) {
 }
 
 function renderKpis(movimentos) {
-    const efetivos = movimentos.filter(movimentoEfetivo);
+    const efetivos = movimentos.filter(entraNoResultado);
     const entradas = efetivos.filter(m => m.tipo === 'entrada');
     const saidas = efetivos.filter(m => m.tipo === 'saida');
     const liquido = somar(entradas) - somar(saidas);
@@ -1609,9 +1610,14 @@ function movimentoEfetivo(m) {
     return m.status === 'ativo' && !m.id_movimento_estornado;
 }
 
+// Transferência (dinheiro mudando de lugar) e fundo (controle do caixa da loja) não entram nos totais do dia.
+function entraNoResultado(m) {
+    return movimentoEfetivo(m) && (m.natureza || 'normal') === 'normal';
+}
+
 // Totais do dia usados no PDF e no WhatsApp (estornos não entram).
 function resumoDoDia() {
-    const efetivos = movimentosDoDia.filter(movimentoEfetivo);
+    const efetivos = movimentosDoDia.filter(entraNoResultado);
     const entradas = efetivos.filter(m => m.tipo === 'entrada');
     const saidas = efetivos.filter(m => m.tipo === 'saida');
 

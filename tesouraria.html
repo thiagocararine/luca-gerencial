@@ -56,21 +56,25 @@
                 <input type="date" id="filtro-data" class="h-8 border-gray-300 rounded text-xs bg-gray-50 font-bold">
                 <button id="btn-dia-seguinte" class="h-8 w-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50" title="Dia seguinte"><i data-feather="chevron-right" class="w-4 h-4"></i></button>
             </div>
-            <div class="h-6 w-px bg-gray-200 mx-1"></div>
+            <div class="flex rounded border border-gray-300 overflow-hidden">
+                <button data-vista="fechamento" class="btn-vista h-8 px-3 text-xs font-bold flex items-center gap-1.5"><i data-feather="clipboard" class="w-3.5 h-3.5"></i> FECHAMENTO DO DIA</button>
+                <button data-vista="movimentos" class="btn-vista h-8 px-3 text-xs font-bold flex items-center gap-1.5 border-l border-gray-300"><i data-feather="list" class="w-3.5 h-3.5"></i> MOVIMENTOS</button>
+            </div>
+            <div class="so-movimentos h-6 w-px bg-gray-200 mx-1"></div>
 
-            <button id="btn-nova-entrada" class="h-8 bg-green-600 text-white px-3 rounded text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
+            <button id="btn-nova-entrada" class="so-movimentos h-8 bg-green-600 text-white px-3 rounded text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
                 <i data-feather="arrow-down-circle" class="w-3.5 h-3.5"></i> ENTRADA
             </button>
-            <button id="btn-apurado" class="h-8 bg-emerald-700 text-white px-3 rounded text-xs font-bold hover:bg-emerald-800 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
+            <button id="btn-apurado" class="so-movimentos h-8 bg-emerald-700 text-white px-3 rounded text-xs font-bold hover:bg-emerald-800 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
                 <i data-feather="dollar-sign" class="w-3.5 h-3.5"></i> APURADO DAS LOJAS
             </button>
-            <button id="btn-nova-saida" class="h-8 bg-red-600 text-white px-3 rounded text-xs font-bold hover:bg-red-700 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
+            <button id="btn-nova-saida" class="so-movimentos h-8 bg-red-600 text-white px-3 rounded text-xs font-bold hover:bg-red-700 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
                 <i data-feather="arrow-up-circle" class="w-3.5 h-3.5"></i> SAÍDA
             </button>
-            <button id="btn-importar-erp" class="h-8 bg-blue-600 text-white px-3 rounded text-xs font-bold hover:bg-blue-700 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
+            <button id="btn-importar-erp" class="so-movimentos h-8 bg-blue-600 text-white px-3 rounded text-xs font-bold hover:bg-blue-700 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
                 <i data-feather="download" class="w-3.5 h-3.5"></i> CONTAS A PAGAR
             </button>
-            <button id="btn-despesas-lojas" class="h-8 bg-amber-500 text-white px-3 rounded text-xs font-bold hover:bg-amber-600 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
+            <button id="btn-despesas-lojas" class="so-movimentos h-8 bg-amber-500 text-white px-3 rounded text-xs font-bold hover:bg-amber-600 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
                 <i data-feather="shopping-bag" class="w-3.5 h-3.5"></i> DESPESAS DAS LOJAS
             </button>
 
@@ -88,7 +92,77 @@
         </div>
     </div>
 
-    <div class="flex-1 min-h-0 flex flex-col gap-3 p-3">
+    <!-- Fechamento do dia: a mesma dinâmica da planilha da operadora (pagamentos, recursos, caixa das lojas, resultado) -->
+    <div id="vista-fechamento" class="hidden flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-green-500 shadow-sm px-4 py-2.5">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Recursos</p>
+                <p id="fech-kpi-recursos" class="text-2xl font-black text-green-700 leading-tight">R$ 0,00</p>
+                <p id="fech-kpi-recursos-sub" class="text-[11px] text-gray-400">taxas R$ 0,00</p>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-red-500 shadow-sm px-4 py-2.5">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Pagamentos</p>
+                <p id="fech-kpi-pagamentos" class="text-2xl font-black text-red-700 leading-tight">R$ 0,00</p>
+                <p id="fech-kpi-pagamentos-sub" class="text-[11px] text-gray-400">juros R$ 0,00</p>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-amber-500 shadow-sm px-4 py-2.5">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Gastos das lojas</p>
+                <p id="fech-kpi-lojas" class="text-2xl font-black text-amber-700 leading-tight">R$ 0,00</p>
+                <p class="text-[11px] text-gray-400">sem escritório e fundo</p>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-indigo-500 shadow-sm px-4 py-2.5">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Resultado do dia</p>
+                <p id="fech-kpi-resultado" class="text-2xl font-black text-gray-800 leading-tight">R$ 0,00</p>
+                <p class="text-[11px] text-gray-400">recursos − taxas − pagamentos − gastos</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-5 gap-3 items-start">
+            <section class="xl:col-span-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+                <div class="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-100">
+                    <h2 class="text-sm font-bold text-gray-800">1. Pagamentos do dia</h2>
+                    <div class="ml-auto flex gap-2">
+                        <button id="btn-fech-puxar-pagamentos" class="h-8 px-3 rounded text-xs font-bold border border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 flex items-center gap-1.5">
+                            <i data-feather="download" class="w-3.5 h-3.5"></i> Puxar pagos do ERP <span id="fech-pag-pendentes" class="hidden bg-blue-600 text-white rounded-full px-1.5 text-[10px]"></span>
+                        </button>
+                        <button id="btn-fech-novo-pagamento" class="h-8 px-3 rounded text-xs font-bold border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5">
+                            <i data-feather="plus" class="w-3.5 h-3.5"></i> Pagamento
+                        </button>
+                    </div>
+                </div>
+                <div id="fech-pagamentos" class="text-xs"></div>
+            </section>
+
+            <div class="xl:col-span-2 space-y-3">
+                <section class="bg-white rounded-lg border border-gray-200 shadow-sm">
+                    <div class="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-100">
+                        <h2 class="text-sm font-bold text-gray-800">2. Recursos</h2>
+                        <div class="ml-auto flex gap-2">
+                            <button id="btn-fech-puxar-apurado" class="h-8 px-3 rounded text-xs font-bold border border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 flex items-center gap-1.5">
+                                <i data-feather="download" class="w-3.5 h-3.5"></i> Puxar apurado do ERP <span id="fech-apurado-pendente" class="hidden bg-emerald-700 text-white rounded-full px-1.5 text-[10px]"></span>
+                            </button>
+                            <button id="btn-fech-novo-recurso" class="h-8 px-3 rounded text-xs font-bold border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5">
+                                <i data-feather="plus" class="w-3.5 h-3.5"></i> Recurso
+                            </button>
+                        </div>
+                    </div>
+                    <div id="fech-recursos" class="text-xs"></div>
+                </section>
+
+                <section class="bg-white rounded-lg border border-gray-200 shadow-sm">
+                    <div class="px-4 py-2.5 border-b border-gray-100"><h2 class="text-sm font-bold text-gray-800">4. Resultado do dia</h2></div>
+                    <div id="fech-resultado" class="text-xs"></div>
+                </section>
+            </div>
+        </div>
+
+        <section class="bg-white rounded-lg border border-dashed border-gray-300 px-4 py-3">
+            <h2 class="text-sm font-bold text-gray-500">3. Caixa das lojas</h2>
+            <p class="text-xs text-gray-400 mt-1">Próximo passo: dinheiro de cada loja vindo do ERP, gastos, valor levado ao escritório e fundo (com o fundo de ontem).</p>
+        </section>
+    </div>
+
+    <div id="vista-movimentos" class="flex-1 min-h-0 flex flex-col gap-3 p-3">
 
         <!-- Indicadores do dia (só lançamentos válidos: estornos não contam) -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
@@ -138,6 +212,21 @@
             </div>
         </div>
 
+    </div>
+
+    <!-- Modal genérico do fechamento: título, corpo e ação montados pelo fechamento.js -->
+    <div id="modal-fech" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden transform scale-95 transition-transform duration-200 max-h-[92vh] flex flex-col">
+            <div class="flex justify-between items-center px-6 py-3 border-b border-gray-200 bg-gray-50 shrink-0">
+                <h3 id="fech-modal-titulo" class="text-base font-bold text-gray-800"></h3>
+                <button id="btn-fech-modal-fechar" class="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
+            </div>
+            <div id="fech-modal-corpo" class="p-6 space-y-4 overflow-y-auto text-sm"></div>
+            <div class="bg-gray-50 px-6 py-3 border-t border-gray-200 flex justify-end gap-3 shrink-0">
+                <button id="btn-fech-modal-cancelar" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Cancelar</button>
+                <button id="btn-fech-modal-ok" class="px-4 py-2 text-sm font-bold text-white bg-indigo-600 rounded-md hover:bg-indigo-700"></button>
+            </div>
+        </div>
     </div>
 
     <!-- Modal: Lançamento de Entrada ou Saída (os campos mudam conforme o botão usado) -->
@@ -494,6 +583,7 @@
     </div>
 
     <script src="assets/global.js?v=20261104"></script>
-    <script src="tesouraria.js?v=20261105d"></script>
+    <script src="tesouraria.js?v=20261106"></script>
+    <script src="fechamento.js?v=20261106"></script>
 </body>
 </html>
