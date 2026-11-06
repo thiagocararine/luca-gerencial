@@ -75,6 +75,7 @@ function renderBlocosFechamento() {
     const c = classificarMovimentosDoDia();
     renderPagamentosFechamento(c.pagamentos);
     renderRecursosFechamento(c);
+    renderCaixaLojas();
     renderResultadoFechamento(c);
 }
 
@@ -593,7 +594,66 @@ function abrirNovoRecurso() {
     });
 }
 
-// --- CAIXA DAS LOJAS (dentro do "Puxar apurado do ERP") ---
+// --- 3. CAIXA DAS LOJAS ---
+// Na tela: o dinheiro de cada loja e as despesas que ela lançou. A divisão do que foi retirado,
+// o que se quer retirar e a sobra ficam no "Puxar apurado do ERP" (renderTabelaCaixaModal).
+
+const lojasAbertasQuadro = new Set();
+
+function renderCaixaLojas() {
+    const el = document.getElementById('fech-caixa-lojas');
+    if (!el) return;
+    const lojas = caixaLojasFechamento;
+    if (!lojas) { el.innerHTML = '<p class="px-4 py-6 text-center text-gray-400">Carregando...</p>'; return; }
+    if (!Array.isArray(lojas)) {
+        el.innerHTML = `<p class="px-4 py-6 text-center text-red-600">Erro ao carregar o caixa das lojas${lojas.erro ? ': ' + escapeHtml(lojas.erro) : ''}.</p>`;
+        return;
+    }
+    const total = campo => lojas.reduce((acc, l) => acc + (Number(l[campo]) || 0), 0);
+    const td = 'px-2 py-1.5 text-right whitespace-nowrap tabular-nums';
+
+    let html = `<table class="w-full mt-1">
+        <thead><tr class="text-[10px] uppercase text-gray-500 border-b border-gray-100">
+            <th class="text-left font-bold px-4 py-1.5">Loja</th>
+            <th class="text-right font-bold px-2 py-1.5">Dinheiro vendido</th>
+            <th class="text-right font-bold px-2 py-1.5">Despesas da loja</th>
+            <th class="text-right font-bold px-4 py-1.5">Dinheiro líquido</th>
+        </tr></thead><tbody>`;
+    lojas.forEach(l => {
+        const despesas = l.itens.filter(i => i.natureza !== 'retirada');
+        const aberta = lojasAbertasQuadro.has(l.cod_filial);
+        html += `<tr class="border-b border-gray-50 hover:bg-gray-50">
+            <td class="px-4 py-1.5"><button class="fech-abrir-loja-quadro font-semibold text-gray-800 flex items-center gap-1" data-loja="${l.cod_filial}">
+                <span class="text-gray-400 w-3">${despesas.length ? (aberta ? '▾' : '▸') : ''}</span>${escapeHtml(l.loja)}
+                ${despesas.length ? `<span class="text-[10px] text-gray-400 font-normal">${despesas.length} despesa(s)</span>` : ''}</button></td>
+            <td class="${td}">${formatarMoeda(l.vendido)}</td>
+            <td class="${td} ${l.consumido ? 'text-red-700' : 'text-gray-300'}">${l.consumido ? '−' + formatarMoeda(l.consumido) : '-'}</td>
+            <td class="${td} px-4 font-bold">${formatarMoeda(l.vendido - l.consumido)}</td>
+        </tr>`;
+        if (aberta && despesas.length) {
+            html += `<tr class="bg-gray-50/60 text-gray-600"><td colspan="4" class="pl-10 pr-4 py-2">${despesas.map(i => `
+                <div class="flex items-center justify-between gap-3 py-0.5">
+                    <span><span class="text-gray-400">${escapeHtml(i.tipo || i.grupo || '')}</span> ${escapeHtml(i.descricao || '')}${i.placa ? ` <span class="text-[10px] px-1 rounded bg-gray-100 text-gray-600">${escapeHtml(i.placa)}${i.litros ? ` · ${String(i.litros).replace('.', ',')} L` : ''}</span>` : ''}
+                        <span class="text-gray-400">· ${escapeHtml(i.lancado_por || '')}</span></span>
+                    <span class="whitespace-nowrap text-red-700">${formatarMoeda(i.valor)}</span>
+                </div>`).join('')}</td></tr>`;
+        }
+    });
+    html += `</tbody><tfoot><tr class="font-bold bg-gray-50 border-t border-gray-200">
+        <td class="px-4 py-2">Total</td>
+        <td class="${td}">${formatarMoeda(total('vendido'))}</td>
+        <td class="${td} text-red-700">${total('consumido') ? '−' + formatarMoeda(total('consumido')) : '-'}</td>
+        <td class="${td} px-4">${formatarMoeda(total('vendido') - total('consumido'))}</td>
+    </tr></tfoot></table>`;
+    el.innerHTML = html;
+    el.querySelectorAll('.fech-abrir-loja-quadro').forEach(btn => btn.addEventListener('click', () => {
+        const cod = btn.dataset.loja;
+        lojasAbertasQuadro.has(cod) ? lojasAbertasQuadro.delete(cod) : lojasAbertasQuadro.add(cod);
+        renderCaixaLojas();
+    }));
+}
+
+// --- Retiradas e sobra do caixa (dentro do "Puxar apurado do ERP") ---
 
 // "1.234,56", "1234.56" ou "R$ 1.234" -> número; vazio -> ''.
 function lerValorDigitado(texto) {
@@ -700,6 +760,7 @@ async function recarregarCaixaLojas() {
         caixaLojasFechamento = { erro: err.message };
     }
     renderTabelaCaixaModal();
+    renderCaixaLojas();
 }
 
 async function gravarCaixaLoja(cod, campos) {
