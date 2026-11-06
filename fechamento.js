@@ -136,6 +136,9 @@ function agruparPorFornecedor(pagamentos) {
         total: somar(g.itens),
         juros: g.itens.reduce((acc, m) => acc + Number(m.valor_juros || 0), 0),
         semClassificacao: g.itens.filter(m => !m.grupo_despesa),
+        // Combustível/Manutenção sem o veículo escolhido (0 = "sem veículo" escolhido de propósito).
+        semVeiculo: g.itens.filter(m => m.grupo_despesa && grupoPedeVeiculo(m.grupo_despesa) && m.id_veiculo == null),
+        placas: [...new Set(g.itens.map(m => m.veiculo_placa).filter(Boolean))],
         classificacoes: [...new Set(g.itens.filter(m => m.grupo_despesa).map(textoClassificacao))]
     })).sort((a, b) => b.total - a.total);
 }
@@ -171,7 +174,10 @@ function renderPagamentosFechamento(pagamentos) {
         const aberto = fornecedoresAbertos.has(g.chave);
         const classificacao = g.semClassificacao.length
             ? `<button class="fech-classificar px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold hover:bg-amber-200" data-chave="${escapeHtml(g.chave)}">Classificar ▾</button>`
-            : `<button class="fech-classificar text-gray-600 hover:underline text-left" data-chave="${escapeHtml(g.chave)}" title="Mudar a classificação">${escapeHtml(g.classificacoes.join(', '))}</button>`;
+            : `<button class="fech-classificar text-gray-600 hover:underline text-left" data-chave="${escapeHtml(g.chave)}" title="Mudar a classificação">${escapeHtml(g.classificacoes.join(', '))}</button>`
+              + (g.semVeiculo.length
+                  ? ` <button class="fech-classificar ml-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold hover:bg-amber-200" data-chave="${escapeHtml(g.chave)}">definir veículo</button>`
+                  : (g.placas.length ? ` <span class="ml-1 text-[10px] px-1.5 rounded bg-gray-100 text-gray-600">${escapeHtml(g.placas.join(', '))}</span>` : ''));
         html += `<tr class="border-b border-gray-50 hover:bg-gray-50">
             <td class="px-4 py-1.5">
                 <button class="fech-abrir font-semibold text-gray-800 flex items-center gap-1 text-left" data-chave="${escapeHtml(g.chave)}">
@@ -186,7 +192,7 @@ function renderPagamentosFechamento(pagamentos) {
         if (aberto && g.itens.length > 1) {
             g.itens.forEach(m => {
                 html += `<tr class="bg-gray-50/60 text-gray-600">
-                    <td class="pl-10 pr-2 py-1" colspan="2">${escapeHtml(m.descricao)}${m.nome_centro_custo ? ` <span class="text-gray-400">· ${escapeHtml(m.nome_centro_custo)}</span>` : ''}</td>
+                    <td class="pl-10 pr-2 py-1" colspan="2">${escapeHtml(m.descricao)}${m.nome_centro_custo ? ` <span class="text-gray-400">· ${escapeHtml(m.nome_centro_custo)}</span>` : ''}${m.veiculo_placa ? ` <span class="text-[10px] px-1 rounded bg-amber-50 text-amber-800">${escapeHtml(m.veiculo_placa)}${Number(m.litros) > 0 ? ` · ${String(Number(m.litros)).replace('.', ',')} L` : ''}</span>` : ''}</td>
                     <td></td>
                     <td class="px-2 py-1 text-right">${Number(m.valor_juros) > 0 ? formatarMoeda(m.valor_juros) : ''}</td>
                     <td class="px-4 py-1 text-right whitespace-nowrap">${formatarMoeda(m.valor)}${botaoEstornar(m)}</td>
@@ -254,12 +260,30 @@ function abrirClassificarFornecedor(grupo) {
     if (!grupo) return;
     abrirModalFechamento({
         titulo: `Classificar ${grupo.nome}`,
+        largura: grupo.itens.some(m => grupoPedeVeiculo(m.grupo_despesa)) || grupo.itens.length > 1 ? 'max-w-2xl' : 'max-w-lg',
         textoOk: 'Classificar',
         corpo: `
             <p class="text-gray-600">${grupo.itens.length} pagamento(s) deste fornecedor neste dia. A escolha fica guardada e os próximos pagamentos dele já vêm classificados.</p>
             <div class="grid grid-cols-2 gap-3">
                 <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Grupo</label><select id="fech-cls-grupo" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select></div>
                 <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tipo</label><select id="fech-cls-tipo" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select></div>
+            </div>
+            <div id="fech-cls-veiculos" class="hidden space-y-2 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                <p class="text-xs text-amber-800"><b>Veículo de cada pagamento</b> (vai para o relatório de abastecimento / despesa do veículo). O veículo não fica guardado para o fornecedor: cada pagamento pode ser de um carro diferente.</p>
+                ${grupo.itens.length > 1 ? `<div class="flex items-center gap-2 text-xs"><span class="text-amber-800">Mesmo veículo para todos:</span>
+                    <select id="fech-cls-veiculo-todos" class="border border-gray-300 rounded p-1 text-xs"></select></div>` : ''}
+                <table class="w-full text-xs">
+                    <thead><tr class="text-[10px] uppercase text-amber-800"><th class="text-left py-1">Pagamento</th><th class="text-left py-1">Veículo</th>
+                        <th class="text-right py-1 fech-cls-col-litros">Litros</th><th class="text-right py-1">KM</th></tr></thead>
+                    <tbody>${grupo.itens.map(m => `
+                        <tr class="border-t border-amber-100" data-id="${Number(m.id)}">
+                            <td class="py-1 pr-2"><span class="block truncate max-w-[12rem]" title="${escapeHtml(m.descricao)}">${escapeHtml(m.descricao)}</span><b>${formatarMoeda(m.valor)}</b></td>
+                            <td class="py-1 pr-2"><select class="fech-cls-veiculo w-full border border-gray-300 rounded p-1 text-xs" data-atual="${m.id_veiculo ?? ''}"></select></td>
+                            <td class="py-1 pr-2 fech-cls-col-litros"><input type="number" step="0.01" min="0" class="fech-cls-litros w-20 border border-gray-300 rounded p-1 text-right text-xs" value="${Number(m.litros) > 0 ? Number(m.litros) : ''}" placeholder="opc."></td>
+                            <td class="py-1"><input type="number" step="1" min="0" class="fech-cls-km w-24 border border-gray-300 rounded p-1 text-right text-xs" value="${Number(m.odometro) > 0 ? Number(m.odometro) : ''}" placeholder="opc."></td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
             </div>`,
         aoAbrir: () => {
             const selGrupo = document.getElementById('fech-cls-grupo');
@@ -269,16 +293,47 @@ function abrirClassificarFornecedor(grupo) {
             if (atual) selGrupo.value = atual.grupo_despesa;
             preencherSelectTipos(selTipo, selGrupo.value);
             if (atual && atual.tipo_despesa) selTipo.value = atual.tipo_despesa;
-            selGrupo.addEventListener('change', () => preencherSelectTipos(selTipo, selGrupo.value));
+            document.querySelectorAll('.fech-cls-veiculo').forEach(sel => {
+                sel.innerHTML = opcoesVeiculos();
+                sel.value = sel.dataset.atual;
+            });
+            const todos = document.getElementById('fech-cls-veiculo-todos');
+            if (todos) {
+                todos.innerHTML = opcoesVeiculos().replace('-- Selecione o veículo --', '-- escolha --');
+                todos.addEventListener('change', () => {
+                    if (todos.value !== '') document.querySelectorAll('.fech-cls-veiculo').forEach(sel => { sel.value = todos.value; });
+                });
+            }
+            const mostrarVeiculos = () => {
+                document.getElementById('fech-cls-veiculos').classList.toggle('hidden', !grupoPedeVeiculo(selGrupo.value));
+                document.querySelectorAll('.fech-cls-col-litros').forEach(el => el.classList.toggle('hidden', !ehGrupoCombustivel(selGrupo.value)));
+            };
+            selGrupo.addEventListener('change', () => { preencherSelectTipos(selTipo, selGrupo.value); mostrarVeiculos(); });
+            mostrarVeiculos();
         },
         aoConfirmar: async () => {
             const grupoDespesa = document.getElementById('fech-cls-grupo').value;
             if (!grupoDespesa) { dialogoAviso('Escolha o grupo.'); return false; }
+            let veiculos;
+            if (grupoPedeVeiculo(grupoDespesa)) {
+                const combustivel = ehGrupoCombustivel(grupoDespesa);
+                veiculos = [...document.querySelectorAll('#fech-cls-veiculos tbody tr')].map(tr => ({
+                    id: Number(tr.dataset.id),
+                    id_veiculo: tr.querySelector('.fech-cls-veiculo').value,
+                    litros: combustivel ? tr.querySelector('.fech-cls-litros').value : null,
+                    odometro: tr.querySelector('.fech-cls-km').value
+                }));
+                if (veiculos.some(v => v.id_veiculo === '')) {
+                    dialogoAviso(`${grupoDespesa}: escolha o veículo de cada pagamento (ou "Sem veículo").`);
+                    return false;
+                }
+            }
             await apiFetch('/fechamento/classificar', {
                 method: 'POST',
                 body: JSON.stringify({
                     ids: grupo.itens.map(m => m.id), fornecedor: grupo.nome,
-                    grupo_despesa: grupoDespesa, tipo_despesa: document.getElementById('fech-cls-tipo').value || null
+                    grupo_despesa: grupoDespesa, tipo_despesa: document.getElementById('fech-cls-tipo').value || null,
+                    veiculos
                 })
             });
         }
@@ -887,7 +942,7 @@ let recarregarAoConfirmar = true;
 
 function abrirModalFechamento({ titulo, corpo, textoOk, aoAbrir, aoConfirmar, recarregar = true, largura = 'max-w-lg' }) {
     const caixa = document.querySelector('#modal-fech > div');
-    caixa.classList.remove('max-w-lg', 'max-w-5xl');
+    caixa.classList.remove('max-w-lg', 'max-w-2xl', 'max-w-5xl');
     caixa.classList.add(largura);
     document.getElementById('fech-modal-titulo').textContent = titulo;
     document.getElementById('fech-modal-corpo').innerHTML = corpo;

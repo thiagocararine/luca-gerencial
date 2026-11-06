@@ -442,9 +442,11 @@ router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), asyn
     }
 });
 
-// 0 / vazio = sem veículo (galão, gerador...).
+// Veículo de um pagamento: id > 0; 0 = "sem veículo" escolhido de propósito (galão, gerador...);
+// vazio = não informado.
 function idVeiculoValido(id) {
-    return Number(id) > 0 ? Number(id) : null;
+    if (Number(id) > 0) return Number(id);
+    return String(id ?? '').trim() === '0' ? 0 : null;
 }
 
 // Litros e KM opcionais do abastecimento/manutenção.
@@ -1370,8 +1372,11 @@ router.post('/fechamento/retirada/:id/cancelar', authenticateToken, checkPerm('t
     }
 });
 
-// POST /api/tesouraria/fechamento/classificar { ids, fornecedor, grupo_despesa, tipo_despesa }
-// Classifica os pagamentos de um fornecedor e guarda a escolha para os próximos.
+// POST /api/tesouraria/fechamento/classificar
+// { ids, fornecedor, grupo_despesa, tipo_despesa, veiculos?: [{ id, id_veiculo, litros, odometro }] }
+// Classifica os pagamentos de um fornecedor e guarda a escolha para os próximos. Em grupo que pede
+// veículo (Combustível, Manutenção), cada pagamento leva o seu veículo (0 = sem veículo), que não
+// é aprendido: o mesmo posto abastece carros diferentes.
 router.post('/fechamento/classificar', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
     const { ids, fornecedor, grupo_despesa, tipo_despesa } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Nenhum pagamento informado.' });
@@ -1380,11 +1385,38 @@ router.post('/fechamento/classificar', authenticateToken, checkPerm('tesouraria_
         const classificacao = await validarClassificacao(grupo_despesa, tipo_despesa, null);
         if (classificacao.erro) return res.status(400).json({ error: classificacao.erro });
 
-        const [result] = await gerencialPool.query(
-            `UPDATE tesouraria_movimentos SET grupo_despesa = ?, tipo_despesa = ?
-             WHERE id IN (?) AND tipo = 'saida' AND status = 'ativo' AND id_movimento_estornado IS NULL`,
-            [classificacao.grupo, classificacao.tipo, ids.map(Number)]
-        );
+        // Veículo, litros e KM de cada pagamento (só em grupo que pede veículo; nos outros, limpa).
+        const dadosVeiculo = new Map();
+        if (classificacao.exige_veiculo) {
+            const porId = new Map((Array.isArray(req.body.veiculos) ? req.body.veiculos : []).map(v => [String(v.id), v]));
+            for (const id of ids) {
+                const v = porId.get(String(id));
+                const idVeiculo = v ? idVeiculoValido(v.id_veiculo) : null;
+                if (idVeiculo === null) {
+                    return res.status(400).json({ error: `${classificacao.grupo}: escolha o veículo de cada pagamento (ou "Sem veículo").` });
+                }
+                const lido = lerLitrosKm(v);
+                if (lido.erro) return res.status(400).json({ error: lido.erro });
+                dadosVeiculo.set(String(id), { idVeiculo, litros: lido.litros, odometro: lido.odometro });
+            }
+            const usados = [...new Set([...dadosVeiculo.values()].map(d => d.idVeiculo).filter(id => id > 0))];
+            if (usados.length) {
+                const [existem] = await gerencialPool.query(`SELECT id FROM veiculos WHERE id IN (?)`, [usados]);
+                if (existem.length !== usados.length) return res.status(400).json({ error: 'Veículo não encontrado.' });
+            }
+        }
+
+        let afetados = 0;
+        for (const id of ids) {
+            const d = dadosVeiculo.get(String(id)) || { idVeiculo: null, litros: null, odometro: null };
+            const [result] = await gerencialPool.query(
+                `UPDATE tesouraria_movimentos SET grupo_despesa = ?, tipo_despesa = ?, id_veiculo = ?, litros = ?, odometro = ?
+                 WHERE id = ? AND tipo = 'saida' AND status = 'ativo' AND id_movimento_estornado IS NULL`,
+                [classificacao.grupo, classificacao.tipo, d.idVeiculo, d.litros, d.odometro, Number(id)]
+            );
+            afetados += result.affectedRows;
+        }
+        const result = { affectedRows: afetados };
         const chave = normalizarChaveErp(fornecedor);
         if (chave) {
             await gerencialPool.query(
