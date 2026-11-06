@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Despesas - Luca Gerencial</title>
+    <title>Caixa da Loja - Luca Gerencial</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css"/>
@@ -17,8 +17,9 @@
     <style>
         body { font-family: 'Inter', sans-serif; } /* Removido overflow-x: hidden */
         [data-feather] { width: 1.25rem; height: 1.25rem; }
-        .cancel-btn { padding: 0.25rem 0.75rem; border-radius: 0.375rem; color: white; font-size: 0.75rem; font-weight: 600; border: none; cursor: pointer; background-color: #ef4444; transition: background-color 0.2s; }
-        .cancel-btn:hover { background-color: #dc2626; }
+        .aba-lanc[aria-selected="true"].aba-despesa { border-color: #059669; color: #047857; }
+        .aba-lanc[aria-selected="true"].aba-retirada { border-color: #4f46e5; color: #4338ca; }
+        .aba-lanc[aria-selected="false"] { border-color: transparent; color: #6b7280; }
         
 
         .modal.hidden { display: none; }
@@ -73,159 +74,151 @@
             </div>
         </header>
 
-        <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-            <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
-                <h2 class="text-2xl font-bold text-gray-900">Despesas Lançadas</h2>
+        <main class="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8 space-y-5">
+            <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">Caixa da Loja</h2>
+                    <p class="text-sm text-gray-500">Despesas pagas com o dinheiro do caixa e retiradas do financeiro.</p>
+                </div>
                 <div class="flex items-center gap-2">
-                    <button id="open-resumo-modal-btn" class="rounded-md bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>
-                        Resumo Dinâmico
+                    <button id="open-resumo-modal-btn" class="rounded-md bg-white px-3 py-2 text-sm font-semibold text-purple-700 ring-1 ring-inset ring-purple-200 shadow-sm hover:bg-purple-50 flex items-center gap-2">
+                        <i data-feather="pie-chart" class="w-4 h-4"></i> Resumo
                     </button>
-                    <button id="open-export-modal-btn" class="rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600">Exportar Relatório</button>
-                    <button id="add-despesa-button" class="rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-700 flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" /></svg>
-                        Adicionar Despesa
+                    <button id="open-export-modal-btn" class="rounded-md bg-white px-3 py-2 text-sm font-semibold text-cyan-700 ring-1 ring-inset ring-cyan-200 shadow-sm hover:bg-cyan-50 flex items-center gap-2">
+                        <i data-feather="file-text" class="w-4 h-4"></i> PDF
                     </button>
                 </div>
             </div>
 
-            <div class="bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow mb-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                    <div class="xl:col-span-1">
-                        <label for="filter-date-range" class="block text-sm font-medium text-gray-700">Período</label>
-                        <input type="text" id="filter-date-range" placeholder="Selecione um intervalo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            <!-- Lançamento rápido -->
+            <section class="bg-white/90 backdrop-blur-sm rounded-xl shadow ring-1 ring-gray-200/60">
+                <div class="flex flex-wrap items-center gap-2 border-b border-gray-100 px-3 sm:px-4 pt-3">
+                    <button type="button" data-aba="despesa" class="aba-lanc px-4 py-2 text-sm font-bold rounded-t-lg border-b-2">Despesa</button>
+                    <button type="button" data-aba="retirada" class="aba-lanc px-4 py-2 text-sm font-bold rounded-t-lg border-b-2">Retirada do financeiro</button>
+                    <div id="lanc-filial-group" class="hidden ml-auto pb-2 flex items-center gap-2">
+                        <label for="lanc-filial" class="text-xs font-bold text-gray-500 uppercase">Loja</label>
+                        <select id="lanc-filial" class="rounded-md border-gray-300 text-sm py-1.5"></select>
                     </div>
-                    <div>
-                        <label for="filter-status" class="block text-sm font-medium text-gray-700">Status</label>
-                        <select id="filter-status" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"><option value="">Todos</option><option value="1">Efetuado</option><option value="2">Cancelado</option></select>
+                </div>
+                <form id="form-lancar" class="p-3 sm:p-4 grid grid-cols-2 lg:grid-cols-12 gap-3 items-start" autocomplete="off">
+                    <div class="col-span-1 lg:col-span-2">
+                        <label for="lanc-data" class="block text-xs font-bold text-gray-500 uppercase mb-1">Data</label>
+                        <input type="date" id="lanc-data" required class="block w-full rounded-md border-gray-300 shadow-sm text-sm">
                     </div>
-                    <div>
-                        <label for="filter-tipo" class="block text-sm font-medium text-gray-700">Tipo Despesa</label>
-                        <select id="filter-tipo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select>
+                    <div class="col-span-1 lg:col-span-2 order-none lg:order-2">
+                        <label for="lanc-valor" class="block text-xs font-bold text-gray-500 uppercase mb-1">Valor (R$)</label>
+                        <input type="number" id="lanc-valor" step="0.01" min="0.01" inputmode="decimal" required placeholder="0,00" class="block w-full rounded-md border-gray-300 shadow-sm text-sm text-right font-bold">
                     </div>
-                    <div>
-                        <label for="filter-grupo" class="block text-sm font-medium text-gray-700">Grupo Despesa</label>
-                        <select id="filter-grupo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select>
+                    <div class="so-despesa col-span-2 lg:col-span-3 lg:order-1">
+                        <label for="lanc-tipo" class="block text-xs font-bold text-gray-500 uppercase mb-1">Tipo</label>
+                        <select id="lanc-tipo" class="block w-full rounded-md border-gray-300 shadow-sm text-sm"></select>
+                        <div id="lanc-grupo-info" class="mt-1 text-[11px] text-gray-500 min-h-[1rem]"></div>
+                        <select id="lanc-grupo" class="hidden mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm"></select>
                     </div>
-                    <div id="filial-filter-group" class="hidden">
-                        <label for="filter-filial" class="block text-sm font-medium text-gray-700">Filial</label>
-                        <select id="filter-filial" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select>
+                    <div class="col-span-2 lg:col-span-3 lg:order-3">
+                        <label for="lanc-descricao" id="lanc-descricao-label" class="block text-xs font-bold text-gray-500 uppercase mb-1">Descrição</label>
+                        <input type="text" id="lanc-descricao" maxlength="200" class="block w-full rounded-md border-gray-300 shadow-sm text-sm" placeholder="Ex: pão da manhã">
                     </div>
-                    <div class="flex flex-col justify-end">
-                        <div class="flex gap-2 w-full flex-col sm:flex-row">
-                            <button id="filter-button" class="w-full sm:w-1/2 justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">Filtrar</button>
-                            <button id="clear-filter-button" class="w-full sm:w-1/2 justify-center rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Limpar</button>
+                    <div class="col-span-2 lg:col-span-2 lg:order-4 lg:pt-5">
+                        <button type="submit" id="btn-lancar" class="w-full rounded-md px-3 py-2 text-sm font-bold text-white shadow-sm flex items-center justify-center gap-2 whitespace-nowrap">
+                            <i data-feather="check" class="w-4 h-4"></i> <span>Lançar</span>
+                        </button>
+                    </div>
+                    <!-- Combustível: veículo abastecido (vai para o relatório de abastecimento) -->
+                    <div id="lanc-combustivel" class="hidden col-span-2 lg:col-span-12 lg:order-5 grid grid-cols-2 lg:grid-cols-12 gap-3 p-3 rounded-lg bg-amber-50 ring-1 ring-amber-200">
+                        <div class="col-span-2 lg:col-span-6">
+                            <label for="lanc-veiculo" class="block text-xs font-bold text-amber-800 uppercase mb-1">Veículo abastecido</label>
+                            <select id="lanc-veiculo" class="block w-full rounded-md border-gray-300 shadow-sm text-sm"></select>
+                        </div>
+                        <div class="col-span-1 lg:col-span-3">
+                            <label for="lanc-litros" class="block text-xs font-bold text-amber-800 uppercase mb-1">Litros <span class="font-normal normal-case text-amber-700/70">opcional</span></label>
+                            <input type="number" id="lanc-litros" step="0.01" min="0" inputmode="decimal" class="block w-full rounded-md border-gray-300 shadow-sm text-sm text-right" placeholder="0,00">
+                        </div>
+                        <div class="col-span-1 lg:col-span-3">
+                            <label for="lanc-km" class="block text-xs font-bold text-amber-800 uppercase mb-1">KM <span class="font-normal normal-case text-amber-700/70">opcional</span></label>
+                            <input type="number" id="lanc-km" step="1" min="0" inputmode="numeric" class="block w-full rounded-md border-gray-300 shadow-sm text-sm text-right" placeholder="0">
+                        </div>
+                        <p class="col-span-2 lg:col-span-12 text-[11px] text-amber-800">O abastecimento entra no relatório de abastecimento do veículo.</p>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Caixa do dia -->
+            <section class="bg-white/90 backdrop-blur-sm rounded-xl shadow ring-1 ring-gray-200/60">
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 sm:px-4 py-3 border-b border-gray-100">
+                    <h3 class="text-sm font-bold text-gray-800">Caixa de <span id="dia-titulo"></span> <span id="dia-filial" class="text-gray-400 font-medium"></span></h3>
+                    <div class="flex flex-wrap gap-2 sm:ml-auto text-xs">
+                        <span class="px-2 py-1 rounded bg-red-50 text-red-700">Despesas <b id="dia-total-despesas">R$ 0,00</b></span>
+                        <span class="px-2 py-1 rounded bg-indigo-50 text-indigo-700">Retiradas <b id="dia-total-retiradas">R$ 0,00</b></span>
+                        <span class="px-2 py-1 rounded bg-gray-100 text-gray-700">Saiu do caixa <b id="dia-total-geral">R$ 0,00</b></span>
+                    </div>
+                </div>
+                <div id="dia-lista" class="divide-y divide-gray-100 text-sm"></div>
+            </section>
+
+            <!-- Histórico -->
+            <section class="space-y-3">
+                <h3 class="text-sm font-bold text-gray-800">Histórico</h3>
+                <div class="bg-white/80 backdrop-blur-sm p-3 sm:p-4 rounded-xl shadow ring-1 ring-gray-200/60">
+                    <div class="grid grid-cols-2 lg:grid-cols-7 gap-3">
+                        <div class="col-span-2 lg:col-span-2">
+                            <label for="filter-date-range" class="block text-xs font-bold text-gray-500 uppercase mb-1">Período</label>
+                            <input type="text" id="filter-date-range" placeholder="Selecione um intervalo" class="block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                        </div>
+                        <div>
+                            <label for="filter-natureza" class="block text-xs font-bold text-gray-500 uppercase mb-1">Lançamento</label>
+                            <select id="filter-natureza" class="block w-full rounded-md border-gray-300 shadow-sm text-sm"><option value="">Todos</option><option value="despesa">Despesas</option><option value="retirada">Retiradas</option></select>
+                        </div>
+                        <div>
+                            <label for="filter-status" class="block text-xs font-bold text-gray-500 uppercase mb-1">Status</label>
+                            <select id="filter-status" class="block w-full rounded-md border-gray-300 shadow-sm text-sm"><option value="">Todos</option><option value="1">Efetuado</option><option value="2">Cancelado</option></select>
+                        </div>
+                        <div>
+                            <label for="filter-tipo" class="block text-xs font-bold text-gray-500 uppercase mb-1">Tipo</label>
+                            <select id="filter-tipo" class="block w-full rounded-md border-gray-300 shadow-sm text-sm"></select>
+                        </div>
+                        <div>
+                            <label for="filter-grupo" class="block text-xs font-bold text-gray-500 uppercase mb-1">Grupo</label>
+                            <select id="filter-grupo" class="block w-full rounded-md border-gray-300 shadow-sm text-sm"></select>
+                        </div>
+                        <div id="filial-filter-group" class="hidden">
+                            <label for="filter-filial" class="block text-xs font-bold text-gray-500 uppercase mb-1">Filial</label>
+                            <select id="filter-filial" class="block w-full rounded-md border-gray-300 shadow-sm text-sm"></select>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 mt-3 justify-end">
+                        <button id="clear-filter-button" class="rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Limpar</button>
+                        <button id="filter-button" class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">Filtrar</button>
+                    </div>
+                </div>
+
+                <div id="historico-totais" class="flex flex-wrap gap-2 text-xs"></div>
+                <div id="historico-lista" class="space-y-3"></div>
+                <p id="no-data-message" class="text-center p-8 text-gray-500 hidden">Nenhum lançamento encontrado.</p>
+
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div id="pagination-info" class="text-sm text-gray-700"></div>
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-2 text-sm">
+                            <label for="items-per-page">Por página:</label>
+                            <select id="items-per-page" class="rounded-md border-gray-300 text-sm">
+                                <option value="20" selected>20</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button id="prev-page-btn" disabled class="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">&laquo;</button>
+                            <span id="page-info-span" class="text-sm text-gray-700">Página 1 de 1</span>
+                            <button id="next-page-btn" disabled class="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">&raquo;</button>
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <div id="tabela-despesas-container" class="bg-white/80 backdrop-blur-sm rounded-lg shadow overflow-x-auto">
-                <table id="tabela-despesas" class="min-w-full">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Despesa</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
-                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor (R$)</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grupo</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Filial</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Lanç.</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Utilizador</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white text-sm divide-y divide-gray-200"></tbody>
-                </table>
-            </div>
-
-            <div id="cards-despesas-container"></div>
-
-            <p id="no-data-message" class="text-center p-8 text-gray-500 hidden">Nenhuma despesa encontrada.</p>
-
-            <div class="flex flex-col sm:flex-row items-center justify-between mt-6 gap-4">
-                <div id="pagination-info" class="text-sm text-gray-700"></div>
-                <div class="flex items-center gap-4">
-                    <div class="flex items-center gap-2 text-sm">
-                        <label for="items-per-page">Itens por página:</label>
-                        <select id="items-per-page" class="rounded-md border-gray-300 text-sm">
-                            <option value="20" selected>20</option>
-                            <option value="40">40</option>
-                            <option value="60">60</option>
-                            <option value="80">80</option>
-                            <option value="100">100</option>
-                        </select>
-                    </div>
-                    <div id="pagination-buttons" class="flex items-center gap-2">
-                        <button id="prev-page-btn" disabled class="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">&laquo; Anterior</button>
-                        <span id="page-info-span" class="text-sm text-gray-700">Página 1 de 1</span>
-                        <button id="next-page-btn" disabled class="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Próxima &raquo;</button>
-                    </div>
-                </div>
-            </div>
+            </section>
         </main>
     </div>
 </div>
 
-    <div id="add-despesa-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
-        <div class="relative mx-auto p-6 border w-full max-w-lg shadow-lg rounded-md bg-white">
-            <div class="flex items-start justify-between pb-4 border-b rounded-t">
-                <h3 class="text-xl font-semibold text-gray-900">Adicionar Nova Despesa</h3>
-                <button id="close-modal-button" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center">
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
-                </button>
-            </div>
-            <form id="form-despesa-modal" class="mt-6 space-y-4">
-                <div id="modal-filial-group" class="hidden">
-                    <label for="modal-filial" class="block mb-2 text-sm font-medium text-gray-900">Lançar para a Filial</label>
-                    <select id="modal-filial" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"></select>
-                </div>
-                <div>
-                    <label for="modal-data_despesa" class="block mb-2 text-sm font-medium text-gray-900">Data da Despesa</label>
-                    <input type="date" id="modal-data_despesa" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                </div>
-                <div>
-                    <label for="modal-descricao" class="block mb-2 text-sm font-medium text-gray-900">Descrição</label>
-                    <input type="text" id="modal-descricao" placeholder="Ex: Compra de material de escritório" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                </div>
-                <div>
-                    <label for="modal-valor" class="block mb-2 text-sm font-medium text-gray-900">Valor (R$)</label>
-                    <input type="number" id="modal-valor" placeholder="Ex: 150.50" step="0.01" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                </div>
-                <div>
-                    <label for="modal-tipo-despesa" class="block mb-2 text-sm font-medium text-gray-900">Tipo da Despesa</label>
-                    <select id="modal-tipo-despesa" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"></select>
-                </div>
-                <div>
-                    <label for="modal-grupo-despesa" class="block mb-2 text-sm font-medium text-gray-900">Grupo da Despesa</label>
-                    <select id="modal-grupo-despesa" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" disabled></select>
-                </div>
-                <button type="submit" class="w-full text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-4 focus:outline-none focus:ring-indigo-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center">Salvar Despesa</button>
-            </form>
-        </div>
-    </div>
-    
-    <div id="confirm-cancel-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
-        <div class="relative mx-auto p-6 border w-full max-w-md shadow-lg rounded-md bg-white">
-            <div class="flex items-start justify-between pb-4 border-b">
-                <h3 class="text-xl font-semibold text-gray-900">Confirmar Cancelamento</h3>
-                <button id="close-confirm-modal-btn" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center">
-                     <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
-                </button>
-            </div>
-            <div class="py-6 text-center">
-                 <svg aria-hidden="true" class="mx-auto mb-4 w-14 h-14 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                <p class="mb-4 text-gray-500">Tem certeza que deseja cancelar o lançamento? Esta ação não pode ser desfeita.</p>
-                <p id="cancel-details" class="text-sm font-medium bg-gray-100 p-2 rounded"></p>
-            </div>
-            <div class="flex justify-center items-center pt-4 border-t gap-4">
-                <button id="reject-cancel-btn" class="rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Voltar</button>
-                <button id="confirm-cancel-btn" class="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700">Confirmar Cancelamento</button>
-            </div>
-        </div>
-    </div>
-    
     <div id="export-pdf-modal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
         <div class="relative mx-auto p-6 border w-full max-w-lg shadow-lg rounded-md bg-white">
             <div class="flex items-start justify-between pb-4 border-b">
@@ -347,7 +340,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
-    <script defer src="despesas.js?v=20261103"></script>
+    <script defer src="despesas.js?v=20261107"></script>
     <script src="assets/global.js"></script>
     <script src="assets/sidebar.js?v=20261103"></script>
 </body>

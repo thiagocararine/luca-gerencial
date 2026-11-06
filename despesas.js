@@ -1,165 +1,129 @@
-// despesas.js (lógica de vinculação ajustada conforme a nova regra de negócio)
+// despesas.js — Caixa da Loja
+// Lançamento rápido de despesas pagas com o dinheiro do caixa e de retiradas do financeiro,
+// caixa do dia da loja e histórico. O grupo vem do vínculo Tipo -> Grupo dos parâmetros
+// (Configurações); "Não Classificado" libera a escolha manual do grupo.
+// Usa de assets/global.js: apiUrlBase, getToken, getUserData, getUserName, logout, dialogoAviso, dialogoConfirmar.
 
 document.addEventListener('DOMContentLoaded', () => {
-    if (document.getElementById('tabela-despesas')) {
-        initPage();
-    }
+    if (document.getElementById('form-lancar')) initPage();
 });
 
-// --- Constantes e Variáveis de Estado Globais ---
-//const apiUrlBase = 'http://10.113.0.17:3000/api';
-//const apiUrlBase = '/api';
 const despesasApiUrl = `${apiUrlBase}/despesas`;
 const privilegedRoles = ["Administrador", "Financeiro"];
+// Mesmo limite da rota: nunca no futuro e no máximo 7 dias para trás (60 para o financeiro).
+const DIAS_PARA_TRAS = 7;
+const DIAS_PARA_TRAS_PRIVILEGIADO = 60;
+
 let todosOsGrupos = [];
 let todosOsTipos = [];
-let despesasNaPagina = [];
+let veiculosCache = [];
+let abaLancamento = 'despesa';
+let lancamentosDoHistorico = [];
+let lancamentosDoDia = [];
 let currentPage = 1;
 let itemsPerPage = 20;
-let despesaIdParaCancelar = null;
 let datepicker = null;
 let exportDatepicker = null;
 let LOGO_BASE_64 = null;
 
-/**
- * Função principal que inicializa a página.
- */
-async function initPage() {
-    const token = getToken();
-    if (!token) {
-        window.location.href = 'login.html';
-        return;
-    }
+// --- UTILITÁRIOS ---
 
-    
+function getUserProfile() { return getUserData()?.perfil || null; }
+function getUserFilial() { return getUserData()?.unidade || null; }
+function ehPrivilegiado() { return privilegedRoles.includes(getUserProfile()); }
+function authHeaders(json = false) {
+    const h = { 'Authorization': `Bearer ${getToken()}` };
+    if (json) h['Content-Type'] = 'application/json';
+    return h;
+}
+
+function dataLocalISO(d = new Date()) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function somarDias(dataStr, dias) {
+    const d = new Date(`${dataStr}T12:00:00`);
+    d.setDate(d.getDate() + dias);
+    return dataLocalISO(d);
+}
+function dataBR(valor) {
+    if (!valor) return '';
+    const iso = String(valor).slice(0, 10);
+    const [a, m, d] = iso.split('-');
+    return `${d}/${m}/${a}`;
+}
+function formatDate(date) { return dataLocalISO(date); }
+function moeda(v) { return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+function escapeHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function semAcento(texto) { return String(texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase(); }
+function ehCombustivel(grupo) { return semAcento(grupo) === 'COMBUSTIVEL'; }
+
+// Erro de API: sessão vencida volta para o login; o resto vira mensagem.
+async function lerResposta(response) {
+    if (response.status === 401 || response.status === 403) {
+        let msg = '';
+        try { msg = (await response.clone().json()).error || ''; } catch (e) { /* sem corpo */ }
+        if (response.status === 401 || !msg) { logout(); throw new Error('Sessão expirada.'); }
+        throw new Error(msg);
+    }
+    let corpo = null;
+    try { corpo = await response.json(); } catch (e) { /* sem corpo */ }
+    if (!response.ok) throw new Error((corpo && corpo.error) || 'Erro na requisição.');
+    return corpo;
+}
+
+async function api(caminho, opcoes = {}) {
+    const response = await fetch(`${despesasApiUrl}${caminho}`, { ...opcoes, headers: authHeaders(!!opcoes.body) });
+    return lerResposta(response);
+}
+
+// --- INICIALIZAÇÃO ---
+
+async function initPage() {
+    if (!getToken()) { window.location.href = 'login.html'; return; }
     document.getElementById('user-name').textContent = getUserName();
     setupDatepickers();
     setupEventListeners();
+    document.querySelector('[data-aba="despesa"]').classList.add('aba-despesa');
+    document.querySelector('[data-aba="retirada"]').classList.add('aba-retirada');
+    trocarAba('despesa');
+
+    const hoje = dataLocalISO();
+    const dataInput = document.getElementById('lanc-data');
+    dataInput.max = hoje;
+    dataInput.min = somarDias(hoje, -(ehPrivilegiado() ? DIAS_PARA_TRAS_PRIVILEGIADO : DIAS_PARA_TRAS));
+    dataInput.value = hoje;
+
     try {
         await loadCurrentLogo();
         await setupInicial();
     } catch (error) {
-        console.error("[initPage] Erro durante a configuração inicial:", error);
+        console.error('[initPage] Erro durante a configuração inicial:', error);
     }
 }
 
-/**
- * Carrega e popula os filtros e dados iniciais da página.
- */
 async function setupInicial() {
-    const userProfile = getUserProfile();
-    const token = getToken();
-    const filialFilterGroup = document.getElementById('filial-filter-group');
-    const modalFilialGroup = document.getElementById('modal-filial-group');
-
-    if (privilegedRoles.includes(userProfile)) {
-        filialFilterGroup.style.display = 'block';
-        modalFilialGroup.style.display = 'block';
-        const filterFilialSelect = document.getElementById('filter-filial');
-        const modalFilialSelect = document.getElementById('modal-filial');
-        await popularSelect(filterFilialSelect, 'Unidades', token, 'Todas as Filiais');
-        await popularSelect(modalFilialSelect, 'Unidades', token, 'Selecione a Filial');
-    } else {
-        filialFilterGroup.style.display = 'none';
-        modalFilialGroup.style.display = 'none';
+    if (ehPrivilegiado()) {
+        document.getElementById('filial-filter-group').classList.remove('hidden');
+        document.getElementById('lanc-filial-group').classList.remove('hidden');
+        await popularSelect(document.getElementById('filter-filial'), 'Unidades', 'Todas as Filiais');
+        const lancFilial = document.getElementById('lanc-filial');
+        await popularSelect(lancFilial, 'Unidades', 'Selecione a loja');
+        let salva = null;
+        try { salva = localStorage.getItem('despesas_loja'); } catch (e) { /* sem storage */ }
+        if (salva && [...lancFilial.options].some(o => o.value === salva)) lancFilial.value = salva;
     }
-    
-    const tipoDespesaModalSelect = document.getElementById('modal-tipo-despesa');
-    const tipoDespesaFilterSelect = document.getElementById('filter-tipo');
-    const grupoDespesaFilterSelect = document.getElementById('filter-grupo');
-    
-    todosOsTipos = await popularSelect(tipoDespesaModalSelect, 'Tipo Despesa', token, '-- Selecione um Tipo --');
-    await popularSelect(tipoDespesaFilterSelect, 'Tipo Despesa', token, 'Todos os Tipos');
-    todosOsGrupos = await popularSelect(grupoDespesaFilterSelect, 'Grupo Despesa', token, 'Todos os Grupos');
-    
-    await carregarDespesas();
+
+    todosOsTipos = await popularSelect(document.getElementById('filter-tipo'), 'Tipo Despesa', 'Todos os Tipos');
+    todosOsGrupos = await popularSelect(document.getElementById('filter-grupo'), 'Grupo Despesa', 'Todos os Grupos');
+    await Promise.all([montarSelectTipos(), carregarVeiculos()]);
+    await Promise.all([carregarCaixaDoDia(), carregarDespesas()]);
 }
-
-/**
- * ATUALIZADO: Lógica de vinculação com o comportamento de travar/liberar o campo de Grupo.
- */
-function handleTipoDespesaChange(event) {
-    const grupoDespesaSelect = document.getElementById('modal-grupo-despesa');
-    const tipoSelecionadoNome = event.target.value;
-
-    // Estado padrão: desabilitado e com placeholder.
-    grupoDespesaSelect.innerHTML = '<option value="">-- Selecione um Tipo primeiro --</option>';
-    grupoDespesaSelect.disabled = true;
-
-    // Caso 1: Se o tipo for "Não Classificado", libera a seleção manual de todos os grupos.
-    if (tipoSelecionadoNome === "Não Classificado") {
-        grupoDespesaSelect.innerHTML = '<option value="">-- Selecione um Grupo --</option>';
-        todosOsGrupos.forEach(grupo => {
-            const option = document.createElement('option');
-            option.value = grupo.NOME_PARAMETRO;
-            option.textContent = grupo.NOME_PARAMETRO;
-            grupoDespesaSelect.appendChild(option);
-        });
-        grupoDespesaSelect.disabled = false; // Habilita o campo
-        return;
-    }
-
-    const tipoSelecionadoObj = todosOsTipos.find(tipo => tipo.NOME_PARAMETRO === tipoSelecionadoNome);
-
-    // Caso 2: Se um tipo específico com vínculo for selecionado.
-    if (tipoSelecionadoObj && tipoSelecionadoObj.KEY_VINCULACAO) {
-        const keyVinculacao = tipoSelecionadoObj.KEY_VINCULACAO;
-        const grupoCorrespondente = todosOsGrupos.find(grupo => grupo.KEY_VINCULACAO == keyVinculacao);
-
-        if (grupoCorrespondente) {
-            // Encontrou o grupo, auto-seleciona e TRAVA o campo.
-            grupoDespesaSelect.innerHTML = '';
-            const option = document.createElement('option');
-            option.value = grupoCorrespondente.NOME_PARAMETRO;
-            option.textContent = grupoCorrespondente.NOME_PARAMETRO;
-            option.selected = true;
-            grupoDespesaSelect.appendChild(option);
-            grupoDespesaSelect.disabled = true; // Desabilita o campo
-        } else {
-            // Caso raro: tipo tem vínculo, mas o grupo não foi encontrado.
-            grupoDespesaSelect.innerHTML = '<option value="">-- Nenhum grupo vinculado --</option>';
-            grupoDespesaSelect.disabled = true;
-        }
-    }
-    // Se nenhum 'if' for satisfeito (ex: o placeholder foi selecionado), o campo permanece desabilitado.
-}
-
-
-/**
- * Lógica de filtro (mantém o comportamento flexível).
- */
-function handleFilterTipoChange(event) {
-    const grupoFilterSelect = document.getElementById('filter-grupo');
-    const tipoSelecionadoNome = event.target.value;
-    
-    const tipoSelecionadoObj = todosOsTipos.find(tipo => tipo.NOME_PARAMETRO === tipoSelecionadoNome);
-
-    grupoFilterSelect.innerHTML = '<option value="">Todos os Grupos</option>';
-
-    let gruposParaExibir = todosOsGrupos;
-
-    if (tipoSelecionadoObj && tipoSelecionadoObj.KEY_VINCULACAO) {
-        const keyVinculacao = tipoSelecionadoObj.KEY_VINCULACAO;
-        gruposParaExibir = todosOsGrupos.filter(grupo => grupo.KEY_VINCULACAO == keyVinculacao);
-    }
-    
-    gruposParaExibir.forEach(grupo => {
-        const option = document.createElement('option');
-        option.value = grupo.NOME_PARAMETRO;
-        option.textContent = grupo.NOME_PARAMETRO;
-        grupoFilterSelect.appendChild(option);
-    });
-}
-
-
-// --- Restante do arquivo (sem alterações) ---
 
 function setupDatepickers() {
     const commonOptions = {
-        elementEnd: null,
-        singleMode: false,
-        lang: 'pt-BR',
-        format: 'DD/MM/YYYY',
+        singleMode: false, lang: 'pt-BR', format: 'DD/MM/YYYY',
         buttonText: {
             previousMonth: `<svg width="11" height="20" xmlns="http://www.w3.org/2000/svg"><path d="M11 1.25L9.75 0 0 9.75l9.75 9.75L11 18.25 2.5 9.75z" fill-rule="evenodd"/></svg>`,
             nextMonth: `<svg width="11" height="20" xmlns="http://www.w3.org/2000/svg"><path d="M0 1.25L1.25 0 11 9.75 1.25 19.5 0 18.25l7.5-8.5z" fill-rule="evenodd"/></svg>`,
@@ -171,225 +135,355 @@ function setupDatepickers() {
 
 function setupEventListeners() {
     document.getElementById('logout-button')?.addEventListener('click', logout);
-    document.getElementById('add-despesa-button')?.addEventListener('click', () => { document.getElementById('add-despesa-modal').classList.remove('hidden'); });
+    document.querySelectorAll('.aba-lanc').forEach(btn => btn.addEventListener('click', () => trocarAba(btn.dataset.aba)));
+    document.getElementById('form-lancar').addEventListener('submit', lancar);
+    document.getElementById('lanc-tipo').addEventListener('change', atualizarGrupoDoTipo);
+    document.getElementById('lanc-grupo').addEventListener('change', atualizarCombustivel);
+    document.getElementById('lanc-data').addEventListener('change', carregarCaixaDoDia);
+    document.getElementById('lanc-filial').addEventListener('change', async e => {
+        try { localStorage.setItem('despesas_loja', e.target.value); } catch (err) { /* preferência só desta sessão */ }
+        await Promise.all([montarSelectTipos(), carregarCaixaDoDia()]);
+        ordenarVeiculos();
+    });
+
     document.getElementById('open-export-modal-btn')?.addEventListener('click', openExportModal);
-    document.getElementById('close-modal-button')?.addEventListener('click', closeModal);
-    document.getElementById('close-export-modal-btn')?.addEventListener('click', () => { document.getElementById('export-pdf-modal').classList.add('hidden'); });
+    document.getElementById('close-export-modal-btn')?.addEventListener('click', () => document.getElementById('export-pdf-modal').classList.add('hidden'));
     document.getElementById('generate-pdf-btn')?.addEventListener('click', exportarPDF);
+    document.getElementById('open-resumo-modal-btn')?.addEventListener('click', gerarResumoDinamico);
+    document.getElementById('close-resumo-modal-btn')?.addEventListener('click', () => document.getElementById('resumo-dinamico-modal').classList.add('hidden'));
+
     document.getElementById('filter-button')?.addEventListener('click', () => { currentPage = 1; carregarDespesas(); });
     document.getElementById('clear-filter-button')?.addEventListener('click', () => { currentPage = 1; clearFilters(); });
-    document.getElementById('form-despesa-modal')?.addEventListener('submit', handleFormSubmit);
-    document.getElementById('modal-tipo-despesa')?.addEventListener('change', handleTipoDespesaChange);
     document.getElementById('filter-tipo')?.addEventListener('change', handleFilterTipoChange);
-    document.getElementById('open-resumo-modal-btn')?.addEventListener('click', gerarResumoDinamico);
-    document.getElementById('close-resumo-modal-btn')?.addEventListener('click', () => { document.getElementById('resumo-dinamico-modal').classList.add('hidden'); });
-    
-    // CORREÇÃO APLICADA AQUI:
-    // O mesmo handler de clique agora é aplicado aos contêineres corretos.
-    document.getElementById('tabela-despesas-container')?.addEventListener('click', handleCancelClick);
-    document.getElementById('cards-despesas-container')?.addEventListener('click', handleCancelClick);
-
-    document.getElementById('items-per-page')?.addEventListener('change', (event) => { itemsPerPage = parseInt(event.target.value); currentPage = 1; carregarDespesas(); });
+    document.getElementById('items-per-page')?.addEventListener('change', e => { itemsPerPage = parseInt(e.target.value); currentPage = 1; carregarDespesas(); });
     document.getElementById('prev-page-btn')?.addEventListener('click', () => { if (currentPage > 1) { currentPage--; carregarDespesas(); } });
     document.getElementById('next-page-btn')?.addEventListener('click', () => { currentPage++; carregarDespesas(); });
-    document.getElementById('close-confirm-modal-btn')?.addEventListener('click', () => { document.getElementById('confirm-cancel-modal').classList.add('hidden'); });
-    document.getElementById('reject-cancel-btn')?.addEventListener('click', () => { document.getElementById('confirm-cancel-modal').classList.add('hidden'); });
-    document.getElementById('confirm-cancel-btn')?.addEventListener('click', () => {
-        if (despesaIdParaCancelar) {
-            cancelarDespesa(despesaIdParaCancelar);
-            document.getElementById('confirm-cancel-modal').classList.add('hidden');
-        }
-    });
-    window.addEventListener('click', (event) => {
-        if (event.target == document.getElementById('add-despesa-modal')) closeModal();
-        if (event.target == document.getElementById('confirm-cancel-modal')) document.getElementById('confirm-cancel-modal').classList.add('hidden');
+
+    // Cancelar (no caixa do dia e no histórico).
+    document.getElementById('dia-lista').addEventListener('click', handleCancelClick);
+    document.getElementById('historico-lista').addEventListener('click', handleCancelClick);
+
+    window.addEventListener('click', event => {
         if (event.target == document.getElementById('export-pdf-modal')) document.getElementById('export-pdf-modal').classList.add('hidden');
     });
 }
 
-async function openExportModal() {
-    const startDate = datepicker.getStartDate();
-    const endDate = datepicker.getEndDate();
-    if (startDate && endDate) {
-        exportDatepicker.setDateRange(startDate.toJSDate(), endDate.toJSDate());
-    } else {
-        exportDatepicker.clearSelection();
-    }
-    const exportFilialGroup = document.getElementById('export-filial-group');
-    const exportFilialSelect = document.getElementById('export-filial-select');
-    if (privilegedRoles.includes(getUserProfile())) {
-        exportFilialGroup.style.display = 'block';
-        await popularSelect(exportFilialSelect, 'Unidades', getToken(), 'Todas as Filiais');
-        exportFilialSelect.value = document.getElementById('filter-filial').value;
-    } else {
-        exportFilialGroup.style.display = 'none';
-    }
-    document.getElementById('export-pdf-modal').classList.remove('hidden');
+// --- LANÇAMENTO ---
+
+function trocarAba(aba) {
+    abaLancamento = aba === 'retirada' ? 'retirada' : 'despesa';
+    const retirada = abaLancamento === 'retirada';
+    document.querySelectorAll('.aba-lanc').forEach(btn => btn.setAttribute('aria-selected', String(btn.dataset.aba === abaLancamento)));
+    document.querySelectorAll('.so-despesa').forEach(el => el.classList.toggle('hidden', retirada));
+    document.getElementById('lanc-descricao-label').innerHTML = retirada
+        ? 'Observação <span class="font-normal normal-case text-gray-400">quem levou / para quê</span>'
+        : 'Descrição';
+    document.getElementById('lanc-descricao').placeholder = retirada ? 'Ex: Rafaela levou para depósito' : 'Ex: pão da manhã';
+    const botao = document.getElementById('btn-lancar');
+    botao.querySelector('span').textContent = retirada ? 'Registrar retirada' : 'Lançar';
+    botao.classList.toggle('bg-indigo-600', retirada);
+    botao.classList.toggle('hover:bg-indigo-700', retirada);
+    botao.classList.toggle('bg-emerald-600', !retirada);
+    botao.classList.toggle('hover:bg-emerald-700', !retirada);
+    atualizarCombustivel();
 }
 
-async function handleFormSubmit(event) {
-    event.preventDefault();
-    const token = getToken();
-    if (!token) return logout();
-    
-    const userProfile = getUserProfile();
-    let filialDaDespesa = null;
+function filialDoLancamento() {
+    return ehPrivilegiado() ? document.getElementById('lanc-filial').value : getUserFilial();
+}
 
-    if (privilegedRoles.includes(userProfile)) {
-        filialDaDespesa = document.getElementById('modal-filial').value;
-        if (!filialDaDespesa) {
-            alert('Como utilizador privilegiado, por favor, selecione a filial para este lançamento.');
-            return;
+// Tipos com os mais usados pela loja primeiro.
+async function montarSelectTipos() {
+    const select = document.getElementById('lanc-tipo');
+    const atual = select.value;
+    let frequentes = [];
+    try {
+        const filial = filialDoLancamento();
+        frequentes = await api(`/tipos-frequentes${filial ? `?filial=${encodeURIComponent(filial)}` : ''}`);
+    } catch (e) { /* sem sugestão: lista normal */ }
+    const nomes = new Set(todosOsTipos.map(t => t.NOME_PARAMETRO));
+    const usados = frequentes.map(f => f.tipo).filter(t => nomes.has(t));
+    const opcao = nome => `<option value="${escapeHtml(nome)}">${escapeHtml(nome)}</option>`;
+    select.innerHTML = '<option value="">-- Selecione o tipo --</option>'
+        + (usados.length ? `<optgroup label="Mais usados">${usados.map(opcao).join('')}</optgroup>` : '')
+        + `<optgroup label="Todos">${todosOsTipos.map(t => opcao(t.NOME_PARAMETRO)).join('')}</optgroup>`;
+    if (atual) select.value = atual;
+    atualizarGrupoDoTipo();
+}
+
+// O grupo vem do vínculo do tipo; "Não Classificado" libera a escolha do grupo.
+function atualizarGrupoDoTipo() {
+    const tipoNome = document.getElementById('lanc-tipo').value;
+    const info = document.getElementById('lanc-grupo-info');
+    const grupoSelect = document.getElementById('lanc-grupo');
+    grupoSelect.classList.add('hidden');
+    grupoSelect.innerHTML = '';
+    info.textContent = '';
+
+    if (tipoNome === 'Não Classificado') {
+        grupoSelect.innerHTML = '<option value="">-- Selecione o grupo --</option>'
+            + todosOsGrupos.map(g => `<option value="${escapeHtml(g.NOME_PARAMETRO)}">${escapeHtml(g.NOME_PARAMETRO)}</option>`).join('');
+        grupoSelect.classList.remove('hidden');
+    } else if (tipoNome) {
+        const tipo = todosOsTipos.find(t => t.NOME_PARAMETRO === tipoNome);
+        const grupo = tipo && tipo.KEY_VINCULACAO ? todosOsGrupos.find(g => g.KEY_VINCULACAO == tipo.KEY_VINCULACAO) : null;
+        if (grupo) {
+            grupoSelect.innerHTML = `<option value="${escapeHtml(grupo.NOME_PARAMETRO)}" selected>${escapeHtml(grupo.NOME_PARAMETRO)}</option>`;
+            info.innerHTML = `Grupo: <b>${escapeHtml(grupo.NOME_PARAMETRO)}</b>`;
+        } else {
+            info.innerHTML = '<span class="text-red-600">Tipo sem grupo vinculado (ajuste em Configurações).</span>';
         }
-    } else {
-        filialDaDespesa = getUserFilial();
     }
-    
-    const novaDespesa = {
-        dsp_datadesp: document.getElementById('modal-data_despesa').value,
-        dsp_descricao: document.getElementById('modal-descricao').value,
-        dsp_valordsp: parseFloat(document.getElementById('modal-valor').value),
-        dsp_tipo: document.getElementById('modal-tipo-despesa').value,
-        dsp_grupo: document.getElementById('modal-grupo-despesa').value,
-        dsp_filial: filialDaDespesa,
+    atualizarCombustivel();
+}
+
+function grupoDoLancamento() { return document.getElementById('lanc-grupo').value; }
+
+function atualizarCombustivel() {
+    const mostrar = abaLancamento === 'despesa' && ehCombustivel(grupoDoLancamento());
+    document.getElementById('lanc-combustivel').classList.toggle('hidden', !mostrar);
+}
+
+async function carregarVeiculos() {
+    try {
+        veiculosCache = await api('/veiculos');
+    } catch (e) {
+        veiculosCache = [];
+    }
+    ordenarVeiculos();
+}
+
+// Veículos da loja primeiro; "sem veículo" para galão, gerador etc.
+function ordenarVeiculos() {
+    const select = document.getElementById('lanc-veiculo');
+    const atual = select.value;
+    const loja = semAcento(filialDoLancamento());
+    const daLoja = veiculosCache.filter(v => semAcento(v.filial) === loja);
+    const outros = veiculosCache.filter(v => semAcento(v.filial) !== loja);
+    const opcao = v => `<option value="${v.id}">${escapeHtml(v.placa)} · ${escapeHtml(v.modelo || '')}${v.filial ? ` (${escapeHtml(v.filial)})` : ''}</option>`;
+    select.innerHTML = '<option value="">-- Selecione o veículo --</option>'
+        + (daLoja.length ? `<optgroup label="Da loja">${daLoja.map(opcao).join('')}</optgroup>` : '')
+        + (outros.length ? `<optgroup label="${daLoja.length ? 'Outras lojas' : 'Veículos'}">${outros.map(opcao).join('')}</optgroup>` : '')
+        + '<option value="0">Sem veículo (galão / outros)</option>';
+    if (atual) select.value = atual;
+}
+
+async function lancar(event) {
+    event.preventDefault();
+    const retirada = abaLancamento === 'retirada';
+    const filial = filialDoLancamento();
+    const valor = Number(document.getElementById('lanc-valor').value);
+    const descricao = document.getElementById('lanc-descricao').value.trim();
+    const corpo = {
+        dsp_natureza: abaLancamento,
+        dsp_datadesp: document.getElementById('lanc-data').value,
+        dsp_valordsp: valor,
+        dsp_descricao: descricao,
+        dsp_filial: filial
     };
-    
-    if (!novaDespesa.dsp_datadesp || !novaDespesa.dsp_descricao || isNaN(novaDespesa.dsp_valordsp) || !novaDespesa.dsp_tipo || !novaDespesa.dsp_grupo) {
-        alert('Todos os campos são obrigatórios.');
+
+    if (!filial) return dialogoAviso('Selecione a loja do lançamento.');
+    if (!corpo.dsp_datadesp) return dialogoAviso('Informe a data.');
+    if (!(valor > 0)) return dialogoAviso('Informe um valor maior que zero.');
+    if (!retirada) {
+        corpo.dsp_tipo = document.getElementById('lanc-tipo').value;
+        corpo.dsp_grupo = grupoDoLancamento();
+        if (!corpo.dsp_tipo) return dialogoAviso('Selecione o tipo da despesa.');
+        if (!corpo.dsp_grupo) return dialogoAviso('Selecione o grupo da despesa.');
+        if (!descricao) return dialogoAviso('Descreva a despesa.');
+        if (ehCombustivel(corpo.dsp_grupo)) {
+            corpo.id_veiculo = document.getElementById('lanc-veiculo').value;
+            if (corpo.id_veiculo === '') return dialogoAviso('Selecione o veículo abastecido (ou "Sem veículo").');
+            corpo.litros = document.getElementById('lanc-litros').value;
+            corpo.odometro = document.getElementById('lanc-km').value;
+        }
+    }
+
+    const botao = document.getElementById('btn-lancar');
+    botao.disabled = true;
+    try {
+        const r = await api('', { method: 'POST', body: JSON.stringify(corpo) });
+        mostrarToast(r.message || 'Lançado!');
+        // Mantém data, loja e tipo para lançar o próximo em seguida.
+        ['lanc-valor', 'lanc-descricao', 'lanc-litros', 'lanc-km'].forEach(id => { document.getElementById(id).value = ''; });
+        document.getElementById('lanc-veiculo').value = '';
+        document.getElementById('lanc-valor').focus();
+        await Promise.all([carregarCaixaDoDia(), carregarDespesas()]);
+    } catch (err) {
+        dialogoAviso(err.message, 'erro', 'Não foi possível lançar');
+    } finally {
+        botao.disabled = false;
+    }
+}
+
+function mostrarToast(texto) {
+    let el = document.getElementById('toast-despesas');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'toast-despesas';
+        el.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 z-[200] px-4 py-2 rounded-lg shadow-lg bg-gray-900 text-white text-sm font-semibold transition-opacity duration-300';
+        document.body.appendChild(el);
+    }
+    el.textContent = texto;
+    el.style.opacity = '1';
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => { el.style.opacity = '0'; }, 2500);
+}
+
+// --- CAIXA DO DIA ---
+
+async function carregarCaixaDoDia() {
+    const data = document.getElementById('lanc-data').value || dataLocalISO();
+    const filial = filialDoLancamento();
+    document.getElementById('dia-titulo').textContent = dataBR(data);
+    document.getElementById('dia-filial').textContent = filial ? `· ${filial}` : '';
+    const lista = document.getElementById('dia-lista');
+    if (!filial) {
+        lancamentosDoDia = [];
+        lista.innerHTML = '<p class="px-4 py-6 text-center text-gray-400">Selecione a loja.</p>';
+        atualizarTotaisDia();
         return;
     }
-    
     try {
-        const response = await fetch(despesasApiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
-            body: JSON.stringify(novaDespesa),
-        });
-        if (response.status >= 400) return handleApiError(response);
-        closeModal();
-        alert('Despesa adicionada com sucesso!');
-        await carregarDespesas();
-    } catch (error) {
-        alert(`Não foi possível adicionar a despesa: ${error.message}`);
+        lancamentosDoDia = await api(`/dia?data=${data}&filial=${encodeURIComponent(filial)}`);
+    } catch (err) {
+        lista.innerHTML = `<p class="px-4 py-6 text-center text-red-600">${escapeHtml(err.message)}</p>`;
+        return;
+    }
+    lista.innerHTML = lancamentosDoDia.length
+        ? lancamentosDoDia.map(d => linhaLancamento(d, { mostrarFilial: false, mostrarData: false })).join('')
+        : '<p class="px-4 py-6 text-center text-gray-400">Nada lançado neste dia ainda.</p>';
+    atualizarTotaisDia();
+    if (typeof feather !== 'undefined') feather.replace();
+}
+
+function atualizarTotaisDia() {
+    const ativos = lancamentosDoDia.filter(d => d.dsp_status === 1);
+    const despesas = ativos.filter(d => d.dsp_natureza !== 'retirada').reduce((a, d) => a + Number(d.dsp_valordsp), 0);
+    const retiradas = ativos.filter(d => d.dsp_natureza === 'retirada').reduce((a, d) => a + Number(d.dsp_valordsp), 0);
+    document.getElementById('dia-total-despesas').textContent = moeda(despesas);
+    document.getElementById('dia-total-retiradas').textContent = moeda(retiradas);
+    document.getElementById('dia-total-geral').textContent = moeda(despesas + retiradas);
+}
+
+// Uma linha de lançamento (caixa do dia e histórico).
+function linhaLancamento(d, { mostrarFilial = true, mostrarData = true } = {}) {
+    const cancelado = d.dsp_status !== 1;
+    const retirada = d.dsp_natureza === 'retirada';
+    const selo = retirada
+        ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-bold">RETIRADA</span>'
+        : `<span class="text-[11px] text-gray-500">${escapeHtml(d.dsp_tipo || '')}${d.dsp_grupo && d.dsp_grupo !== d.dsp_tipo ? ` · ${escapeHtml(d.dsp_grupo)}` : ''}</span>`;
+    const veiculo = d.veiculo_placa
+        ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold">${escapeHtml(d.veiculo_placa)}${d.litros ? ` · ${String(Number(d.litros)).replace('.', ',')} L` : ''}${d.odometro ? ` · ${Number(d.odometro).toLocaleString('pt-BR')} km` : ''}</span>`
+        : '';
+    const extras = [
+        mostrarData ? dataBR(d.dsp_datadesp) : '',
+        mostrarFilial ? escapeHtml(d.dsp_filial || '') : '',
+        `por ${escapeHtml(d.dsp_userlanc || '-')}`,
+        cancelado ? `<span class="text-red-600 font-semibold">cancelado${d.dsp_usercan ? ` por ${escapeHtml(d.dsp_usercan)}` : ''}</span>` : ''
+    ].filter(Boolean).join(' · ');
+    return `
+        <div class="flex items-start gap-3 px-3 sm:px-4 py-2.5 ${cancelado ? 'opacity-50' : ''}">
+            <div class="flex-1 min-w-0">
+                <p class="font-semibold text-gray-800 break-words ${cancelado ? 'line-through' : ''}">${escapeHtml(d.dsp_descricao || '')}</p>
+                <div class="flex flex-wrap items-center gap-1.5 mt-0.5">${selo}${veiculo}</div>
+                <p class="text-[11px] text-gray-400 mt-0.5">${extras}</p>
+            </div>
+            <div class="text-right shrink-0">
+                <p class="font-bold whitespace-nowrap ${retirada ? 'text-indigo-700' : 'text-gray-900'} ${cancelado ? 'line-through' : ''}">${moeda(d.dsp_valordsp)}</p>
+                ${cancelado ? '' : `<button class="cancel-btn mt-1 text-[11px] text-gray-400 hover:text-red-600 hover:underline" data-id="${Number(d.ID)}">cancelar</button>`}
+            </div>
+        </div>`;
+}
+
+async function handleCancelClick(event) {
+    const botao = event.target.closest('.cancel-btn');
+    if (!botao) return;
+    const id = Number(botao.dataset.id);
+    const d = [...lancamentosDoDia, ...lancamentosDoHistorico].find(x => x.ID === id);
+    if (!d) return;
+    const ok = await dialogoConfirmar(
+        `${d.dsp_natureza === 'retirada' ? 'Retirada' : 'Despesa'} de ${dataBR(d.dsp_datadesp)}: "${d.dsp_descricao}" (${moeda(d.dsp_valordsp)}). O cancelamento fica registrado com o seu nome.`,
+        { titulo: 'Cancelar lançamento?', textoOk: 'Cancelar lançamento', perigo: true }
+    );
+    if (!ok) return;
+    try {
+        await api(`/${id}/cancelar`, { method: 'PUT' });
+        mostrarToast('Lançamento cancelado.');
+        await Promise.all([carregarCaixaDoDia(), carregarDespesas()]);
+    } catch (err) {
+        dialogoAviso(err.message, 'erro', 'Não foi possível cancelar');
     }
 }
 
-function renderTable(despesas) {
-    const tabelaDespesasBody = document.getElementById('tabela-despesas')?.querySelector('tbody');
-    const noDataMessage = document.getElementById('no-data-message');
-    tabelaDespesasBody.innerHTML = '';
+// --- HISTÓRICO ---
 
-    if (despesas.length === 0) {
-        noDataMessage.classList.remove('hidden');
-    } else {
-        noDataMessage.classList.add('hidden');
-        despesas.forEach(despesa => {
-            const tr = tabelaDespesasBody.insertRow();
-            
-            const statusText = despesa.dsp_status === 1 ? 'Efetuado' : 'Cancelado';
-            const statusClass = despesa.dsp_status === 1 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
-            const dataDespesaFmt = new Date(despesa.dsp_datadesp).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
-            const dataLancFmt = despesa.dsp_datalanc ? new Date(despesa.dsp_datalanc).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '';
-            const valorFmt = parseFloat(despesa.dsp_valordsp).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
-            const descricao = despesa.dsp_descricao || '';
-
-            tr.innerHTML = `
-                <td class="px-4 py-3">${despesa.dsp_status === 1 ? `<button class="cancel-btn" data-id="${despesa.ID}" title="Cancelar esta despesa">Cancelar</button>` : ''}</td>
-                <td class="px-4 py-3 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}">${statusText}</span></td>
-                <td class="px-4 py-3 whitespace-nowrap">${dataDespesaFmt}</td>
-                <td class="px-4 py-3" title="${descricao}">${descricao}</td>
-                <td class="px-4 py-3 text-right whitespace-nowrap">${valorFmt}</td>
-                <td class="px-4 py-3">${despesa.dsp_tipo || ''}</td>
-                <td class="px-4 py-3">${despesa.dsp_grupo || ''}</td>
-                <td class="px-4 py-3">${despesa.dsp_filial || ''}</td>
-                <td class="px-4 py-3 whitespace-nowrap">${dataLancFmt}</td>
-                <td class="px-4 py-3">${despesa.dsp_userlanc || ''}</td>
-            `;
-        });
-    }
-}
-
-async function carregarDespesas() {
-    const tabelaContainer = document.getElementById('tabela-despesas-container');
-    const cardsContainer = document.getElementById('cards-despesas-container');
-    const noDataMessage = document.getElementById('no-data-message');
-    
-    // Mostra uma mensagem de carregamento em ambos os containers para evitar saltos no layout
-    const loadingHtml = '<p class="text-center p-8 text-gray-500">A carregar...</p>';
-    tabelaContainer.innerHTML = loadingHtml;
-    cardsContainer.innerHTML = loadingHtml;
-    noDataMessage.classList.add('hidden');
-    
-    const token = getToken();
-    if (!token) return logout();
-    
-    itemsPerPage = document.getElementById('items-per-page').value;
-    const params = new URLSearchParams({ page: currentPage, limit: itemsPerPage });
-    
+function filtrosAtuais() {
     const startDate = datepicker.getStartDate();
     const endDate = datepicker.getEndDate();
     const filtros = {
         dataInicio: startDate ? formatDate(startDate.toJSDate()) : '',
         dataFim: endDate ? formatDate(endDate.toJSDate()) : '',
+        natureza: document.getElementById('filter-natureza').value,
         status: document.getElementById('filter-status').value,
         tipo: document.getElementById('filter-tipo').value,
         grupo: document.getElementById('filter-grupo').value,
-        filial: document.getElementById('filter-filial').value,
+        filial: ehPrivilegiado() ? document.getElementById('filter-filial').value : ''
     };
+    return Object.fromEntries(Object.entries(filtros).filter(([, v]) => v));
+}
 
-    for (const key in filtros) {
-        if (filtros[key]) {
-            if (key === 'filial' && !privilegedRoles.includes(getUserProfile())) continue;
-            params.append(key, filtros[key]);
-        }
-    }
+async function carregarDespesas() {
+    const lista = document.getElementById('historico-lista');
+    const noData = document.getElementById('no-data-message');
+    lista.innerHTML = '<p class="text-center p-8 text-gray-500">Carregando...</p>';
+    noData.classList.add('hidden');
+    itemsPerPage = parseInt(document.getElementById('items-per-page').value);
+    const params = new URLSearchParams({ page: currentPage, limit: itemsPerPage, ...filtrosAtuais() });
 
-    const urlComFiltros = `${despesasApiUrl}?${params.toString()}`;
     try {
-        const response = await fetch(urlComFiltros, { headers: { 'Authorization': `Bearer ${token}` } });
-        if (response.status >= 400) return handleApiError(response);
-        
-        const responseData = await response.json();
-        despesasNaPagina = responseData.data;
-        
-        // LÓGICA RESPONSIVA ADICIONADA AQUI
-        if (window.innerWidth < 768) {
-            // Mobile: esconde a tabela e mostra os cards
-            tabelaContainer.style.display = 'none';
-            cardsContainer.style.display = 'block';
-            renderDespesasAsCards(despesasNaPagina);
-        } else {
-            // Desktop: mostra a tabela e esconde os cards
-            tabelaContainer.style.display = 'block';
-            cardsContainer.style.display = 'none';
-            // Recria a estrutura da tabela antes de renderizar
-            tabelaContainer.innerHTML = `
-                <table id="tabela-despesas" class="min-w-full">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Despesa</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
-                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor (R$)</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grupo</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Filial</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Lanç.</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Utilizador</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white text-sm divide-y divide-gray-200"></tbody>
-                </table>
-            `;
-            renderTable(despesasNaPagina);
-        }
-        
-        renderPagination(responseData);
+        const resposta = await api(`?${params.toString()}`);
+        lancamentosDoHistorico = resposta.data;
+        renderHistorico(resposta);
+        renderPagination(resposta);
     } catch (error) {
-        tabelaContainer.innerHTML = `<p class="text-center p-8 text-red-500">Falha ao carregar despesas.</p>`;
-        cardsContainer.innerHTML = `<p class="text-center p-8 text-red-500">Falha ao carregar despesas.</p>`;
+        lista.innerHTML = `<p class="text-center p-8 text-red-500">Falha ao carregar: ${escapeHtml(error.message)}</p>`;
     }
+}
+
+// Agrupado por dia, com o total do dia (só lançamentos efetuados).
+function renderHistorico(resposta) {
+    const lista = document.getElementById('historico-lista');
+    const noData = document.getElementById('no-data-message');
+    const dados = resposta.data;
+    document.getElementById('historico-totais').innerHTML = resposta.totalItems ? `
+        <span class="px-2 py-1 rounded bg-white/80 ring-1 ring-gray-200 text-red-700">Despesas no filtro <b>${moeda(resposta.totalDespesas)}</b></span>
+        <span class="px-2 py-1 rounded bg-white/80 ring-1 ring-gray-200 text-indigo-700">Retiradas no filtro <b>${moeda(resposta.totalRetiradas)}</b></span>` : '';
+    if (!dados.length) {
+        lista.innerHTML = '';
+        noData.classList.remove('hidden');
+        return;
+    }
+    const dias = new Map();
+    dados.forEach(d => {
+        const dia = String(d.dsp_datadesp).slice(0, 10);
+        if (!dias.has(dia)) dias.set(dia, []);
+        dias.get(dia).push(d);
+    });
+    lista.innerHTML = [...dias.entries()].map(([dia, itens]) => {
+        const ativos = itens.filter(d => d.dsp_status === 1);
+        const despesas = ativos.filter(d => d.dsp_natureza !== 'retirada').reduce((a, d) => a + Number(d.dsp_valordsp), 0);
+        const retiradas = ativos.filter(d => d.dsp_natureza === 'retirada').reduce((a, d) => a + Number(d.dsp_valordsp), 0);
+        return `
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow ring-1 ring-gray-200/60 overflow-hidden">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 sm:px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs">
+                    <b class="text-gray-800 text-sm">${dataBR(dia)}</b>
+                    <span class="ml-auto text-red-700">despesas <b>${moeda(despesas)}</b></span>
+                    ${retiradas ? `<span class="text-indigo-700">retiradas <b>${moeda(retiradas)}</b></span>` : ''}
+                </div>
+                <div class="divide-y divide-gray-100 text-sm">${itens.map(d => linhaLancamento(d, { mostrarFilial: ehPrivilegiado(), mostrarData: false })).join('')}</div>
+            </div>`;
+    }).join('');
 }
 
 function renderPagination({ totalItems, totalPages, currentPage: page }) {
@@ -397,72 +491,89 @@ function renderPagination({ totalItems, totalPages, currentPage: page }) {
     const pageInfoSpan = document.getElementById('page-info-span');
     const prevBtn = document.getElementById('prev-page-btn');
     const nextBtn = document.getElementById('next-page-btn');
-    
-    if (!totalItems || totalItems === 0) {
-        pageInfoContainer.textContent = 'Nenhum resultado encontrado.';
+    if (!totalItems) {
+        pageInfoContainer.textContent = '';
         pageInfoSpan.textContent = '';
         prevBtn.style.display = 'none';
         nextBtn.style.display = 'none';
     } else {
         const startItem = (page - 1) * itemsPerPage + 1;
         const endItem = Math.min(page * itemsPerPage, totalItems);
-        pageInfoContainer.textContent = `Mostrando ${startItem} - ${endItem} de ${totalItems} resultados.`;
+        pageInfoContainer.textContent = `Mostrando ${startItem} - ${endItem} de ${totalItems}.`;
         pageInfoSpan.textContent = `Página ${page} de ${totalPages}`;
         prevBtn.style.display = 'inline-flex';
         nextBtn.style.display = 'inline-flex';
     }
-    
     prevBtn.disabled = page <= 1;
     nextBtn.disabled = page >= totalPages;
 }
 
-function handleCancelClick(event) {
-    // Procura pelo botão .cancel-btn mais próximo do local onde o usuário clicou
-    const target = event.target.closest('.cancel-btn');
-    if (target) {
-        const despesaId = parseInt(target.dataset.id, 10);
-        const despesaParaCancelar = despesasNaPagina.find(d => d.ID === despesaId);
-        if (despesaParaCancelar) {
-            openCancelConfirmModal(despesaParaCancelar);
-        }
-    }
+function handleFilterTipoChange(event) {
+    const grupoFilterSelect = document.getElementById('filter-grupo');
+    const tipoSelecionado = todosOsTipos.find(t => t.NOME_PARAMETRO === event.target.value);
+    const grupos = tipoSelecionado && tipoSelecionado.KEY_VINCULACAO
+        ? todosOsGrupos.filter(g => g.KEY_VINCULACAO == tipoSelecionado.KEY_VINCULACAO)
+        : todosOsGrupos;
+    grupoFilterSelect.innerHTML = '<option value="">Todos os Grupos</option>'
+        + grupos.map(g => `<option value="${escapeHtml(g.NOME_PARAMETRO)}">${escapeHtml(g.NOME_PARAMETRO)}</option>`).join('');
 }
 
-async function cancelarDespesa(id) {
-    const token = getToken();
-    if (!token) return logout();
-    const url = `${despesasApiUrl}/${id}/cancelar`;
+function clearFilters() {
+    datepicker.clearSelection();
+    ['filter-natureza', 'filter-status', 'filter-tipo'].forEach(id => { document.getElementById(id).value = ''; });
+    handleFilterTipoChange({ target: { value: '' } });
+    if (ehPrivilegiado()) document.getElementById('filter-filial').value = '';
+    carregarDespesas();
+}
+
+async function popularSelect(selectElement, codParametro, placeholderText) {
     try {
-        const response = await fetch(url, { method: 'PUT', headers: { 'Authorization': `Bearer ${token}` } });
-        if (response.status >= 400) return handleApiError(response);
-        alert('Despesa cancelada com sucesso!');
-        await carregarDespesas();
+        const response = await fetch(`${apiUrlBase}/settings/parametros?cod=${encodeURIComponent(codParametro)}`, { headers: authHeaders() });
+        const data = await lerResposta(response);
+        selectElement.innerHTML = `<option value="">${placeholderText}</option>`
+            + data.map(p => `<option value="${escapeHtml(p.NOME_PARAMETRO)}">${escapeHtml(p.NOME_PARAMETRO)}</option>`).join('');
+        return data;
     } catch (error) {
-        alert(`Não foi possível cancelar a despesa: ${error.message}`);
-    } finally {
-        despesaIdParaCancelar = null;
+        selectElement.innerHTML = '<option value="">Erro ao carregar</option>';
+        return [];
     }
 }
 
-function openCancelConfirmModal(despesa) {
-    despesaIdParaCancelar = despesa.ID;
-    const dataFormatada = new Date(despesa.dsp_datadesp).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
-    const valorFormatado = parseFloat(despesa.dsp_valordsp).toFixed(2);
-    const detalhesHtml = `<strong>ID:</strong> ${despesa.ID}<br><strong>Data:</strong> ${dataFormatada}<br><strong>Descrição:</strong> ${despesa.dsp_descricao}<br><strong>Valor:</strong> R$ ${valorFormatado}`;
-    document.getElementById('cancel-details').innerHTML = detalhesHtml;
-    document.getElementById('confirm-cancel-modal').classList.remove('hidden');
+async function loadCurrentLogo() {
+    try {
+        const response = await fetch(`${apiUrlBase}/settings/config/logo`, { headers: authHeaders() });
+        const data = await lerResposta(response);
+        if (data && data.logoBase64) LOGO_BASE_64 = data.logoBase64;
+    } catch (error) {
+        console.error('Não foi possível carregar a logo atual:', error);
+    }
 }
 
-/**
- * ATUALIZADO: Gera e descarrega o relatório em PDF com a totalização por grupo.
- */
+// --- PDF ---
+
+async function openExportModal() {
+    const startDate = datepicker.getStartDate();
+    const endDate = datepicker.getEndDate();
+    if (startDate && endDate) exportDatepicker.setDateRange(startDate.toJSDate(), endDate.toJSDate());
+    else exportDatepicker.clearSelection();
+    const exportFilialGroup = document.getElementById('export-filial-group');
+    const exportFilialSelect = document.getElementById('export-filial-select');
+    if (ehPrivilegiado()) {
+        exportFilialGroup.style.display = 'block';
+        await popularSelect(exportFilialSelect, 'Unidades', 'Todas as Filiais');
+        exportFilialSelect.value = document.getElementById('filter-filial').value;
+    } else {
+        exportFilialGroup.style.display = 'none';
+    }
+    document.getElementById('export-pdf-modal').classList.remove('hidden');
+}
+
+// Despesas por dia, totais por grupo e, à parte, as retiradas do financeiro.
 async function exportarPDF() {
     const btn = document.getElementById('generate-pdf-btn');
-    btn.textContent = 'A gerar...';
+    btn.textContent = 'Gerando...';
     btn.disabled = true;
     try {
-        const token = getToken();
-        if (!token) return logout();
         const params = new URLSearchParams();
         const startDate = exportDatepicker.getStartDate();
         const endDate = exportDatepicker.getEndDate();
@@ -471,118 +582,108 @@ async function exportarPDF() {
         if (dataInicio) params.append('dataInicio', dataInicio);
         if (dataFim) params.append('dataFim', dataFim);
         const filialSelecionada = document.getElementById('export-filial-select').value;
-        if (privilegedRoles.includes(getUserProfile()) && filialSelecionada) {
-            params.append('filial', filialSelecionada);
-        }
-        const statusSelecionado = document.querySelector('input[name="export-status"]:checked').value;
-        params.append('status', statusSelecionado);
+        if (ehPrivilegiado() && filialSelecionada) params.append('filial', filialSelecionada);
+        params.append('status', document.querySelector('input[name="export-status"]:checked').value);
         params.append('export', 'true');
-        const response = await fetch(`${despesasApiUrl}?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token}` } });
-        if (response.status >= 400) return handleApiError(response, true);
-        const despesas = await response.json();
-        if (despesas.length === 0) {
-            alert('Nenhuma despesa encontrada com os filtros atuais para gerar o relatório.');
+        const lancamentos = await api(`?${params.toString()}`);
+        if (!lancamentos.length) {
+            dialogoAviso('Nenhum lançamento encontrado com esses filtros.');
             return;
         }
+        const despesas = lancamentos.filter(d => d.dsp_natureza !== 'retirada');
+        const retiradas = lancamentos.filter(d => d.dsp_natureza === 'retirada');
+
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-        
+        const largura = doc.internal.pageSize.getWidth();
         try {
-            if (LOGO_BASE_64 && LOGO_BASE_64.startsWith('data:image/')) {
-                doc.addImage(LOGO_BASE_64, 'PNG', 14, 15, 20, 0);
-            }
+            if (LOGO_BASE_64 && LOGO_BASE_64.startsWith('data:image/')) doc.addImage(LOGO_BASE_64, 'PNG', 14, 15, 20, 0);
         } catch (e) {
-            console.error("A logo carregada é inválida e não será adicionada ao PDF.", e);
+            console.error('A logo carregada é inválida e não será adicionada ao PDF.', e);
         }
-
         doc.setFontSize(18);
-        doc.text('Relatório de Despesas', doc.internal.pageSize.getWidth() / 2, 22, { align: 'center' });
+        doc.text('Relatório do Caixa da Loja', largura / 2, 22, { align: 'center' });
         doc.setFontSize(11);
-        const filial = filialSelecionada || getUserFilial() || 'Todas';
-        doc.text(`Filial: ${filial}`, doc.internal.pageSize.getWidth() / 2, 28, { align: 'center' });
-        const periodo = dataInicio ? `Período: ${startDate.format('DD/MM/YYYY')} a ${endDate.format('DD/MM/YYYY')}` : 'Período: Completo';
-        doc.text(periodo, doc.internal.pageSize.getWidth() / 2, 34, { align: 'center' });
-        
-        const despesasPorDia = despesas.reduce((acc, despesa) => {
-            const data = despesa.dsp_datadesp.split('T')[0];
-            if (!acc[data]) { acc[data] = { items: [], total: 0 }; }
-            acc[data].items.push(despesa);
-            acc[data].total += parseFloat(despesa.dsp_valordsp);
-            return acc;
-        }, {});
+        doc.text(`Filial: ${filialSelecionada || getUserFilial() || 'Todas'}`, largura / 2, 28, { align: 'center' });
+        doc.text(dataInicio ? `Período: ${startDate.format('DD/MM/YYYY')} a ${endDate.format('DD/MM/YYYY')}` : 'Período: Completo', largura / 2, 34, { align: 'center' });
 
         const body = [];
-        for (const data of Object.keys(despesasPorDia).sort()) {
-            const diaInfo = despesasPorDia[data];
-            diaInfo.items.forEach(d => {
-                body.push([
-                    new Date(d.dsp_datadesp).toLocaleDateString('pt-BR', { timeZone: 'UTC' }),
-                    d.dsp_descricao,
-                    d.dsp_grupo,
-                    d.dsp_tipo,
-                    parseFloat(d.dsp_valordsp).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                ]);
-            });
+        const porDia = new Map();
+        despesas.forEach(d => {
+            const dia = String(d.dsp_datadesp).slice(0, 10);
+            if (!porDia.has(dia)) porDia.set(dia, []);
+            porDia.get(dia).push(d);
+        });
+        for (const dia of [...porDia.keys()].sort()) {
+            const itens = porDia.get(dia);
+            itens.forEach(d => body.push([
+                dataBR(d.dsp_datadesp),
+                d.dsp_descricao + (d.veiculo_placa ? ` [${d.veiculo_placa}]` : ''),
+                d.dsp_grupo || '', d.dsp_tipo || '', moeda(d.dsp_valordsp)
+            ]));
             body.push([
-                { content: `Total do Dia:`, colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } },
-                { content: diaInfo.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), styles: { halign: 'right', fontStyle: 'bold' } }
+                { content: 'Total do Dia:', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } },
+                { content: moeda(itens.reduce((a, d) => a + Number(d.dsp_valordsp), 0)), styles: { halign: 'right', fontStyle: 'bold' } }
             ]);
         }
-        
-        doc.autoTable({
-            head: [['Data Desp.', 'Descrição', 'Grupo', 'Tipo', 'Valor']],
-            body: body,
-            startY: 45,
-            theme: 'grid',
-            headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-            styles: { fontSize: 8, cellPadding: 2 },
-            columnStyles: {
-                0: { cellWidth: 22 }, 1: { cellWidth: 'auto' },
-                2: { cellWidth: 30 }, 3: { cellWidth: 30 },
-                4: { cellWidth: 25, halign: 'right' }
-            },
-            didParseCell: (data) => {
-                if (data.row.raw[0]?.colSpan) {
-                    data.cell.styles.fillColor = '#f8f9fa';
-                    data.cell.styles.textColor = [220, 53, 69];
-                    data.cell.styles.fontStyle = 'bold';
-                    data.cell.styles.cellPadding = 1.5;
-                    data.cell.styles.fontSize = 7;
+        let y = 45;
+        if (body.length) {
+            doc.autoTable({
+                head: [['Data', 'Descrição', 'Grupo', 'Tipo', 'Valor']],
+                body, startY: y, theme: 'grid',
+                headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+                styles: { fontSize: 8, cellPadding: 2 },
+                columnStyles: { 0: { cellWidth: 22 }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 30 }, 3: { cellWidth: 30 }, 4: { cellWidth: 25, halign: 'right' } },
+                didParseCell: data => {
+                    if (data.row.raw[0]?.colSpan) {
+                        data.cell.styles.fillColor = '#f8f9fa';
+                        data.cell.styles.textColor = [220, 53, 69];
+                        data.cell.styles.fontSize = 7;
+                    }
                 }
-            },
-        });
-        
-        const finalY = doc.autoTable.previous.finalY;
+            });
+            y = doc.autoTable.previous.finalY + 10;
+        }
 
-        // NOVO: Lógica para totalizar por grupo
-        const totaisPorGrupo = despesas.reduce((acc, despesa) => {
-            const grupo = despesa.dsp_grupo || 'Não Agrupado';
-            acc[grupo] = (acc[grupo] || 0) + parseFloat(despesa.dsp_valordsp);
+        if (retiradas.length) {
+            doc.setFontSize(13);
+            doc.text('Retiradas do financeiro', 14, y + 5);
+            doc.autoTable({
+                head: [['Data', 'Filial', 'Observação', 'Lançado por', 'Valor']],
+                body: retiradas.map(d => [dataBR(d.dsp_datadesp), d.dsp_filial || '', d.dsp_descricao || '', d.dsp_userlanc || '', moeda(d.dsp_valordsp)]),
+                startY: y + 9, theme: 'grid',
+                headStyles: { fillColor: [79, 70, 229], textColor: 255 },
+                styles: { fontSize: 8, cellPadding: 2 },
+                columnStyles: { 4: { halign: 'right', cellWidth: 25 } }
+            });
+            y = doc.autoTable.previous.finalY + 10;
+        }
+
+        const totaisPorGrupo = despesas.reduce((acc, d) => {
+            const grupo = d.dsp_grupo || 'Não Agrupado';
+            acc[grupo] = (acc[grupo] || 0) + Number(d.dsp_valordsp);
             return acc;
         }, {});
-        const totalGeral = Object.values(totaisPorGrupo).reduce((sum, value) => sum + value, 0);
-        
-        doc.setFontSize(14);
-        doc.text('Totais por Grupo de Despesa', 14, finalY + 15);
-        
-        const totalBody = Object.entries(totaisPorGrupo).map(([grupo, total]) => [
-            grupo,
-            total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-        ]);
-
+        const totalDespesas = Object.values(totaisPorGrupo).reduce((a, v) => a + v, 0);
+        const totalRetiradas = retiradas.reduce((a, d) => a + Number(d.dsp_valordsp), 0);
+        doc.setFontSize(13);
+        doc.text('Totais', 14, y + 5);
         doc.autoTable({
-            head: [['Grupo', 'Total Gasto']],
-            body: totalBody,
-            startY: finalY + 20,
-            theme: 'striped',
-            foot: [['Total Geral', totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })]],
-            footStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold' }
+            head: [['Grupo', 'Total']],
+            body: [
+                ...Object.entries(totaisPorGrupo).sort((a, b) => b[1] - a[1]).map(([g, t]) => [g, moeda(t)]),
+                [{ content: 'Total de despesas', styles: { fontStyle: 'bold' } }, { content: moeda(totalDespesas), styles: { fontStyle: 'bold' } }],
+                ['Retiradas do financeiro', moeda(totalRetiradas)]
+            ],
+            startY: y + 9, theme: 'striped',
+            foot: [['Total que saiu do caixa', moeda(totalDespesas + totalRetiradas)]],
+            footStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold' },
+            columnStyles: { 1: { halign: 'right' } }
         });
-        
-        const dataStr = new Date().toISOString().slice(0, 10);
-        doc.save(`Relatorio_Despesas_${dataStr}.pdf`);
+
+        doc.save(`Relatorio_Caixa_Loja_${dataLocalISO()}.pdf`);
     } catch (error) {
-        alert("Ocorreu um erro ao gerar o relatório em PDF.");
+        dialogoAviso('Ocorreu um erro ao gerar o PDF: ' + error.message, 'erro');
     } finally {
         btn.textContent = 'Gerar PDF';
         btn.disabled = false;
@@ -590,207 +691,50 @@ async function exportarPDF() {
     }
 }
 
-function closeModal() {
-    const modal = document.getElementById('add-despesa-modal');
-    modal.classList.add('hidden');
-    const form = document.getElementById('form-despesa-modal');
-    form.reset();
-    const grupoSelect = document.getElementById('modal-grupo-despesa');
-    grupoSelect.innerHTML = '<option value="">-- Selecione um Tipo primeiro --</option>';
-    grupoSelect.disabled = true;
-}
-
-function clearFilters() {
-    datepicker.clearSelection();
-    document.getElementById('filter-status').value = '';
-    document.getElementById('filter-tipo').value = '';
-    const grupoSelect = document.getElementById('filter-grupo');
-    grupoSelect.innerHTML = '<option value="">Todos os Grupos</option>';
-    todosOsGrupos.forEach(g => {
-        const option = document.createElement('option');
-        option.value = g.NOME_PARAMETRO;
-        option.textContent = g.NOME_PARAMETRO;
-        grupoSelect.appendChild(option);
-    });
-    if (privilegedRoles.includes(getUserProfile())) document.getElementById('filter-filial').value = '';
-    carregarDespesas();
-}
-
-function formatDate(date) { return date.toISOString().slice(0, 10); }
-function getToken() { return localStorage.getItem('lucaUserToken'); }
-function getUserData() { const token = getToken(); if (!token) return null; try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; } }
-function getUserName() { return getUserData()?.nome || 'Utilizador'; }
-function getUserProfile() { return getUserData()?.perfil || null; }
-function getUserFilial() { return getUserData()?.unidade || null; }
-function logout() { localStorage.removeItem('lucaUserToken'); window.location.href = 'login.html';}
-async function popularSelect(selectElement, codParametro, token, placeholderText) {
-    try {
-        const response = await fetch(`${apiUrlBase}/settings/parametros?cod=${codParametro}`, { headers: { 'Authorization': `Bearer ${token}` } });
-        if (response.status >= 400) return handleApiError(response);
-        const data = await response.json();
-        selectElement.innerHTML = `<option value="">${placeholderText}</option>`;
-        data.forEach(param => {
-            const option = document.createElement('option');
-            option.value = param.NOME_PARAMETRO;
-            option.textContent = param.NOME_PARAMETRO;
-            if (param.KEY_VINCULACAO) option.dataset.keyVinculacao = param.KEY_VINCULACAO;
-            if (param.KEY_PARAMETRO) option.dataset.keyParametro = param.KEY_PARAMETRO;
-            selectElement.appendChild(option);
-        });
-        return data;
-    } catch (error) {
-        selectElement.innerHTML = `<option value="">Erro ao carregar</option>`;
-        return [];
-    }
-}
-async function loadCurrentLogo() {
-    try {
-        const response = await fetch(`${apiUrlBase}/settings/config/logo`, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-        if (response.status >= 400) return handleApiError(response);
-        const data = await response.json();
-        if (data.logoBase64) {
-            LOGO_BASE_64 = data.logoBase64;
-        }
-    } catch (error) {
-        console.error("Não foi possível carregar a logo atual:", error);
-    }
-}
-function handleApiError(response, isExport = false) {
-    if (response.status === 401 || response.status === 403) {
-        logout();
-    } else {
-        response.json().then(errorData => {
-            const message = `Erro na API: ${errorData.error || response.statusText}`;
-            if (!isExport) {
-                 const tabelaDespesasBody = document.getElementById('tabela-despesas')?.querySelector('tbody');
-                 if (tabelaDespesasBody) tabelaDespesasBody.innerHTML = `<tr><td colspan="10" class="text-center p-8 text-red-500">${message}</td></tr>`;
-            } else {
-                alert(message);
-            }
-        }).catch(() => {
-            alert('Ocorreu um erro inesperado na API.');
-        });
-    }
-}
-
-
-// ADICIONE ESTA NOVA FUNÇÃO EM despesas.js
-function renderDespesasAsCards(despesas) {
-    const container = document.getElementById('cards-despesas-container'); // O container que vamos criar no HTML
-    container.innerHTML = ''; // Limpa o conteúdo anterior
-
-    if (despesas.length === 0) {
-        document.getElementById('no-data-message').classList.remove('hidden');
-        return;
-    }
-    
-    document.getElementById('no-data-message').classList.add('hidden');
-
-    const cardsGrid = document.createElement('div');
-    cardsGrid.className = 'grid grid-cols-1 sm:grid-cols-2 gap-4';
-    
-    despesas.forEach(despesa => {
-        const card = document.createElement('div');
-        card.className = 'bg-white/80 backdrop-blur-sm rounded-lg shadow p-4 space-y-3 border-l-4';
-
-        const statusText = despesa.dsp_status === 1 ? 'Efetuado' : 'Cancelado';
-        const statusClass = despesa.dsp_status === 1 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
-        const borderColor = despesa.dsp_status === 1 ? 'border-green-500' : 'border-red-500';
-        card.classList.add(borderColor);
-
-        const dataDespesaFmt = new Date(despesa.dsp_datadesp).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
-        const valorFmt = parseFloat(despesa.dsp_valordsp).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
-
-        card.innerHTML = `
-            <div class="flex justify-between items-start">
-                <div>
-                    <p class="font-bold text-gray-800 break-words">${despesa.dsp_descricao}</p>
-                    <p class="text-sm text-gray-600">${despesa.dsp_grupo} / ${despesa.dsp_tipo}</p>
-                </div>
-                <span class="px-2 py-1 text-xs font-semibold rounded-full ${statusClass}">${statusText}</span>
-            </div>
-            <div class="text-2xl font-bold text-gray-900 text-right">${valorFmt}</div>
-            <div class="text-xs text-gray-500 border-t pt-2 mt-2 space-y-1">
-                <div class="flex justify-between"><span>Filial:</span> <span class="font-medium">${despesa.dsp_filial}</span></div>
-                <div class="flex justify-between"><span>Data da Despesa:</span> <span class="font-medium">${dataDespesaFmt}</span></div>
-                <div class="flex justify-between"><span>Usuário:</span> <span class="font-medium">${despesa.dsp_userlanc}</span></div>
-            </div>
-            ${despesa.dsp_status === 1 ? `<button class="cancel-btn w-full mt-2" data-id="${despesa.ID}">Cancelar Lançamento</button>` : ''}
-        `;
-        cardsGrid.appendChild(card);
-    });
-
-    container.appendChild(cardsGrid);
-}
-
 // ==========================================================
-//               MÓDULO: TABELA DINÂMICA (PIVOT) COM CHECKBOXES
+//          RESUMO DINÂMICO (só despesas; retiradas à parte)
 // ==========================================================
 
-window.recalcularArvoresDinamicas = function() {
+window.recalcularArvoresDinamicas = function () {
     let totalGeral = 0;
-    const formatCurrency = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-    // Iterar por todos os Grupos
     document.querySelectorAll('.grupo-container').forEach(grupoDiv => {
         let totalGrupo = 0;
         const groupId = grupoDiv.dataset.groupId;
         const chkGrupo = document.getElementById(`chk-${groupId}`);
         let todosTiposChecados = true;
         let algumTipoChecado = false;
-
-        // Iterar pelos Tipos dentro do Grupo
         grupoDiv.querySelectorAll('.tipo-container').forEach(tipoDiv => {
             let totalTipo = 0;
             const typeId = tipoDiv.dataset.typeId;
             const chkTipo = document.getElementById(`chk-${typeId}`);
             let todosDescChecados = true;
             let algumDescChecado = false;
-
             const descCheckboxes = tipoDiv.querySelectorAll('.chk-desc');
-            if(descCheckboxes.length === 0) todosDescChecados = false;
-
-            // Somar as descrições checadas
+            if (descCheckboxes.length === 0) todosDescChecados = false;
             descCheckboxes.forEach(chk => {
-                if (chk.checked) {
-                    totalTipo += parseFloat(chk.dataset.valor || 0);
-                    algumDescChecado = true;
-                } else {
-                    todosDescChecados = false;
-                }
+                if (chk.checked) { totalTipo += parseFloat(chk.dataset.valor || 0); algumDescChecado = true; }
+                else todosDescChecados = false;
             });
-
-            // Atualiza o Checkbox do Tipo (Marcado, Desmarcado ou Indeterminado)
             if (chkTipo) {
                 chkTipo.checked = todosDescChecados && descCheckboxes.length > 0;
                 chkTipo.indeterminate = !todosDescChecados && algumDescChecado;
             }
-
-            // Atualiza o subtotal do Tipo
-            document.getElementById(`total-${typeId}`).textContent = formatCurrency(totalTipo);
+            document.getElementById(`total-${typeId}`).textContent = moeda(totalTipo);
             totalGrupo += totalTipo;
-
             if (!chkTipo.checked) todosTiposChecados = false;
             if (chkTipo.checked || chkTipo.indeterminate) algumTipoChecado = true;
         });
-
-        // Atualiza o Checkbox do Grupo (Marcado, Desmarcado ou Indeterminado)
         if (chkGrupo) {
             chkGrupo.checked = todosTiposChecados && grupoDiv.querySelectorAll('.tipo-container').length > 0;
             chkGrupo.indeterminate = !todosTiposChecados && algumTipoChecado;
         }
-
-        // Atualiza o subtotal do Grupo
-        document.getElementById(`total-${groupId}`).textContent = formatCurrency(totalGrupo);
+        document.getElementById(`total-${groupId}`).textContent = moeda(totalGrupo);
         totalGeral += totalGrupo;
     });
-
-    // Atualiza o Total Geral do Modal
-    document.getElementById('resumo-total-geral').textContent = formatCurrency(totalGeral);
+    document.getElementById('resumo-total-geral').textContent = moeda(totalGeral);
 };
 
-window.toggleResumoCheckboxes = function(checkboxCentral, containerId) {
-    // Marca ou desmarca todos os filhos baseando-se no pai clicado
+window.toggleResumoCheckboxes = function (checkboxCentral, containerId) {
     const container = document.getElementById(containerId);
     if (container) {
         container.querySelectorAll('input[type="checkbox"]').forEach(chk => {
@@ -805,133 +749,91 @@ async function gerarResumoDinamico() {
     const modal = document.getElementById('resumo-dinamico-modal');
     const content = document.getElementById('resumo-dinamico-content');
     const totalGeralEl = document.getElementById('resumo-total-geral');
-    
     modal.classList.remove('hidden');
     content.innerHTML = '<div class="flex flex-col items-center justify-center p-10 text-gray-400"><i data-feather="loader" class="w-8 h-8 animate-spin text-purple-600 mb-2"></i><p class="font-medium text-sm">Processando dados...</p></div>';
-    if(typeof feather !== 'undefined') feather.replace();
+    if (typeof feather !== 'undefined') feather.replace();
 
     try {
-        const token = getToken();
-        if (!token) return logout();
+        const filtros = filtrosAtuais();
+        delete filtros.natureza;
+        const params = new URLSearchParams({ ...filtros, export: 'true' });
+        const lancamentos = await api(`?${params.toString()}`);
+        const efetuados = lancamentos.filter(d => d.dsp_status === 1);
+        const despesas = efetuados.filter(d => d.dsp_natureza !== 'retirada');
+        const retiradas = efetuados.filter(d => d.dsp_natureza === 'retirada');
+        const totalRetiradas = retiradas.reduce((a, d) => a + Number(d.dsp_valordsp), 0);
 
-        const params = new URLSearchParams();
-        const startDate = datepicker.getStartDate();
-        const endDate = datepicker.getEndDate();
-        if (startDate) params.append('dataInicio', formatDate(startDate.toJSDate()));
-        if (endDate) params.append('dataFim', formatDate(endDate.toJSDate()));
-        
-        const statusVal = document.getElementById('filter-status').value;
-        const tipoVal = document.getElementById('filter-tipo').value;
-        const grupoVal = document.getElementById('filter-grupo').value;
-        const filialVal = document.getElementById('filter-filial').value;
-
-        if (statusVal) params.append('status', statusVal);
-        if (tipoVal) params.append('tipo', tipoVal);
-        if (grupoVal) params.append('grupo', grupoVal);
-        if (privilegedRoles.includes(getUserProfile()) && filialVal) params.append('filial', filialVal);
-        params.append('export', 'true'); // Ignora paginação
-
-        const response = await fetch(`${despesasApiUrl}?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token}` } });
-        if (response.status >= 400) throw new Error("Falha ao buscar dados.");
-        
-        const despesas = await response.json();
-
-        if (despesas.length === 0) {
-            content.innerHTML = '<div class="text-center p-8 text-gray-500"><i data-feather="inbox" class="w-12 h-12 mx-auto mb-3 opacity-50"></i><p class="font-bold">Nenhum dado encontrado para o filtro atual.</p></div>';
+        if (!despesas.length) {
+            content.innerHTML = '<div class="text-center p-8 text-gray-500"><i data-feather="inbox" class="w-12 h-12 mx-auto mb-3 opacity-50"></i><p class="font-bold">Nenhuma despesa encontrada para o filtro atual.</p></div>';
             totalGeralEl.textContent = 'R$ 0,00';
-            if(typeof feather !== 'undefined') feather.replace();
+            if (typeof feather !== 'undefined') feather.replace();
             return;
         }
 
         const arvore = {};
         let totalAcumulado = 0;
-
         despesas.forEach(d => {
-            if (d.dsp_status === 2) return; // Ignora canceladas no resumo
-
             const grupo = d.dsp_grupo || 'NÃO CLASSIFICADO (GRUPO)';
             const tipo = d.dsp_tipo || 'NÃO CLASSIFICADO (TIPO)';
             const desc = d.dsp_descricao || 'Sem Descrição';
             const valor = parseFloat(d.dsp_valordsp) || 0;
-
             if (!arvore[grupo]) arvore[grupo] = { total: 0, tipos: {} };
             arvore[grupo].total += valor;
-
             if (!arvore[grupo].tipos[tipo]) arvore[grupo].tipos[tipo] = { total: 0, descricoes: {} };
             arvore[grupo].tipos[tipo].total += valor;
-
-            if (!arvore[grupo].tipos[tipo].descricoes[desc]) arvore[grupo].tipos[tipo].descricoes[desc] = 0;
-            arvore[grupo].tipos[tipo].descricoes[desc] += valor;
-
+            arvore[grupo].tipos[tipo].descricoes[desc] = (arvore[grupo].tipos[tipo].descricoes[desc] || 0) + valor;
             totalAcumulado += valor;
         });
 
-        const formatCurrency = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         let html = `<div class="space-y-3">`;
+        if (totalRetiradas) {
+            html += `<div class="px-4 py-2 rounded-lg bg-indigo-50 ring-1 ring-indigo-200 text-sm text-indigo-800 flex justify-between"><span>Retiradas do financeiro no período (fora do total de despesas)</span><b>${moeda(totalRetiradas)}</b></div>`;
+        }
         let idCounter = 0;
-
-        const gruposOrdenados = Object.entries(arvore).sort((a, b) => b[1].total - a[1].total);
-
-        for (const [grupo, objGrupo] of gruposOrdenados) {
-            idCounter++;
-            const gId = `resumo-g-${idCounter}`;
-            
+        for (const [grupo, objGrupo] of Object.entries(arvore).sort((a, b) => b[1].total - a[1].total)) {
+            const gId = `resumo-g-${++idCounter}`;
             html += `
             <div class="grupo-container border border-gray-200 rounded-lg overflow-hidden shadow-sm bg-white" data-group-id="${gId}">
                 <div class="bg-purple-50 px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-purple-100 transition-colors border-l-4 border-purple-500" onclick="document.getElementById('${gId}').classList.toggle('hidden')">
                     <div class="flex items-center gap-3">
                         <input type="checkbox" checked id="chk-${gId}" class="w-4 h-4 text-purple-600 rounded border-purple-300 focus:ring-purple-500 cursor-pointer" onclick="event.stopPropagation()" onchange="window.toggleResumoCheckboxes(this, '${gId}')">
-                        <span class="font-black text-purple-900 text-sm flex items-center gap-2"><i data-feather="folder" class="w-4 h-4 text-purple-600"></i> ${grupo}</span>
+                        <span class="font-black text-purple-900 text-sm flex items-center gap-2"><i data-feather="folder" class="w-4 h-4 text-purple-600"></i> ${escapeHtml(grupo)}</span>
                     </div>
-                    <span class="font-black text-purple-700 text-base" id="total-${gId}">${formatCurrency(objGrupo.total)}</span>
+                    <span class="font-black text-purple-700 text-base" id="total-${gId}">${moeda(objGrupo.total)}</span>
                 </div>
-                <div id="${gId}" class="hidden divide-y divide-gray-100">
-            `;
-
-            const tiposOrdenados = Object.entries(objGrupo.tipos).sort((a, b) => b[1].total - a[1].total);
-
-            for (const [tipo, objTipo] of tiposOrdenados) {
-                idCounter++;
-                const tId = `resumo-t-${idCounter}`;
-                
+                <div id="${gId}" class="hidden divide-y divide-gray-100">`;
+            for (const [tipo, objTipo] of Object.entries(objGrupo.tipos).sort((a, b) => b[1].total - a[1].total)) {
+                const tId = `resumo-t-${++idCounter}`;
                 html += `
                     <div class="tipo-container bg-gray-50" data-type-id="${tId}">
-                        <div class="px-4 py-2.5 pl-10 flex justify-between items-center cursor-pointer hover:bg-gray-100 transition-colors border-l-4 border-transparent hover:border-gray-300" onclick="document.getElementById('${tId}').classList.toggle('hidden')">
+                        <div class="px-4 py-2.5 pl-10 flex justify-between items-center cursor-pointer hover:bg-gray-100 transition-colors" onclick="document.getElementById('${tId}').classList.toggle('hidden')">
                             <div class="flex items-center gap-3">
                                 <input type="checkbox" checked id="chk-${tId}" class="w-3 h-3 text-purple-600 rounded border-gray-300 focus:ring-purple-500 cursor-pointer" onclick="event.stopPropagation()" onchange="window.toggleResumoCheckboxes(this, '${tId}')">
-                                <span class="font-bold text-gray-700 text-xs flex items-center gap-2 uppercase tracking-wide"><i data-feather="corner-down-right" class="w-3 h-3 text-gray-400"></i> ${tipo}</span>
+                                <span class="font-bold text-gray-700 text-xs flex items-center gap-2 uppercase tracking-wide"><i data-feather="corner-down-right" class="w-3 h-3 text-gray-400"></i> ${escapeHtml(tipo)}</span>
                             </div>
-                            <span class="font-bold text-gray-700 text-sm" id="total-${tId}">${formatCurrency(objTipo.total)}</span>
+                            <span class="font-bold text-gray-700 text-sm" id="total-${tId}">${moeda(objTipo.total)}</span>
                         </div>
-                        <div id="${tId}" class="hidden bg-white divide-y divide-gray-50 shadow-inner">
-                `;
-
-                const descOrdenadas = Object.entries(objTipo.descricoes).sort((a, b) => b[1] - a[1]);
-
-                for (const [desc, val] of descOrdenadas) {
+                        <div id="${tId}" class="hidden bg-white divide-y divide-gray-50 shadow-inner">`;
+                for (const [desc, val] of Object.entries(objTipo.descricoes).sort((a, b) => b[1] - a[1])) {
                     html += `
                             <div class="px-4 py-2 pl-16 flex justify-between items-center hover:bg-blue-50 transition-colors">
                                 <div class="flex items-center gap-3 overflow-hidden">
                                     <input type="checkbox" checked class="chk-desc w-3 h-3 text-purple-600 rounded border-gray-300 focus:ring-purple-500 cursor-pointer shrink-0" data-valor="${val}" onclick="event.stopPropagation()" onchange="window.recalcularArvoresDinamicas()">
-                                    <span class="text-gray-500 text-xs font-medium truncate" title="${desc}">- ${desc}</span>
+                                    <span class="text-gray-500 text-xs font-medium truncate" title="${escapeHtml(desc)}">- ${escapeHtml(desc)}</span>
                                 </div>
-                                <span class="font-semibold text-gray-500 text-xs shrink-0 ml-2">${formatCurrency(val)}</span>
-                            </div>
-                    `;
+                                <span class="font-semibold text-gray-500 text-xs shrink-0 ml-2">${moeda(val)}</span>
+                            </div>`;
                 }
                 html += `</div></div>`;
             }
             html += `</div></div>`;
         }
-        
         html += `</div>`;
-        
         content.innerHTML = html;
-        totalGeralEl.textContent = formatCurrency(totalAcumulado);
-        if(typeof feather !== 'undefined') feather.replace();
-
+        totalGeralEl.textContent = moeda(totalAcumulado);
+        if (typeof feather !== 'undefined') feather.replace();
     } catch (error) {
-        content.innerHTML = `<div class="text-center p-8 text-red-500"><i data-feather="alert-triangle" class="w-12 h-12 mx-auto mb-3"></i><p class="font-bold">Erro ao gerar tabela: ${error.message}</p></div>`;
-        if(typeof feather !== 'undefined') feather.replace();
+        content.innerHTML = `<div class="text-center p-8 text-red-500"><i data-feather="alert-triangle" class="w-12 h-12 mx-auto mb-3"></i><p class="font-bold">Erro ao gerar tabela: ${escapeHtml(error.message)}</p></div>`;
+        if (typeof feather !== 'undefined') feather.replace();
     }
 }
