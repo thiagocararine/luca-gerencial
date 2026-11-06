@@ -133,13 +133,28 @@ async function carregarVeiculos() {
         const res = await fetch(`${apiUrlBase}/logistica/veiculos`, { headers: apiHeaders() });
         if (!res.ok) throw new Error('Falha ao buscar veículos.');
         veiculosCache = await res.json();
-        const select = document.getElementById('lanc-veiculo');
-        select.innerHTML = '<option value="">-- Nenhum --</option>' +
-            veiculosCache.map(v => `<option value="${v.id}">${escapeHtml(v.modelo)} - ${escapeHtml(v.placa)}</option>`).join('');
+        document.getElementById('lanc-veiculo').innerHTML = opcoesVeiculos();
     } catch (err) {
         console.error('Erro ao carregar veículos:', err);
         veiculosCache = [];
     }
+}
+
+// Combustível e manutenção pedem o veículo; "Sem veículo" (0) para galão, gerador etc.
+function opcoesVeiculos() {
+    const ativos = veiculosCache.filter(v => !v.status || v.status === 'Ativo');
+    return '<option value="">-- Selecione o veículo --</option>' +
+        ativos.map(v => `<option value="${v.id}">${escapeHtml(v.placa)} · ${escapeHtml(v.modelo)}</option>`).join('') +
+        '<option value="0">Sem veículo (galão / outros)</option>';
+}
+
+function grupoPedeVeiculo(nomeGrupo) {
+    const grupo = classificacaoCache.find(g => g.nome === nomeGrupo);
+    return !!(grupo && grupo.exige_veiculo);
+}
+
+function ehGrupoCombustivel(nomeGrupo) {
+    return normalizarNome(nomeGrupo) === 'combustivel';
 }
 
 async function carregarFiliais() {
@@ -185,10 +200,10 @@ function preencherSelectTipos(select, nomeGrupo) {
 function handleGrupoLancamentoChange() {
     const nomeGrupo = document.getElementById('lanc-grupo-despesa').value;
     preencherSelectTipos(document.getElementById('lanc-tipo-despesa'), nomeGrupo);
-    const grupo = classificacaoCache.find(g => g.nome === nomeGrupo);
-    const precisaVeiculo = !!(grupo && grupo.exige_veiculo);
+    const precisaVeiculo = grupoPedeVeiculo(nomeGrupo);
     document.getElementById('lanc-veiculo-wrap').classList.toggle('hidden', !precisaVeiculo);
-    if (!precisaVeiculo) document.getElementById('lanc-veiculo').value = '';
+    document.querySelectorAll('.lanc-so-combustivel').forEach(el => el.classList.toggle('hidden', !ehGrupoCombustivel(nomeGrupo)));
+    if (!precisaVeiculo) ['lanc-veiculo', 'lanc-litros', 'lanc-km'].forEach(id => { document.getElementById(id).value = ''; });
 }
 
 // Compara nomes sem acento e sem diferença de maiúsculas ("Combustivel" = "Combustível").
@@ -495,7 +510,7 @@ function abrirModalLancamento(modo) {
         Object.entries(cfg.opcoesForma).map(([valor, texto]) => `<option value="${valor}">${texto}</option>`).join('');
     document.getElementById('lanc-descricao').placeholder = cfg.placeholderDescricao;
 
-    ['lanc-conta', 'lanc-centro-custo', 'lanc-valor', 'lanc-juros', 'lanc-descricao', 'lanc-favorecido', 'lanc-veiculo',
+    ['lanc-conta', 'lanc-centro-custo', 'lanc-valor', 'lanc-juros', 'lanc-descricao', 'lanc-favorecido', 'lanc-veiculo', 'lanc-litros', 'lanc-km',
         'lanc-numero-nf', 'lanc-data-despesa', 'lanc-grupo-despesa'].forEach(id => { document.getElementById(id).value = ''; });
 
     document.querySelectorAll('#modal-lancamento .campo-saida').forEach(el => el.classList.toggle('hidden', modo !== 'saida'));
@@ -536,6 +551,8 @@ async function salvarLancamento() {
         grupo_despesa: ehSaida ? valorCampo('lanc-grupo-despesa') : null,
         tipo_despesa: ehSaida ? valorCampo('lanc-tipo-despesa') : null,
         id_veiculo: ehSaida ? valorCampo('lanc-veiculo') : null,
+        litros: ehSaida ? valorCampo('lanc-litros') : null,
+        odometro: ehSaida ? valorCampo('lanc-km') : null,
         numero_nf: ehSaida ? valorCampo('lanc-numero-nf') : null,
         data_despesa: ehSaida ? valorCampo('lanc-data-despesa') : null,
         favorecido: ehSaida ? valorCampo('lanc-favorecido') : null
@@ -546,6 +563,9 @@ async function salvarLancamento() {
     }
     if (ehSaida && !payload.grupo_despesa) {
         return dialogoAviso('Selecione o grupo de despesa.');
+    }
+    if (ehSaida && grupoPedeVeiculo(payload.grupo_despesa) && payload.id_veiculo === null) {
+        return dialogoAviso(`${payload.grupo_despesa}: selecione o veículo (ou "Sem veículo").`);
     }
     if (ehSaida && payload.valor_juros && payload.valor_juros >= payload.valor) {
         return dialogoAviso('Os juros precisam ser menores que o valor total pago.');

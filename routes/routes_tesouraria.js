@@ -344,10 +344,10 @@ async function validarClassificacao(grupoNome, tipoNome, idVeiculo) {
         if (tipos.length === 0) return { erro: 'Tipo de despesa não pertence ao grupo escolhido.' };
         tipo = tipos[0].nome;
     }
-    if (idVeiculo && !grupo.exige_veiculo) {
+    if (Number(idVeiculo) > 0 && !grupo.exige_veiculo) {
         return { erro: 'Veículo só pode ser informado em grupos que pedem veículo (ex.: Manutenção, Combustível).' };
     }
-    return { grupo: grupo.nome, tipo };
+    return { grupo: grupo.nome, tipo, exige_veiculo: !!grupo.exige_veiculo };
 }
 
 // --- MOVIMENTOS ---
@@ -384,6 +384,8 @@ router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), asyn
     let { id_veiculo, data_despesa, numero_nf, grupo_despesa, tipo_despesa, valor_juros } = req.body;
     // sem_classificacao: o fechamento do dia aceita pagamento sem grupo, classificado depois por fornecedor.
     const { natureza = 'normal', sem_classificacao } = req.body;
+    let litros = null;
+    let odometro = null;
     const { userId, nome: nomeUsuario } = req.user;
 
     if (!id_conta || !data_movimento || !tipo || !valor || !descricao) {
@@ -409,6 +411,15 @@ router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), asyn
             const classificacao = await validarClassificacao(grupo_despesa, tipo_despesa, id_veiculo);
             if (classificacao.erro) return res.status(400).json({ error: classificacao.erro });
             ({ grupo: grupo_despesa, tipo: tipo_despesa } = classificacao);
+            // Grupo que pede veículo (Combustível, Manutenção): escolher o veículo ou "sem veículo" (0).
+            if (classificacao.exige_veiculo) {
+                if (id_veiculo === undefined || id_veiculo === null || id_veiculo === '') {
+                    return res.status(400).json({ error: `${grupo_despesa}: selecione o veículo (ou "Sem veículo").` });
+                }
+                const lido = lerLitrosKm(req.body);
+                if (lido.erro) return res.status(400).json({ error: lido.erro });
+                ({ litros, odometro } = lido);
+            }
         } else {
             // Entrada não é despesa: não leva classificação, veículo nem dados de nota.
             id_veiculo = data_despesa = numero_nf = grupo_despesa = tipo_despesa = valor_juros = null;
@@ -416,10 +427,10 @@ router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), asyn
 
         const [result] = await gerencialPool.query(
             `INSERT INTO tesouraria_movimentos
-                (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, natureza, valor, valor_juros, descricao, favorecido, forma_pagamento, origem, id_usuario_lancamento, nome_usuario_lancamento)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)`,
+                (id_conta, id_centro_custo, id_veiculo, litros, odometro, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, natureza, valor, valor_juros, descricao, favorecido, forma_pagamento, origem, id_usuario_lancamento, nome_usuario_lancamento)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)`,
             [
-                id_conta, id_centro_custo || null, id_veiculo || null, data_movimento, data_despesa || null, numero_nf || null,
+                id_conta, id_centro_custo || null, idVeiculoValido(id_veiculo), litros, odometro, data_movimento, data_despesa || null, numero_nf || null,
                 grupo_despesa || null, tipo_despesa || null, tipo, natureza, valor, valorJuros(valor_juros), descricao, favorecido || null, forma_pagamento || null,
                 userId, nomeUsuario
             ]
@@ -430,6 +441,26 @@ router.post('/movimentos', authenticateToken, checkPerm('tesouraria_oper'), asyn
         res.status(500).json({ error: 'Erro interno ao registrar o lançamento.' });
     }
 });
+
+// 0 / vazio = sem veículo (galão, gerador...).
+function idVeiculoValido(id) {
+    return Number(id) > 0 ? Number(id) : null;
+}
+
+// Litros e KM opcionais do abastecimento/manutenção.
+function lerLitrosKm(body) {
+    let litros = null;
+    let odometro = null;
+    if (body.litros !== undefined && body.litros !== null && body.litros !== '') {
+        litros = Math.round(Number(body.litros) * 100) / 100;
+        if (!(litros > 0)) return { erro: 'Litros inválidos.' };
+    }
+    if (body.odometro !== undefined && body.odometro !== null && body.odometro !== '') {
+        odometro = parseInt(body.odometro, 10);
+        if (!(odometro > 0)) return { erro: 'KM inválido.' };
+    }
+    return { litros, odometro };
+}
 
 // normal entra no resultado; transferência (dinheiro mudando de lugar) e fundo (controle do caixa da loja) não.
 const NATUREZAS = ['normal', 'transferencia', 'fundo'];
@@ -451,10 +482,10 @@ async function registrarEstorno(connection, original, userId, nomeUsuario) {
     const tipoEstorno = original.tipo === 'entrada' ? 'saida' : 'entrada';
     await connection.execute(
         `INSERT INTO tesouraria_movimentos
-            (id_conta, id_centro_custo, id_veiculo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, natureza, valor, valor_juros, descricao, favorecido, forma_pagamento, origem, status, id_movimento_estornado, id_usuario_lancamento, nome_usuario_lancamento)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 'ativo', ?, ?, ?)`,
+            (id_conta, id_centro_custo, id_veiculo, litros, odometro, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa, tipo, natureza, valor, valor_juros, descricao, favorecido, forma_pagamento, origem, status, id_movimento_estornado, id_usuario_lancamento, nome_usuario_lancamento)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 'ativo', ?, ?, ?)`,
         [
-            original.id_conta, original.id_centro_custo, original.id_veiculo, original.data_movimento, original.data_despesa, original.numero_nf,
+            original.id_conta, original.id_centro_custo, original.id_veiculo, original.litros, original.odometro, original.data_movimento, original.data_despesa, original.numero_nf,
             original.grupo_despesa, original.tipo_despesa, tipoEstorno, original.natureza, original.valor, original.valor_juros,
             `Estorno do lançamento #${original.id}: ${original.descricao}`,
             original.favorecido, original.forma_pagamento, original.id, userId, nomeUsuario
@@ -694,7 +725,7 @@ router.post('/erp/importar', authenticateToken, checkPerm('tesouraria_oper'), as
                          tipo, valor, valor_juros, descricao, favorecido, forma_pagamento, origem, origem_ref, id_usuario_lancamento, nome_usuario_lancamento)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'saida', ?, ?, ?, ?, ?, 'erp_apagar', ?, ?, ?)`,
                     [
-                        item.id_conta, item.id_centro_custo || null, id_veiculo || null, data_movimento, dataISO(t.ap_dtvenc),
+                        item.id_conta, item.id_centro_custo || null, idVeiculoValido(id_veiculo), data_movimento, dataISO(t.ap_dtvenc),
                         t.ap_numenf || null, classificacao.grupo, classificacao.tipo, Number(item.valor), valorJuros(item.juros), descricao,
                         t.ap_nomefo || null, forma_pagamento || null, String(t.ap_regist), userId, nomeUsuario
                     ]

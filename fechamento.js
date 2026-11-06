@@ -303,13 +303,27 @@ function abrirNovoPagamento() {
                 <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Grupo <span class="font-normal normal-case text-gray-400">opcional</span></label><select id="fech-pg-grupo" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select></div>
                 <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tipo</label><select id="fech-pg-tipo" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select></div>
             </div>
+            <div id="fech-pg-veiculo-wrap" class="hidden grid grid-cols-4 gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                <div class="col-span-2"><label class="block text-xs font-bold text-amber-800 uppercase mb-1">Veículo</label>
+                    <select id="fech-pg-veiculo" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select></div>
+                <div id="fech-pg-litros-wrap"><label class="block text-xs font-bold text-amber-800 uppercase mb-1">Litros <span class="font-normal normal-case text-amber-700/70">opc.</span></label>
+                    <input id="fech-pg-litros" type="number" step="0.01" min="0" class="w-full border border-gray-300 rounded-md p-2 text-sm text-right" placeholder="0,00"></div>
+                <div><label class="block text-xs font-bold text-amber-800 uppercase mb-1">KM <span class="font-normal normal-case text-amber-700/70">opc.</span></label>
+                    <input id="fech-pg-km" type="number" step="1" min="0" class="w-full border border-gray-300 rounded-md p-2 text-sm text-right" placeholder="0"></div>
+                <p class="col-span-4 text-[11px] text-amber-800">Vai para o relatório de abastecimento / despesa do veículo.</p>
+            </div>
             <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Loja / centro de custo <span class="font-normal normal-case text-gray-400">opcional</span></label><select id="fech-pg-centro" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select></div>`,
         aoAbrir: () => {
             const selGrupo = document.getElementById('fech-pg-grupo');
             const selTipo = document.getElementById('fech-pg-tipo');
             preencherSelectGrupos(selGrupo);
             preencherSelectTipos(selTipo, '');
-            selGrupo.addEventListener('change', () => preencherSelectTipos(selTipo, selGrupo.value));
+            document.getElementById('fech-pg-veiculo').innerHTML = opcoesVeiculos();
+            selGrupo.addEventListener('change', () => {
+                preencherSelectTipos(selTipo, selGrupo.value);
+                document.getElementById('fech-pg-veiculo-wrap').classList.toggle('hidden', !grupoPedeVeiculo(selGrupo.value));
+                document.getElementById('fech-pg-litros-wrap').classList.toggle('hidden', !ehGrupoCombustivel(selGrupo.value));
+            });
             preencherSelectCentros(document.getElementById('fech-pg-centro'));
             document.getElementById('fech-pg-favorecido').focus();
         },
@@ -319,13 +333,20 @@ function abrirNovoPagamento() {
             const juros = Number(document.getElementById('fech-pg-juros').value || 0);
             if (!favorecido || !(valor > 0)) { dialogoAviso('Informe o favorecido e o valor.'); return false; }
             if (juros && juros >= valor) { dialogoAviso('Os juros precisam ser menores que o valor total pago.'); return false; }
+            const grupoDespesa = document.getElementById('fech-pg-grupo').value || null;
+            const pedeVeiculo = grupoPedeVeiculo(grupoDespesa);
+            const veiculo = document.getElementById('fech-pg-veiculo').value;
+            if (pedeVeiculo && veiculo === '') { dialogoAviso(`${grupoDespesa}: selecione o veículo (ou "Sem veículo").`); return false; }
             await apiFetch('/movimentos', {
                 method: 'POST',
                 body: JSON.stringify({
                     tipo: 'saida', id_conta: idContaGeral(), data_movimento: document.getElementById('filtro-data').value,
                     valor, valor_juros: juros, descricao: favorecido, favorecido,
-                    grupo_despesa: document.getElementById('fech-pg-grupo').value || null,
+                    grupo_despesa: grupoDespesa,
                     tipo_despesa: document.getElementById('fech-pg-tipo').value || null,
+                    id_veiculo: pedeVeiculo ? veiculo : null,
+                    litros: pedeVeiculo && ehGrupoCombustivel(grupoDespesa) ? document.getElementById('fech-pg-litros').value : null,
+                    odometro: pedeVeiculo ? document.getElementById('fech-pg-km').value : null,
                     id_centro_custo: document.getElementById('fech-pg-centro').value || null,
                     sem_classificacao: true
                 })
