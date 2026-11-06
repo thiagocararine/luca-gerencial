@@ -204,9 +204,9 @@ async function exportarRelatorioLogisticaHTML() {
                     return `<tr>
                         <td class="text-center">${new Date(item.data_movimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
                         <td>${item.nome_filial}</td>
-                        <td>${item.modelo ? `${item.modelo} (${item.placa})` : 'Galão'}</td>
-                        <td class="text-right">${quantidade.toFixed(2)}</td>
-                        <td class="text-right">${valorUnit.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+                        <td>${item.modelo ? `${item.modelo} (${item.placa})` : 'Galão'}${item.origem === 'Caixa da loja' ? ' · caixa da loja' : ''}</td>
+                        <td class="text-right">${quantidade ? quantidade.toFixed(2) : '-'}</td>
+                        <td class="text-right">${valorUnit ? valorUnit.toLocaleString('pt-BR', {minimumFractionDigits:2}) : '-'}</td>
                         <td class="text-right font-bold">${custo.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
                         <td class="text-right">${item.odometro_no_momento ? item.odometro_no_momento.toLocaleString('pt-BR') : '-'}</td>
                     </tr>`;
@@ -682,14 +682,17 @@ function renderAbastecimentoReport(data, container) {
         totalCusto += custo;
 
         const odometroFmt = item.odometro_no_momento ? item.odometro_no_momento.toLocaleString('pt-BR') : 'N/A';
-        const veiculoFmt = item.modelo ? `${item.modelo} (${item.placa})` : 'Galão';
+        // Abastecimento pago no caixa da loja (módulo de despesas): litros só quando a loja informou.
+        const origemFmt = item.origem === 'Caixa da loja'
+            ? ' <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold">caixa da loja</span>' : '';
+        const veiculoFmt = (item.modelo ? `${item.modelo} (${item.placa})` : 'Galão') + origemFmt;
         
         tr.innerHTML = `
             <td class="px-4 py-2 text-black">${new Date(item.data_movimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
             <td class="px-4 py-2 text-black">${item.nome_filial}</td>
             <td class="px-4 py-2 text-black">${veiculoFmt}</td>
-            <td class="px-4 py-2 text-right text-black">${quantidade.toFixed(2)}</td>
-            <td class="px-4 py-2 text-right text-black">${valorUnitario.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td>
+            <td class="px-4 py-2 text-right text-black">${quantidade ? quantidade.toFixed(2) : '-'}</td>
+            <td class="px-4 py-2 text-right text-black">${valorUnitario ? valorUnitario.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}) : '-'}</td>
             <td class="px-4 py-2 text-right text-black">${custo.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td>
             <td class="px-4 py-2 text-right text-black">${odometroFmt}</td>
         `;
