@@ -615,9 +615,9 @@ function renderCaixaLojas() {
     let html = `<table class="w-full mt-1">
         <thead><tr class="text-[10px] uppercase text-gray-500 border-b border-gray-100">
             <th class="text-left font-bold px-4 py-1.5">Loja</th>
-            <th class="text-right font-bold px-2 py-1.5">Dinheiro vendido</th>
-            <th class="text-right font-bold px-2 py-1.5">Despesas da loja</th>
-            <th class="text-right font-bold px-4 py-1.5">Dinheiro líquido</th>
+            <th class="text-right font-bold px-2 py-1.5">Vendido</th>
+            <th class="text-right font-bold px-2 py-1.5">Despesas</th>
+            <th class="text-right font-bold px-4 py-1.5">Líquido</th>
         </tr></thead><tbody>`;
     lojas.forEach(l => {
         const despesas = l.itens.filter(i => i.natureza !== 'retirada');
@@ -625,16 +625,15 @@ function renderCaixaLojas() {
         html += `<tr class="border-b border-gray-50 hover:bg-gray-50">
             <td class="px-4 py-1.5"><button class="fech-abrir-loja-quadro font-semibold text-gray-800 flex items-center gap-1" data-loja="${l.cod_filial}">
                 <span class="text-gray-400 w-3">${despesas.length ? (aberta ? '▾' : '▸') : ''}</span>${escapeHtml(l.loja)}
-                ${despesas.length ? `<span class="text-[10px] text-gray-400 font-normal">${despesas.length} despesa(s)</span>` : ''}</button></td>
+                ${despesas.length ? `<span class="text-[10px] text-gray-400 font-normal">(${despesas.length})</span>` : ''}</button></td>
             <td class="${td}">${formatarMoeda(l.vendido)}</td>
             <td class="${td} ${l.consumido ? 'text-red-700' : 'text-gray-300'}">${l.consumido ? '−' + formatarMoeda(l.consumido) : '-'}</td>
             <td class="${td} px-4 font-bold">${formatarMoeda(l.vendido - l.consumido)}</td>
         </tr>`;
         if (aberta && despesas.length) {
-            html += `<tr class="bg-gray-50/60 text-gray-600"><td colspan="4" class="pl-10 pr-4 py-2">${despesas.map(i => `
-                <div class="flex items-center justify-between gap-3 py-0.5">
-                    <span><span class="text-gray-400">${escapeHtml(i.tipo || i.grupo || '')}</span> ${escapeHtml(i.descricao || '')}${i.placa ? ` <span class="text-[10px] px-1 rounded bg-gray-100 text-gray-600">${escapeHtml(i.placa)}${i.litros ? ` · ${String(i.litros).replace('.', ',')} L` : ''}</span>` : ''}
-                        <span class="text-gray-400">· ${escapeHtml(i.lancado_por || '')}</span></span>
+            html += `<tr class="bg-gray-50/60 text-gray-600"><td colspan="4" class="pl-8 pr-4 py-1.5">${despesas.map(i => `
+                <div class="flex items-center justify-between gap-3 py-0.5" title="Lançado por ${escapeHtml(i.lancado_por || '-')}">
+                    <span class="min-w-0 truncate"><span class="text-gray-400">${escapeHtml(i.tipo || i.grupo || '')}</span> ${escapeHtml(i.descricao || '')}${i.placa ? ` <span class="text-[10px] px-1 rounded bg-gray-100 text-gray-600">${escapeHtml(i.placa)}${i.litros ? ` · ${String(i.litros).replace('.', ',')} L` : ''}</span>` : ''}</span>
                     <span class="whitespace-nowrap text-red-700">${formatarMoeda(i.valor)}</span>
                 </div>`).join('')}</td></tr>`;
         }
