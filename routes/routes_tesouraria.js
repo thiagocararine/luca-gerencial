@@ -493,14 +493,16 @@ router.post('/movimentos/:id/estornar', authenticateToken, checkPerm('tesouraria
 
         await registrarEstorno(connection, original, userId, nomeUsuario);
 
-        // A entrada do apurado leva junto a saída da taxa dela, senão a taxa fica solta
-        // e impede lançar a linha de novo.
-        if (original.origem === 'erp_receber' && !String(original.origem_ref).endsWith('|taxa')) {
-            const [taxas] = await connection.execute(
-                `SELECT * FROM tesouraria_movimentos WHERE origem = 'erp_receber' AND origem_ref = ? AND status = 'ativo' FOR UPDATE`,
-                [`${original.origem_ref}|taxa`]
+        // A entrada do apurado leva junto a saída da taxa e a das despesas do caixa dela,
+        // senão elas ficam soltas e impedem lançar a linha de novo.
+        if (original.origem === 'erp_receber' && original.tipo === 'entrada') {
+            const [filhas] = await connection.execute(
+                `SELECT * FROM tesouraria_movimentos
+                 WHERE status = 'ativo' AND ((origem = 'erp_receber' AND origem_ref = ?) OR (origem = 'despesa_caixa' AND origem_ref = ?))
+                 FOR UPDATE`,
+                [`${original.origem_ref}|taxa`, `${original.origem_ref}|consumo`]
             );
-            for (const taxa of taxas) await registrarEstorno(connection, taxa, userId, nomeUsuario);
+            for (const filha of filhas) await registrarEstorno(connection, filha, userId, nomeUsuario);
         }
 
         await connection.commit();
@@ -755,162 +757,12 @@ router.delete('/contas-erp', authenticateToken, checkPerm('tesouraria_admin'), a
     }
 });
 
-// --- DESPESAS DAS LOJAS (despesa_caixa): conferência antes de entrar na tesouraria ---
+// --- LOJAS ---
 
 // Compara nomes ignorando acento e maiúsculas ("Parada Angélica" = "PARADA ANGELICA").
 function nomeComparavel(texto) {
     return String(texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase();
 }
-
-// GET /api/tesouraria/despesa-caixa?modo=dia|pendentes&data=YYYY-MM-DD
-//   dia: tudo que as lojas lançaram com data de despesa = data (pendente, conferido ou cancelado)
-//   pendentes: dos 30 dias até a data, o que falta conferir e o que foi cancelado na loja
-//              depois de conferido (precisa de estorno na tesouraria)
-router.get('/despesa-caixa', authenticateToken, checkPerm('tesouraria_view'), async (req, res) => {
-    const { modo, data } = req.query;
-    if (!['dia', 'pendentes'].includes(modo) || !data) {
-        return res.status(400).json({ error: 'Informe o modo e a data.' });
-    }
-
-    const filtro = modo === 'dia'
-        ? `d.dsp_datadesp = ?`
-        : `d.dsp_datadesp BETWEEN DATE_SUB(?, INTERVAL 30 DAY) AND ?
-           AND ((d.dsp_status = 1 AND m.id IS NULL) OR (d.dsp_status <> 1 AND m.id IS NOT NULL))`;
-    const params = modo === 'dia' ? [data] : [data, data];
-
-    try {
-        const [despesas] = await gerencialPool.query(
-            `SELECT d.ID, d.dsp_filial, d.dsp_status, d.dsp_datadesp, d.dsp_datalanc, d.dsp_grupo, d.dsp_tipo,
-                    d.dsp_descricao, d.dsp_valordsp, d.dsp_userlanc, d.dsp_usercan,
-                    m.id AS id_movimento, m.data_movimento AS mov_data, m.grupo_despesa AS mov_grupo,
-                    m.tipo_despesa AS mov_tipo, c.nome AS mov_conta
-             FROM despesa_caixa d
-             LEFT JOIN tesouraria_movimentos m
-                    ON m.origem = 'despesa_caixa' AND m.origem_ref = CAST(d.ID AS CHAR) AND m.status = 'ativo'
-             LEFT JOIN tesouraria_contas c ON c.id = m.id_conta
-             WHERE ${filtro}
-             ORDER BY d.dsp_datadesp ASC, d.dsp_filial ASC, d.ID ASC
-             LIMIT 2000`,
-            params
-        );
-
-        // Sugestões: centro de custo da loja (vínculo com a Unidade) e conta cujo nome cita a loja
-        // (ex.: "Caixa Nova Campinas"). Sem sugestão, o usuário escolhe na tela.
-        const [centros] = await gerencialPool.query(
-            `SELECT cc.id, p.NOME_PARAMETRO AS nome_filial
-             FROM tesouraria_centros_custo cc
-             JOIN parametro p ON cc.id_filial = p.ID AND p.COD_PARAMETRO = 'Unidades'
-             WHERE cc.ativo = 1`
-        );
-        const [contas] = await gerencialPool.query(`SELECT id, nome FROM tesouraria_contas WHERE ativo = 1`);
-        const centroPorLoja = new Map(centros.map(c => [nomeComparavel(c.nome_filial), c.id]));
-
-        res.json(despesas.map(d => {
-            const loja = nomeComparavel(d.dsp_filial);
-            const contasDaLoja = contas.filter(c => loja && nomeComparavel(c.nome).includes(loja));
-            const cancelada = d.dsp_status !== 1;
-            return {
-                id: d.ID,
-                loja: d.dsp_filial,
-                data_despesa: dataISO(d.dsp_datadesp),
-                data_lancamento: dataISO(d.dsp_datalanc),
-                descricao: d.dsp_descricao,
-                valor: Number(d.dsp_valordsp),
-                grupo_loja: d.dsp_grupo,
-                tipo_loja: d.dsp_tipo,
-                lancado_por: d.dsp_userlanc,
-                cancelado_por: d.dsp_usercan,
-                situacao: cancelada ? (d.id_movimento ? 'cancelada_conferida' : 'cancelada') : (d.id_movimento ? 'conferida' : 'pendente'),
-                id_movimento: d.id_movimento,
-                mov_data: dataISO(d.mov_data),
-                mov_conta: d.mov_conta,
-                mov_grupo: d.mov_grupo,
-                mov_tipo: d.mov_tipo,
-                id_centro_sugerido: centroPorLoja.get(loja) || null,
-                id_conta_sugerida: contasDaLoja.length === 1 ? contasDaLoja[0].id : null
-            };
-        }));
-    } catch (error) {
-        console.error('Erro ao buscar despesas das lojas:', error);
-        res.status(500).json({ error: 'Erro ao buscar despesas das lojas.' });
-    }
-});
-
-// POST /api/tesouraria/despesa-caixa/conferir
-// { data_movimento, itens: [{ id, id_conta, id_centro_custo, grupo_despesa, tipo_despesa }] }
-// Cada despesa conferida vira uma saída da tesouraria no dia informado; valor, descrição e
-// data da despesa vêm da própria despesa_caixa, não da tela.
-router.post('/despesa-caixa/conferir', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
-    const { data_movimento, itens } = req.body;
-    const { userId, nome: nomeUsuario } = req.user;
-
-    if (!data_movimento || !Array.isArray(itens) || itens.length === 0) {
-        return res.status(400).json({ error: 'Marque ao menos uma despesa.' });
-    }
-    const semConta = itens.find(i => !i.id || !i.id_conta);
-    if (semConta) {
-        return res.status(400).json({ error: `Despesa ${semConta.id || ''}: escolha a conta.` });
-    }
-
-    let connection;
-    try {
-        // Valida cada combinação grupo/tipo uma vez só.
-        const classificacoes = new Map();
-        for (const item of itens) {
-            const chave = `${item.grupo_despesa}|${item.tipo_despesa || ''}`;
-            if (!classificacoes.has(chave)) {
-                classificacoes.set(chave, await validarClassificacao(item.grupo_despesa, item.tipo_despesa, null));
-            }
-            const resultado = classificacoes.get(chave);
-            if (resultado.erro) return res.status(400).json({ error: `Despesa ${item.id}: ${resultado.erro}` });
-        }
-
-        const [despesas] = await gerencialPool.query(
-            `SELECT * FROM despesa_caixa WHERE ID IN (?) AND dsp_status = 1`,
-            [itens.map(i => Number(i.id))]
-        );
-        const despesaPorId = new Map(despesas.map(d => [String(d.ID), d]));
-        const cancelada = itens.find(i => !despesaPorId.has(String(i.id)));
-        if (cancelada) {
-            return res.status(400).json({ error: `Despesa ${cancelada.id} não existe mais ou foi cancelada na loja.` });
-        }
-
-        connection = await mysql.createConnection(dbConfig);
-        await connection.beginTransaction();
-
-        const conferidas = [];
-        const jaConferidas = [];
-        for (const item of itens) {
-            const d = despesaPorId.get(String(item.id));
-            const { grupo, tipo } = classificacoes.get(`${item.grupo_despesa}|${item.tipo_despesa || ''}`);
-            try {
-                await connection.execute(
-                    `INSERT INTO tesouraria_movimentos
-                        (id_conta, id_centro_custo, data_movimento, data_despesa, grupo_despesa, tipo_despesa, tipo, valor,
-                         descricao, forma_pagamento, origem, origem_ref, id_usuario_lancamento, nome_usuario_lancamento)
-                     VALUES (?, ?, ?, ?, ?, ?, 'saida', ?, ?, 'dinheiro', 'despesa_caixa', ?, ?, ?)`,
-                    [
-                        item.id_conta, item.id_centro_custo || null, data_movimento, dataISO(d.dsp_datadesp), grupo, tipo,
-                        d.dsp_valordsp, String(d.dsp_descricao || 'Despesa de caixa').slice(0, 255), String(d.ID), userId, nomeUsuario
-                    ]
-                );
-                conferidas.push(d.ID);
-            } catch (err) {
-                if (err.code !== 'ER_DUP_ENTRY') throw err;
-                jaConferidas.push(d.ID);
-            }
-        }
-
-        await connection.commit();
-        res.status(201).json({ message: `${conferidas.length} despesa(s) conferida(s).`, conferidas, ja_conferidas: jaConferidas });
-    } catch (error) {
-        if (connection) await connection.rollback();
-        console.error('Erro ao conferir despesas das lojas:', error);
-        res.status(500).json({ error: 'Erro interno ao conferir as despesas.' });
-    } finally {
-        if (connection) await connection.end();
-    }
-});
 
 // --- APURADO DAS LOJAS (ERP receber/cdavs): entradas por loja e modalidade ---
 
@@ -937,6 +789,75 @@ const MODALIDADES_APURADO = {
 const MODALIDADE_POR_CHAVE = new Map(Object.values(MODALIDADES_APURADO).map(m => [m.chave, m]));
 const GRUPO_TAXAS = 'Taxas Financeiras';
 
+function lojaPorNome(nome) {
+    const chave = nomeComparavel(nome);
+    return LOJAS_APURADO.find(l => nomeComparavel(l.nome) === chave) || null;
+}
+
+// Dinheiro do caixa do balcão (cdavs) por dia e loja: { 'YYYY-MM-DD|COD': { total, qtd } }.
+async function balcaoPorDia(dataIni, dataFim) {
+    const [rows] = await seiPool.query(
+        `SELECT cr_erec AS dia, cr_fili AS fili, SUM(cr_dinh) AS total, COUNT(*) AS qtd
+         FROM cdavs
+         WHERE cr_erec BETWEEN ? AND ? AND cr_reca = '1' AND cr_fili IN (?)
+           AND (cr_rece = '01-Dinheiro' OR (cr_rece = '20-Diversos' AND LENGTH(TRIM(cr_dinh)) > 0))
+         GROUP BY cr_erec, cr_fili`,
+        [dataIni, dataFim, LOJAS_APURADO.map(l => l.fili)]
+    );
+    const mapa = new Map();
+    for (const r of rows) {
+        const loja = LOJAS_APURADO.find(l => l.fili === String(r.fili));
+        if (loja) mapa.set(`${dataISO(r.dia)}|${loja.cod}`, { total: Number(r.total || 0), qtd: Number(r.qtd) });
+    }
+    return mapa;
+}
+
+// Todo o dinheiro que entrou no caixa da loja segundo o ERP (receber em dinheiro + balcão),
+// por dia e loja: { 'YYYY-MM-DD|COD': valor }.
+async function dinheiroErpPorDia(dataIni, dataFim) {
+    const [recebidos] = await seiPool.query(
+        `SELECT rc_dtbaix AS dia, rc_indefi AS cod, SUM(rc_vlbaix) AS total
+         FROM receber
+         WHERE rc_dtbaix BETWEEN ? AND ? AND rc_status IN ('1', '2') AND rc_indefi IN (?) AND rc_formar = '01-Dinheiro'
+         GROUP BY rc_dtbaix, rc_indefi`,
+        [dataIni, dataFim, LOJAS_APURADO.map(l => l.cod)]
+    );
+    const mapa = new Map();
+    const somar = (chave, valor) => mapa.set(chave, (mapa.get(chave) || 0) + valor);
+    for (const r of recebidos) somar(`${dataISO(r.dia)}|${r.cod}`, Number(r.total || 0));
+    for (const [chave, b] of await balcaoPorDia(dataIni, dataFim)) somar(chave, b.total);
+    return mapa;
+}
+
+// O que as lojas lançaram no módulo de despesas por dia e loja:
+// { 'YYYY-MM-DD|COD': { consumido, retirado } }. Canceladas não contam.
+async function caixaLojasPorDia(dataIni, dataFim) {
+    const [rows] = await gerencialPool.query(
+        `SELECT dsp_datadesp AS dia, dsp_filial AS filial, dsp_natureza AS natureza, SUM(dsp_valordsp) AS total
+         FROM despesa_caixa
+         WHERE dsp_status = 1 AND dsp_datadesp BETWEEN ? AND ?
+         GROUP BY dsp_datadesp, dsp_filial, dsp_natureza`,
+        [dataIni, dataFim]
+    );
+    const mapa = new Map();
+    for (const r of rows) {
+        const loja = lojaPorNome(r.filial);
+        if (!loja) continue;
+        const chave = `${dataISO(r.dia)}|${loja.cod}`;
+        if (!mapa.has(chave)) mapa.set(chave, { consumido: 0, retirado: 0 });
+        mapa.get(chave)[r.natureza === 'retirada' ? 'retirado' : 'consumido'] += Number(r.total || 0);
+    }
+    return mapa;
+}
+
+const centavos = v => Math.round(Number(v || 0) * 100) / 100;
+
+function somarDias(dataStr, dias) {
+    const d = new Date(`${dataStr}T12:00:00`);
+    d.setDate(d.getDate() + dias);
+    return dataISO(d);
+}
+
 // GET /api/tesouraria/apurado?data=YYYY-MM-DD
 // Uma linha por loja e modalidade com o total recebido no ERP no dia, já cruzado com o que
 // foi lançado na tesouraria. Dinheiro soma o receber e o caixa do balcão (cdavs), como na Conciliação.
@@ -952,14 +873,8 @@ router.get('/apurado', authenticateToken, checkPerm('tesouraria_view'), async (r
              GROUP BY rc_indefi, rc_formar`,
             [data, LOJAS_APURADO.map(l => l.cod), Object.keys(MODALIDADES_APURADO)]
         );
-        const [balcao] = await seiPool.query(
-            `SELECT cr_fili AS fili, SUM(cr_dinh) AS total, COUNT(*) AS qtd
-             FROM cdavs
-             WHERE cr_erec = ? AND cr_reca = '1' AND cr_fili IN (?)
-               AND (cr_rece = '01-Dinheiro' OR (cr_rece = '20-Diversos' AND LENGTH(TRIM(cr_dinh)) > 0))
-             GROUP BY cr_fili`,
-            [data, LOJAS_APURADO.map(l => l.fili)]
-        );
+        const balcao = await balcaoPorDia(data, data);
+        const caixaLojas = await caixaLojasPorDia(data, data);
 
         const linhas = new Map();
         const linha = (loja, modalidade) => {
@@ -977,10 +892,15 @@ router.get('/apurado', authenticateToken, checkPerm('tesouraria_view'), async (r
             l.valor_erp += Number(r.total || 0);
             l.qtd += Number(r.qtd);
         }
-        for (const b of balcao) {
-            const l = linha(LOJAS_APURADO.find(x => x.fili === String(b.fili)), MODALIDADES_APURADO['01-Dinheiro']);
-            l.valor_erp += Number(b.total || 0);
-            l.qtd += Number(b.qtd);
+        for (const [chave, b] of balcao) {
+            const l = linha(LOJAS_APURADO.find(x => x.cod === chave.split('|')[1]), MODALIDADES_APURADO['01-Dinheiro']);
+            l.valor_erp += b.total;
+            l.qtd += b.qtd;
+        }
+        // Dinheiro: o que a loja já gastou do caixa no dia sai descontado (vendido − consumido).
+        for (const [chave, c] of caixaLojas) {
+            if (!(c.consumido > 0)) continue;
+            linha(LOJAS_APURADO.find(x => x.cod === chave.split('|')[1]), MODALIDADES_APURADO['01-Dinheiro']).consumido = centavos(c.consumido);
         }
 
         // O que já entrou na tesouraria neste dia (entrada e taxa de cada linha).
@@ -988,7 +908,7 @@ router.get('/apurado', authenticateToken, checkPerm('tesouraria_view'), async (r
             `SELECT m.id, m.origem_ref, m.tipo, m.valor, c.nome AS nome_conta
              FROM tesouraria_movimentos m
              JOIN tesouraria_contas c ON c.id = m.id_conta
-             WHERE m.origem = 'erp_receber' AND m.status = 'ativo' AND m.origem_ref LIKE ?`,
+             WHERE m.origem IN ('erp_receber', 'despesa_caixa') AND m.status = 'ativo' AND m.origem_ref LIKE ?`,
             [`${data}|%`]
         );
         for (const m of lancados) {
@@ -997,7 +917,10 @@ router.get('/apurado', authenticateToken, checkPerm('tesouraria_view'), async (r
             const mod = MODALIDADE_POR_CHAVE.get(modalidade);
             if (!loja || !mod) continue;
             const l = linha(loja, mod);
-            if (sufixo === 'taxa') {
+            if (sufixo === 'consumo') {
+                l.id_movimento_consumo = m.id;
+                l.consumo_lancado = Number(m.valor);
+            } else if (sufixo === 'taxa') {
                 l.id_movimento_taxa = m.id;
                 l.taxa_lancada = Number(m.valor);
             } else {
@@ -1053,6 +976,7 @@ router.get('/apurado', authenticateToken, checkPerm('tesouraria_view'), async (r
             .map(l => ({
                 ...l,
                 valor_erp: Math.round(l.valor_erp * 100) / 100,
+                consumido: l.consumido || 0,
                 id_centro_sugerido: centroPorLoja.get(nomeComparavel(l.loja)) || null,
                 id_conta_sugerida: contaPorLinha.get(l.chave) || null,
                 taxa_pct_sugerida: pctPorModalidade.get(l.modalidade) ?? null
@@ -1068,6 +992,8 @@ router.get('/apurado', authenticateToken, checkPerm('tesouraria_view'), async (r
 // POST /api/tesouraria/apurado/lancar
 // { data_movimento, itens: [{ cod_filial, modalidade, valor, taxa, id_conta, id_centro_custo }] }
 // Cada item vira uma entrada pelo valor bruto e, se tiver taxa, uma saída da taxa na mesma conta.
+// No dinheiro, o que a loja lançou de despesas no dia vira uma saída "Despesas do caixa" (o valor
+// é lido da despesa_caixa aqui, não vem da tela).
 router.post('/apurado/lancar', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
     const { data_movimento, itens } = req.body;
     const { userId, nome: nomeUsuario } = req.user;
@@ -1104,6 +1030,9 @@ router.post('/apurado/lancar', authenticateToken, checkPerm('tesouraria_oper'), 
             tiposTaxa.set(p.modalidade.taxa, resultado);
         }
 
+        const caixaLojas = preparados.some(p => p.modalidade.chave === 'dinheiro')
+            ? await caixaLojasPorDia(data_movimento, data_movimento) : new Map();
+
         connection = await mysql.createConnection(dbConfig);
         await connection.beginTransaction();
 
@@ -1134,6 +1063,18 @@ router.post('/apurado/lancar', authenticateToken, checkPerm('tesouraria_oper'), 
                      VALUES (?, ?, ?, ?, ?, 'saida', ?, ?, ?, 'erp_receber', ?, ?, ?)`,
                     [item.id_conta, item.id_centro_custo || null, data_movimento, grupo, tipo, taxa,
                      `Taxa ${modalidade.nome} - apurado ${loja.nome}`, modalidade.chave, `${ref}|taxa`, userId, nomeUsuario]
+                );
+            }
+            const consumo = modalidade.chave === 'dinheiro'
+                ? centavos((caixaLojas.get(`${data_movimento}|${loja.cod}`) || {}).consumido) : 0;
+            if (consumo > 0) {
+                await connection.execute(
+                    `INSERT INTO tesouraria_movimentos
+                        (id_conta, id_centro_custo, data_movimento, tipo, valor, descricao, forma_pagamento,
+                         origem, origem_ref, id_usuario_lancamento, nome_usuario_lancamento)
+                     VALUES (?, ?, ?, 'saida', ?, ?, 'dinheiro', 'despesa_caixa', ?, ?, ?)`,
+                    [item.id_conta, item.id_centro_custo || null, data_movimento, consumo,
+                     `Despesas do caixa - ${loja.nome}`, `${ref}|consumo`, userId, nomeUsuario]
                 );
             }
             lancados.push(`${loja.nome} · ${modalidade.nome}`);
@@ -1231,6 +1172,170 @@ router.post('/fechamento/puxar-pagamentos', authenticateToken, checkPerm('tesour
         res.status(500).json({ error: 'Erro interno ao puxar os pagamentos do ERP.' });
     } finally {
         if (connection) await connection.end();
+    }
+});
+
+// --- CAIXA DAS LOJAS ---
+
+// O saldo anterior parte da última contagem do caixa (até 90 dias antes) e soma, dia a dia,
+// vendido − consumido − retirado. Sem contagem, não dá para saber o que havia: devolve null.
+const JANELA_SALDO_DIAS = 90;
+
+// GET /api/tesouraria/fechamento/caixa-lojas?data=YYYY-MM-DD
+router.get('/fechamento/caixa-lojas', authenticateToken, checkPerm('tesouraria_view'), async (req, res) => {
+    const { data } = req.query;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data || ''))) return res.status(400).json({ error: 'Informe a data.' });
+
+    try {
+        const [dias] = await gerencialPool.query(
+            `SELECT * FROM tesouraria_caixa_loja_dia WHERE data_movimento BETWEEN ? AND ? ORDER BY data_movimento`,
+            [somarDias(data, -JANELA_SALDO_DIAS), data]
+        );
+        const doDia = new Map();
+        const contagem = new Map();
+        for (const d of dias) {
+            const dia = dataISO(d.data_movimento);
+            if (dia === data) doDia.set(d.cod_filial, d);
+            if (d.saldo_contado !== null) contagem.set(d.cod_filial, { dia, valor: Number(d.saldo_contado) });
+        }
+
+        const inicio = [...contagem.values()].reduce((min, c) => (c.dia < min ? c.dia : min), data);
+        const [dinheiro, caixa] = await Promise.all([dinheiroErpPorDia(inicio, data), caixaLojasPorDia(inicio, data)]);
+
+        const [itens] = await gerencialPool.query(
+            `SELECT d.ID, d.dsp_filial, d.dsp_natureza, d.dsp_grupo, d.dsp_tipo, d.dsp_descricao, d.dsp_valordsp,
+                    d.dsp_userlanc, d.litros, v.placa
+             FROM despesa_caixa d
+             LEFT JOIN veiculos v ON v.id = d.id_veiculo
+             WHERE d.dsp_status = 1 AND d.dsp_datadesp = ?
+             ORDER BY d.dsp_natureza, d.ID`,
+            [data]
+        );
+
+        res.json(LOJAS_APURADO.map(loja => {
+            const movimento = dia => {
+                const c = caixa.get(`${dia}|${loja.cod}`) || { consumido: 0, retirado: 0 };
+                return { vendido: dinheiro.get(`${dia}|${loja.cod}`) || 0, ...c };
+            };
+            const hoje = movimento(data);
+            const cont = contagem.get(loja.cod);
+            let saldoAnterior = null;
+            if (cont) {
+                saldoAnterior = cont.valor;
+                for (let dia = cont.dia; dia < data; dia = somarDias(dia, 1)) {
+                    const m = movimento(dia);
+                    saldoAnterior += m.vendido - m.consumido - m.retirado;
+                }
+                saldoAnterior = centavos(saldoAnterior);
+            }
+            const registro = doDia.get(loja.cod);
+            return {
+                cod_filial: loja.cod,
+                loja: loja.nome,
+                saldo_anterior: saldoAnterior,
+                contagem_dia: cont ? cont.dia : null,
+                saldo_contado_hoje: registro && registro.saldo_contado !== null ? Number(registro.saldo_contado) : null,
+                vendido: centavos(hoje.vendido),
+                consumido: centavos(hoje.consumido),
+                retirado: centavos(hoje.retirado),
+                a_retirar: registro && registro.a_retirar !== null ? Number(registro.a_retirar) : null,
+                observacao: registro ? registro.observacao : null,
+                itens: itens.filter(i => lojaPorNome(i.dsp_filial) === loja).map(i => ({
+                    id: i.ID, natureza: i.dsp_natureza, grupo: i.dsp_grupo, tipo: i.dsp_tipo,
+                    descricao: i.dsp_descricao, valor: Number(i.dsp_valordsp), lancado_por: i.dsp_userlanc,
+                    placa: i.placa, litros: i.litros !== null ? Number(i.litros) : null
+                }))
+            };
+        }));
+    } catch (error) {
+        console.error('Erro ao montar o caixa das lojas:', error);
+        res.status(500).json({ error: 'Erro ao montar o caixa das lojas.' });
+    }
+});
+
+// Valor opcional da tela: vazio = null (limpa), senão número >= 0 com centavos.
+function valorOpcional(v) {
+    if (v === null || v === undefined || v === '') return { valor: null };
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0) return { erro: true };
+    return { valor: centavos(n) };
+}
+
+// PUT /api/tesouraria/fechamento/caixa-lojas { data_movimento, cod_filial, a_retirar?, saldo_contado?, observacao? }
+// Só mexe nos campos enviados.
+router.put('/fechamento/caixa-lojas', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
+    const { data_movimento, cod_filial } = req.body;
+    const { userId, nome: nomeUsuario } = req.user;
+    if (!data_movimento || !LOJAS_APURADO.some(l => l.cod === cod_filial)) {
+        return res.status(400).json({ error: 'Informe a data e a loja.' });
+    }
+
+    const campos = {};
+    for (const campo of ['a_retirar', 'saldo_contado']) {
+        if (!(campo in req.body)) continue;
+        const r = valorOpcional(req.body[campo]);
+        if (r.erro) return res.status(400).json({ error: 'Valor inválido.' });
+        campos[campo] = r.valor;
+    }
+    if ('observacao' in req.body) campos.observacao = String(req.body.observacao || '').trim().slice(0, 255) || null;
+    if (!Object.keys(campos).length) return res.status(400).json({ error: 'Nada para gravar.' });
+
+    try {
+        const colunas = Object.keys(campos);
+        await gerencialPool.query(
+            `INSERT INTO tesouraria_caixa_loja_dia (data_movimento, cod_filial, ${colunas.join(', ')}, id_usuario, nome_usuario)
+             VALUES (?, ?, ${colunas.map(() => '?').join(', ')}, ?, ?)
+             ON DUPLICATE KEY UPDATE ${colunas.map(c => `${c} = VALUES(${c})`).join(', ')},
+                id_usuario = VALUES(id_usuario), nome_usuario = VALUES(nome_usuario)`,
+            [data_movimento, cod_filial, ...colunas.map(c => campos[c]), userId, nomeUsuario]
+        );
+        res.json({ message: 'Caixa da loja atualizado.' });
+    } catch (error) {
+        console.error('Erro ao gravar o caixa da loja:', error);
+        res.status(500).json({ error: 'Erro interno ao gravar o caixa da loja.' });
+    }
+});
+
+// POST /api/tesouraria/fechamento/retirada { data_movimento, cod_filial, valor, observacao }
+// A retirada é gravada no módulo de despesas da loja (natureza "retirada"): a loja vê o mesmo
+// registro, e o fechamento lê o "já retirado" de lá.
+router.post('/fechamento/retirada', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
+    const { data_movimento, cod_filial, observacao } = req.body;
+    const { userId, nome: nomeUsuario } = req.user;
+    const loja = LOJAS_APURADO.find(l => l.cod === cod_filial);
+    const valor = centavos(req.body.valor);
+    if (!data_movimento || !loja) return res.status(400).json({ error: 'Informe a data e a loja.' });
+    if (!(valor > 0)) return res.status(400).json({ error: 'Informe o valor retirado.' });
+
+    try {
+        const obs = String(observacao || '').trim();
+        const [result] = await gerencialPool.query(
+            `INSERT INTO despesa_caixa
+                (dsp_datadesp, dsp_descricao, dsp_valordsp, dsp_tipo, dsp_grupo, dsp_filial, dsp_userlanc,
+                 dsp_status, dsp_natureza, dsp_datalanc, id_usuario_lancamento)
+             VALUES (?, ?, ?, 'Retirada Financeiro', 'Retirada Financeiro', ?, ?, 1, 'retirada', NOW(), ?)`,
+            [data_movimento, (obs ? `FINANCEIRO - ${obs}` : 'FINANCEIRO').slice(0, 255), valor, loja.nome, nomeUsuario, userId]
+        );
+        res.status(201).json({ message: 'Retirada registrada.', id: result.insertId });
+    } catch (error) {
+        console.error('Erro ao registrar retirada:', error);
+        res.status(500).json({ error: 'Erro interno ao registrar a retirada.' });
+    }
+});
+
+// POST /api/tesouraria/fechamento/retirada/:id/cancelar
+router.post('/fechamento/retirada/:id/cancelar', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
+    try {
+        const [result] = await gerencialPool.query(
+            `UPDATE despesa_caixa SET dsp_status = 2, dsp_usercan = ?, dsp_datacanc = CURDATE()
+             WHERE ID = ? AND dsp_natureza = 'retirada' AND dsp_status = 1`,
+            [req.user.nome, Number(req.params.id)]
+        );
+        if (!result.affectedRows) return res.status(404).json({ error: 'Retirada não encontrada ou já cancelada.' });
+        res.json({ message: 'Retirada cancelada.' });
+    } catch (error) {
+        console.error('Erro ao cancelar retirada:', error);
+        res.status(500).json({ error: 'Erro interno ao cancelar a retirada.' });
     }
 });
 

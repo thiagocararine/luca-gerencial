@@ -9,7 +9,9 @@ const GRUPO_TAXAS_FECHAMENTO = 'Taxas Financeiras';
 let vistaAtual = null;
 let apuradoFechamento = [];
 let pagamentosPendentesErp = [];
+let caixaLojasFechamento = null;
 const fornecedoresAbertos = new Set();
+const lojasAbertas = new Set();
 // Evita que a resposta de um dia anterior sobrescreva a do dia que está na tela.
 let sequenciaFechamento = 0;
 
@@ -73,6 +75,7 @@ function renderBlocosFechamento() {
     const c = classificarMovimentosDoDia();
     renderPagamentosFechamento(c.pagamentos);
     renderRecursosFechamento(c);
+    renderCaixaLojas();
     renderResultadoFechamento(c);
 }
 
@@ -81,7 +84,8 @@ function classificarMovimentosDoDia() {
     const noResultado = ativos.filter(entraNoResultado);
     const saidas = noResultado.filter(m => m.tipo === 'saida');
     const taxas = saidas.filter(m => m.origem === 'erp_receber');
-    const gastosLojas = saidas.filter(m => m.origem === 'caixa_loja' || m.origem === 'despesa_caixa');
+    // Despesas do caixa lançadas junto com o dinheiro do apurado (o que a loja gastou no dia).
+    const gastosLojas = saidas.filter(m => m.origem === 'despesa_caixa');
     const pagamentos = saidas.filter(m => !taxas.includes(m) && !gastosLojas.includes(m));
     return {
         entradas: ativos.filter(m => m.tipo === 'entrada'),
@@ -94,13 +98,15 @@ function classificarMovimentosDoDia() {
 async function carregarDadosErpFechamento() {
     const sequencia = ++sequenciaFechamento;
     const dataRef = document.getElementById('filtro-data').value;
-    const [apurado, pendentes] = await Promise.allSettled([
+    const [apurado, pendentes, caixa] = await Promise.allSettled([
         apiFetch(`/apurado?data=${dataRef}`),
-        apiFetch(`/erp/titulos?modo=baixados&data=${dataRef}`)
+        apiFetch(`/erp/titulos?modo=baixados&data=${dataRef}`),
+        apiFetch(`/fechamento/caixa-lojas?data=${dataRef}`)
     ]);
     if (sequencia !== sequenciaFechamento) return;
     apuradoFechamento = apurado.status === 'fulfilled' ? apurado.value : [];
     pagamentosPendentesErp = pendentes.status === 'fulfilled' ? pendentes.value : [];
+    caixaLojasFechamento = caixa.status === 'fulfilled' ? caixa.value : { erro: caixa.reason && caixa.reason.message };
 
     mostrarContador('fech-pag-pendentes', pagamentosPendentesErp.length);
     const linhasPendentes = apuradoFechamento.filter(l => !l.id_movimento && l.valor_erp > 0);
@@ -339,18 +345,24 @@ function renderRecursosFechamento(c) {
         const taxas = c.taxas.filter(m => m.forma_pagamento === chave);
         const linhasErp = apuradoFechamento.filter(l => l.modalidade === chave);
         const lancadas = linhasErp.filter(l => l.id_movimento);
+        // Dinheiro entra líquido: o que as lojas gastaram do caixa no dia já sai descontado.
+        const consumo = chave === 'dinheiro' ? somar(c.gastosLojas) : 0;
+        const bruto = somar(entradas);
         return {
             chave,
             nome: MODALIDADES_APURADO_LABEL[chave],
             entradas,
-            valor: somar(entradas),
+            bruto,
+            consumo,
+            valor: bruto - consumo,
             taxa: somar(taxas),
             lojas: new Set(entradas.map(m => m.id_centro_custo)).size,
-            pendente: linhasErp.filter(l => !l.id_movimento).reduce((acc, l) => acc + l.valor_erp, 0),
-            // O ERP continua recebendo durante o dia: avisa se o que foi lançado ficou diferente.
-            mudouNoErp: lancadas.some(l => Math.abs(l.valor_erp - Number(l.valor_lancado || 0)) >= 0.01)
+            pendente: linhasErp.filter(l => !l.id_movimento).reduce((acc, l) => acc + l.valor_erp - (l.consumido || 0), 0),
+            // O ERP (e as lojas) continuam lançando durante o dia: avisa se o lançado ficou diferente.
+            mudouNoErp: lancadas.some(l => Math.abs(l.valor_erp - Number(l.valor_lancado || 0)) >= 0.01
+                || Math.abs((l.consumido || 0) - Number(l.consumo_lancado || 0)) >= 0.01)
         };
-    }).filter(m => m.valor > 0 || m.pendente > 0);
+    }).filter(m => m.bruto > 0 || m.pendente !== 0);
 
     if (!modalidades.length && !manuais.length) {
         el.innerHTML = '<p class="px-4 py-6 text-center text-gray-400">Nenhum recurso lançado neste dia.</p>';
@@ -366,14 +378,15 @@ function renderRecursosFechamento(c) {
     modalidades.forEach(m => {
         const pct = m.valor ? (m.taxa / m.valor * 100).toFixed(2).replace('.', ',') : '';
         let aviso = '';
-        if (m.pendente > 0) aviso += `<span class="block text-[10px] text-amber-700">ERP: ${formatarMoeda(m.pendente)} a puxar</span>`;
-        if (m.mudouNoErp) aviso += `<span class="block text-[10px] text-amber-700">valor mudou no ERP · <button class="fech-refazer underline font-bold" data-modalidade="${m.chave}">refazer</button></span>`;
+        if (m.consumo) aviso += `<span class="block text-[10px] text-gray-500">vendido ${formatarMoeda(m.bruto)} − despesas das lojas ${formatarMoeda(m.consumo)}</span>`;
+        if (m.pendente !== 0) aviso += `<span class="block text-[10px] text-amber-700">ERP: ${formatarMoeda(m.pendente)} a puxar</span>`;
+        if (m.mudouNoErp) aviso += `<span class="block text-[10px] text-amber-700">valor mudou no ERP ou nas despesas das lojas · <button class="fech-refazer underline font-bold" data-modalidade="${m.chave}">refazer</button></span>`;
         html += `<tr class="border-b border-gray-50">
             <td class="px-4 py-1.5"><span class="font-semibold text-gray-800">${escapeHtml(m.nome)}</span>
                 ${m.lojas ? `<span class="ml-1 text-[10px] px-1.5 rounded bg-emerald-50 text-emerald-700">ERP · ${m.lojas} loja(s)</span>` : ''}${aviso}</td>
             <td class="px-2 py-1.5 text-right ${m.taxa ? 'text-red-700' : 'text-gray-300'}">${m.taxa ? `${formatarMoeda(m.taxa)} <span class="text-gray-400 text-[10px]">${pct}%</span>` : '-'}</td>
-            <td class="px-4 py-1.5 text-right font-bold whitespace-nowrap">${m.valor ? formatarMoeda(m.valor) : '<span class="text-gray-300">-</span>'}
-                ${m.valor ? `<button class="fech-desfazer-modalidade ml-2 text-gray-300 hover:text-red-600" data-modalidade="${m.chave}" title="Desfazer esta modalidade">✕</button>` : ''}</td>
+            <td class="px-4 py-1.5 text-right font-bold whitespace-nowrap">${m.bruto ? formatarMoeda(m.valor) : '<span class="text-gray-300">-</span>'}
+                ${m.bruto ? `<button class="fech-desfazer-modalidade ml-2 text-gray-300 hover:text-red-600" data-modalidade="${m.chave}" title="Desfazer esta modalidade">✕</button>` : ''}</td>
         </tr>`;
     });
     manuais.forEach(m => {
@@ -388,7 +401,7 @@ function renderRecursosFechamento(c) {
     html += `</tbody><tfoot><tr class="font-bold bg-gray-50 border-t border-gray-200">
         <td class="px-4 py-2">Total</td>
         <td class="px-2 py-2 text-right text-red-700">${formatarMoeda(somar(c.taxas))}</td>
-        <td class="px-4 py-2 text-right">${formatarMoeda(somar(c.recursos))}</td>
+        <td class="px-4 py-2 text-right">${formatarMoeda(somar(c.recursos) - somar(c.gastosLojas))}</td>
     </tr></tfoot></table>`;
     el.innerHTML = html;
 
@@ -405,7 +418,7 @@ async function desfazerModalidade(modalidade, refazer = false) {
     if (!entradas.length) return;
     const nome = MODALIDADES_APURADO_LABEL[modalidade];
     const ok = await dialogoConfirmar(
-        `${nome}: ${entradas.length} lançamento(s), ${formatarMoeda(somar(entradas))}, e as taxas deles saem do fechamento por estorno.` +
+        `${nome}: ${entradas.length} lançamento(s), ${formatarMoeda(somar(entradas))}, e as taxas${modalidade === 'dinheiro' ? ' e despesas das lojas' : ''} deles saem do fechamento por estorno.` +
         (refazer ? ' Depois você lança de novo com o valor atual do ERP.' : ''),
         { titulo: refazer ? `Refazer ${nome}?` : `Desfazer ${nome}?`, textoOk: refazer ? 'Refazer' : 'Desfazer', perigo: true }
     );
@@ -423,7 +436,9 @@ async function desfazerModalidade(modalidade, refazer = false) {
     }
 }
 
-// Lojas de uma modalidade que ainda não entraram, com a taxa % (sugerida pela última usada).
+// Lojas de uma modalidade que ainda não entraram. A taxa é digitada em R$ por modalidade e
+// dividida entre as lojas na proporção do valor de cada uma. No dinheiro, as despesas que as
+// lojas lançaram no dia saem descontadas (o servidor lê o valor da despesa_caixa).
 function abrirPuxarApurado() {
     if (!exigirContaGeral()) return;
     const pendentes = apuradoFechamento.filter(l => !l.id_movimento && l.valor_erp > 0);
@@ -432,25 +447,31 @@ function abrirPuxarApurado() {
     }
     const modalidades = ORDEM_MODALIDADES.map(chave => {
         const linhas = pendentes.filter(l => l.modalidade === chave);
+        const bruto = linhas.reduce((acc, l) => acc + l.valor_erp, 0);
+        const consumo = linhas.reduce((acc, l) => acc + (l.consumido || 0), 0);
         const sugerida = linhas.find(l => l.taxa_pct_sugerida != null);
-        return { chave, linhas, aceitaTaxa: linhas.some(l => l.aceita_taxa), pct: sugerida ? sugerida.taxa_pct_sugerida : '' };
+        const pct = sugerida ? Number(sugerida.taxa_pct_sugerida) : null;
+        return { chave, linhas, bruto, consumo, aceitaTaxa: linhas.some(l => l.aceita_taxa), pct };
     }).filter(m => m.linhas.length);
+
+    const dica = m => m.pct ? `~${formatarMoeda(m.bruto * m.pct / 100).replace('R$', '').trim()} (${String(m.pct).replace('.', ',')}% da última vez)` : '0,00';
 
     abrirModalFechamento({
         titulo: `Puxar apurado do ERP · ${formatarDataBR(document.getElementById('filtro-data').value)}`,
         textoOk: 'Lançar apurado',
         corpo: `
-            <p class="text-gray-600">Valores recebidos no ERP, somando as lojas. Digite a <b>taxa %</b> das maquininhas; o sistema calcula a taxa de cada loja.</p>
+            <p class="text-gray-600">Valores recebidos no ERP, somando as lojas. Digite o <b>valor da taxa (R$)</b> de cada modalidade; o sistema divide entre as lojas. No dinheiro, as despesas que as lojas lançaram no dia já saem descontadas.</p>
             <table class="w-full text-sm">
-                <thead><tr class="text-[10px] uppercase text-gray-500 border-b"><th class="text-left py-1">Modalidade</th><th class="text-right py-1">Valor</th><th class="text-right py-1 w-24">Taxa %</th><th class="text-right py-1">Taxa</th></tr></thead>
+                <thead><tr class="text-[10px] uppercase text-gray-500 border-b"><th class="text-left py-1">Modalidade</th><th class="text-right py-1">Valor</th><th class="text-right py-1 w-40">Taxa (R$)</th></tr></thead>
                 <tbody>${modalidades.map(m => `
-                    <tr class="border-b border-gray-100">
-                        <td class="py-1.5">${escapeHtml(MODALIDADES_APURADO_LABEL[m.chave])} <span class="text-[10px] text-gray-400">${m.linhas.length} loja(s)</span></td>
-                        <td class="py-1.5 text-right font-bold">${formatarMoeda(m.linhas.reduce((acc, l) => acc + l.valor_erp, 0))}</td>
+                    <tr class="border-b border-gray-100 align-top">
+                        <td class="py-1.5">${escapeHtml(MODALIDADES_APURADO_LABEL[m.chave])} <span class="text-[10px] text-gray-400">${m.linhas.length} loja(s)</span>
+                            ${m.consumo ? `<span class="block text-[10px] text-gray-500">vendido ${formatarMoeda(m.bruto)} − despesas das lojas ${formatarMoeda(m.consumo)}</span>` : ''}</td>
+                        <td class="py-1.5 text-right font-bold whitespace-nowrap">${formatarMoeda(m.bruto - m.consumo)}</td>
                         <td class="py-1.5 text-right">${m.aceitaTaxa
-                            ? `<input type="number" step="0.01" min="0" max="99" class="fech-pct w-20 border border-gray-300 rounded p-1 text-right text-sm" data-modalidade="${m.chave}" value="${m.pct}">`
+                            ? `<input type="number" step="0.01" min="0" class="fech-taxa w-36 border border-gray-300 rounded p-1 text-right text-sm" data-modalidade="${m.chave}" placeholder="${escapeHtml(dica(m))}">
+                               <span class="block text-[10px] text-gray-400 fech-taxa-pct" data-modalidade="${m.chave}"></span>`
                             : '<span class="text-gray-300">-</span>'}</td>
-                        <td class="py-1.5 text-right text-red-700 fech-taxa-calc" data-modalidade="${m.chave}">-</td>
                     </tr>`).join('')}
                 </tbody>
             </table>
@@ -458,28 +479,35 @@ function abrirPuxarApurado() {
         aoAbrir: () => {
             const atualizar = () => {
                 let bruto = 0;
+                let consumo = 0;
                 let taxas = 0;
                 modalidades.forEach(m => {
-                    const taxa = taxasPorLinha(m.linhas, pctDaModalidade(m.chave)).reduce((acc, t) => acc + t, 0);
-                    bruto += m.linhas.reduce((acc, l) => acc + l.valor_erp, 0);
+                    const taxa = taxaDaModalidade(m.chave);
+                    bruto += m.bruto;
+                    consumo += m.consumo;
                     taxas += taxa;
-                    const cel = document.querySelector(`.fech-taxa-calc[data-modalidade="${m.chave}"]`);
-                    cel.textContent = taxa ? formatarMoeda(taxa) : '-';
+                    const info = document.querySelector(`.fech-taxa-pct[data-modalidade="${m.chave}"]`);
+                    if (info) info.textContent = taxa && m.bruto ? `${(taxa / m.bruto * 100).toFixed(2).replace('.', ',')}% do valor` : '';
                 });
                 document.getElementById('fech-apurado-resumo').textContent =
-                    `Entradas ${formatarMoeda(bruto)} − taxas ${formatarMoeda(taxas)} = líquido ${formatarMoeda(bruto - taxas)}`;
+                    `Entradas ${formatarMoeda(bruto)}${consumo ? ` − despesas das lojas ${formatarMoeda(consumo)}` : ''} − taxas ${formatarMoeda(taxas)} = líquido ${formatarMoeda(bruto - consumo - taxas)}`;
             };
-            document.querySelectorAll('.fech-pct').forEach(inp => inp.addEventListener('input', atualizar));
+            document.querySelectorAll('.fech-taxa').forEach(inp => inp.addEventListener('input', atualizar));
             atualizar();
+            const primeiro = document.querySelector('.fech-taxa');
+            if (primeiro) primeiro.focus();
         },
         aoConfirmar: async () => {
             const itens = [];
             for (const m of modalidades) {
-                const pct = pctDaModalidade(m.chave);
-                if (pct < 0 || pct >= 100) { dialogoAviso(`${MODALIDADES_APURADO_LABEL[m.chave]}: taxa % inválida.`); return false; }
-                const taxas = taxasPorLinha(m.linhas, pct);
+                const taxa = taxaDaModalidade(m.chave);
+                if (!Number.isFinite(taxa) || taxa < 0 || (taxa > 0 && taxa >= m.bruto)) {
+                    dialogoAviso(`${MODALIDADES_APURADO_LABEL[m.chave]}: a taxa precisa ser menor que o valor.`);
+                    return false;
+                }
+                const rateio = ratearTaxa(m.linhas, taxa);
                 m.linhas.forEach((l, i) => itens.push({
-                    cod_filial: l.cod_filial, modalidade: l.modalidade, valor: l.valor_erp, taxa: taxas[i],
+                    cod_filial: l.cod_filial, modalidade: l.modalidade, valor: l.valor_erp, taxa: rateio[i],
                     id_conta: idContaGeral(), id_centro_custo: l.id_centro_sugerido || null
                 }));
             }
@@ -492,13 +520,27 @@ function abrirPuxarApurado() {
     });
 }
 
-function pctDaModalidade(chave) {
-    const inp = document.querySelector(`.fech-pct[data-modalidade="${chave}"]`);
+function taxaDaModalidade(chave) {
+    const inp = document.querySelector(`.fech-taxa[data-modalidade="${chave}"]`);
     return inp ? Number(String(inp.value).replace(',', '.') || 0) : 0;
 }
 
-function taxasPorLinha(linhas, pct) {
-    return linhas.map(l => (l.aceita_taxa && pct > 0) ? Math.round(l.valor_erp * pct) / 100 : 0);
+// Divide a taxa total entre as lojas pelo valor de cada uma; a última fica com os centavos
+// que sobrarem do arredondamento, para a soma bater com o que foi digitado.
+function ratearTaxa(linhas, total) {
+    const comTaxa = linhas.map((l, i) => ({ i, valor: l.aceita_taxa ? l.valor_erp : 0 })).filter(x => x.valor > 0);
+    const resultado = linhas.map(() => 0);
+    const base = comTaxa.reduce((acc, x) => acc + x.valor, 0);
+    if (!(total > 0) || !base) return resultado;
+    let distribuido = 0;
+    comTaxa.forEach((x, n) => {
+        const parte = n === comTaxa.length - 1
+            ? Math.round((total - distribuido) * 100) / 100
+            : Math.round(total * x.valor / base * 100) / 100;
+        resultado[x.i] = parte;
+        distribuido += parte;
+    });
+    return resultado;
 }
 
 function abrirNovoRecurso() {
@@ -534,25 +576,214 @@ function abrirNovoRecurso() {
     });
 }
 
+// --- 3. CAIXA DAS LOJAS ---
+
+function renderCaixaLojas() {
+    const el = document.getElementById('fech-caixa-lojas');
+    if (!el) return;
+    const lojas = caixaLojasFechamento;
+    if (!lojas) { el.innerHTML = '<p class="px-4 py-6 text-center text-gray-400">Carregando...</p>'; return; }
+    if (!Array.isArray(lojas)) {
+        el.innerHTML = `<p class="px-4 py-6 text-center text-red-600">Erro ao carregar o caixa das lojas${lojas.erro ? ': ' + escapeHtml(lojas.erro) : ''}.</p>`;
+        return;
+    }
+
+    const linhas = lojas.map(l => {
+        const disponivel = (l.saldo_anterior || 0) + l.vendido - l.consumido;
+        return { ...l, disponivel, sobra: disponivel - l.retirado, falta: l.a_retirar != null ? l.a_retirar - l.retirado : null };
+    });
+    const total = campo => linhas.reduce((acc, l) => acc + (Number(l[campo]) || 0), 0);
+    const algumSemSaldo = linhas.some(l => l.saldo_anterior === null);
+    const dinheiro = v => formatarMoeda(v);
+    const tdValor = 'px-2 py-1.5 text-right whitespace-nowrap tabular-nums';
+
+    let html = `<table class="w-full min-w-[880px]">
+        <thead><tr class="text-[10px] uppercase text-gray-500 border-b border-gray-100">
+            <th class="text-left font-bold px-4 py-1.5">Loja</th>
+            <th class="text-right font-bold px-2 py-1.5" title="O que sobrou no caixa até ontem (parte da última contagem)">Saldo anterior</th>
+            <th class="text-right font-bold px-2 py-1.5">Vendido (dinheiro)</th>
+            <th class="text-right font-bold px-2 py-1.5">Consumido</th>
+            <th class="text-right font-bold px-2 py-1.5">Disponível</th>
+            <th class="text-right font-bold px-2 py-1.5 w-32">A retirar</th>
+            <th class="text-right font-bold px-2 py-1.5">Já retirado</th>
+            <th class="text-right font-bold px-2 py-1.5">Sobra no caixa</th>
+            <th class="px-4 py-1.5"></th>
+        </tr></thead><tbody>`;
+    linhas.forEach(l => {
+        const aberta = lojasAbertas.has(l.cod_filial);
+        const saldo = l.saldo_anterior === null
+            ? `<button class="fech-contagem text-[11px] text-indigo-600 hover:underline" data-loja="${l.cod_filial}" title="Informe quanto havia no caixa para o sistema acompanhar o que sobra">informar</button>`
+            : `<button class="fech-contagem hover:underline" data-loja="${l.cod_filial}" title="Contagem de ${formatarDataBR(l.contagem_dia)} · clique para contar de novo">${dinheiro(l.saldo_anterior)}</button>`;
+        html += `<tr class="border-b border-gray-50 hover:bg-gray-50">
+            <td class="px-4 py-1.5"><button class="fech-abrir-loja font-semibold text-gray-800 flex items-center gap-1" data-loja="${l.cod_filial}">
+                <span class="text-gray-400 w-3">${aberta ? '▾' : '▸'}</span>${escapeHtml(l.loja)}</button></td>
+            <td class="${tdValor} text-gray-600">${saldo}</td>
+            <td class="${tdValor}">${dinheiro(l.vendido)}</td>
+            <td class="${tdValor} ${l.consumido ? 'text-red-700' : 'text-gray-300'}">${l.consumido ? '−' + dinheiro(l.consumido) : '-'}</td>
+            <td class="${tdValor} font-bold">${dinheiro(l.disponivel)}</td>
+            <td class="px-2 py-1 text-right">
+                <input type="number" step="0.01" min="0" class="fech-a-retirar w-28 border border-gray-300 rounded p-1 text-right text-xs" data-loja="${l.cod_filial}" value="${l.a_retirar != null ? l.a_retirar : ''}" placeholder="0,00">
+                ${l.falta > 0.004 ? `<span class="block text-[10px] text-amber-700">falta ${dinheiro(l.falta)}</span>` : ''}</td>
+            <td class="${tdValor} ${l.retirado ? 'text-indigo-700 font-semibold' : 'text-gray-300'}">${l.retirado ? dinheiro(l.retirado) : '-'}</td>
+            <td class="${tdValor} font-bold ${l.sobra < -0.004 ? 'text-red-700' : 'text-emerald-700'}">${dinheiro(l.sobra)}</td>
+            <td class="px-4 py-1.5 text-right whitespace-nowrap">
+                <button class="fech-nova-retirada px-2 py-0.5 rounded border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 font-bold" data-loja="${l.cod_filial}">+ Retirada</button></td>
+        </tr>`;
+        if (aberta) {
+            const itens = l.itens.length ? l.itens.map(i => `
+                <div class="flex items-center justify-between gap-3 py-0.5">
+                    <span>${i.natureza === 'retirada'
+                        ? '<span class="text-[10px] px-1.5 rounded bg-indigo-100 text-indigo-700 font-bold">RETIRADA</span>'
+                        : `<span class="text-gray-400">${escapeHtml(i.tipo || i.grupo || '')}</span>`}
+                        ${escapeHtml(i.descricao || '')}${i.placa ? ` <span class="text-[10px] px-1 rounded bg-gray-100 text-gray-600">${escapeHtml(i.placa)}${i.litros ? ` · ${String(i.litros).replace('.', ',')} L` : ''}</span>` : ''}
+                        <span class="text-gray-400">· ${escapeHtml(i.lancado_por || '')}</span></span>
+                    <span class="whitespace-nowrap ${i.natureza === 'retirada' ? 'text-indigo-700' : 'text-red-700'}">${dinheiro(i.valor)}${i.natureza === 'retirada'
+                        ? `<button class="fech-cancelar-retirada ml-2 text-gray-300 hover:text-red-600" data-id="${Number(i.id)}" title="Cancelar esta retirada">✕</button>` : ''}</span>
+                </div>`).join('') : '<p class="text-gray-400">A loja não lançou despesas nem retiradas neste dia.</p>';
+            html += `<tr class="bg-gray-50/60 text-gray-600"><td colspan="9" class="pl-10 pr-4 py-2">${itens}
+                ${l.observacao ? `<p class="mt-1 text-gray-500">Obs.: ${escapeHtml(l.observacao)}</p>` : ''}</td></tr>`;
+        }
+    });
+    html += `</tbody><tfoot><tr class="font-bold bg-gray-50 border-t border-gray-200">
+        <td class="px-4 py-2">Total</td>
+        <td class="${tdValor}">${dinheiro(total('saldo_anterior'))}</td>
+        <td class="${tdValor}">${dinheiro(total('vendido'))}</td>
+        <td class="${tdValor} text-red-700">${total('consumido') ? '−' + dinheiro(total('consumido')) : '-'}</td>
+        <td class="${tdValor}">${dinheiro(total('disponivel'))}</td>
+        <td class="${tdValor}">${dinheiro(total('a_retirar'))}</td>
+        <td class="${tdValor} text-indigo-700">${dinheiro(total('retirado'))}</td>
+        <td class="${tdValor} ${total('sobra') < -0.004 ? 'text-red-700' : 'text-emerald-700'}">${dinheiro(total('sobra'))}</td>
+        <td></td>
+    </tr></tfoot></table>`;
+    if (algumSemSaldo) {
+        html += `<p class="px-4 py-2 text-[11px] text-gray-500">Loja sem saldo anterior: clique em "informar" e digite o dinheiro que havia no caixa no começo do dia. A partir daí a sobra de cada dia passa para o dia seguinte sozinha (é o fundo de ontem).</p>`;
+    }
+    el.innerHTML = html;
+
+    el.querySelectorAll('.fech-abrir-loja').forEach(btn => btn.addEventListener('click', () => {
+        const cod = btn.dataset.loja;
+        lojasAbertas.has(cod) ? lojasAbertas.delete(cod) : lojasAbertas.add(cod);
+        renderCaixaLojas();
+    }));
+    el.querySelectorAll('.fech-a-retirar').forEach(inp => inp.addEventListener('change', () => gravarCaixaLoja(inp.dataset.loja, { a_retirar: inp.value })));
+    el.querySelectorAll('.fech-contagem').forEach(btn => btn.addEventListener('click', () => abrirContagem(linhas.find(l => l.cod_filial === btn.dataset.loja))));
+    el.querySelectorAll('.fech-nova-retirada').forEach(btn => btn.addEventListener('click', () => abrirNovaRetirada(linhas.find(l => l.cod_filial === btn.dataset.loja))));
+    el.querySelectorAll('.fech-cancelar-retirada').forEach(btn => btn.addEventListener('click', () => cancelarRetirada(Number(btn.dataset.id))));
+}
+
+async function recarregarCaixaLojas() {
+    const dataRef = document.getElementById('filtro-data').value;
+    try {
+        caixaLojasFechamento = await apiFetch(`/fechamento/caixa-lojas?data=${dataRef}`);
+    } catch (err) {
+        caixaLojasFechamento = { erro: err.message };
+    }
+    // O consumido também muda o dinheiro dos recursos ("valor mudou · refazer").
+    await carregarDadosErpFechamento();
+}
+
+async function gravarCaixaLoja(cod, campos) {
+    try {
+        await apiFetch('/fechamento/caixa-lojas', {
+            method: 'PUT',
+            body: JSON.stringify({ data_movimento: document.getElementById('filtro-data').value, cod_filial: cod, ...campos })
+        });
+        await recarregarCaixaLojas();
+    } catch (err) {
+        dialogoAviso('Erro ao gravar: ' + err.message, 'erro');
+    }
+}
+
+function abrirContagem(loja) {
+    if (!loja) return;
+    const dataRef = document.getElementById('filtro-data').value;
+    abrirModalFechamento({
+        titulo: `Contagem do caixa · ${loja.loja}`,
+        textoOk: 'Gravar contagem',
+        recarregar: false,
+        corpo: `
+            <p class="text-gray-600">Quanto havia de dinheiro no caixa da loja <b>no começo de ${formatarDataBR(dataRef)}</b>, antes das vendas do dia (o fundo/sobra que ficou de ontem)?</p>
+            <p class="text-xs text-gray-500">A partir desta contagem, a sobra de cada dia passa para o dia seguinte sozinha. Conte de novo quando quiser acertar o valor.</p>
+            <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Dinheiro no caixa (R$)</label>
+                <input id="fech-ct-valor" type="number" step="0.01" min="0" class="w-full border border-gray-300 rounded-md p-2 text-sm" value="${loja.saldo_contado_hoje != null ? loja.saldo_contado_hoje : ''}" placeholder="0,00"></div>
+            ${loja.saldo_contado_hoje != null ? '<p class="text-xs text-gray-500">Para apagar a contagem deste dia, deixe o campo vazio.</p>' : ''}`,
+        aoAbrir: () => document.getElementById('fech-ct-valor').focus(),
+        aoConfirmar: async () => {
+            const valor = document.getElementById('fech-ct-valor').value;
+            if (valor === '' && loja.saldo_contado_hoje == null) { dialogoAviso('Informe o valor contado.'); return false; }
+            if (valor !== '' && !(Number(valor) >= 0)) { dialogoAviso('Valor inválido.'); return false; }
+            await apiFetch('/fechamento/caixa-lojas', {
+                method: 'PUT',
+                body: JSON.stringify({ data_movimento: dataRef, cod_filial: loja.cod_filial, saldo_contado: valor })
+            });
+            await recarregarCaixaLojas();
+        }
+    });
+}
+
+function abrirNovaRetirada(loja) {
+    if (!loja) return;
+    const sugestao = loja.falta > 0 ? loja.falta : null;
+    abrirModalFechamento({
+        titulo: `Retirada · ${loja.loja}`,
+        textoOk: 'Registrar retirada',
+        recarregar: false,
+        corpo: `
+            <p class="text-gray-600">Dinheiro que saiu do caixa da loja para o financeiro. Fica registrado também no módulo de despesas da loja, como "Retirada do financeiro".</p>
+            <div class="grid grid-cols-2 gap-3 text-xs">
+                <div class="p-2 rounded bg-gray-50 border border-gray-200">Disponível<br><b class="text-sm">${formatarMoeda(loja.disponivel)}</b></div>
+                <div class="p-2 rounded bg-gray-50 border border-gray-200">Já retirado<br><b class="text-sm">${formatarMoeda(loja.retirado)}</b></div>
+            </div>
+            <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Valor retirado (R$)</label>
+                <input id="fech-rt-valor" type="number" step="0.01" min="0.01" class="w-full border border-gray-300 rounded-md p-2 text-sm" value="${sugestao != null ? sugestao.toFixed(2) : ''}" placeholder="0,00"></div>
+            <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Observação <span class="font-normal normal-case text-gray-400">quem levou / para quê</span></label>
+                <input id="fech-rt-obs" type="text" maxlength="200" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="Depósito no banco"></div>`,
+        aoAbrir: () => document.getElementById('fech-rt-valor').focus(),
+        aoConfirmar: async () => {
+            const valor = Number(document.getElementById('fech-rt-valor').value);
+            if (!(valor > 0)) { dialogoAviso('Informe o valor retirado.'); return false; }
+            await apiFetch('/fechamento/retirada', {
+                method: 'POST',
+                body: JSON.stringify({
+                    data_movimento: document.getElementById('filtro-data').value, cod_filial: loja.cod_filial,
+                    valor, observacao: document.getElementById('fech-rt-obs').value
+                })
+            });
+            await recarregarCaixaLojas();
+        }
+    });
+}
+
+async function cancelarRetirada(id) {
+    const ok = await dialogoConfirmar('A retirada é cancelada aqui e no módulo de despesas da loja.', { titulo: 'Cancelar retirada?', textoOk: 'Cancelar retirada', perigo: true });
+    if (!ok) return;
+    try {
+        await apiFetch(`/fechamento/retirada/${id}/cancelar`, { method: 'POST' });
+        await recarregarCaixaLojas();
+    } catch (err) {
+        dialogoAviso('Erro ao cancelar: ' + err.message, 'erro');
+    }
+}
+
 // --- 4. RESULTADO ---
 
 function renderResultadoFechamento(c) {
-    const recursos = somar(c.recursos);
+    // Recursos já com o dinheiro líquido (sem o que as lojas gastaram do caixa).
+    const gastos = somar(c.gastosLojas);
+    const recursos = somar(c.recursos) - gastos;
     const taxas = somar(c.taxas);
     const pagamentos = somar(c.pagamentos);
     const juros = c.pagamentos.reduce((acc, m) => acc + Number(m.valor_juros || 0), 0);
-    const gastos = somar(c.gastosLojas);
-    const resultado = recursos - taxas - pagamentos - gastos;
+    const resultado = recursos - taxas - pagamentos;
 
     const linha = (rotulo, valor, extra = '', classe = '') => `
         <div class="flex justify-between items-baseline px-4 py-1.5 border-b border-gray-50 ${classe}">
             <span>${rotulo} ${extra}</span><span class="tabular-nums">${valor}</span>
         </div>`;
     document.getElementById('fech-resultado').innerHTML =
-        linha('Recursos', formatarMoeda(recursos)) +
+        linha('Recursos', formatarMoeda(recursos), gastos ? `<span class="text-gray-400 text-[10px]">dinheiro já sem ${formatarMoeda(gastos)} de despesas das lojas</span>` : '') +
         linha('(−) Taxas das maquininhas', formatarMoeda(-taxas)) +
         linha('(−) Pagamentos', formatarMoeda(-pagamentos), juros ? `<span class="text-amber-700 text-[10px]">incl. ${formatarMoeda(juros)} de juros</span>` : '') +
-        linha('(−) Gastos das lojas', formatarMoeda(-gastos)) +
         linha('Resultado do dia', formatarMoeda(resultado), '', `font-bold text-sm bg-gray-50 ${resultado < 0 ? 'text-red-700' : 'text-green-700'}`);
 
     document.getElementById('fech-kpi-recursos').textContent = formatarMoeda(recursos);
@@ -570,11 +801,15 @@ function renderResultadoFechamento(c) {
 
 let acaoModalFechamento = null;
 
-function abrirModalFechamento({ titulo, corpo, textoOk, aoAbrir, aoConfirmar }) {
+// recarregar: false quando aoConfirmar já atualiza a parte da tela que mudou.
+let recarregarAoConfirmar = true;
+
+function abrirModalFechamento({ titulo, corpo, textoOk, aoAbrir, aoConfirmar, recarregar = true }) {
     document.getElementById('fech-modal-titulo').textContent = titulo;
     document.getElementById('fech-modal-corpo').innerHTML = corpo;
     document.getElementById('btn-fech-modal-ok').textContent = textoOk;
     acaoModalFechamento = aoConfirmar;
+    recarregarAoConfirmar = recarregar;
     abrirModal('modal-fech');
     if (aoAbrir) aoAbrir();
 }
@@ -592,8 +827,9 @@ async function confirmarModalFechamento() {
     try {
         const resultado = await acaoModalFechamento();
         if (resultado === false) return;
+        const recarregar = recarregarAoConfirmar;
         fecharModalFechamento();
-        await carregarDia(document.getElementById('filtro-data').value);
+        if (recarregar) await carregarDia(document.getElementById('filtro-data').value);
     } catch (err) {
         dialogoAviso('Erro: ' + err.message, 'erro');
     } finally {

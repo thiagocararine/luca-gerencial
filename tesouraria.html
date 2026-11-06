@@ -74,9 +74,6 @@
             <button id="btn-importar-erp" class="so-movimentos h-8 bg-blue-600 text-white px-3 rounded text-xs font-bold hover:bg-blue-700 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
                 <i data-feather="download" class="w-3.5 h-3.5"></i> CONTAS A PAGAR
             </button>
-            <button id="btn-despesas-lojas" class="so-movimentos h-8 bg-amber-500 text-white px-3 rounded text-xs font-bold hover:bg-amber-600 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
-                <i data-feather="shopping-bag" class="w-3.5 h-3.5"></i> DESPESAS DAS LOJAS
-            </button>
 
             <div class="ml-auto flex gap-2">
                 <button id="btn-gerenciar" class="h-8 bg-white text-gray-700 border border-gray-300 px-3 rounded text-xs font-bold hover:bg-gray-50 shadow-sm flex items-center gap-1.5 transition-all">
@@ -108,12 +105,12 @@
             <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-amber-500 shadow-sm px-4 py-2.5">
                 <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Gastos das lojas</p>
                 <p id="fech-kpi-lojas" class="text-2xl font-black text-amber-700 leading-tight">R$ 0,00</p>
-                <p class="text-[11px] text-gray-400">sem escritório e fundo</p>
+                <p class="text-[11px] text-gray-400">lançadas no caixa · já descontadas do dinheiro</p>
             </div>
             <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-indigo-500 shadow-sm px-4 py-2.5">
                 <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Resultado do dia</p>
                 <p id="fech-kpi-resultado" class="text-2xl font-black text-gray-800 leading-tight">R$ 0,00</p>
-                <p class="text-[11px] text-gray-400">recursos − taxas − pagamentos − gastos</p>
+                <p class="text-[11px] text-gray-400">recursos − taxas − pagamentos</p>
             </div>
         </div>
 
@@ -156,9 +153,12 @@
             </div>
         </div>
 
-        <section class="bg-white rounded-lg border border-dashed border-gray-300 px-4 py-3">
-            <h2 class="text-sm font-bold text-gray-500">3. Caixa das lojas</h2>
-            <p class="text-xs text-gray-400 mt-1">Próximo passo: dinheiro de cada loja vindo do ERP, gastos, valor levado ao escritório e fundo (com o fundo de ontem).</p>
+        <section class="bg-white rounded-lg border border-gray-200 shadow-sm">
+            <div class="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-100">
+                <h2 class="text-sm font-bold text-gray-800">3. Caixa das lojas</h2>
+                <span class="text-[11px] text-gray-400">dinheiro de cada loja: vendido no ERP, gasto pela loja, retirado pelo financeiro e o que sobra no caixa</span>
+            </div>
+            <div id="fech-caixa-lojas" class="text-xs overflow-x-auto"></div>
         </section>
     </div>
 
@@ -183,10 +183,6 @@
             </div>
             <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-amber-500 shadow-sm px-4 py-2.5 space-y-1">
                 <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Pendências</p>
-                <button id="kpi-pend-lojas" class="w-full flex items-center justify-between gap-2 text-xs hover:bg-amber-50 rounded px-1 -mx-1">
-                    <span class="text-gray-600 text-left">Despesas das lojas a conferir</span>
-                    <span id="kpi-pend-lojas-valor" class="font-bold text-gray-400 whitespace-nowrap">—</span>
-                </button>
                 <button id="kpi-pend-erp" class="w-full flex items-center justify-between gap-2 text-xs hover:bg-blue-50 rounded px-1 -mx-1">
                     <span class="text-gray-600 text-left">Pagos no ERP fora da tesouraria</span>
                     <span id="kpi-pend-erp-valor" class="font-bold text-gray-400 whitespace-nowrap">—</span>
@@ -414,65 +410,6 @@
         </div>
     </div>
 
-    <!-- Modal: Despesas das Lojas (despesa_caixa) — conferência antes de entrar no relatório -->
-    <div id="modal-lojas" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-7xl overflow-hidden transform scale-95 transition-transform duration-200 h-[92vh] flex flex-col">
-            <div class="flex justify-between items-center px-6 py-3 border-b border-gray-200 bg-amber-50 shrink-0">
-                <h3 class="text-lg font-bold text-amber-900 flex items-center gap-2">
-                    <i data-feather="shopping-bag" class="w-5 h-5 text-amber-600"></i> Despesas das Lojas
-                </h3>
-                <button id="btn-fechar-modal-lojas" class="text-amber-500 hover:text-amber-700 hover:bg-amber-100 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
-            </div>
-            <div class="px-6 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2 shrink-0">
-                <div class="flex flex-wrap gap-1">
-                    <button data-modo="dia" class="aba-lojas px-3 py-1.5 rounded text-xs font-bold border">Despesas do dia</button>
-                    <button data-modo="pendentes" class="aba-lojas px-3 py-1.5 rounded text-xs font-bold border">Pendentes (últimos 30 dias)</button>
-                </div>
-                <input type="date" id="lojas-data" class="h-8 border-gray-300 rounded text-xs bg-gray-50 font-medium">
-                <select id="lojas-filtro-loja" class="h-8 border border-gray-300 rounded text-xs px-2"></select>
-                <div id="lojas-resumo" class="ml-auto flex gap-3 text-xs"></div>
-            </div>
-            <p class="px-6 pt-2 text-[11px] text-gray-500 shrink-0">
-                O que as lojas lançaram em <b>Lançamentos</b>. Marque as despesas conferidas, confira a <b>conta</b> e a <b>classificação</b> (clique na célula para mudar) e clique em <b>Conferir</b>:
-                elas entram como saída no dia <b id="lojas-dia-movimento"></b> e passam a sair no relatório.
-            </p>
-            <div class="flex-1 min-h-0 px-6 py-2">
-                <div id="tabela-lojas" class="w-full h-full"></div>
-            </div>
-            <div class="bg-gray-50 px-6 py-3 border-t border-gray-200 shrink-0 space-y-2">
-                <div class="flex flex-wrap items-end gap-3">
-                    <div class="flex items-end gap-1">
-                        <div>
-                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Conta dos marcados</label>
-                            <select id="lojas-conta-lote" class="h-8 border border-gray-300 rounded text-xs px-2 w-48"></select>
-                        </div>
-                        <button id="btn-lojas-aplicar-conta" class="h-8 px-3 bg-white border border-gray-300 rounded text-xs font-bold hover:bg-gray-100">Aplicar</button>
-                    </div>
-                    <div class="flex items-end gap-1">
-                        <div>
-                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Grupo dos marcados</label>
-                            <select id="lojas-grupo-lote" class="h-8 border border-gray-300 rounded text-xs px-2 w-40"></select>
-                        </div>
-                        <div>
-                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tipo</label>
-                            <select id="lojas-tipo-lote" class="h-8 border border-gray-300 rounded text-xs px-2 w-40"></select>
-                        </div>
-                        <button id="btn-lojas-aplicar-grupo" class="h-8 px-3 bg-white border border-gray-300 rounded text-xs font-bold hover:bg-gray-100">Aplicar</button>
-                    </div>
-                </div>
-                <div class="flex items-center justify-between">
-                    <p id="lojas-resumo-marcados" class="text-xs font-bold text-gray-700"></p>
-                    <div class="flex gap-3">
-                        <button id="btn-cancelar-lojas" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm">Fechar</button>
-                        <button id="btn-conferir-lojas" class="px-4 py-2 text-sm font-bold text-white bg-amber-600 rounded-md hover:bg-amber-700 shadow-sm flex items-center gap-2">
-                            <i data-feather="check-square" class="w-4 h-4"></i> Conferir marcados
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Modal: Gerenciar Contas e Centros de Custo -->
     <div id="modal-gerenciar" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
         <div class="bg-white rounded-xl shadow-xl w-full max-w-6xl overflow-hidden transform scale-95 transition-transform duration-200 max-h-[90vh] flex flex-col">
@@ -583,7 +520,7 @@
     </div>
 
     <script src="assets/global.js?v=20261104"></script>
-    <script src="tesouraria.js?v=20261106"></script>
-    <script src="fechamento.js?v=20261106"></script>
+    <script src="tesouraria.js?v=20261107"></script>
+    <script src="fechamento.js?v=20261107"></script>
 </body>
 </html>
