@@ -1132,11 +1132,97 @@ async function idContaGeral() {
     return rows.length ? rows[0].id : null;
 }
 
-// POST /api/tesouraria/fechamento/puxar-pagamentos { data_movimento }
+// --- PAGAMENTO LANÇADO À MÃO QUE DEPOIS VEM DO ERP ---
+
+// Palavras que não ajudam a reconhecer o fornecedor.
+const PALAVRAS_GENERICAS = new Set(['LTDA', 'EIRELI', 'COMERCIO', 'COMERCIAL', 'MATERIAIS', 'MATERIAL', 'CONSTRUCAO', 'DISTRIBUIDORA',
+    'SERVICOS', 'INDUSTRIA', 'BRASIL', 'PAGAMENTO', 'BOLETO', 'PARCELA', 'NOTA', 'FISCAL', 'COMPRA']);
+
+function palavrasDoNome(texto) {
+    return new Set(normalizarChaveErp(texto).split(/[^A-Z0-9]+/).filter(p => p.length >= 3 && !PALAVRAS_GENERICAS.has(p) && !/^\d+$/.test(p)));
+}
+
+// Títulos do ERP ainda fora da tesouraria x saídas lançadas à mão no mesmo dia com o mesmo valor.
+// Cada lançamento manual entra em um par só; nome parecido vem primeiro (sugestão de unificar).
+async function candidatosUnificacao(data, titulos) {
+    const [manuais] = await gerencialPool.query(
+        `SELECT m.id, m.valor, m.valor_juros, m.descricao, m.favorecido, m.grupo_despesa, m.tipo_despesa, m.id_centro_custo,
+                m.id_veiculo, m.litros, m.odometro, v.placa AS veiculo_placa
+         FROM tesouraria_movimentos m
+         LEFT JOIN veiculos v ON v.id = m.id_veiculo
+         WHERE m.data_movimento = ? AND m.tipo = 'saida' AND m.origem = 'manual' AND m.status = 'ativo'
+           AND m.id_movimento_estornado IS NULL AND m.natureza = 'normal'`,
+        [data]
+    );
+    if (!manuais.length || !titulos.length) return [];
+
+    const pares = [];
+    for (const t of titulos) {
+        const valor = Number(t.ap_valorb);
+        const nomeTitulo = palavrasDoNome(t.ap_nomefo);
+        for (const m of manuais) {
+            if (Math.abs(Number(m.valor) - valor) >= 0.01) continue;
+            const nomeManual = palavrasDoNome(`${m.favorecido || ''} ${m.descricao || ''}`);
+            const parecido = [...nomeTitulo].some(p => nomeManual.has(p));
+            pares.push({ t, m, parecido });
+        }
+    }
+    pares.sort((a, b) => Number(b.parecido) - Number(a.parecido));
+    const usadosTitulo = new Set();
+    const usadosManual = new Set();
+    return pares.filter(p => {
+        if (usadosTitulo.has(p.t.ap_regist) || usadosManual.has(p.m.id)) return false;
+        usadosTitulo.add(p.t.ap_regist);
+        usadosManual.add(p.m.id);
+        return true;
+    });
+}
+
+async function titulosErpForaDaTesouraria(data) {
+    const [titulos] = await seiPool.query(
+        `SELECT ${CAMPOS_TITULO} FROM apagar WHERE ${FILTROS_TITULOS.baixados} ORDER BY ap_nomefo, ap_regist`,
+        [data]
+    );
+    if (!titulos.length) return [];
+    const [importados] = await gerencialPool.query(
+        `SELECT origem_ref FROM tesouraria_movimentos WHERE origem = 'erp_apagar' AND status = 'ativo' AND origem_ref IN (?)`,
+        [titulos.map(t => String(t.ap_regist))]
+    );
+    const jaImportados = new Set(importados.map(m => m.origem_ref));
+    return titulos.filter(t => !jaImportados.has(String(t.ap_regist)));
+}
+
+// GET /api/tesouraria/fechamento/duplicidades?data=YYYY-MM-DD
+// Antes de puxar os pagos do ERP: quais deles parecem já ter sido lançados à mão no dia.
+router.get('/fechamento/duplicidades', authenticateToken, checkPerm('tesouraria_view'), async (req, res) => {
+    const { data } = req.query;
+    if (!data) return res.status(400).json({ error: 'Informe a data.' });
+    try {
+        const pares = await candidatosUnificacao(data, await titulosErpForaDaTesouraria(data));
+        res.json(pares.map(({ t, m, parecido }) => ({
+            ap_regist: String(t.ap_regist),
+            titulo: { fornecedor: String(t.ap_nomefo || '').trim(), descricao: descricaoTitulo(t), valor: Number(t.ap_valorb), juros: Number(t.ap_jurosm || 0) },
+            manual: {
+                id: m.id, descricao: m.descricao, favorecido: m.favorecido, valor: Number(m.valor),
+                grupo_despesa: m.grupo_despesa, tipo_despesa: m.tipo_despesa, veiculo_placa: m.veiculo_placa
+            },
+            nome_parecido: parecido
+        })));
+    } catch (error) {
+        console.error('Erro ao procurar pagamentos repetidos:', error);
+        res.status(500).json({ error: 'Erro ao comparar com os lançamentos manuais.' });
+    }
+});
+
+// POST /api/tesouraria/fechamento/puxar-pagamentos { data_movimento, unificar?: [{ ap_regist, id_manual }] }
 // Traz de uma vez tudo que o ERP baixou no dia e ainda não está na tesouraria: conta geral,
 // centro pela indicação de pagamento, juros do ERP e a classificação já aprendida do fornecedor.
+// Unificar: o título do ERP entra no lugar do lançamento manual (que é estornado), herdando dele
+// a classificação, o veículo e o centro de custo quando o ERP não traz.
 router.post('/fechamento/puxar-pagamentos', authenticateToken, checkPerm('tesouraria_oper'), async (req, res) => {
     const { data_movimento } = req.body;
+    const unificarPorTitulo = new Map((Array.isArray(req.body.unificar) ? req.body.unificar : [])
+        .filter(u => u && u.ap_regist && u.id_manual).map(u => [String(u.ap_regist), Number(u.id_manual)]));
     const { userId, nome: nomeUsuario } = req.user;
     if (!data_movimento) return res.status(400).json({ error: 'Informe a data.' });
 
@@ -1172,19 +1258,41 @@ router.post('/fechamento/puxar-pagamentos', authenticateToken, checkPerm('tesour
         let total = 0;
         let semClassificacao = 0;
         let quantidade = 0;
+        let unificados = 0;
         for (const t of novos) {
-            const cls = classificacaoPorFornecedor.get(normalizarChaveErp(t.ap_nomefo));
+            // Lançamento manual do mesmo pagamento, se a operadora mandou unificar (precisa continuar
+            // ativo, manual, saída do mesmo dia com o mesmo valor).
+            let manual = null;
+            const idManual = unificarPorTitulo.get(String(t.ap_regist));
+            if (idManual) {
+                const [rows] = await connection.execute(
+                    `SELECT * FROM tesouraria_movimentos
+                     WHERE id = ? AND origem = 'manual' AND tipo = 'saida' AND status = 'ativo' AND id_movimento_estornado IS NULL
+                       AND data_movimento = ? AND ABS(valor - ?) < 0.01
+                     FOR UPDATE`,
+                    [idManual, data_movimento, Number(t.ap_valorb)]
+                );
+                manual = rows[0] || null;
+            }
+            const aprendida = classificacaoPorFornecedor.get(normalizarChaveErp(t.ap_nomefo));
+            const cls = manual && manual.grupo_despesa
+                ? { grupo_despesa: manual.grupo_despesa, tipo_despesa: manual.tipo_despesa }
+                : aprendida;
             if (!cls) semClassificacao++;
             try {
                 await connection.execute(
                     `INSERT INTO tesouraria_movimentos
-                        (id_conta, id_centro_custo, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa,
+                        (id_conta, id_centro_custo, id_veiculo, litros, odometro, data_movimento, data_despesa, numero_nf, grupo_despesa, tipo_despesa,
                          tipo, valor, valor_juros, descricao, favorecido, origem, origem_ref, id_usuario_lancamento, nome_usuario_lancamento)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, 'saida', ?, ?, ?, ?, 'erp_apagar', ?, ?, ?)`,
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'saida', ?, ?, ?, ?, 'erp_apagar', ?, ?, ?)`,
                     [
-                        idConta, centroPorIndicacao.get(String(t.ap_pagame || '').trim()) || null, data_movimento, dataISO(t.ap_dtvenc),
+                        idConta,
+                        centroPorIndicacao.get(String(t.ap_pagame || '').trim()) || (manual ? manual.id_centro_custo : null),
+                        manual ? manual.id_veiculo : null, manual ? manual.litros : null, manual ? manual.odometro : null,
+                        data_movimento, dataISO(t.ap_dtvenc),
                         t.ap_numenf || null, cls ? cls.grupo_despesa : null, cls ? cls.tipo_despesa : null,
-                        Number(t.ap_valorb), valorJuros(t.ap_jurosm), descricaoTitulo(t), String(t.ap_nomefo || '').trim() || null,
+                        Number(t.ap_valorb), valorJuros(t.ap_jurosm) ?? (manual ? manual.valor_juros : null), descricaoTitulo(t),
+                        String(t.ap_nomefo || '').trim() || null,
                         String(t.ap_regist), userId, nomeUsuario
                     ]
                 );
@@ -1192,12 +1300,17 @@ router.post('/fechamento/puxar-pagamentos', authenticateToken, checkPerm('tesour
                 quantidade++;
             } catch (err) {
                 if (err.code !== 'ER_DUP_ENTRY') throw err;
+                continue;
+            }
+            if (manual) {
+                await registrarEstorno(connection, manual, userId, nomeUsuario);
+                unificados++;
             }
         }
         await connection.commit();
         res.status(201).json({
-            message: `${quantidade} pagamento(s) trazido(s) do ERP.`,
-            importados: quantidade, total: Math.round(total * 100) / 100, sem_classificacao: semClassificacao
+            message: `${quantidade} pagamento(s) trazido(s) do ERP${unificados ? `, ${unificados} unificado(s) com o lançamento manual` : ''}.`,
+            importados: quantidade, unificados, total: Math.round(total * 100) / 100, sem_classificacao: semClassificacao
         });
     } catch (error) {
         if (connection) await connection.rollback();

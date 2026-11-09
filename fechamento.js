@@ -240,13 +240,24 @@ async function puxarPagamentosErp() {
         return dialogoAviso('Não há pagamentos do ERP neste dia fora do fechamento.', 'aviso', 'Nada para puxar');
     }
     const total = pagamentosPendentesErp.reduce((acc, t) => acc + Number(t.valor || 0), 0);
-    const ok = await dialogoConfirmar(
-        `${pagamentosPendentesErp.length} pagamento(s) baixado(s) no ERP em ${formatarDataBR(dataRef)}, total ${formatarMoeda(total)}, entram no fechamento.`,
-        { titulo: 'Puxar pagos do ERP?', textoOk: 'Puxar' }
-    );
-    if (!ok) return;
+    const resumo = `${pagamentosPendentesErp.length} pagamento(s) baixado(s) no ERP em ${formatarDataBR(dataRef)}, total ${formatarMoeda(total)}, entram no fechamento.`;
+
+    // Pagamento já lançado à mão no dia com o mesmo valor: pergunta se é o mesmo, para não contar duas vezes.
+    let pares = [];
     try {
-        const r = await apiFetch('/fechamento/puxar-pagamentos', { method: 'POST', body: JSON.stringify({ data_movimento: dataRef }) });
+        pares = await apiFetch(`/fechamento/duplicidades?data=${dataRef}`);
+    } catch (err) {
+        return dialogoAviso('Erro ao comparar com os lançamentos manuais: ' + err.message, 'erro');
+    }
+    if (pares.length) return abrirUnificacao(dataRef, resumo, pares);
+
+    const ok = await dialogoConfirmar(resumo, { titulo: 'Puxar pagos do ERP?', textoOk: 'Puxar' });
+    if (ok) await executarPuxarPagamentos(dataRef, []);
+}
+
+async function executarPuxarPagamentos(dataRef, unificar) {
+    try {
+        const r = await apiFetch('/fechamento/puxar-pagamentos', { method: 'POST', body: JSON.stringify({ data_movimento: dataRef, unificar }) });
         let msg = r.message;
         if (r.sem_classificacao) msg += `\n${r.sem_classificacao} ainda sem classificação: use "Classificar" ao lado do fornecedor. Na próxima vez ele já vem classificado.`;
         dialogoAviso(msg, 'sucesso', 'Pagamentos trazidos');
@@ -254,6 +265,40 @@ async function puxarPagamentosErp() {
     } catch (err) {
         dialogoAviso('Erro ao puxar pagamentos: ' + err.message, 'erro');
     }
+}
+
+// Pares "título do ERP x lançamento manual" com o mesmo valor. Marcado = é o mesmo pagamento:
+// fica o do ERP (com a classificação e o veículo do manual) e o manual sai por estorno.
+function abrirUnificacao(dataRef, resumo, pares) {
+    abrirModalFechamento({
+        titulo: 'Pagamentos que parecem já lançados',
+        textoOk: 'Puxar',
+        largura: 'max-w-2xl',
+        recarregar: false,
+        corpo: `
+            <p class="text-gray-600">${escapeHtml(resumo)}</p>
+            <p class="text-gray-700">Estes pagamentos do ERP têm o <b>mesmo valor</b> de um lançamento feito à mão neste dia. Marque os que são <b>o mesmo pagamento</b>: entra o do ERP (com juros e NF) e o manual sai, mantendo a classificação e o veículo que você deu. Desmarcado, ficam os dois.</p>
+            <div class="space-y-2">${pares.map((p, i) => `
+                <label class="flex items-start gap-3 p-3 rounded-lg border ${p.nome_parecido ? 'border-amber-300 bg-amber-50' : 'border-gray-200'} cursor-pointer">
+                    <input type="checkbox" class="fech-unificar mt-1" data-i="${i}" ${p.nome_parecido ? 'checked' : ''}>
+                    <span class="flex-1 grid grid-cols-2 gap-3 text-xs">
+                        <span><span class="block text-[10px] font-bold text-blue-700 uppercase">ERP</span>
+                            <b class="text-gray-800">${escapeHtml(p.titulo.fornecedor)}</b><br>${escapeHtml(p.titulo.descricao)}<br><b>${formatarMoeda(p.titulo.valor)}</b></span>
+                        <span><span class="block text-[10px] font-bold text-gray-500 uppercase">Lançado à mão</span>
+                            <b class="text-gray-800">${escapeHtml(p.manual.favorecido || p.manual.descricao)}</b><br>
+                            ${escapeHtml([p.manual.grupo_despesa, p.manual.tipo_despesa].filter(Boolean).join(' / ') || 'sem classificação')}${p.manual.veiculo_placa ? ` · ${escapeHtml(p.manual.veiculo_placa)}` : ''}<br><b>${formatarMoeda(p.manual.valor)}</b></span>
+                    </span>
+                    ${p.nome_parecido ? '<span class="text-[10px] font-bold text-amber-800 whitespace-nowrap">nome parecido</span>' : '<span class="text-[10px] text-gray-400 whitespace-nowrap">só o valor igual</span>'}
+                </label>`).join('')}
+            </div>`,
+        aoConfirmar: async () => {
+            const unificar = [...document.querySelectorAll('.fech-unificar')].filter(c => c.checked)
+                .map(c => pares[Number(c.dataset.i)]).map(p => ({ ap_regist: p.ap_regist, id_manual: p.manual.id }));
+            fecharModalFechamento();
+            await executarPuxarPagamentos(dataRef, unificar);
+            return false;
+        }
+    });
 }
 
 function abrirClassificarFornecedor(grupo) {
