@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-fech-novo-pagamento').addEventListener('click', abrirNovoPagamento);
     document.getElementById('btn-fech-puxar-apurado').addEventListener('click', abrirPuxarApurado);
     document.getElementById('btn-fech-novo-recurso').addEventListener('click', abrirNovoRecurso);
+    document.getElementById('btn-fech-retiradas').addEventListener('click', abrirRetiradas);
     document.getElementById('btn-fech-modal-fechar').addEventListener('click', fecharModalFechamento);
     document.getElementById('btn-fech-modal-cancelar').addEventListener('click', fecharModalFechamento);
     document.getElementById('btn-fech-modal-ok').addEventListener('click', confirmarModalFechamento);
@@ -558,14 +559,13 @@ async function desfazerModalidade(modalidade, refazer = false) {
     }
 }
 
-// Puxar do ERP: no dinheiro, a tabela do caixa de cada loja (vendido, consumido, a retirar,
-// já retirado, sobra); nas outras modalidades, o que ainda não entrou, com a taxa em R$ dividida
-// entre as lojas na proporção do valor de cada uma. O dinheiro entra no fechamento já sem as
-// despesas que as lojas lançaram (o servidor lê o valor da despesa_caixa).
+// Puxar do ERP: só lança. Cada modalidade com o que ainda não entrou; a taxa é digitada em R$ e
+// dividida entre as lojas na proporção do valor de cada uma. O dinheiro entra já sem as despesas
+// que as lojas lançaram (o servidor lê o valor da despesa_caixa). Retiradas ficam em abrirRetiradas().
 function abrirPuxarApurado() {
     if (!exigirContaGeral()) return;
     const pendentes = apuradoFechamento.filter(l => !l.id_movimento && l.valor_erp > 0);
-    if (!pendentes.length && !Array.isArray(caixaLojasFechamento)) {
+    if (!pendentes.length) {
         return dialogoAviso('Todo o apurado do ERP deste dia já está no fechamento.', 'aviso', 'Nada para puxar');
     }
     const modalidades = ORDEM_MODALIDADES.map(chave => {
@@ -576,46 +576,31 @@ function abrirPuxarApurado() {
         const pct = sugerida ? Number(sugerida.taxa_pct_sugerida) : null;
         return { chave, linhas, bruto, consumo, aceitaTaxa: linhas.some(l => l.aceita_taxa), pct };
     }).filter(m => m.linhas.length);
-    const dinheiro = modalidades.find(m => m.chave === 'dinheiro');
-    const outras = modalidades.filter(m => m.chave !== 'dinheiro');
 
     const dica = m => m.pct ? `~${formatarMoeda(m.bruto * m.pct / 100).replace('R$', '').trim()} (${String(m.pct).replace('.', ',')}% da última vez)` : '0,00';
-    const textoDinheiro = dinheiro
-        ? `<p class="text-xs text-gray-700">Entra no fechamento (${dinheiro.linhas.length} loja(s) ainda não lançada(s)): vendido ${formatarMoeda(dinheiro.bruto)}${dinheiro.consumo ? ` − consumido pelas lojas ${formatarMoeda(dinheiro.consumo)}` : ''} = <b>${formatarMoeda(dinheiro.bruto - dinheiro.consumo)}</b></p>`
-        : '<p class="text-xs text-gray-500">O dinheiro das lojas deste dia já está no fechamento.</p>';
 
     abrirModalFechamento({
         titulo: `Puxar apurado do ERP · ${formatarDataBR(document.getElementById('filtro-data').value)}`,
-        textoOk: pendentes.length ? 'Lançar apurado' : 'Fechar',
-        largura: 'max-w-5xl',
-        recarregar: pendentes.length > 0,
+        textoOk: 'Lançar apurado',
+        largura: 'max-w-2xl',
         corpo: `
-            <section class="space-y-2">
-                <h4 class="text-xs font-bold text-gray-700 uppercase tracking-wide">Dinheiro das lojas</h4>
-                <div id="fech-modal-caixa" class="text-xs overflow-x-auto border border-gray-200 rounded-lg"></div>
-                ${textoDinheiro}
-            </section>
-            ${outras.length ? `
-            <section class="space-y-2">
-                <h4 class="text-xs font-bold text-gray-700 uppercase tracking-wide">Outras modalidades</h4>
-                <p class="text-xs text-gray-500">Digite o <b>valor da taxa (R$)</b> de cada modalidade; o sistema divide entre as lojas.</p>
-                <table class="w-full text-sm">
-                    <thead><tr class="text-[10px] uppercase text-gray-500 border-b"><th class="text-left py-1">Modalidade</th><th class="text-right py-1">Valor</th><th class="text-right py-1 w-40">Taxa (R$)</th></tr></thead>
-                    <tbody>${outras.map(m => `
-                        <tr class="border-b border-gray-100 align-top">
-                            <td class="py-1.5">${escapeHtml(MODALIDADES_APURADO_LABEL[m.chave])} <span class="text-[10px] text-gray-400">${m.linhas.length} loja(s)</span></td>
-                            <td class="py-1.5 text-right font-bold whitespace-nowrap">${formatarMoeda(m.bruto)}</td>
-                            <td class="py-1.5 text-right">${m.aceitaTaxa
-                                ? `<input type="number" step="0.01" min="0" class="fech-taxa w-36 border border-gray-300 rounded p-1 text-right text-sm" data-modalidade="${m.chave}" placeholder="${escapeHtml(dica(m))}">
-                                   <span class="block text-[10px] text-gray-400 fech-taxa-pct" data-modalidade="${m.chave}"></span>`
-                                : '<span class="text-gray-300">-</span>'}</td>
-                        </tr>`).join('')}
-                    </tbody>
-                </table>
-            </section>` : ''}
-            ${pendentes.length ? '<p id="fech-apurado-resumo" class="text-xs font-bold text-gray-700 border-t border-gray-200 pt-3"></p>' : ''}`,
+            <p class="text-gray-600">Valores recebidos no ERP, somando as lojas. Digite o <b>valor da taxa (R$)</b> de cada modalidade; o sistema divide entre as lojas. No dinheiro, as despesas que as lojas lançaram no dia já saem descontadas.</p>
+            <table class="w-full text-sm">
+                <thead><tr class="text-[10px] uppercase text-gray-500 border-b"><th class="text-left py-1">Modalidade</th><th class="text-right py-1">Valor</th><th class="text-right py-1 w-40">Taxa (R$)</th></tr></thead>
+                <tbody>${modalidades.map(m => `
+                    <tr class="border-b border-gray-100 align-top">
+                        <td class="py-1.5">${escapeHtml(MODALIDADES_APURADO_LABEL[m.chave])} <span class="text-[10px] text-gray-400">${m.linhas.length} loja(s)</span>
+                            ${m.consumo ? `<span class="block text-[10px] text-gray-500">vendido ${formatarMoeda(m.bruto)} − despesas das lojas ${formatarMoeda(m.consumo)}</span>` : ''}</td>
+                        <td class="py-1.5 text-right font-bold whitespace-nowrap">${formatarMoeda(m.bruto - m.consumo)}</td>
+                        <td class="py-1.5 text-right">${m.aceitaTaxa
+                            ? `<input type="number" step="0.01" min="0" class="fech-taxa w-36 border border-gray-300 rounded p-1 text-right text-sm" data-modalidade="${m.chave}" placeholder="${escapeHtml(dica(m))}">
+                               <span class="block text-[10px] text-gray-400 fech-taxa-pct" data-modalidade="${m.chave}"></span>`
+                            : '<span class="text-gray-300">-</span>'}</td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+            <p id="fech-apurado-resumo" class="text-xs font-bold text-gray-700"></p>`,
         aoAbrir: () => {
-            renderTabelaCaixaModal();
             const atualizar = () => {
                 let bruto = 0;
                 let consumo = 0;
@@ -628,15 +613,15 @@ function abrirPuxarApurado() {
                     const info = document.querySelector(`.fech-taxa-pct[data-modalidade="${m.chave}"]`);
                     if (info) info.textContent = taxa && m.bruto ? `${(taxa / m.bruto * 100).toFixed(2).replace('.', ',')}% do valor` : '';
                 });
-                const resumo = document.getElementById('fech-apurado-resumo');
-                if (resumo) resumo.textContent =
-                    `Entradas ${formatarMoeda(bruto)}${consumo ? ` − consumido pelas lojas ${formatarMoeda(consumo)}` : ''} − taxas ${formatarMoeda(taxas)} = líquido ${formatarMoeda(bruto - consumo - taxas)}`;
+                document.getElementById('fech-apurado-resumo').textContent =
+                    `Entradas ${formatarMoeda(bruto)}${consumo ? ` − despesas das lojas ${formatarMoeda(consumo)}` : ''} − taxas ${formatarMoeda(taxas)} = líquido ${formatarMoeda(bruto - consumo - taxas)}`;
             };
             document.querySelectorAll('.fech-taxa').forEach(inp => inp.addEventListener('input', atualizar));
             atualizar();
+            const primeiro = document.querySelector('.fech-taxa');
+            if (primeiro) primeiro.focus();
         },
         aoConfirmar: async () => {
-            if (!pendentes.length) return;
             const itens = [];
             for (const m of modalidades) {
                 const taxa = taxaDaModalidade(m.chave);
@@ -656,6 +641,23 @@ function abrirPuxarApurado() {
             });
             if (r.ja_lancados && r.ja_lancados.length) dialogoAviso(`Já estavam lançadas e foram ignoradas: ${r.ja_lancados.join(', ')}.`);
         }
+    });
+}
+
+// Janela própria das retiradas: por loja, saldo anterior, vendido, consumido, disponível,
+// o que se quer retirar, o já retirado e a sobra no caixa.
+function abrirRetiradas() {
+    abrirModalFechamento({
+        titulo: `Retiradas do caixa das lojas · ${formatarDataBR(document.getElementById('filtro-data').value)}`,
+        textoOk: 'Fechar',
+        largura: 'max-w-5xl',
+        recarregar: false,
+        semCancelar: true,
+        corpo: `
+            <p class="text-gray-600">Quanto há em dinheiro em cada loja, quanto você quer retirar e o que já foi retirado. A retirada fica registrada também no módulo de despesas da loja.</p>
+            <div id="fech-modal-caixa" class="text-xs overflow-x-auto border border-gray-200 rounded-lg"></div>`,
+        aoAbrir: () => renderTabelaCaixaModal(),
+        aoConfirmar: async () => {}
     });
 }
 
@@ -717,7 +719,7 @@ function abrirNovoRecurso() {
 
 // --- 3. CAIXA DAS LOJAS ---
 // Na tela: o dinheiro de cada loja e as despesas que ela lançou. A divisão do que foi retirado,
-// o que se quer retirar e a sobra ficam no "Puxar apurado do ERP" (renderTabelaCaixaModal).
+// o que se quer retirar e a sobra ficam na janela "Retiradas" (abrirRetiradas).
 
 const lojasAbertasQuadro = new Set();
 
@@ -773,7 +775,7 @@ function renderCaixaLojas() {
     }));
 }
 
-// --- Retiradas e sobra do caixa (dentro do "Puxar apurado do ERP") ---
+// --- Retiradas e sobra do caixa (janela "Retiradas") ---
 
 // "1.234,56", "1234.56" ou "R$ 1.234" -> número; vazio -> ''.
 function lerValorDigitado(texto) {
@@ -985,7 +987,8 @@ let acaoModalFechamento = null;
 // recarregar: false quando aoConfirmar já atualiza a parte da tela que mudou.
 let recarregarAoConfirmar = true;
 
-function abrirModalFechamento({ titulo, corpo, textoOk, aoAbrir, aoConfirmar, recarregar = true, largura = 'max-w-lg' }) {
+function abrirModalFechamento({ titulo, corpo, textoOk, aoAbrir, aoConfirmar, recarregar = true, largura = 'max-w-lg', semCancelar = false }) {
+    document.getElementById('btn-fech-modal-cancelar').classList.toggle('hidden', semCancelar);
     const caixa = document.querySelector('#modal-fech > div');
     caixa.classList.remove('max-w-lg', 'max-w-2xl', 'max-w-5xl');
     caixa.classList.add(largura);
