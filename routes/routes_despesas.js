@@ -151,7 +151,7 @@ router.get('/veiculos', authenticateToken, async (req, res) => {
 
 // POST /api/despesas
 // Despesa: { dsp_natureza: 'despesa', dsp_datadesp, dsp_descricao, dsp_valordsp, dsp_tipo, dsp_grupo, dsp_filial,
-//            id_veiculo?, litros?, odometro? }  (veículo obrigatório no grupo Combustível; 0 = sem veículo)
+//            id_veiculo?, litros?, odometro? }  (veículo opcional no Combustível; 0 ou vazio = sem veículo)
 // Retirada: { dsp_natureza: 'retirada', dsp_datadesp, dsp_valordsp, dsp_descricao?, dsp_filial }
 router.post('/', authenticateToken, async (req, res) => {
     const { dsp_datadesp, dsp_tipo, dsp_grupo } = req.body;
@@ -175,16 +175,20 @@ router.post('/', authenticateToken, async (req, res) => {
     let idVeiculo = null;
     let litros = null;
     let odometro = null;
+    let naturezaFinal = natureza;
 
     if (natureza === 'retirada') {
         tipo = grupo = GRUPO_RETIRADA;
         descricao = descricao ? `FINANCEIRO - ${descricao}` : 'FINANCEIRO';
     } else {
         if (!descricao || !tipo || !grupo) return res.status(400).json({ error: 'Preencha tipo, grupo e descrição.' });
+        // Tela clássica: a loja lança a retirada do financeiro como "Pag. Boletos" com descrição
+        // começando por FINANCEIRO. É retirada (mesma regra da migração 2026-11-07), não consumo da loja.
+        if (['PAG. BOLETOS', 'PAG. BOLETO'].includes(semAcento(grupo)) && semAcento(descricao).startsWith('FINANCEIRO')) {
+            naturezaFinal = 'retirada';
+        }
         if (semAcento(grupo) === 'COMBUSTIVEL') {
-            if (req.body.id_veiculo === undefined || req.body.id_veiculo === null || req.body.id_veiculo === '') {
-                return res.status(400).json({ error: 'Combustível: selecione o veículo abastecido (ou "sem veículo").' });
-            }
+            // Veículo opcional: a tela clássica não pergunta; quando vier, vai para o relatório de abastecimento.
             if (Number(req.body.id_veiculo) > 0) idVeiculo = Number(req.body.id_veiculo);
             if (req.body.litros !== undefined && req.body.litros !== null && req.body.litros !== '') {
                 litros = Math.round(Number(req.body.litros) * 100) / 100;
@@ -207,10 +211,10 @@ router.post('/', authenticateToken, async (req, res) => {
                 (dsp_datadesp, dsp_descricao, dsp_valordsp, dsp_tipo, dsp_grupo, dsp_filial, dsp_userlanc,
                  dsp_status, dsp_natureza, dsp_datalanc, id_usuario_lancamento, id_veiculo, litros, odometro)
              VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, NOW(), ?, ?, ?, ?)`,
-            [dsp_datadesp, descricao.slice(0, 255), valor, tipo, grupo, filial, nomeUsuario, natureza, userId, idVeiculo, litros, odometro]
+            [dsp_datadesp, descricao.slice(0, 255), valor, tipo, grupo, filial, nomeUsuario, naturezaFinal, userId, idVeiculo, litros, odometro]
         );
         res.status(201).json({
-            message: natureza === 'retirada' ? 'Retirada registrada!' : 'Despesa lançada!',
+            message: naturezaFinal === 'retirada' ? 'Retirada registrada!' : 'Despesa lançada!',
             id: result.insertId
         });
     } catch (error) {
