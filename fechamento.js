@@ -67,6 +67,7 @@ function exigirContaGeral() {
 
 function renderFechamento() {
     if (vistaAtual !== 'fechamento') return;
+    caixaLojasFechamento = null; // o do dia anterior não vale para o dia na tela
     renderBlocosFechamento();
     carregarDadosErpFechamento();
 }
@@ -468,19 +469,17 @@ function renderRecursosFechamento(c) {
         const taxas = c.taxas.filter(m => m.forma_pagamento === chave);
         const linhasErp = apuradoFechamento.filter(l => l.modalidade === chave);
         const lancadas = linhasErp.filter(l => l.id_movimento);
-        // Dinheiro entra líquido: o que as lojas gastaram do caixa no dia já sai descontado.
-        const consumo = chave === 'dinheiro' ? somar(c.gastosLojas) : 0;
+        // Dinheiro entra cheio; as despesas das lojas aparecem separadas, no resultado do dia.
         const bruto = somar(entradas);
         return {
             chave,
             nome: MODALIDADES_APURADO_LABEL[chave],
             entradas,
             bruto,
-            consumo,
-            valor: bruto - consumo,
+            valor: bruto,
             taxa: somar(taxas),
             lojas: new Set(entradas.map(m => m.id_centro_custo)).size,
-            pendente: linhasErp.filter(l => !l.id_movimento).reduce((acc, l) => acc + l.valor_erp - (l.consumido || 0), 0),
+            pendente: linhasErp.filter(l => !l.id_movimento).reduce((acc, l) => acc + l.valor_erp, 0),
             // O ERP (e as lojas) continuam lançando durante o dia: avisa se o lançado ficou diferente.
             mudouNoErp: lancadas.some(l => Math.abs(l.valor_erp - Number(l.valor_lancado || 0)) >= 0.01
                 || Math.abs((l.consumido || 0) - Number(l.consumo_lancado || 0)) >= 0.01)
@@ -501,7 +500,6 @@ function renderRecursosFechamento(c) {
     modalidades.forEach(m => {
         const pct = m.valor ? (m.taxa / m.valor * 100).toFixed(2).replace('.', ',') : '';
         let aviso = '';
-        if (m.consumo) aviso += `<span class="block text-[10px] text-gray-500">vendido ${formatarMoeda(m.bruto)} − despesas das lojas ${formatarMoeda(m.consumo)}</span>`;
         if (m.pendente !== 0) aviso += `<span class="block text-[10px] text-amber-700">ERP: ${formatarMoeda(m.pendente)} a puxar</span>`;
         if (m.mudouNoErp) aviso += `<span class="block text-[10px] text-amber-700">valor mudou no ERP ou nas despesas das lojas · <button class="fech-refazer underline font-bold" data-modalidade="${m.chave}">refazer</button></span>`;
         html += `<tr class="border-b border-gray-50">
@@ -524,7 +522,7 @@ function renderRecursosFechamento(c) {
     html += `</tbody><tfoot><tr class="font-bold bg-gray-50 border-t border-gray-200">
         <td class="px-4 py-2">Total</td>
         <td class="px-2 py-2 text-right text-red-700">${formatarMoeda(somar(c.taxas))}</td>
-        <td class="px-4 py-2 text-right">${formatarMoeda(somar(c.recursos) - somar(c.gastosLojas))}</td>
+        <td class="px-4 py-2 text-right">${formatarMoeda(somar(c.recursos))}</td>
     </tr></tfoot></table>`;
     el.innerHTML = html;
 
@@ -580,12 +578,11 @@ function abrirPuxarApurado() {
 
     const modalidades = ORDEM_MODALIDADES.map(chave => {
         const linhas = pendentes.filter(l => l.modalidade === chave);
-        const consumo = linhas.reduce((acc, l) => acc + (l.consumido || 0), 0);
         const titulos = linhas.flatMap(l => titulosDaLinha(l).map(t => ({ ...t, loja: l.loja })));
         const vendasDoDia = linhas.reduce((acc, l) => acc + totalComTitulos(l), 0) - titulos.reduce((acc, t) => acc + t.valor, 0);
         const sugerida = linhas.find(l => l.taxa_pct_sugerida != null);
         const pct = sugerida ? Number(sugerida.taxa_pct_sugerida) : null;
-        return { chave, linhas, consumo, titulos, vendasDoDia, aceitaTaxa: linhas.some(l => l.aceita_taxa), pct };
+        return { chave, linhas, titulos, vendasDoDia, aceitaTaxa: linhas.some(l => l.aceita_taxa), pct };
     }).filter(m => m.linhas.length);
     const brutoDa = m => m.linhas.reduce((acc, l) => acc + valorLinha(l), 0);
 
@@ -597,13 +594,12 @@ function abrirPuxarApurado() {
         textoOk: 'Lançar apurado',
         largura: 'max-w-2xl',
         corpo: `
-            <p class="text-gray-600">Valores recebidos no ERP, somando as lojas. Digite o <b>valor da taxa (R$)</b> de cada modalidade; o sistema divide entre as lojas. No dinheiro, as despesas que as lojas lançaram no dia já saem descontadas.</p>
+            <p class="text-gray-600">Valores recebidos no ERP, somando as lojas. Digite o <b>valor da taxa (R$)</b> de cada modalidade; o sistema divide entre as lojas. O dinheiro entra cheio; as despesas das lojas aparecem separadas, nos gastos do dia.</p>
             <table class="w-full text-sm">
                 <thead><tr class="text-[10px] uppercase text-gray-500 border-b"><th class="text-left py-1">Modalidade</th><th class="text-right py-1">Valor</th><th class="text-right py-1 w-40">Taxa (R$)</th></tr></thead>
                 <tbody>${modalidades.map(m => `
                     <tr class="border-b border-gray-100 align-top">
                         <td class="py-1.5">${escapeHtml(MODALIDADES_APURADO_LABEL[m.chave])} <span class="text-[10px] text-gray-400">${m.linhas.length} loja(s)</span>
-                            ${m.consumo ? `<span class="block text-[10px] text-gray-500">vendido ${formatarMoeda(brutoDa(m))} − despesas das lojas ${formatarMoeda(m.consumo)}</span>` : ''}
                             ${m.titulos.length ? `
                                 <span class="block text-[10px] text-gray-500">vendas do dia ${formatarMoeda(m.vendasDoDia)}</span>
                                 <div class="mt-1 border border-amber-200 bg-amber-50/60 rounded">
@@ -622,7 +618,7 @@ function abrirPuxarApurado() {
                                             </label>`).join('')}
                                     </div>
                                 </div>` : ''}</td>
-                        <td class="py-1.5 text-right font-bold whitespace-nowrap fech-ap-valor" data-modalidade="${m.chave}">${formatarMoeda(brutoDa(m) - m.consumo)}</td>
+                        <td class="py-1.5 text-right font-bold whitespace-nowrap fech-ap-valor" data-modalidade="${m.chave}">${formatarMoeda(brutoDa(m))}</td>
                         <td class="py-1.5 text-right">${m.aceitaTaxa
                             ? `<input type="number" step="0.01" min="0" class="fech-taxa w-36 border border-gray-300 rounded p-1 text-right text-sm" data-modalidade="${m.chave}" placeholder="${escapeHtml(dica(m))}">
                                <span class="block text-[10px] text-gray-400 fech-taxa-pct" data-modalidade="${m.chave}"></span>`
@@ -634,16 +630,14 @@ function abrirPuxarApurado() {
         aoAbrir: () => {
             const atualizar = () => {
                 let bruto = 0;
-                let consumo = 0;
                 let taxas = 0;
                 modalidades.forEach(m => {
                     const brutoModalidade = brutoDa(m);
                     const taxa = taxaDaModalidade(m.chave);
                     bruto += brutoModalidade;
-                    consumo += m.consumo;
                     taxas += taxa;
                     const celula = document.querySelector(`.fech-ap-valor[data-modalidade="${m.chave}"]`);
-                    if (celula) celula.textContent = formatarMoeda(brutoModalidade - m.consumo);
+                    if (celula) celula.textContent = formatarMoeda(brutoModalidade);
                     const resumoTit = document.querySelector(`.fech-tit-resumo[data-modalidade="${m.chave}"]`);
                     if (resumoTit) {
                         const marcados = m.titulos.filter(tituloMarcado);
@@ -653,7 +647,7 @@ function abrirPuxarApurado() {
                     if (info) info.textContent = taxa && brutoModalidade ? `${(taxa / brutoModalidade * 100).toFixed(2).replace('.', ',')}% do valor` : '';
                 });
                 document.getElementById('fech-apurado-resumo').textContent =
-                    `Entradas ${formatarMoeda(bruto)}${consumo ? ` − despesas das lojas ${formatarMoeda(consumo)}` : ''} − taxas ${formatarMoeda(taxas)} = líquido ${formatarMoeda(bruto - consumo - taxas)}`;
+                    `Entradas ${formatarMoeda(bruto)} − taxas ${formatarMoeda(taxas)} = líquido ${formatarMoeda(bruto - taxas)}`;
             };
             document.querySelectorAll('.fech-taxa').forEach(inp => inp.addEventListener('input', atualizar));
             document.querySelectorAll('.fech-tit').forEach(cb => cb.addEventListener('change', atualizar));
@@ -804,7 +798,8 @@ function renderCaixaLojas() {
                 <span class="text-gray-400 w-3">${despesas.length ? (aberta ? '▾' : '▸') : ''}</span>${escapeHtml(l.loja)}
                 ${despesas.length ? `<span class="text-[10px] text-gray-400 font-normal">(${despesas.length})</span>` : ''}</button></td>
             <td class="${td}">${formatarMoeda(l.vendido)}</td>
-            <td class="${td} ${l.consumido ? 'text-red-700' : 'text-gray-300'}">${l.consumido ? '−' + formatarMoeda(l.consumido) : '-'}</td>
+            <td class="${td} ${l.consumido ? 'text-red-700' : 'text-gray-300'}">${l.consumido ? '−' + formatarMoeda(l.consumido)
+                : (despesas.length ? '-' : '<span class="text-[10px] font-bold text-amber-600" title="A loja não lançou despesas neste dia">⚠ não lançou</span>')}</td>
             <td class="${td} px-4 font-bold">${formatarMoeda(l.vendido - l.consumido)}</td>
         </tr>`;
         if (aberta && despesas.length) {
@@ -1004,21 +999,41 @@ async function cancelarRetirada(id) {
 
 // --- 4. RESULTADO ---
 
+// Despesas das lojas por loja, lidas na hora do módulo de despesas (o que a loja lançou no dia).
+// Sem o quadro do caixa das lojas, usa o que já entrou na tesouraria.
+function despesasDasLojasDoDia(c) {
+    if (Array.isArray(caixaLojasFechamento)) {
+        return caixaLojasFechamento.map(l => ({
+            loja: l.loja,
+            valor: Number(l.consumido) || 0,
+            lancou: l.itens.some(i => i.natureza !== 'retirada')
+        }));
+    }
+    return null;
+}
+
 function renderResultadoFechamento(c) {
-    // Recursos já com o dinheiro líquido (sem o que as lojas gastaram do caixa).
-    const gastos = somar(c.gastosLojas);
-    const recursos = somar(c.recursos) - gastos;
+    // Dinheiro entra cheio nos recursos; as despesas das lojas saem numa linha própria, por loja.
+    const porLoja = despesasDasLojasDoDia(c);
+    const gastos = porLoja ? porLoja.reduce((acc, l) => acc + l.valor, 0) : somar(c.gastosLojas);
+    const recursos = somar(c.recursos);
     const taxas = somar(c.taxas);
     const pagamentos = somar(c.pagamentos);
     const juros = c.pagamentos.reduce((acc, m) => acc + Number(m.valor_juros || 0), 0);
-    const resultado = recursos - taxas - pagamentos;
+    const resultado = recursos - gastos - taxas - pagamentos;
 
     const linha = (rotulo, valor, extra = '', classe = '') => `
         <div class="flex justify-between items-baseline px-4 py-1.5 border-b border-gray-50 ${classe}">
             <span>${rotulo} ${extra}</span><span class="tabular-nums">${valor}</span>
         </div>`;
+    const subLinhasLojas = (porLoja || []).map(l => `
+        <div class="flex justify-between items-baseline pl-8 pr-4 py-0.5 text-[11px] text-gray-500">
+            <span>${escapeHtml(l.loja)}</span>
+            <span class="tabular-nums">${l.lancou ? formatarMoeda(-l.valor) : '<span class="font-bold text-amber-600">⚠ não lançou</span>'}</span>
+        </div>`).join('');
     document.getElementById('fech-resultado').innerHTML =
-        linha('Recursos', formatarMoeda(recursos), gastos ? `<span class="text-gray-400 text-[10px]">dinheiro já sem ${formatarMoeda(gastos)} de despesas das lojas</span>` : '') +
+        linha('Recursos', formatarMoeda(recursos)) +
+        linha('(−) Despesas das lojas', formatarMoeda(-gastos), '', porLoja && porLoja.length ? 'border-b-0' : '') + subLinhasLojas +
         linha('(−) Taxas das maquininhas', formatarMoeda(-taxas)) +
         linha('(−) Pagamentos', formatarMoeda(-pagamentos), juros ? `<span class="text-amber-700 text-[10px]">incl. ${formatarMoeda(juros)} de juros</span>` : '') +
         linha('Resultado do dia', formatarMoeda(resultado), '', `font-bold text-sm bg-gray-50 ${resultado < 0 ? 'text-red-700' : 'text-green-700'}`);
