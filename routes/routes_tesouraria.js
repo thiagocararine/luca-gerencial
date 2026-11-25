@@ -885,6 +885,75 @@ async function caixaLojasPorDia(dataIni, dataFim) {
 
 const centavos = v => Math.round(Number(v || 0) * 100) / 100;
 
+// Baixa de título (receber.rc_origem = 'R'): rc_compro lista os títulos quitados,
+// "doc/parc;DD/MM/AAAA;valor;...|doc/parc;...". Devolve a data mais recente (AAAA-MM-DD) ou null.
+function dataTituloMaisRecente(compro) {
+    let maior = null;
+    for (const parte of String(compro || '').split('|')) {
+        const m = String(parte.split(';')[1] || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (!m) continue;
+        const iso = `${m[3]}-${m[2]}-${m[1]}`;
+        if (!maior || iso > maior) maior = iso;
+    }
+    return maior;
+}
+
+// Baixas de títulos de dias anteriores, fora o dinheiro (que está na gaveta no dia da baixa).
+// O ERP grava a baixa no dia em que foi digitada; um Pix recebido no dia 19 e baixado no 23
+// aparece no 23. A operadora vê cada uma e pode deixar fora a que já contou em outro dia.
+const FORMAS_COM_TITULOS = Object.keys(MODALIDADES_APURADO).filter(f => f !== '01-Dinheiro');
+
+async function titulosAnterioresDoDia(data, cods, regists = null) {
+    const [rows] = await seiPool.query(
+        `SELECT rc_regist, rc_indefi AS cod, rc_formar AS formar, rc_vlbaix AS valor, rc_clnome AS cliente, rc_compro AS compro
+         FROM receber
+         WHERE rc_dtbaix = ? AND rc_origem = 'R' AND rc_status IN ('1', '2') AND rc_indefi IN (?) AND rc_formar IN (?)
+           ${regists ? 'AND rc_regist IN (?)' : ''}`,
+        regists ? [data, cods, FORMAS_COM_TITULOS, regists] : [data, cods, FORMAS_COM_TITULOS]
+    );
+    return rows
+        .map(t => ({
+            rc_regist: Number(t.rc_regist), cod: t.cod, formar: t.formar, valor: centavos(t.valor),
+            cliente: String(t.cliente || '').trim(), data_titulo: dataTituloMaisRecente(t.compro)
+        }))
+        .filter(t => t.data_titulo && t.data_titulo < data);
+}
+
+// Grava (substituindo) os títulos deixados fora de uma linha do apurado, dentro da transação do lançamento.
+async function gravarTitulosFora(connection, data, loja, modalidade, titulos, userId, nomeUsuario) {
+    try {
+        await connection.execute(
+            `DELETE FROM tesouraria_apurado_titulos_fora WHERE data_movimento = ? AND cod_filial = ? AND modalidade = ?`,
+            [data, loja.cod, modalidade.chave]
+        );
+    } catch (err) {
+        // Sem a migração 2026-11-25 não há o que limpar; só é erro se houver título para gravar.
+        if (err.code !== 'ER_NO_SUCH_TABLE' || titulos.length) throw err;
+        return;
+    }
+    for (const t of titulos) {
+        await connection.execute(
+            `INSERT INTO tesouraria_apurado_titulos_fora
+                (data_movimento, rc_regist, cod_filial, modalidade, valor, id_usuario, nome_usuario)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [data, t.rc_regist, loja.cod, modalidade.chave, t.valor, userId, nomeUsuario]
+        );
+    }
+}
+
+// Títulos que a operadora deixou fora do dia. Antes da migração 2026-11-25 a tabela não existe.
+async function titulosForaDoDia(data) {
+    try {
+        const [rows] = await gerencialPool.query(
+            `SELECT rc_regist FROM tesouraria_apurado_titulos_fora WHERE data_movimento = ?`, [data]
+        );
+        return new Set(rows.map(r => Number(r.rc_regist)));
+    } catch (err) {
+        if (err.code === 'ER_NO_SUCH_TABLE') return new Set();
+        throw err;
+    }
+}
+
 function somarDias(dataStr, dias) {
     const d = new Date(`${dataStr}T12:00:00`);
     d.setDate(d.getDate() + dias);
@@ -929,6 +998,16 @@ router.get('/apurado', authenticateToken, checkPerm('tesouraria_view'), async (r
             const l = linha(LOJAS_APURADO.find(x => x.cod === chave.split('|')[1]), MODALIDADES_APURADO['01-Dinheiro']);
             l.valor_erp += b.total;
             l.qtd += b.qtd;
+        }
+        // Baixas de títulos de dias anteriores: listadas uma a uma; as deixadas fora saem do valor.
+        const fora = await titulosForaDoDia(data);
+        for (const t of await titulosAnterioresDoDia(data, LOJAS_APURADO.map(l => l.cod))) {
+            const l = linha(LOJAS_APURADO.find(x => x.cod === t.cod), MODALIDADES_APURADO[t.formar]);
+            const ficouFora = fora.has(t.rc_regist);
+            (l.titulos_anteriores = l.titulos_anteriores || []).push({
+                rc_regist: t.rc_regist, cliente: t.cliente, data_titulo: t.data_titulo, valor: t.valor, fora: ficouFora
+            });
+            if (ficouFora) l.valor_erp -= t.valor;
         }
         // Dinheiro: o que a loja já gastou do caixa no dia sai descontado (vendido − consumido).
         for (const [chave, c] of caixaLojas) {
@@ -1010,6 +1089,7 @@ router.get('/apurado', authenticateToken, checkPerm('tesouraria_view'), async (r
                 ...l,
                 valor_erp: Math.round(l.valor_erp * 100) / 100,
                 consumido: l.consumido || 0,
+                titulos_anteriores: l.titulos_anteriores || [],
                 id_centro_sugerido: centroPorLoja.get(nomeComparavel(l.loja)) || null,
                 id_conta_sugerida: contaPorLinha.get(l.chave) || null,
                 taxa_pct_sugerida: pctPorModalidade.get(l.modalidade) ?? null
@@ -1043,11 +1123,28 @@ router.post('/apurado/lancar', authenticateToken, checkPerm('tesouraria_oper'), 
         const rotulo = `${loja.nome} · ${modalidade.nome}`;
         const valor = Math.round(Number(item.valor) * 100) / 100;
         const taxa = Math.round(Number(item.taxa || 0) * 100) / 100;
+        const titulosFora = Array.isArray(item.titulos_fora) ? item.titulos_fora.map(Number).filter(n => n > 0) : [];
         if (!item.id_conta) return res.status(400).json({ error: `${rotulo}: escolha a conta.` });
-        if (!(valor > 0)) return res.status(400).json({ error: `${rotulo}: valor inválido.` });
-        if (taxa < 0 || taxa >= valor) return res.status(400).json({ error: `${rotulo}: a taxa precisa ser menor que o valor.` });
+        // Valor zero só quando a linha inteira era de títulos que ficaram fora do dia.
+        if (!(valor > 0) && !(valor === 0 && titulosFora.length)) return res.status(400).json({ error: `${rotulo}: valor inválido.` });
+        if (taxa < 0 || (taxa > 0 && taxa >= valor)) return res.status(400).json({ error: `${rotulo}: a taxa precisa ser menor que o valor.` });
         if (taxa > 0 && !modalidade.taxa) return res.status(400).json({ error: `${rotulo}: esta modalidade não tem taxa.` });
-        preparados.push({ item, loja, modalidade, valor, taxa });
+        preparados.push({ item, loja, modalidade, valor, taxa, titulosFora });
+    }
+
+    // Títulos deixados fora: só valem os que são mesmo baixas de dias anteriores desta loja e
+    // modalidade no dia (o valor gravado vem do ERP, não da tela).
+    const todosFora = preparados.flatMap(p => p.titulosFora);
+    const titulosValidos = todosFora.length
+        ? new Map((await titulosAnterioresDoDia(data_movimento, LOJAS_APURADO.map(l => l.cod), todosFora)).map(t => [t.rc_regist, t]))
+        : new Map();
+    for (const p of preparados) {
+        p.foraValidos = p.titulosFora
+            .map(id => titulosValidos.get(id))
+            .filter(t => t && t.cod === p.loja.cod && MODALIDADES_APURADO[t.formar].chave === p.modalidade.chave);
+        if (p.foraValidos.length !== p.titulosFora.length) {
+            return res.status(400).json({ error: `${p.loja.nome} · ${p.modalidade.nome}: título fora do dia inválido. Atualize a tela.` });
+        }
     }
 
     let connection;
@@ -1071,8 +1168,14 @@ router.post('/apurado/lancar', authenticateToken, checkPerm('tesouraria_oper'), 
 
         const lancados = [];
         const jaLancados = [];
-        for (const { item, loja, modalidade, valor, taxa } of preparados) {
+        for (const { item, loja, modalidade, valor, taxa, foraValidos } of preparados) {
             const ref = `${data_movimento}|${loja.cod}|${modalidade.chave}`;
+            if (valor === 0) {
+                // Linha só com títulos de outros dias, todos deixados fora: nada entra, só a marca.
+                await gravarTitulosFora(connection, data_movimento, loja, modalidade, foraValidos, userId, nomeUsuario);
+                lancados.push(`${loja.nome} · ${modalidade.nome} (títulos fora do dia)`);
+                continue;
+            }
             try {
                 await connection.execute(
                     `INSERT INTO tesouraria_movimentos
@@ -1087,6 +1190,7 @@ router.post('/apurado/lancar', authenticateToken, checkPerm('tesouraria_oper'), 
                 jaLancados.push(`${loja.nome} · ${modalidade.nome}`);
                 continue;
             }
+            await gravarTitulosFora(connection, data_movimento, loja, modalidade, foraValidos, userId, nomeUsuario);
             if (taxa > 0) {
                 const { grupo, tipo } = tiposTaxa.get(modalidade.taxa);
                 await connection.execute(

@@ -568,16 +568,29 @@ function abrirPuxarApurado() {
     if (!pendentes.length) {
         return dialogoAviso('Todo o apurado do ERP deste dia já está no fechamento.', 'aviso', 'Nada para puxar');
     }
+    // Baixas de títulos de dias anteriores (Pix/cartão recebido antes e baixado hoje no ERP):
+    // vêm marcadas; desmarcada, a baixa fica fora do valor do dia.
+    const titulosDaLinha = l => (l.titulos_anteriores || []);
+    const totalComTitulos = l => l.valor_erp + titulosDaLinha(l).filter(t => t.fora).reduce((acc, t) => acc + t.valor, 0);
+    const tituloMarcado = t => {
+        const cb = document.querySelector(`.fech-tit[data-regist="${t.rc_regist}"]`);
+        return cb ? cb.checked : !t.fora;
+    };
+    const valorLinha = l => Math.round((totalComTitulos(l) - titulosDaLinha(l).filter(t => !tituloMarcado(t)).reduce((acc, t) => acc + t.valor, 0)) * 100) / 100;
+
     const modalidades = ORDEM_MODALIDADES.map(chave => {
         const linhas = pendentes.filter(l => l.modalidade === chave);
-        const bruto = linhas.reduce((acc, l) => acc + l.valor_erp, 0);
         const consumo = linhas.reduce((acc, l) => acc + (l.consumido || 0), 0);
+        const titulos = linhas.flatMap(l => titulosDaLinha(l).map(t => ({ ...t, loja: l.loja })));
+        const vendasDoDia = linhas.reduce((acc, l) => acc + totalComTitulos(l), 0) - titulos.reduce((acc, t) => acc + t.valor, 0);
         const sugerida = linhas.find(l => l.taxa_pct_sugerida != null);
         const pct = sugerida ? Number(sugerida.taxa_pct_sugerida) : null;
-        return { chave, linhas, bruto, consumo, aceitaTaxa: linhas.some(l => l.aceita_taxa), pct };
+        return { chave, linhas, consumo, titulos, vendasDoDia, aceitaTaxa: linhas.some(l => l.aceita_taxa), pct };
     }).filter(m => m.linhas.length);
+    const brutoDa = m => m.linhas.reduce((acc, l) => acc + valorLinha(l), 0);
 
-    const dica = m => m.pct ? `~${formatarMoeda(m.bruto * m.pct / 100).replace('R$', '').trim()} (${String(m.pct).replace('.', ',')}% da última vez)` : '0,00';
+    const dica = m => m.pct ? `~${formatarMoeda(brutoDa(m) * m.pct / 100).replace('R$', '').trim()} (${String(m.pct).replace('.', ',')}% da última vez)` : '0,00';
+    const dataCurta = iso => iso.split('-').reverse().slice(0, 2).join('/');
 
     abrirModalFechamento({
         titulo: `Puxar apurado do ERP · ${formatarDataBR(document.getElementById('filtro-data').value)}`,
@@ -590,8 +603,17 @@ function abrirPuxarApurado() {
                 <tbody>${modalidades.map(m => `
                     <tr class="border-b border-gray-100 align-top">
                         <td class="py-1.5">${escapeHtml(MODALIDADES_APURADO_LABEL[m.chave])} <span class="text-[10px] text-gray-400">${m.linhas.length} loja(s)</span>
-                            ${m.consumo ? `<span class="block text-[10px] text-gray-500">vendido ${formatarMoeda(m.bruto)} − despesas das lojas ${formatarMoeda(m.consumo)}</span>` : ''}</td>
-                        <td class="py-1.5 text-right font-bold whitespace-nowrap">${formatarMoeda(m.bruto - m.consumo)}</td>
+                            ${m.consumo ? `<span class="block text-[10px] text-gray-500">vendido ${formatarMoeda(brutoDa(m))} − despesas das lojas ${formatarMoeda(m.consumo)}</span>` : ''}
+                            ${m.titulos.length ? `
+                                <span class="block text-[10px] text-gray-500">vendas do dia ${formatarMoeda(m.vendasDoDia)}</span>
+                                <span class="block text-[10px] font-bold text-amber-700 mt-1">Contas a receber de dias anteriores (desmarque o que já contou em outro dia):</span>
+                                ${m.titulos.map(t => `
+                                    <label class="flex items-center gap-1.5 text-[11px] text-gray-700 cursor-pointer">
+                                        <input type="checkbox" class="fech-tit" data-regist="${t.rc_regist}" data-modalidade="${m.chave}" ${t.fora ? '' : 'checked'}>
+                                        <span class="flex-1 min-w-0 break-words">${escapeHtml(t.cliente)} · título de ${dataCurta(t.data_titulo)} · ${escapeHtml(t.loja)}</span>
+                                        <span class="whitespace-nowrap">${formatarMoeda(t.valor)}</span>
+                                    </label>`).join('')}` : ''}</td>
+                        <td class="py-1.5 text-right font-bold whitespace-nowrap fech-ap-valor" data-modalidade="${m.chave}">${formatarMoeda(brutoDa(m) - m.consumo)}</td>
                         <td class="py-1.5 text-right">${m.aceitaTaxa
                             ? `<input type="number" step="0.01" min="0" class="fech-taxa w-36 border border-gray-300 rounded p-1 text-right text-sm" data-modalidade="${m.chave}" placeholder="${escapeHtml(dica(m))}">
                                <span class="block text-[10px] text-gray-400 fech-taxa-pct" data-modalidade="${m.chave}"></span>`
@@ -606,17 +628,21 @@ function abrirPuxarApurado() {
                 let consumo = 0;
                 let taxas = 0;
                 modalidades.forEach(m => {
+                    const brutoModalidade = brutoDa(m);
                     const taxa = taxaDaModalidade(m.chave);
-                    bruto += m.bruto;
+                    bruto += brutoModalidade;
                     consumo += m.consumo;
                     taxas += taxa;
+                    const celula = document.querySelector(`.fech-ap-valor[data-modalidade="${m.chave}"]`);
+                    if (celula) celula.textContent = formatarMoeda(brutoModalidade - m.consumo);
                     const info = document.querySelector(`.fech-taxa-pct[data-modalidade="${m.chave}"]`);
-                    if (info) info.textContent = taxa && m.bruto ? `${(taxa / m.bruto * 100).toFixed(2).replace('.', ',')}% do valor` : '';
+                    if (info) info.textContent = taxa && brutoModalidade ? `${(taxa / brutoModalidade * 100).toFixed(2).replace('.', ',')}% do valor` : '';
                 });
                 document.getElementById('fech-apurado-resumo').textContent =
                     `Entradas ${formatarMoeda(bruto)}${consumo ? ` − despesas das lojas ${formatarMoeda(consumo)}` : ''} − taxas ${formatarMoeda(taxas)} = líquido ${formatarMoeda(bruto - consumo - taxas)}`;
             };
             document.querySelectorAll('.fech-taxa').forEach(inp => inp.addEventListener('input', atualizar));
+            document.querySelectorAll('.fech-tit').forEach(cb => cb.addEventListener('change', atualizar));
             atualizar();
             const primeiro = document.querySelector('.fech-taxa');
             if (primeiro) primeiro.focus();
@@ -625,15 +651,21 @@ function abrirPuxarApurado() {
             const itens = [];
             for (const m of modalidades) {
                 const taxa = taxaDaModalidade(m.chave);
-                if (!Number.isFinite(taxa) || taxa < 0 || (taxa > 0 && taxa >= m.bruto)) {
+                const brutoModalidade = brutoDa(m);
+                if (!Number.isFinite(taxa) || taxa < 0 || (taxa > 0 && taxa >= brutoModalidade)) {
                     dialogoAviso(`${MODALIDADES_APURADO_LABEL[m.chave]}: a taxa precisa ser menor que o valor.`);
                     return false;
                 }
-                const rateio = ratearTaxa(m.linhas, taxa);
-                m.linhas.forEach((l, i) => itens.push({
-                    cod_filial: l.cod_filial, modalidade: l.modalidade, valor: l.valor_erp, taxa: rateio[i],
-                    id_conta: idContaGeral(), id_centro_custo: l.id_centro_sugerido || null
-                }));
+                const linhasValor = m.linhas.map(l => ({ ...l, valor_erp: valorLinha(l) }));
+                const rateio = ratearTaxa(linhasValor, taxa);
+                linhasValor.forEach((l, i) => {
+                    const titulosFora = titulosDaLinha(l).filter(t => !tituloMarcado(t)).map(t => t.rc_regist);
+                    if (!(l.valor_erp > 0) && !titulosFora.length) return;
+                    itens.push({
+                        cod_filial: l.cod_filial, modalidade: l.modalidade, valor: l.valor_erp, taxa: rateio[i],
+                        id_conta: idContaGeral(), id_centro_custo: l.id_centro_sugerido || null, titulos_fora: titulosFora
+                    });
+                });
             }
             const r = await apiFetch('/apurado/lancar', {
                 method: 'POST',
