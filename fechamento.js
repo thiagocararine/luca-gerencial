@@ -606,13 +606,22 @@ function abrirPuxarApurado() {
                             ${m.consumo ? `<span class="block text-[10px] text-gray-500">vendido ${formatarMoeda(brutoDa(m))} − despesas das lojas ${formatarMoeda(m.consumo)}</span>` : ''}
                             ${m.titulos.length ? `
                                 <span class="block text-[10px] text-gray-500">vendas do dia ${formatarMoeda(m.vendasDoDia)}</span>
-                                <span class="block text-[10px] font-bold text-amber-700 mt-1">Contas a receber de dias anteriores (desmarque o que já contou em outro dia):</span>
-                                ${m.titulos.map(t => `
-                                    <label class="flex items-center gap-1.5 text-[11px] text-gray-700 cursor-pointer">
-                                        <input type="checkbox" class="fech-tit" data-regist="${t.rc_regist}" data-modalidade="${m.chave}" ${t.fora ? '' : 'checked'}>
-                                        <span class="flex-1 min-w-0 break-words">${escapeHtml(t.cliente)} · título de ${dataCurta(t.data_titulo)} · ${escapeHtml(t.loja)}</span>
-                                        <span class="whitespace-nowrap">${formatarMoeda(t.valor)}</span>
-                                    </label>`).join('')}` : ''}</td>
+                                <div class="mt-1 border border-amber-200 bg-amber-50/60 rounded">
+                                    <button type="button" class="fech-tit-toggle w-full flex items-center gap-1.5 px-1.5 py-1 text-left text-[10px] font-bold text-amber-800" data-modalidade="${m.chave}" aria-expanded="false">
+                                        <span class="fech-tit-sinal inline-flex items-center justify-center w-4 h-4 shrink-0 rounded border border-amber-400 bg-white text-xs leading-none">+</span>
+                                        <span class="flex-1">Contas a receber de dias anteriores</span>
+                                        <span class="fech-tit-resumo font-normal text-amber-700 whitespace-nowrap" data-modalidade="${m.chave}"></span>
+                                    </button>
+                                    <div class="fech-tit-lista hidden px-1.5 pb-1.5 space-y-0.5" data-modalidade="${m.chave}">
+                                        <span class="block text-[10px] text-gray-500">Desmarque o que já contou em outro dia.</span>
+                                        ${m.titulos.map(t => `
+                                            <label class="flex items-center gap-1.5 text-[11px] text-gray-700 cursor-pointer">
+                                                <input type="checkbox" class="fech-tit" data-regist="${t.rc_regist}" data-modalidade="${m.chave}" ${t.fora ? '' : 'checked'}>
+                                                <span class="flex-1 min-w-0 break-words">${escapeHtml(t.cliente)} · título de ${dataCurta(t.data_titulo)} · ${escapeHtml(t.loja)}</span>
+                                                <span class="whitespace-nowrap">${formatarMoeda(t.valor)}</span>
+                                            </label>`).join('')}
+                                    </div>
+                                </div>` : ''}</td>
                         <td class="py-1.5 text-right font-bold whitespace-nowrap fech-ap-valor" data-modalidade="${m.chave}">${formatarMoeda(brutoDa(m) - m.consumo)}</td>
                         <td class="py-1.5 text-right">${m.aceitaTaxa
                             ? `<input type="number" step="0.01" min="0" class="fech-taxa w-36 border border-gray-300 rounded p-1 text-right text-sm" data-modalidade="${m.chave}" placeholder="${escapeHtml(dica(m))}">
@@ -635,6 +644,11 @@ function abrirPuxarApurado() {
                     taxas += taxa;
                     const celula = document.querySelector(`.fech-ap-valor[data-modalidade="${m.chave}"]`);
                     if (celula) celula.textContent = formatarMoeda(brutoModalidade - m.consumo);
+                    const resumoTit = document.querySelector(`.fech-tit-resumo[data-modalidade="${m.chave}"]`);
+                    if (resumoTit) {
+                        const marcados = m.titulos.filter(tituloMarcado);
+                        resumoTit.textContent = `${marcados.length} de ${m.titulos.length} · ${formatarMoeda(marcados.reduce((acc, t) => acc + t.valor, 0))}`;
+                    }
                     const info = document.querySelector(`.fech-taxa-pct[data-modalidade="${m.chave}"]`);
                     if (info) info.textContent = taxa && brutoModalidade ? `${(taxa / brutoModalidade * 100).toFixed(2).replace('.', ',')}% do valor` : '';
                 });
@@ -643,6 +657,14 @@ function abrirPuxarApurado() {
             };
             document.querySelectorAll('.fech-taxa').forEach(inp => inp.addEventListener('input', atualizar));
             document.querySelectorAll('.fech-tit').forEach(cb => cb.addEventListener('change', atualizar));
+            // Caixinha do contas a receber: fechada (+), abre a lista (−).
+            document.querySelectorAll('.fech-tit-toggle').forEach(btn => btn.addEventListener('click', () => {
+                const lista = document.querySelector(`.fech-tit-lista[data-modalidade="${btn.dataset.modalidade}"]`);
+                const abrir = lista.classList.contains('hidden');
+                lista.classList.toggle('hidden', !abrir);
+                btn.querySelector('.fech-tit-sinal').textContent = abrir ? '−' : '+';
+                btn.setAttribute('aria-expanded', String(abrir));
+            }));
             atualizar();
             const primeiro = document.querySelector('.fech-taxa');
             if (primeiro) primeiro.focus();
