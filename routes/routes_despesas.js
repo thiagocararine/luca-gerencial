@@ -12,9 +12,9 @@ const pool = mysql.createPool(dbConfig);
 
 const privilegedAccessProfiles = ["Administrador", "Financeiro"];
 const GRUPO_RETIRADA = 'Retirada Financeiro';
-// Data da despesa: nunca no futuro e no máximo N dias para trás (evita 2029, 1906...).
-const DIAS_PARA_TRAS = 7;
-const DIAS_PARA_TRAS_PRIVILEGIADO = 60;
+// Data da despesa: nunca no futuro. Para trás, sem limite de prazo (há lojas lançando com
+// atraso); só barra data com mais de 1 ano, que é erro de digitação (1906, 0262...).
+const DIAS_PARA_TRAS = 365;
 
 function podeVerTodas(req) {
     return privilegedAccessProfiles.includes(req.user.perfil);
@@ -165,9 +165,9 @@ router.post('/', authenticateToken, async (req, res) => {
     if (!filial) return res.status(400).json({ error: 'Selecione a filial.' });
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dsp_datadesp || ''))) return res.status(400).json({ error: 'Informe a data.' });
     const hoje = hojeLocal();
-    const limite = somarDias(hoje, -(podeVerTodas(req) ? DIAS_PARA_TRAS_PRIVILEGIADO : DIAS_PARA_TRAS));
+    const limite = somarDias(hoje, -DIAS_PARA_TRAS);
     if (dsp_datadesp > hoje) return res.status(400).json({ error: 'A data não pode ser no futuro.' });
-    if (dsp_datadesp < limite) return res.status(400).json({ error: `A data pode ser de no máximo ${podeVerTodas(req) ? DIAS_PARA_TRAS_PRIVILEGIADO : DIAS_PARA_TRAS} dias atrás.` });
+    if (dsp_datadesp < limite) return res.status(400).json({ error: 'Data com mais de 1 ano atrás: confira se foi digitada certo.' });
     if (!(valor > 0)) return res.status(400).json({ error: 'Informe um valor maior que zero.' });
 
     let tipo = dsp_tipo;
