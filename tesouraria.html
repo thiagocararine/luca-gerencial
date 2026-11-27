@@ -49,110 +49,248 @@
         </div>
     </header>
 
-    <div class="bg-white p-3 border-b border-gray-200 shrink-0 shadow-sm z-20">
-        <div class="flex flex-wrap gap-3 items-end">
-            <div>
-                <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-wide">Dia</label>
-                <input type="date" id="filtro-data" class="h-8 border-gray-300 rounded text-xs bg-gray-50 font-medium">
+    <div class="bg-white px-4 py-2 border-b border-gray-200 shrink-0 shadow-sm z-20">
+        <div class="flex flex-wrap gap-2 items-center">
+            <div class="flex items-center gap-1">
+                <button id="btn-dia-anterior" class="h-8 w-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50" title="Dia anterior"><i data-feather="chevron-left" class="w-4 h-4"></i></button>
+                <input type="date" id="filtro-data" class="h-8 border-gray-300 rounded text-xs bg-gray-50 font-bold">
+                <button id="btn-dia-seguinte" class="h-8 w-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50" title="Dia seguinte"><i data-feather="chevron-right" class="w-4 h-4"></i></button>
             </div>
+            <div class="flex rounded border border-gray-300 overflow-hidden">
+                <button data-vista="fechamento" class="btn-vista h-8 px-3 text-xs font-bold flex items-center gap-1.5"><i data-feather="clipboard" class="w-3.5 h-3.5"></i> FECHAMENTO DO DIA</button>
+                <button data-vista="movimentos" class="btn-vista h-8 px-3 text-xs font-bold flex items-center gap-1.5 border-l border-gray-300"><i data-feather="list" class="w-3.5 h-3.5"></i> MOVIMENTOS</button>
+            </div>
+            <div class="so-movimentos h-6 w-px bg-gray-200 mx-1"></div>
 
-            <button id="btn-novo-lancamento" class="h-8 bg-indigo-600 text-white px-4 rounded text-xs font-bold hover:bg-indigo-700 shadow-sm flex items-center gap-2 transition-all active:scale-95">
-                <i data-feather="plus" class="w-3.5 h-3.5"></i> NOVO LANÇAMENTO
+            <button id="btn-nova-entrada" class="so-movimentos h-8 bg-green-600 text-white px-3 rounded text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
+                <i data-feather="arrow-down-circle" class="w-3.5 h-3.5"></i> ENTRADA
+            </button>
+            <button id="btn-apurado" class="so-movimentos h-8 bg-emerald-700 text-white px-3 rounded text-xs font-bold hover:bg-emerald-800 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
+                <i data-feather="dollar-sign" class="w-3.5 h-3.5"></i> APURADO DAS LOJAS
+            </button>
+            <button id="btn-nova-saida" class="so-movimentos h-8 bg-red-600 text-white px-3 rounded text-xs font-bold hover:bg-red-700 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
+                <i data-feather="arrow-up-circle" class="w-3.5 h-3.5"></i> SAÍDA
+            </button>
+            <button id="btn-importar-erp" class="so-movimentos h-8 bg-blue-600 text-white px-3 rounded text-xs font-bold hover:bg-blue-700 shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
+                <i data-feather="download" class="w-3.5 h-3.5"></i> CONTAS A PAGAR
             </button>
 
             <div class="ml-auto flex gap-2">
-                <button id="btn-gerenciar" class="h-8 bg-white text-gray-700 border border-gray-300 px-4 rounded text-xs font-bold hover:bg-gray-50 shadow-sm flex items-center gap-2 transition-all">
-                    <i data-feather="settings" class="w-3.5 h-3.5"></i> CONTAS / CENTROS DE CUSTO
+                <button id="btn-gerenciar" class="h-8 bg-white text-gray-700 border border-gray-300 px-3 rounded text-xs font-bold hover:bg-gray-50 shadow-sm flex items-center gap-1.5 transition-all">
+                    <i data-feather="settings" class="w-3.5 h-3.5"></i> CADASTROS
                 </button>
-                <button id="btn-exportar-pdf" class="h-8 bg-gray-700 text-white px-4 rounded text-xs font-bold hover:bg-gray-800 shadow-sm flex items-center gap-2 transition-all">
-                    <i data-feather="file-text" class="w-3.5 h-3.5"></i> EXPORTAR PDF
+                <button id="btn-exportar-pdf" class="h-8 bg-gray-700 text-white px-3 rounded text-xs font-bold hover:bg-gray-800 shadow-sm flex items-center gap-1.5 transition-all">
+                    <i data-feather="file-text" class="w-3.5 h-3.5"></i> RELATÓRIO PDF
                 </button>
-                <button id="btn-whatsapp" class="h-8 bg-green-600 text-white px-4 rounded text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-2 transition-all">
+                <button id="btn-whatsapp" class="h-8 bg-green-600 text-white px-3 rounded text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-1.5 transition-all">
                     <i data-feather="share-2" class="w-3.5 h-3.5"></i> COMPARTILHAR
                 </button>
             </div>
         </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-4 space-y-4">
-
-        <div id="cards-contas" class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <!-- Cards de saldo por conta, preenchidos via JS -->
-        </div>
-
-        <div id="painel-pendentes" class="hidden bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-            <h2 class="text-xs font-bold text-yellow-800 uppercase tracking-wide mb-2 flex items-center gap-2">
-                <i data-feather="alert-triangle" class="w-4 h-4"></i>
-                Despesas de caixa do dia ainda não confirmadas na tesouraria
-            </h2>
-            <div id="lista-pendentes" class="space-y-2"></div>
-        </div>
-
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div class="px-3 py-2 border-b border-gray-100 bg-gray-50">
-                <h2 class="text-xs font-bold text-gray-600 uppercase tracking-wide">Movimentos do dia</h2>
+    <!-- Fechamento do dia: a mesma dinâmica da planilha da operadora (pagamentos, recursos, caixa das lojas, resultado) -->
+    <div id="vista-fechamento" class="hidden flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-green-500 shadow-sm px-4 py-2.5">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Recursos</p>
+                <p id="fech-kpi-recursos" class="text-2xl font-black text-green-700 leading-tight">R$ 0,00</p>
+                <p id="fech-kpi-recursos-sub" class="text-[11px] text-gray-400">taxas R$ 0,00</p>
             </div>
-            <div id="tabela-movimentos" class="w-full"></div>
+            <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-red-500 shadow-sm px-4 py-2.5">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Pagamentos</p>
+                <p id="fech-kpi-pagamentos" class="text-2xl font-black text-red-700 leading-tight">R$ 0,00</p>
+                <p id="fech-kpi-pagamentos-sub" class="text-[11px] text-gray-400">juros R$ 0,00</p>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-amber-500 shadow-sm px-4 py-2.5">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Gastos das lojas</p>
+                <p id="fech-kpi-lojas" class="text-2xl font-black text-amber-700 leading-tight">R$ 0,00</p>
+                <p class="text-[11px] text-gray-400">lançadas pelas lojas no dia</p>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-indigo-500 shadow-sm px-4 py-2.5">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Resultado do dia</p>
+                <p id="fech-kpi-resultado" class="text-2xl font-black text-gray-800 leading-tight">R$ 0,00</p>
+                <p class="text-[11px] text-gray-400">recursos − despesas das lojas − taxas − pagamentos</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-5 gap-3 items-start">
+            <section class="xl:col-span-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+                <div class="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-100">
+                    <h2 class="text-sm font-bold text-gray-800">1. Pagamentos do dia</h2>
+                    <div class="ml-auto flex gap-2">
+                        <button id="btn-fech-puxar-pagamentos" class="h-8 px-3 rounded text-xs font-bold border border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 flex items-center gap-1.5">
+                            <i data-feather="download" class="w-3.5 h-3.5"></i> Puxar pagos do ERP <span id="fech-pag-pendentes" class="hidden bg-blue-600 text-white rounded-full px-1.5 text-[10px]"></span>
+                        </button>
+                        <button id="btn-fech-novo-pagamento" class="h-8 px-3 rounded text-xs font-bold border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5">
+                            <i data-feather="plus" class="w-3.5 h-3.5"></i> Pagamento
+                        </button>
+                    </div>
+                </div>
+                <div id="fech-pagamentos" class="text-xs"></div>
+            </section>
+
+            <div class="xl:col-span-2 space-y-3">
+                <section class="bg-white rounded-lg border border-gray-200 shadow-sm">
+                    <div class="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-100">
+                        <h2 class="text-sm font-bold text-gray-800">2. Recursos</h2>
+                        <div class="ml-auto flex gap-2">
+                            <button id="btn-fech-puxar-apurado" class="h-8 px-3 rounded text-xs font-bold border border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 flex items-center gap-1.5">
+                                <i data-feather="download" class="w-3.5 h-3.5"></i> Puxar apurado do ERP <span id="fech-apurado-pendente" class="hidden bg-emerald-700 text-white rounded-full px-1.5 text-[10px]"></span>
+                            </button>
+                            <button id="btn-fech-novo-recurso" class="h-8 px-3 rounded text-xs font-bold border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5">
+                                <i data-feather="plus" class="w-3.5 h-3.5"></i> Recurso
+                            </button>
+                        </div>
+                    </div>
+                    <div id="fech-recursos" class="text-xs"></div>
+                </section>
+
+                <section class="bg-white rounded-lg border border-gray-200 shadow-sm">
+                    <div class="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100">
+                        <h2 class="text-sm font-bold text-gray-800">3. Caixa das lojas</h2>
+                        <button id="btn-fech-retiradas" class="ml-auto h-8 px-3 rounded text-xs font-bold border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 flex items-center gap-1.5">
+                            <i data-feather="log-out" class="w-3.5 h-3.5"></i> Retiradas
+                        </button>
+                    </div>
+                    <div id="fech-caixa-lojas" class="text-xs"></div>
+                </section>
+
+                <section class="bg-white rounded-lg border border-gray-200 shadow-sm">
+                    <div class="px-4 py-2.5 border-b border-gray-100"><h2 class="text-sm font-bold text-gray-800">4. Resultado do dia</h2></div>
+                    <div id="fech-resultado" class="text-xs"></div>
+                </section>
+            </div>
+        </div>
+
+
+    </div>
+
+    <div id="vista-movimentos" class="flex-1 min-h-0 flex flex-col gap-3 p-3">
+
+        <!-- Indicadores do dia (só lançamentos válidos: estornos não contam) -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
+            <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-green-500 shadow-sm px-4 py-2.5">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Total de entradas</p>
+                <p id="kpi-entradas" class="text-2xl font-black text-green-700 leading-tight">R$ 0,00</p>
+                <p id="kpi-entradas-qtd" class="text-[11px] text-gray-400">0 lançamento(s)</p>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-red-500 shadow-sm px-4 py-2.5">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Total de saídas</p>
+                <p id="kpi-saidas" class="text-2xl font-black text-red-700 leading-tight">R$ 0,00</p>
+                <p id="kpi-saidas-qtd" class="text-[11px] text-gray-400">0 lançamento(s)</p>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-indigo-500 shadow-sm px-4 py-2.5">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Líquido do dia</p>
+                <p id="kpi-liquido" class="text-2xl font-black text-gray-800 leading-tight">R$ 0,00</p>
+                <p class="text-[11px] text-gray-400">entradas − saídas</p>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 border-l-4 border-l-amber-500 shadow-sm px-4 py-2.5 space-y-1">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Pendências</p>
+                <button id="kpi-pend-erp" class="w-full flex items-center justify-between gap-2 text-xs hover:bg-blue-50 rounded px-1 -mx-1">
+                    <span class="text-gray-600 text-left">Pagos no ERP fora da tesouraria</span>
+                    <span id="kpi-pend-erp-valor" class="font-bold text-gray-400 whitespace-nowrap">—</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Movimento do dia por conta -->
+        <div id="cards-contas" class="flex flex-wrap gap-2 shrink-0"></div>
+
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex-1 min-h-[16rem] flex flex-col">
+            <div class="px-3 py-2 border-b border-gray-100 bg-gray-50 flex flex-wrap items-center gap-2 shrink-0">
+                <h2 class="text-xs font-bold text-gray-600 uppercase tracking-wide mr-2">Movimentos do dia</h2>
+                <div class="flex gap-1">
+                    <button data-tipo="" class="filtro-tipo px-2.5 py-1 rounded text-[11px] font-bold border">Todos</button>
+                    <button data-tipo="entrada" class="filtro-tipo px-2.5 py-1 rounded text-[11px] font-bold border">Entradas</button>
+                    <button data-tipo="saida" class="filtro-tipo px-2.5 py-1 rounded text-[11px] font-bold border">Saídas</button>
+                </div>
+                <input type="text" id="busca-movimentos" placeholder="Buscar descrição, favorecido, NF..." class="ml-auto h-7 w-64 border border-gray-300 rounded text-xs px-2">
+            </div>
+            <div class="flex-1 min-h-0">
+                <div id="tabela-movimentos" class="w-full h-full"></div>
+            </div>
         </div>
 
     </div>
 
-    <!-- Modal: Novo Lançamento -->
-    <div id="modal-lancamento" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden transform scale-95 transition-transform duration-200">
-            <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200 bg-indigo-50">
-                <h3 class="text-lg font-bold text-indigo-900 flex items-center gap-2">
-                    <i data-feather="plus-circle" class="w-5 h-5 text-indigo-600"></i> Novo Lançamento
-                </h3>
-                <button id="btn-fechar-modal-lancamento" class="text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
+    <!-- Modal genérico do fechamento: título, corpo e ação montados pelo fechamento.js -->
+    <div id="modal-fech" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden transform scale-95 transition-transform duration-200 max-h-[92vh] flex flex-col">
+            <div class="flex justify-between items-center px-6 py-3 border-b border-gray-200 bg-gray-50 shrink-0">
+                <h3 id="fech-modal-titulo" class="text-base font-bold text-gray-800"></h3>
+                <button id="btn-fech-modal-fechar" class="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
             </div>
-            <div class="p-6 space-y-4">
+            <div id="fech-modal-corpo" class="p-6 space-y-4 overflow-y-auto text-sm"></div>
+            <div class="bg-gray-50 px-6 py-3 border-t border-gray-200 flex justify-end gap-3 shrink-0">
+                <button id="btn-fech-modal-cancelar" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Cancelar</button>
+                <button id="btn-fech-modal-ok" class="px-4 py-2 text-sm font-bold text-white bg-indigo-600 rounded-md hover:bg-indigo-700"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Lançamento de Entrada ou Saída (os campos mudam conforme o botão usado) -->
+    <div id="modal-lancamento" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden transform scale-95 transition-transform duration-200 max-h-[95vh] flex flex-col">
+            <div id="lanc-cabecalho" class="flex justify-between items-center px-6 py-4 border-b border-gray-200 shrink-0">
+                <h3 id="lanc-titulo" class="text-lg font-bold flex items-center gap-2"></h3>
+                <button id="btn-fechar-modal-lancamento" class="text-gray-400 hover:text-gray-600 hover:bg-white/60 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 space-y-4 overflow-y-auto">
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">Conta</label>
+                        <label id="lanc-conta-label" class="block text-sm font-semibold text-gray-700 mb-1">Conta</label>
                         <select id="lanc-conta" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select>
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">Centro de Custo</label>
+                        <label id="lanc-centro-custo-label" class="block text-sm font-semibold text-gray-700 mb-1">Centro de Custo</label>
                         <select id="lanc-centro-custo" class="w-full border border-gray-300 rounded-md p-2 text-sm">
                             <option value="">-- Nenhum --</option>
                         </select>
                     </div>
                 </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">Tipo de Despesa</label>
-                        <select id="lanc-tipo-despesa" class="w-full border border-gray-300 rounded-md p-2 text-sm">
-                            <option value="">-- Selecione --</option>
-                        </select>
-                    </div>
+                <div class="campo-saida grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1">Grupo de Despesa</label>
-                        <select id="lanc-grupo-despesa" disabled class="w-full border border-gray-300 rounded-md p-2 text-sm bg-gray-100 text-gray-500">
-                            <option value="">-- Selecione o Tipo primeiro --</option>
-                        </select>
+                        <select id="lanc-grupo-despesa" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Tipo de Despesa</label>
+                        <select id="lanc-tipo-despesa" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select>
                     </div>
                 </div>
-                <div id="lanc-veiculo-wrap" class="hidden">
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">Veículo</label>
-                    <select id="lanc-veiculo" class="w-full border border-gray-300 rounded-md p-2 text-sm">
-                        <option value="">-- Nenhum --</option>
-                    </select>
+                <div id="lanc-veiculo-wrap" class="campo-saida hidden grid grid-cols-4 gap-4 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                    <div class="col-span-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Veículo</label>
+                        <select id="lanc-veiculo" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select>
+                    </div>
+                    <div class="lanc-so-combustivel">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Litros <span class="font-normal text-gray-400 text-xs">opcional</span></label>
+                        <input type="number" step="0.01" min="0" id="lanc-litros" class="w-full border border-gray-300 rounded-md p-2 text-sm text-right" placeholder="0,00">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">KM <span class="font-normal text-gray-400 text-xs">opcional</span></label>
+                        <input type="number" step="1" min="0" id="lanc-km" class="w-full border border-gray-300 rounded-md p-2 text-sm text-right" placeholder="0">
+                    </div>
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">Tipo</label>
-                        <select id="lanc-tipo" class="w-full border border-gray-300 rounded-md p-2 text-sm">
-                            <option value="saida" selected>Saída (Pagamento)</option>
-                            <option value="entrada">Entrada</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">Valor (R$)</label>
+                        <label id="lanc-valor-label" class="block text-sm font-semibold text-gray-700 mb-1">Valor (R$)</label>
                         <input type="number" step="0.01" min="0.01" id="lanc-valor" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="0,00">
                     </div>
+                    <div>
+                        <label id="lanc-forma-pagamento-label" class="block text-sm font-semibold text-gray-700 mb-1">Forma de Pagamento</label>
+                        <select id="lanc-forma-pagamento" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select>
+                    </div>
                 </div>
-                <div class="grid grid-cols-2 gap-4">
+                <div class="campo-saida grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Juros / Multa (R$) <span class="font-normal text-gray-400">opcional</span></label>
+                        <input type="number" step="0.01" min="0" id="lanc-juros" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="0,00">
+                    </div>
+                    <p id="lanc-juros-resumo" class="self-end pb-2 text-xs text-gray-500">Os juros já estão dentro do valor total pago.</p>
+                </div>
+                <div class="campo-saida grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1">Data da Despesa/Vencimento</label>
                         <input type="date" id="lanc-data-despesa" class="w-full border border-gray-300 rounded-md p-2 text-sm">
@@ -162,72 +300,138 @@
                         <input type="text" id="lanc-numero-nf" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="Opcional">
                     </div>
                 </div>
+                <div class="campo-saida">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Favorecido</label>
+                    <input type="text" id="lanc-favorecido" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="Opcional">
+                </div>
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-1">Descrição</label>
-                    <input type="text" id="lanc-descricao" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="Ex: Pagamento fornecedor X">
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">Favorecido</label>
-                        <input type="text" id="lanc-favorecido" class="w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="Opcional">
-                    </div>
-                    <div>
-                        <label id="lanc-forma-pagamento-label" class="block text-sm font-semibold text-gray-700 mb-1">Forma de Pagamento</label>
-                        <select id="lanc-forma-pagamento" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select>
-                    </div>
+                    <input type="text" id="lanc-descricao" class="w-full border border-gray-300 rounded-md p-2 text-sm">
                 </div>
             </div>
-            <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+            <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3 shrink-0">
                 <button id="btn-cancelar-lancamento" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm">Cancelar</button>
-                <button id="btn-salvar-lancamento" class="px-4 py-2 text-sm font-bold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 shadow-sm flex items-center gap-2">
-                    <i data-feather="save" class="w-4 h-4"></i> Salvar Lançamento
+                <button id="btn-salvar-lancamento" class="px-4 py-2 text-sm font-bold text-white rounded-md shadow-sm flex items-center gap-2">
+                    <i data-feather="save" class="w-4 h-4"></i> <span id="lanc-salvar-texto">Salvar</span>
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- Modal: Confirmar despesa de caixa pendente -->
-    <div id="modal-confirmar-despesa" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-200">
-            <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200 bg-yellow-50">
-                <h3 class="text-lg font-bold text-yellow-900 flex items-center gap-2">
-                    <i data-feather="check-circle" class="w-5 h-5 text-yellow-600"></i> Confirmar Despesa de Caixa
+    <!-- Modal: Importar títulos do Contas a Pagar (ERP, somente leitura) -->
+    <div id="modal-importar" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-7xl overflow-hidden transform scale-95 transition-transform duration-200 h-[92vh] flex flex-col">
+            <div class="flex justify-between items-center px-6 py-3 border-b border-gray-200 bg-blue-50 shrink-0">
+                <h3 class="text-lg font-bold text-blue-900 flex items-center gap-2">
+                    <i data-feather="download" class="w-5 h-5 text-blue-600"></i> Importar do Contas a Pagar
                 </h3>
-                <button id="btn-fechar-modal-confirmar" class="text-yellow-500 hover:text-yellow-700 hover:bg-yellow-100 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
+                <button id="btn-fechar-modal-importar" class="text-blue-400 hover:text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
             </div>
-            <div class="p-6 space-y-4">
-                <p id="confirmar-despesa-descricao" class="text-sm text-gray-600 bg-gray-50 p-3 rounded border border-gray-200"></p>
-                <input type="hidden" id="confirmar-despesa-id">
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">Conta que pagou</label>
-                    <select id="confirmar-conta" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select>
+            <div class="px-6 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2 shrink-0">
+                <div id="abas-importar" class="flex flex-wrap gap-1">
+                    <button data-modo="baixados" class="aba-importar px-3 py-1.5 rounded text-xs font-bold border">Pagos no ERP neste dia</button>
+                    <button data-modo="vencidos" class="aba-importar px-3 py-1.5 rounded text-xs font-bold border">Vencidos (60 dias)</button>
+                    <button data-modo="hoje" class="aba-importar px-3 py-1.5 rounded text-xs font-bold border">Vencem neste dia</button>
+                    <button data-modo="proximos" class="aba-importar px-3 py-1.5 rounded text-xs font-bold border">Próximos 7 dias</button>
                 </div>
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">Centro de Custo</label>
-                    <select id="confirmar-centro-custo" class="w-full border border-gray-300 rounded-md p-2 text-sm">
-                        <option value="">-- Nenhum --</option>
-                    </select>
+                <input type="text" id="busca-importar" placeholder="Buscar fornecedor, NF ou controle..." class="ml-auto h-8 w-64 border border-gray-300 rounded text-xs px-2">
+            </div>
+            <p class="px-6 pt-2 text-[11px] text-gray-500 shrink-0">
+                Marque os títulos, confira a <b>conta</b> e o <b>centro de custo</b> de cada um (dá para mudar clicando na célula) e escolha o grupo embaixo.
+                Os títulos importados entram como saída no dia <b id="dia-importar"></b> e saem desta lista.
+            </p>
+            <div class="flex-1 min-h-0 px-6 py-2">
+                <div id="tabela-importar" class="w-full h-full"></div>
+            </div>
+            <div class="bg-gray-50 px-6 py-3 border-t border-gray-200 shrink-0 space-y-2">
+                <div class="flex flex-wrap items-end gap-3">
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Grupo de Despesa</label>
+                        <select id="imp-grupo-despesa" class="h-8 border border-gray-300 rounded text-xs px-2 w-44"></select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tipo de Despesa</label>
+                        <select id="imp-tipo-despesa" class="h-8 border border-gray-300 rounded text-xs px-2 w-40"></select>
+                    </div>
+                    <div id="imp-veiculo-wrap" class="hidden">
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Veículo</label>
+                        <select id="imp-veiculo" class="h-8 border border-gray-300 rounded text-xs px-2 w-44"></select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Forma de Pagamento</label>
+                        <select id="imp-forma-pagamento" class="h-8 border border-gray-300 rounded text-xs px-2 w-32"></select>
+                    </div>
+                    <div class="flex items-end gap-1">
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Conta dos marcados</label>
+                            <select id="imp-conta-lote" class="h-8 border border-gray-300 rounded text-xs px-2 w-48"></select>
+                        </div>
+                        <button id="btn-aplicar-conta-lote" class="h-8 px-3 bg-white border border-gray-300 rounded text-xs font-bold hover:bg-gray-100">Aplicar</button>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <p id="resumo-importar" class="text-xs font-bold text-gray-700"></p>
+                    <div class="flex gap-3">
+                        <button id="btn-cancelar-importar" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm">Fechar</button>
+                        <button id="btn-confirmar-importar" class="px-4 py-2 text-sm font-bold text-white bg-blue-600 rounded-md hover:bg-blue-700 shadow-sm flex items-center gap-2">
+                            <i data-feather="download" class="w-4 h-4"></i> Importar marcados
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-                <button id="btn-cancelar-confirmar" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm">Cancelar</button>
-                <button id="btn-salvar-confirmar" class="px-4 py-2 text-sm font-bold text-white bg-yellow-600 rounded-md hover:bg-yellow-700 shadow-sm flex items-center gap-2">
-                    <i data-feather="check" class="w-4 h-4"></i> Confirmar
-                </button>
+        </div>
+    </div>
+
+    <!-- Modal: Apurado das Lojas (ERP Contas a Receber) — entradas por loja e modalidade -->
+    <div id="modal-apurado" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-7xl overflow-hidden transform scale-95 transition-transform duration-200 h-[92vh] flex flex-col">
+            <div class="flex justify-between items-center px-6 py-3 border-b border-gray-200 bg-emerald-50 shrink-0">
+                <h3 class="text-lg font-bold text-emerald-900 flex items-center gap-2">
+                    <i data-feather="dollar-sign" class="w-5 h-5 text-emerald-700"></i> Apurado das Lojas · <span id="dia-apurado"></span>
+                </h3>
+                <button id="btn-fechar-modal-apurado" class="text-emerald-400 hover:text-emerald-700 hover:bg-emerald-100 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
+            </div>
+            <p class="px-6 pt-2 text-[11px] text-gray-500 shrink-0">
+                Valores recebidos no ERP neste dia, por loja e modalidade. Confira o <b>valor</b>, digite a <b>taxa</b> das maquininhas
+                (em R$, ou em % terminando com %, ex.: <b>3,5%</b>) e escolha a <b>conta</b> onde o dinheiro entra.
+                Cada linha vira uma entrada pelo valor bruto e, se tiver taxa, uma saída da taxa na mesma conta.
+            </p>
+            <div class="flex-1 min-h-0 px-6 py-2">
+                <div id="tabela-apurado" class="w-full h-full"></div>
+            </div>
+            <div class="bg-gray-50 px-6 py-3 border-t border-gray-200 shrink-0 space-y-2">
+                <div class="flex flex-wrap items-end gap-3">
+                    <div class="flex items-end gap-1">
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Conta dos marcados</label>
+                            <select id="apurado-conta-lote" class="h-8 border border-gray-300 rounded text-xs px-2 w-56"></select>
+                        </div>
+                        <button id="btn-apurado-aplicar-conta" class="h-8 px-3 bg-white border border-gray-300 rounded text-xs font-bold hover:bg-gray-100">Aplicar</button>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <p id="resumo-apurado" class="text-xs font-bold text-gray-700"></p>
+                    <div class="flex gap-3">
+                        <button id="btn-cancelar-apurado" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm">Fechar</button>
+                        <button id="btn-lancar-apurado" class="px-4 py-2 text-sm font-bold text-white bg-emerald-700 rounded-md hover:bg-emerald-800 shadow-sm flex items-center gap-2">
+                            <i data-feather="check" class="w-4 h-4"></i> Lançar marcados
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Modal: Gerenciar Contas e Centros de Custo -->
     <div id="modal-gerenciar" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity">
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-3xl overflow-hidden transform scale-95 transition-transform duration-200 max-h-[90vh] flex flex-col">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-6xl overflow-hidden transform scale-95 transition-transform duration-200 max-h-[90vh] flex flex-col">
             <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200 bg-gray-50 shrink-0">
                 <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    <i data-feather="settings" class="w-5 h-5 text-gray-600"></i> Contas e Centros de Custo
+                    <i data-feather="settings" class="w-5 h-5 text-gray-600"></i> Cadastros da Tesouraria
                 </h3>
                 <button id="btn-fechar-modal-gerenciar" class="text-gray-400 hover:text-gray-600 hover:bg-gray-200 p-2 rounded-lg transition-colors"><i data-feather="x" class="w-5 h-5"></i></button>
             </div>
-            <div class="p-6 grid grid-cols-2 gap-6 overflow-y-auto">
+            <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-y-auto">
                 <div>
                     <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Contas</h4>
                     <div id="lista-gerenciar-contas" class="space-y-2 mb-3"></div>
@@ -256,6 +460,22 @@
                             <option value="">-- Vincular a uma Unidade (opcional) --</option>
                         </select>
                         <button id="btn-add-centro" class="w-full bg-indigo-600 text-white rounded-md p-2 text-sm font-bold hover:bg-indigo-700">+ Adicionar Centro de Custo</button>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Grupos e Tipos de Despesa</h4>
+                    <div id="lista-gerenciar-grupos" class="space-y-2 mb-3"></div>
+                    <div class="border-t border-dashed border-gray-200 pt-3 space-y-2">
+                        <input type="text" id="novo-grupo-nome" placeholder="Nome do novo grupo" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                        <label class="flex items-center gap-2 text-xs text-gray-600">
+                            <input type="checkbox" id="novo-grupo-veiculo"> Pede o veículo (ex.: Manutenção, Combustível)
+                        </label>
+                        <button id="btn-add-grupo" class="w-full bg-indigo-600 text-white rounded-md p-2 text-sm font-bold hover:bg-indigo-700">+ Adicionar Grupo</button>
+                    </div>
+                    <div class="border-t border-dashed border-gray-200 pt-3 mt-3 space-y-2">
+                        <select id="novo-tipo-grupo" class="w-full border border-gray-300 rounded-md p-2 text-sm"></select>
+                        <input type="text" id="novo-tipo-nome" placeholder="Nome do novo tipo" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                        <button id="btn-add-tipo" class="w-full bg-indigo-600 text-white rounded-md p-2 text-sm font-bold hover:bg-indigo-700">+ Adicionar Tipo ao Grupo</button>
                     </div>
                 </div>
             </div>
@@ -311,7 +531,8 @@
         </div>
     </div>
 
-    <script src="assets/global.js"></script>
-    <script src="tesouraria.js"></script>
+    <script src="assets/global.js?v=20261104"></script>
+    <script src="tesouraria.js?v=20261107b"></script>
+    <script src="fechamento.js?v=20261125c"></script>
 </body>
 </html>

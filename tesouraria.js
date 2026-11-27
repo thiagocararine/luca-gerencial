@@ -13,19 +13,29 @@ const OPCOES_SAIDA = {
 };
 const OPCOES_ENTRADA = {
     sangria: 'Sangria de Caixa', sobra: 'Sobra do Dia Anterior', transferencia: 'Transferência entre Contas',
-    aporte: 'Aporte', outro: 'Outro'
+    emprestimo: 'Empréstimo Recebido', aporte: 'Aporte', outro: 'Outro'
 };
-const FORMAS_PAGAMENTO_LABEL = { ...OPCOES_SAIDA, ...OPCOES_ENTRADA };
+// Modalidades do apurado das lojas (entradas vindas do ERP): mesmas chaves salvas pelo backend.
+const MODALIDADES_APURADO_LABEL = {
+    dinheiro: 'Dinheiro', pix: 'Pix / Depósito', cartao_credito: 'Cartão de Crédito', cartao_debito: 'Cartão de Débito',
+    boleto: 'Boleto', carteira: 'Carteira', site_mp: 'Venda Site (Mercado Pago)'
+};
+const FORMAS_PAGAMENTO_LABEL = { ...MODALIDADES_APURADO_LABEL, ...OPCOES_SAIDA, ...OPCOES_ENTRADA };
 const TIPO_CENTRO_LABEL = {
     loja: 'Loja', transportadora: 'Transportadora', administrativo: 'Administrativo', outro: 'Outro'
 };
-// Grupos de Despesa (Configurações > Parâmetros) que exigem informar o veículo.
-const GRUPOS_QUE_EXIGEM_VEICULO = ['Manutenção', 'Combustivel'];
 
 let veiculosCache = [];
 let filiaisCache = [];
-let tiposDespesaCache = [];
-let gruposDespesaCache = [];
+// Grupos de despesa da própria tesouraria, cada um com seus tipos (não é a lista das lojas).
+let classificacaoCache = [];
+// 'entrada' ou 'saida': qual botão abriu o modal de lançamento.
+let modoLancamento = 'saida';
+
+// Importação do Contas a Pagar: aba atual e títulos carregados (cada um com `marcado`).
+let modoImportar = 'baixados';
+let titulosImportar = [];
+let tabelaImportar = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!getToken()) {
@@ -42,16 +52,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     inputData.addEventListener('change', () => carregarDia(inputData.value));
 
     setupModais();
-    document.getElementById('lanc-tipo').addEventListener('change', atualizarOpcoesFormaPagamento);
-    document.getElementById('lanc-tipo-despesa').addEventListener('change', handleTipoDespesaChange);
-    document.getElementById('lanc-grupo-despesa').addEventListener('change', (e) => atualizarVisibilidadeVeiculo(e.target.value));
+    document.getElementById('lanc-grupo-despesa').addEventListener('change', handleGrupoLancamentoChange);
+    document.getElementById('btn-dia-anterior').addEventListener('click', () => mudarDia(-1));
+    document.getElementById('btn-dia-seguinte').addEventListener('click', () => mudarDia(1));
+    document.querySelectorAll('.filtro-tipo').forEach(btn => btn.addEventListener('click', () => {
+        filtroTipoMovimentos = btn.dataset.tipo;
+        aplicarFiltrosMovimentos();
+    }));
+    document.getElementById('busca-movimentos').addEventListener('input', aplicarFiltrosMovimentos);
     document.getElementById('novo-centro-tipo').addEventListener('change', atualizarVisibilidadeFilialCentro);
-    atualizarOpcoesFormaPagamento();
     atualizarVisibilidadeFilialCentro();
     if (typeof feather !== 'undefined') feather.replace();
 
     await Promise.all([
-        carregarContas(), carregarCentrosCusto(), carregarVeiculos(), carregarFiliais(), carregarClassificacaoDespesa()
+        carregarContas(), carregarCentrosCusto(), carregarVeiculos(), carregarFiliais(), carregarClassificacao()
     ]);
     await carregarDia(inputData.value);
 });
@@ -72,8 +86,24 @@ async function apiFetch(path, options = {}) {
         headers: { ...apiHeaders(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) }
     });
     const data = await res.json().catch(() => ({}));
+    // 401, ou 403 sem mensagem, vem do authenticateToken: login vencido (o token dura 8h).
+    // Um 403 com mensagem é falta de permissão e segue como erro normal.
+    // A promessa fica pendente de propósito: a página vai para o login, sem uma pilha de avisos de erro.
+    if (res.status === 401 || (res.status === 403 && !data.error)) {
+        avisarSessaoExpirada();
+        return new Promise(() => {});
+    }
     if (!res.ok) throw new Error(data.error || 'Erro na requisição.');
     return data;
+}
+
+// Várias chamadas falham juntas quando o login vence; avisa uma vez só e volta para o login.
+let sessaoExpiradaAvisada = false;
+async function avisarSessaoExpirada() {
+    if (sessaoExpiradaAvisada) return;
+    sessaoExpiradaAvisada = true;
+    await dialogoAviso('Seu login venceu. Entre novamente para continuar.', 'aviso', 'Sessão expirada');
+    logout();
 }
 
 // --- CARREGAMENTO ---
@@ -82,7 +112,6 @@ async function carregarContas() {
     try {
         contasCache = await apiFetch('/contas');
         preencherSelectContas(document.getElementById('lanc-conta'));
-        preencherSelectContas(document.getElementById('confirmar-conta'));
     } catch (err) {
         console.error('Erro ao carregar contas:', err);
         contasCache = [];
@@ -93,7 +122,6 @@ async function carregarCentrosCusto() {
     try {
         centrosCustoCache = await apiFetch('/centros-custo');
         preencherSelectCentros(document.getElementById('lanc-centro-custo'));
-        preencherSelectCentros(document.getElementById('confirmar-centro-custo'));
     } catch (err) {
         console.error('Erro ao carregar centros de custo:', err);
         centrosCustoCache = [];
@@ -105,13 +133,28 @@ async function carregarVeiculos() {
         const res = await fetch(`${apiUrlBase}/logistica/veiculos`, { headers: apiHeaders() });
         if (!res.ok) throw new Error('Falha ao buscar veículos.');
         veiculosCache = await res.json();
-        const select = document.getElementById('lanc-veiculo');
-        select.innerHTML = '<option value="">-- Nenhum --</option>' +
-            veiculosCache.map(v => `<option value="${v.id}">${escapeHtml(v.modelo)} - ${escapeHtml(v.placa)}</option>`).join('');
+        document.getElementById('lanc-veiculo').innerHTML = opcoesVeiculos();
     } catch (err) {
         console.error('Erro ao carregar veículos:', err);
         veiculosCache = [];
     }
+}
+
+// Combustível e manutenção pedem o veículo; "Sem veículo" (0) para galão, gerador etc.
+function opcoesVeiculos() {
+    const ativos = veiculosCache.filter(v => !v.status || v.status === 'Ativo');
+    return '<option value="">-- Selecione o veículo --</option>' +
+        ativos.map(v => `<option value="${v.id}">${escapeHtml(v.placa)} · ${escapeHtml(v.modelo)}</option>`).join('') +
+        '<option value="0">Sem veículo (galão / outros)</option>';
+}
+
+function grupoPedeVeiculo(nomeGrupo) {
+    const grupo = classificacaoCache.find(g => g.nome === nomeGrupo);
+    return !!(grupo && grupo.exige_veiculo);
+}
+
+function ehGrupoCombustivel(nomeGrupo) {
+    return normalizarNome(nomeGrupo) === 'combustivel';
 }
 
 async function carregarFiliais() {
@@ -128,69 +171,44 @@ async function carregarFiliais() {
     }
 }
 
-// Reaproveita a mesma classificação Grupo Despesa / Tipo Despesa que despesas.js já usa
-// (Configurações > Parâmetros), para não duplicar essa lista em outro lugar.
-async function carregarClassificacaoDespesa() {
+async function carregarClassificacao() {
     try {
-        const [resTipos, resGrupos] = await Promise.all([
-            fetch(`${apiUrlBase}/settings/parametros?cod=Tipo Despesa`, { headers: apiHeaders() }),
-            fetch(`${apiUrlBase}/settings/parametros?cod=Grupo Despesa`, { headers: apiHeaders() })
-        ]);
-        if (!resTipos.ok || !resGrupos.ok) throw new Error('Falha ao buscar classificação de despesa.');
-        tiposDespesaCache = await resTipos.json();
-        gruposDespesaCache = await resGrupos.json();
-
-        const select = document.getElementById('lanc-tipo-despesa');
-        select.innerHTML = '<option value="">-- Selecione --</option>' +
-            tiposDespesaCache.map(t => `<option value="${escapeHtml(t.NOME_PARAMETRO)}">${escapeHtml(t.NOME_PARAMETRO)}</option>`).join('');
+        classificacaoCache = await apiFetch('/classificacao');
     } catch (err) {
-        console.error('Erro ao carregar classificação de despesa:', err);
-        tiposDespesaCache = [];
-        gruposDespesaCache = [];
+        console.error('Erro ao carregar grupos e tipos de despesa:', err);
+        classificacaoCache = [];
     }
+    preencherSelectGrupos(document.getElementById('lanc-grupo-despesa'));
+    handleGrupoLancamentoChange();
 }
 
-// Mesma lógica de despesas.js (handleTipoDespesaChange): o Grupo é derivado do Tipo
-// escolhido via KEY_VINCULACAO, e travado — exceto para "Não Classificado".
-function handleTipoDespesaChange() {
-    const tipoNome = document.getElementById('lanc-tipo-despesa').value;
-    const grupoSelect = document.getElementById('lanc-grupo-despesa');
-
-    if (!tipoNome) {
-        grupoSelect.innerHTML = '<option value="">-- Selecione o Tipo primeiro --</option>';
-        grupoSelect.disabled = true;
-        atualizarVisibilidadeVeiculo(null);
-        return;
-    }
-
-    if (tipoNome === 'Não Classificado') {
-        grupoSelect.innerHTML = '<option value="">-- Selecione um Grupo --</option>' +
-            gruposDespesaCache.map(g => `<option value="${escapeHtml(g.NOME_PARAMETRO)}">${escapeHtml(g.NOME_PARAMETRO)}</option>`).join('');
-        grupoSelect.disabled = false;
-        atualizarVisibilidadeVeiculo(null);
-        return;
-    }
-
-    const tipoObj = tiposDespesaCache.find(t => t.NOME_PARAMETRO === tipoNome);
-    const grupoObj = tipoObj && tipoObj.KEY_VINCULACAO != null
-        ? gruposDespesaCache.find(g => g.KEY_VINCULACAO == tipoObj.KEY_VINCULACAO)
-        : null;
-
-    if (grupoObj) {
-        grupoSelect.innerHTML = `<option value="${escapeHtml(grupoObj.NOME_PARAMETRO)}" selected>${escapeHtml(grupoObj.NOME_PARAMETRO)}</option>`;
-        grupoSelect.disabled = true;
-        atualizarVisibilidadeVeiculo(grupoObj.NOME_PARAMETRO);
-    } else {
-        grupoSelect.innerHTML = '<option value="">-- Sem grupo vinculado --</option>';
-        grupoSelect.disabled = true;
-        atualizarVisibilidadeVeiculo(null);
-    }
+function preencherSelectGrupos(select) {
+    select.innerHTML = '<option value="">-- Selecione --</option>' +
+        classificacaoCache.map(g => `<option value="${escapeHtml(g.nome)}">${escapeHtml(g.nome)}</option>`).join('');
 }
 
-function atualizarVisibilidadeVeiculo(nomeGrupo) {
-    const precisaVeiculo = GRUPOS_QUE_EXIGEM_VEICULO.includes(nomeGrupo);
+// Tipo é opcional: um grupo pode ainda não ter tipos cadastrados.
+function preencherSelectTipos(select, nomeGrupo) {
+    const grupo = classificacaoCache.find(g => g.nome === nomeGrupo);
+    const tipos = grupo ? grupo.tipos : [];
+    select.innerHTML = `<option value="">${tipos.length ? '-- Selecione --' : '-- Nenhum --'}</option>` +
+        tipos.map(t => `<option value="${escapeHtml(t.nome)}">${escapeHtml(t.nome)}</option>`).join('');
+    select.disabled = tipos.length === 0;
+}
+
+// O veículo só aparece nos grupos marcados como "pede veículo" no cadastro.
+function handleGrupoLancamentoChange() {
+    const nomeGrupo = document.getElementById('lanc-grupo-despesa').value;
+    preencherSelectTipos(document.getElementById('lanc-tipo-despesa'), nomeGrupo);
+    const precisaVeiculo = grupoPedeVeiculo(nomeGrupo);
     document.getElementById('lanc-veiculo-wrap').classList.toggle('hidden', !precisaVeiculo);
-    if (!precisaVeiculo) document.getElementById('lanc-veiculo').value = '';
+    document.querySelectorAll('.lanc-so-combustivel').forEach(el => el.classList.toggle('hidden', !ehGrupoCombustivel(nomeGrupo)));
+    if (!precisaVeiculo) ['lanc-veiculo', 'lanc-litros', 'lanc-km'].forEach(id => { document.getElementById(id).value = ''; });
+}
+
+// Compara nomes sem acento e sem diferença de maiúsculas ("Combustivel" = "Combustível").
+function normalizarNome(str) {
+    return String(str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
 }
 
 // Sem conta pré-selecionada, para não lançar na conta errada sem perceber.
@@ -210,152 +228,208 @@ function preencherSelectCentros(select) {
 
 async function carregarDia(data) {
     try {
-        const [movimentos, pendentes] = await Promise.all([
-            apiFetch(`/movimentos?data=${data}`),
-            apiFetch(`/despesa-caixa/pendentes?data=${data}`)
-        ]);
-        movimentosDoDia = movimentos;
-        renderCardsContas(movimentos);
-        renderPendentes(pendentes, data);
-        renderTabelaMovimentos(movimentos);
+        movimentosDoDia = await apiFetch(`/movimentos?data=${data}`);
+        renderKpis(movimentosDoDia);
+        renderCardsContas(movimentosDoDia);
+        renderTabelaMovimentos(movimentosDoDia);
+        if (typeof renderFechamento === 'function') renderFechamento();
     } catch (err) {
-        alert('Erro ao carregar dados do dia: ' + err.message);
+        dialogoAviso('Erro ao carregar dados do dia: ' + err.message, 'erro');
+    }
+    await carregarPendencias(data);
+}
+
+function somar(lista) {
+    return lista.reduce((acc, m) => acc + Number(m.valor || 0), 0);
+}
+
+function renderKpis(movimentos) {
+    const efetivos = movimentos.filter(entraNoResultado);
+    const entradas = efetivos.filter(m => m.tipo === 'entrada');
+    const saidas = efetivos.filter(m => m.tipo === 'saida');
+    const liquido = somar(entradas) - somar(saidas);
+
+    document.getElementById('kpi-entradas').textContent = formatarMoeda(somar(entradas));
+    document.getElementById('kpi-entradas-qtd').textContent = `${entradas.length} lançamento(s)`;
+    document.getElementById('kpi-saidas').textContent = formatarMoeda(somar(saidas));
+    const juros = saidas.reduce((acc, m) => acc + Number(m.valor_juros || 0), 0);
+    document.getElementById('kpi-saidas-qtd').textContent =
+        `${saidas.length} lançamento(s)${juros ? ` · juros ${formatarMoeda(juros)}` : ''}`;
+    const elLiquido = document.getElementById('kpi-liquido');
+    elLiquido.textContent = formatarMoeda(liquido);
+    elLiquido.classList.toggle('text-red-700', liquido < 0);
+    elLiquido.classList.toggle('text-gray-800', liquido >= 0);
+}
+
+// Pendência do card de KPI: títulos pagos no ERP que ainda não entraram. Fica fora do
+// carregamento principal: se falhar, o dia abre do mesmo jeito.
+async function carregarPendencias(data) {
+    const [erp] = await Promise.allSettled([apiFetch(`/erp/titulos?modo=baixados&data=${data}`)]);
+
+    const elErp = document.getElementById('kpi-pend-erp-valor');
+    if (erp.status === 'fulfilled') {
+        const titulos = erp.value;
+        mostrarPendencia(elErp, titulos.length ? `${titulos.length} · ${formatarMoeda(somar(titulos))}` : 'nenhum', titulos.length > 0, 'text-blue-700');
+    } else {
+        mostrarPendencia(elErp, 'erro ao consultar', true, 'text-red-600');
     }
 }
 
-// --- CARDS DE CONTAS ---
+function mostrarPendencia(el, texto, destacar, cor) {
+    el.textContent = texto;
+    el.className = `font-bold whitespace-nowrap ${destacar ? cor : 'text-gray-400'}`;
+}
 
-// O valor do card é o líquido do dia (entradas - saídas), não o saldo da conta:
+// --- CONTAS (movimento do dia por conta) ---
+
+// O valor é o líquido do dia (entradas - saídas), não o saldo da conta:
 // saldo de verdade depende de saldo inicial/fechamento, que é a Fase C.
 function renderCardsContas(movimentos) {
     const container = document.getElementById('cards-contas');
     container.innerHTML = contasCache.map(conta => {
         const movsConta = movimentos.filter(m => m.id_conta === conta.id && movimentoEfetivo(m));
-        const totalEntrada = movsConta.filter(m => m.tipo === 'entrada').reduce((a, m) => a + Number(m.valor), 0);
-        const totalSaida = movsConta.filter(m => m.tipo === 'saida').reduce((a, m) => a + Number(m.valor), 0);
-        const liquido = totalEntrada - totalSaida;
-        const corLiquido = liquido < 0 ? 'text-red-600' : 'text-gray-800';
+        const entradas = somar(movsConta.filter(m => m.tipo === 'entrada'));
+        const saidas = somar(movsConta.filter(m => m.tipo === 'saida'));
+        const liquido = entradas - saidas;
+        const semMovimento = movsConta.length === 0;
         return `
-            <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-3">
-                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wide truncate">${escapeHtml(conta.nome)}</p>
-                <p class="text-lg font-black ${corLiquido}">${formatarMoeda(liquido)}</p>
-                <p class="text-[10px] text-gray-400 -mt-0.5 mb-1">Líquido do dia</p>
-                <p class="text-[10px] text-green-700">Entradas: ${formatarMoeda(totalEntrada)}</p>
-                <p class="text-[10px] text-red-700">Saídas: ${formatarMoeda(totalSaida)}</p>
+            <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-3 py-1.5 min-w-[11rem] ${semMovimento ? 'opacity-60' : ''}">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide truncate max-w-[14rem]" title="${escapeHtml(conta.nome)}">${escapeHtml(conta.nome)}</p>
+                <p class="text-sm font-black ${liquido < 0 ? 'text-red-600' : 'text-gray-800'}">${formatarMoeda(liquido)}</p>
+                <p class="text-[10px] whitespace-nowrap"><span class="text-green-700">↓ ${formatarMoeda(entradas)}</span> <span class="text-red-700 ml-1">↑ ${formatarMoeda(saidas)}</span></p>
             </div>`;
-    }).join('') || '<p class="text-xs text-gray-400 col-span-full">Nenhuma conta cadastrada ainda.</p>';
-}
-
-// --- PENDENTES (despesa_caixa) ---
-
-function renderPendentes(pendentes, data) {
-    const painel = document.getElementById('painel-pendentes');
-    const lista = document.getElementById('lista-pendentes');
-
-    if (!pendentes || pendentes.length === 0) {
-        painel.classList.add('hidden');
-        lista.innerHTML = '';
-        return;
-    }
-
-    painel.classList.remove('hidden');
-    lista.innerHTML = pendentes.map(d => `
-        <div class="flex items-center justify-between bg-white border border-yellow-200 rounded px-3 py-2 text-xs">
-            <div>
-                <span class="font-bold text-gray-700">${escapeHtml(d.dsp_descricao)}</span>
-                <span class="text-gray-400"> — ${escapeHtml(d.dsp_grupo || '')} / ${escapeHtml(d.dsp_tipo || '')} — Filial ${escapeHtml(d.dsp_filial || '')}</span>
-            </div>
-            <div class="flex items-center gap-3">
-                <span class="font-bold text-gray-800">${formatarMoeda(d.dsp_valordsp)}</span>
-                <button class="btn-confirmar-despesa bg-yellow-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-yellow-700"
-                        data-id="${d.ID}" data-filial="${escapeHtml(d.dsp_filial || '')}"
-                        data-descricao="${escapeHtml(d.dsp_descricao)} — ${formatarMoeda(d.dsp_valordsp)}">
-                    Confirmar
-                </button>
-            </div>
-        </div>
-    `).join('');
-
-    lista.querySelectorAll('.btn-confirmar-despesa').forEach(btn => {
-        btn.addEventListener('click', () => abrirModalConfirmarDespesa(btn.dataset.id, btn.dataset.descricao, btn.dataset.filial));
-    });
+    }).join('') || '<p class="text-xs text-gray-400">Nenhuma conta cadastrada ainda. Use CADASTROS.</p>';
 }
 
 // --- TABELA DE MOVIMENTOS ---
 
+let filtroTipoMovimentos = '';
+
 function renderTabelaMovimentos(movimentos) {
     const dados = movimentos.map(m => ({
         ...m,
-        origem_label: m.origem === 'manual' ? 'Manual' : (m.origem === 'despesa_caixa' ? 'Caixa (Despesas)' : 'ERP'),
+        classificacao: textoClassificacao(m),
+        origem_label: ORIGEM_LABEL[m.origem] || m.origem,
         forma_label: FORMAS_PAGAMENTO_LABEL[m.forma_pagamento] || m.forma_pagamento || '-'
     }));
 
-    if (!tabelaMovimentos) {
-        tabelaMovimentos = new Tabulator('#tabela-movimentos', {
-            data: dados,
-            layout: 'fitColumns',
-            height: '360px',
-            placeholder: 'Nenhum movimento lançado neste dia.',
-            columns: [
-                { title: 'Conta', field: 'nome_conta', widthGrow: 1.2 },
-                {
-                    title: 'Centro de Custo', field: 'nome_centro_custo', widthGrow: 1.2,
-                    formatter: cell => {
-                        const m = cell.getRow().getData();
-                        const base = escapeHtml(cell.getValue() || '-');
-                        if (!m.veiculo_placa) return base;
-                        return `${base} <span class="text-gray-400">· ${escapeHtml(m.veiculo_placa)}</span>`;
-                    }
-                },
-                { title: 'Tipo Despesa', field: 'tipo_despesa', widthGrow: 1, formatter: cell => escapeHtml(cell.getValue() || '-') },
-                { title: 'Tipo', field: 'tipo', width: 80, formatter: cell => cell.getValue() === 'entrada' ? '<span class="text-green-600 font-bold">Entrada</span>' : '<span class="text-red-600 font-bold">Saída</span>' },
-                { title: 'Valor', field: 'valor', width: 110, hozAlign: 'right', formatter: cell => formatarMoeda(cell.getValue()) },
-                { title: 'Descrição', field: 'descricao', widthGrow: 2 },
-                { title: 'Forma', field: 'forma_label', width: 90 },
-                { title: 'Origem', field: 'origem_label', width: 110 },
-                { title: 'Usuário', field: 'nome_usuario_lancamento', width: 110 },
-                {
-                    title: 'Status', field: 'status', width: 110,
-                    formatter: cell => {
-                        const m = cell.getRow().getData();
-                        if (m.id_movimento_estornado) return `<span class="text-gray-400 italic">Estorno de #${Number(m.id_movimento_estornado)}</span>`;
-                        if (m.status === 'estornado') return '<span class="text-gray-400 italic">Estornado</span>';
-                        return '<button class="btn-estornar text-red-600 hover:underline text-[11px] font-bold">Estornar</button>';
-                    },
-                    cellClick: (e, cell) => {
-                        const m = cell.getRow().getData();
-                        if (!movimentoEfetivo(m)) return;
-                        estornarMovimento(m.id);
-                    }
-                }
-            ]
-        });
-    } else {
-        tabelaMovimentos.setData(dados);
+    if (tabelaMovimentos) {
+        tabelaMovimentos.setData(dados).then(aplicarFiltrosMovimentos);
+        return;
     }
+
+    tabelaMovimentos = new Tabulator('#tabela-movimentos', {
+        data: dados,
+        layout: 'fitColumns',
+        height: '100%',
+        placeholder: 'Nenhum movimento lançado neste dia.',
+        rowFormatter: row => {
+            if (!movimentoEfetivo(row.getData())) row.getElement().style.opacity = '0.45';
+        },
+        columns: [
+            {
+                title: 'Tipo', field: 'tipo', width: 65,
+                formatter: cell => cell.getValue() === 'entrada'
+                    ? '<span class="text-green-600 font-bold">Entrada</span>' : '<span class="text-red-600 font-bold">Saída</span>'
+            },
+            {
+                title: 'Valor', field: 'valor', width: 105, hozAlign: 'right',
+                formatter: cell => {
+                    const m = cell.getRow().getData();
+                    return `<span class="font-bold ${m.tipo === 'entrada' ? 'text-green-700' : 'text-red-700'}">${formatarMoeda(cell.getValue())}</span>`;
+                }
+            },
+            {
+                title: 'Juros', field: 'valor_juros', width: 80, hozAlign: 'right',
+                formatter: cell => Number(cell.getValue()) > 0 ? `<span class="text-amber-700 font-bold">${formatarMoeda(cell.getValue())}</span>` : '<span class="text-gray-300">-</span>'
+            },
+            { title: 'Descrição', field: 'descricao', widthGrow: 2.2, minWidth: 160, formatter: cell => escapeHtml(cell.getValue()) },
+            { title: 'Conta', field: 'nome_conta', widthGrow: 1.2, minWidth: 110, formatter: cell => escapeHtml(cell.getValue()) },
+            {
+                title: 'Centro de Custo', field: 'nome_centro_custo', widthGrow: 1.1, minWidth: 100,
+                formatter: cell => {
+                    const m = cell.getRow().getData();
+                    const base = escapeHtml(cell.getValue() || '-');
+                    return m.veiculo_placa ? `${base} <span class="text-gray-400">· ${escapeHtml(m.veiculo_placa)}</span>` : base;
+                }
+            },
+            { title: 'Grupo / Tipo', field: 'classificacao', widthGrow: 1.3, minWidth: 110, formatter: cell => escapeHtml(cell.getValue()) },
+            { title: 'Favorecido', field: 'favorecido', widthGrow: 1.2, minWidth: 90, formatter: cell => escapeHtml(cell.getValue() || '-') },
+            { title: 'NF', field: 'numero_nf', width: 70, formatter: cell => escapeHtml(cell.getValue() || '-') },
+            { title: 'Forma / Origem', field: 'forma_label', width: 100 },
+            { title: 'Lançado por', field: 'origem_label', width: 105 },
+            { title: 'Usuário', field: 'nome_usuario_lancamento', width: 95, formatter: cell => escapeHtml(cell.getValue()) },
+            {
+                title: 'Status', field: 'status', width: 90, headerSort: false,
+                formatter: cell => {
+                    const m = cell.getRow().getData();
+                    if (m.id_movimento_estornado) return `<span class="text-gray-500 italic">Estorno de #${Number(m.id_movimento_estornado)}</span>`;
+                    if (m.status === 'estornado') return '<span class="text-gray-500 italic">Estornado</span>';
+                    return '<button class="text-red-600 hover:underline text-[11px] font-bold">Estornar</button>';
+                },
+                cellClick: (e, cell) => {
+                    const m = cell.getRow().getData();
+                    if (movimentoEfetivo(m)) estornarMovimento(m.id);
+                }
+            }
+        ]
+    });
+    tabelaMovimentos.on('tableBuilt', aplicarFiltrosMovimentos);
+}
+
+const ORIGEM_LABEL = { manual: 'Manual', despesa_caixa: 'Despesa da loja', erp_apagar: 'Contas a Pagar', erp_receber: 'Apurado da loja' };
+
+function aplicarFiltrosMovimentos() {
+    document.querySelectorAll('.filtro-tipo').forEach(btn => {
+        const ativo = btn.dataset.tipo === filtroTipoMovimentos;
+        btn.classList.toggle('bg-gray-700', ativo);
+        btn.classList.toggle('text-white', ativo);
+        btn.classList.toggle('bg-white', !ativo);
+        btn.classList.toggle('text-gray-600', !ativo);
+    });
+    if (!tabelaMovimentos) return;
+    const termo = normalizarNome(document.getElementById('busca-movimentos').value);
+    tabelaMovimentos.setFilter(m => {
+        if (filtroTipoMovimentos && m.tipo !== filtroTipoMovimentos) return false;
+        if (!termo) return true;
+        return [m.descricao, m.favorecido, m.numero_nf, m.nome_conta, m.nome_centro_custo, m.classificacao]
+            .some(v => normalizarNome(v).includes(termo));
+    });
+}
+
+function mudarDia(dias) {
+    const input = document.getElementById('filtro-data');
+    const [ano, mes, dia] = input.value.split('-').map(Number);
+    const d = new Date(ano, mes - 1, dia + dias);
+    input.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    carregarDia(input.value);
 }
 
 async function estornarMovimento(id) {
-    if (!confirm('Confirma o estorno deste lançamento? Isso cria um lançamento inverso e não pode ser desfeito.')) return;
+    if (!await dialogoConfirmar('Isso cria um lançamento inverso e não pode ser desfeito.', { titulo: 'Estornar lançamento?', textoOk: 'Estornar', perigo: true })) return;
     try {
         await apiFetch(`/movimentos/${id}/estornar`, { method: 'POST' });
         await carregarDia(document.getElementById('filtro-data').value);
     } catch (err) {
-        alert('Erro ao estornar: ' + err.message);
+        dialogoAviso('Erro ao estornar: ' + err.message, 'erro');
     }
 }
 
 // --- MODAIS ---
 
 function setupModais() {
-    document.getElementById('btn-novo-lancamento').addEventListener('click', abrirModalLancamento);
+    document.getElementById('btn-nova-entrada').addEventListener('click', () => abrirModalLancamento('entrada'));
+    document.getElementById('btn-nova-saida').addEventListener('click', () => abrirModalLancamento('saida'));
     document.getElementById('btn-fechar-modal-lancamento').addEventListener('click', fecharModalLancamento);
     document.getElementById('btn-cancelar-lancamento').addEventListener('click', fecharModalLancamento);
     document.getElementById('btn-salvar-lancamento').addEventListener('click', salvarLancamento);
+    ['lanc-valor', 'lanc-juros'].forEach(id => document.getElementById(id).addEventListener('input', atualizarResumoJurosLancamento));
 
-    document.getElementById('btn-fechar-modal-confirmar').addEventListener('click', fecharModalConfirmarDespesa);
-    document.getElementById('btn-cancelar-confirmar').addEventListener('click', fecharModalConfirmarDespesa);
-    document.getElementById('btn-salvar-confirmar').addEventListener('click', salvarConfirmarDespesa);
+    document.getElementById('btn-apurado').addEventListener('click', abrirModalApurado);
+    document.getElementById('btn-fechar-modal-apurado').addEventListener('click', () => fecharModal('modal-apurado'));
+    document.getElementById('btn-cancelar-apurado').addEventListener('click', () => fecharModal('modal-apurado'));
+    document.getElementById('btn-apurado-aplicar-conta').addEventListener('click', aplicarContaApurado);
+    document.getElementById('btn-lancar-apurado').addEventListener('click', lancarApurado);
 
     document.getElementById('btn-exportar-pdf').addEventListener('click', exportarPDF);
     document.getElementById('btn-whatsapp').addEventListener('click', compartilharWhatsApp);
@@ -364,6 +438,20 @@ function setupModais() {
     document.getElementById('btn-fechar-modal-gerenciar').addEventListener('click', () => fecharModal('modal-gerenciar'));
     document.getElementById('btn-add-conta').addEventListener('click', adicionarConta);
     document.getElementById('btn-add-centro').addEventListener('click', adicionarCentroCusto);
+    document.getElementById('btn-add-grupo').addEventListener('click', adicionarGrupo);
+    document.getElementById('btn-add-tipo').addEventListener('click', adicionarTipo);
+
+    document.getElementById('btn-importar-erp').addEventListener('click', () => abrirModalImportar('baixados'));
+    document.getElementById('kpi-pend-erp').addEventListener('click', () => abrirModalImportar('baixados'));
+    document.getElementById('btn-fechar-modal-importar').addEventListener('click', () => fecharModal('modal-importar'));
+    document.getElementById('btn-cancelar-importar').addEventListener('click', () => fecharModal('modal-importar'));
+    document.querySelectorAll('.aba-importar').forEach(btn => {
+        btn.addEventListener('click', () => carregarTitulosImportar(btn.dataset.modo));
+    });
+    document.getElementById('busca-importar').addEventListener('input', aplicarBuscaImportar);
+    document.getElementById('imp-grupo-despesa').addEventListener('change', handleGrupoImportarChange);
+    document.getElementById('btn-aplicar-conta-lote').addEventListener('click', aplicarContaLote);
+    document.getElementById('btn-confirmar-importar').addEventListener('click', importarMarcados);
 }
 
 function abrirModal(id) {
@@ -382,27 +470,65 @@ function fecharModal(id) {
     setTimeout(() => modal.classList.add('hidden'), 200);
 }
 
-function abrirModalLancamento() {
-    document.getElementById('lanc-valor').value = '';
-    document.getElementById('lanc-descricao').value = '';
-    document.getElementById('lanc-favorecido').value = '';
-    document.getElementById('lanc-veiculo').value = '';
-    document.getElementById('lanc-numero-nf').value = '';
-    document.getElementById('lanc-data-despesa').value = '';
-    document.getElementById('lanc-tipo-despesa').value = '';
-    handleTipoDespesaChange();
+// Entrada e Saída usam o mesmo modal, mas cada botão abre só os campos que fazem sentido:
+// uma entrada (sangria, sobra...) não tem grupo de despesa, NF, veículo nem favorecido.
+const MODOS_LANCAMENTO = {
+    entrada: {
+        titulo: 'Nova Entrada', icone: 'arrow-down-circle', corCabecalho: 'bg-green-50', corTitulo: 'text-green-900',
+        corBotao: ['bg-green-600', 'hover:bg-green-700'], textoBotao: 'Salvar Entrada',
+        labelConta: 'Conta onde entrou', labelCentro: 'Loja / Origem do valor', labelForma: 'Origem da Entrada', labelValor: 'Valor (R$)',
+        opcoesForma: OPCOES_ENTRADA, placeholderDescricao: 'Ex: Sangria do caixa 2 da loja Santa Cruz'
+    },
+    saida: {
+        titulo: 'Nova Saída', icone: 'arrow-up-circle', corCabecalho: 'bg-red-50', corTitulo: 'text-red-900',
+        corBotao: ['bg-red-600', 'hover:bg-red-700'], textoBotao: 'Salvar Saída',
+        labelConta: 'Conta de onde saiu', labelCentro: 'Centro de Custo', labelForma: 'Forma de Pagamento', labelValor: 'Valor total pago (R$)',
+        opcoesForma: OPCOES_SAIDA, placeholderDescricao: 'Ex: Pagamento fornecedor X'
+    }
+};
+
+function abrirModalLancamento(modo) {
+    modoLancamento = modo;
+    const cfg = MODOS_LANCAMENTO[modo];
+
+    const cabecalho = document.getElementById('lanc-cabecalho');
+    cabecalho.classList.remove('bg-green-50', 'bg-red-50');
+    cabecalho.classList.add(cfg.corCabecalho);
+    const titulo = document.getElementById('lanc-titulo');
+    titulo.className = `text-lg font-bold flex items-center gap-2 ${cfg.corTitulo}`;
+    titulo.innerHTML = `<i data-feather="${cfg.icone}" class="w-5 h-5"></i> ${cfg.titulo}`;
+    const botao = document.getElementById('btn-salvar-lancamento');
+    botao.classList.remove('bg-green-600', 'hover:bg-green-700', 'bg-red-600', 'hover:bg-red-700');
+    botao.classList.add(...cfg.corBotao);
+    document.getElementById('lanc-salvar-texto').textContent = cfg.textoBotao;
+
+    document.getElementById('lanc-conta-label').textContent = cfg.labelConta;
+    document.getElementById('lanc-centro-custo-label').textContent = cfg.labelCentro;
+    document.getElementById('lanc-forma-pagamento-label').textContent = cfg.labelForma;
+    document.getElementById('lanc-valor-label').textContent = cfg.labelValor;
+    document.getElementById('lanc-forma-pagamento').innerHTML =
+        Object.entries(cfg.opcoesForma).map(([valor, texto]) => `<option value="${valor}">${texto}</option>`).join('');
+    document.getElementById('lanc-descricao').placeholder = cfg.placeholderDescricao;
+
+    ['lanc-conta', 'lanc-centro-custo', 'lanc-valor', 'lanc-juros', 'lanc-descricao', 'lanc-favorecido', 'lanc-veiculo', 'lanc-litros', 'lanc-km',
+        'lanc-numero-nf', 'lanc-data-despesa', 'lanc-grupo-despesa'].forEach(id => { document.getElementById(id).value = ''; });
+
+    document.querySelectorAll('#modal-lancamento .campo-saida').forEach(el => el.classList.toggle('hidden', modo !== 'saida'));
+    if (modo === 'saida') handleGrupoLancamentoChange();
+    atualizarResumoJurosLancamento();
+
+    if (typeof feather !== 'undefined') feather.replace();
     abrirModal('modal-lancamento');
 }
 function fecharModalLancamento() { fecharModal('modal-lancamento'); }
 
-function atualizarOpcoesFormaPagamento() {
-    const tipo = document.getElementById('lanc-tipo').value;
-    const label = document.getElementById('lanc-forma-pagamento-label');
-    const select = document.getElementById('lanc-forma-pagamento');
-    const opcoes = tipo === 'entrada' ? OPCOES_ENTRADA : OPCOES_SAIDA;
-
-    label.textContent = tipo === 'entrada' ? 'Origem da Entrada' : 'Forma de Pagamento';
-    select.innerHTML = Object.entries(opcoes).map(([valor, texto]) => `<option value="${valor}">${texto}</option>`).join('');
+// Mostra quanto do total pago é o título e quanto é juros, para não haver dúvida se o juros soma ou não.
+function atualizarResumoJurosLancamento() {
+    const total = Number(document.getElementById('lanc-valor').value || 0);
+    const juros = Number(document.getElementById('lanc-juros').value || 0);
+    document.getElementById('lanc-juros-resumo').textContent = juros > 0
+        ? `Título ${formatarMoeda(total - juros)} + juros ${formatarMoeda(juros)} = ${formatarMoeda(total)}`
+        : 'Os juros já estão dentro do valor total pago.';
 }
 
 function atualizarVisibilidadeFilialCentro() {
@@ -411,28 +537,38 @@ function atualizarVisibilidadeFilialCentro() {
 }
 
 async function salvarLancamento() {
-    const idVeiculo = document.getElementById('lanc-veiculo').value;
+    const ehSaida = modoLancamento === 'saida';
+    const valorCampo = id => document.getElementById(id).value.trim() || null;
     const payload = {
+        tipo: modoLancamento,
         id_conta: Number(document.getElementById('lanc-conta').value),
-        id_centro_custo: document.getElementById('lanc-centro-custo').value || null,
-        id_veiculo: idVeiculo || null,
-        tipo_despesa: document.getElementById('lanc-tipo-despesa').value || null,
-        grupo_despesa: document.getElementById('lanc-grupo-despesa').value || null,
-        numero_nf: document.getElementById('lanc-numero-nf').value.trim() || null,
-        data_despesa: document.getElementById('lanc-data-despesa').value || null,
+        id_centro_custo: valorCampo('lanc-centro-custo'),
         data_movimento: document.getElementById('filtro-data').value,
-        tipo: document.getElementById('lanc-tipo').value,
         valor: Number(document.getElementById('lanc-valor').value),
+        valor_juros: ehSaida ? Number(document.getElementById('lanc-juros').value || 0) : null,
         descricao: document.getElementById('lanc-descricao').value.trim(),
-        favorecido: document.getElementById('lanc-favorecido').value.trim() || null,
-        forma_pagamento: document.getElementById('lanc-forma-pagamento').value
+        forma_pagamento: document.getElementById('lanc-forma-pagamento').value,
+        grupo_despesa: ehSaida ? valorCampo('lanc-grupo-despesa') : null,
+        tipo_despesa: ehSaida ? valorCampo('lanc-tipo-despesa') : null,
+        id_veiculo: ehSaida ? valorCampo('lanc-veiculo') : null,
+        litros: ehSaida ? valorCampo('lanc-litros') : null,
+        odometro: ehSaida ? valorCampo('lanc-km') : null,
+        numero_nf: ehSaida ? valorCampo('lanc-numero-nf') : null,
+        data_despesa: ehSaida ? valorCampo('lanc-data-despesa') : null,
+        favorecido: ehSaida ? valorCampo('lanc-favorecido') : null
     };
 
     if (!payload.id_conta || !payload.valor || !payload.descricao) {
-        return alert('Preencha conta, valor e descrição.');
+        return dialogoAviso('Preencha conta, valor e descrição.');
     }
-    if (idVeiculo && !GRUPOS_QUE_EXIGEM_VEICULO.includes(payload.grupo_despesa)) {
-        return alert('O campo Veículo só se aplica a despesas do grupo Manutenção ou Combustível.');
+    if (ehSaida && !payload.grupo_despesa) {
+        return dialogoAviso('Selecione o grupo de despesa.');
+    }
+    if (ehSaida && grupoPedeVeiculo(payload.grupo_despesa) && payload.id_veiculo === null) {
+        return dialogoAviso(`${payload.grupo_despesa}: selecione o veículo (ou "Sem veículo").`);
+    }
+    if (ehSaida && payload.valor_juros && payload.valor_juros >= payload.valor) {
+        return dialogoAviso('Os juros precisam ser menores que o valor total pago.');
     }
 
     try {
@@ -440,36 +576,479 @@ async function salvarLancamento() {
         fecharModalLancamento();
         await carregarDia(document.getElementById('filtro-data').value);
     } catch (err) {
-        alert('Erro ao salvar lançamento: ' + err.message);
+        dialogoAviso('Erro ao salvar lançamento: ' + err.message, 'erro');
     }
 }
 
-// dsp_filial guarda o nome da Unidade (ex.: "Santa Cruz"), o mesmo nome_filial que vem
-// do JOIN dos centros de custo — então dá para já sugerir o centro de custo da loja.
-function abrirModalConfirmarDespesa(id, descricao, nomeFilial) {
-    document.getElementById('confirmar-despesa-id').value = id;
-    document.getElementById('confirmar-despesa-descricao').textContent = descricao;
-    document.getElementById('confirmar-conta').value = '';
-    const centroDaLoja = centrosCustoCache.find(c => c.nome_filial && c.nome_filial === nomeFilial);
-    document.getElementById('confirmar-centro-custo').value = centroDaLoja ? String(centroDaLoja.id) : '';
-    abrirModal('modal-confirmar-despesa');
+// --- APURADO DAS LOJAS (ERP Contas a Receber) ---
+
+let tabelaApurado = null;
+let tabelaApuradoPronta = null;
+
+function abrirModalApurado() {
+    document.getElementById('dia-apurado').textContent = formatarDataBR(document.getElementById('filtro-data').value);
+    preencherSelectContas(document.getElementById('apurado-conta-lote'));
+    abrirModal('modal-apurado');
+    // A tabela só pode ser montada com o modal visível, senão o Tabulator calcula altura zero.
+    requestAnimationFrame(carregarApurado);
 }
-function fecharModalConfirmarDespesa() { fecharModal('modal-confirmar-despesa'); }
 
-async function salvarConfirmarDespesa() {
-    const id = document.getElementById('confirmar-despesa-id').value;
-    const payload = {
-        id_conta: Number(document.getElementById('confirmar-conta').value),
-        id_centro_custo: document.getElementById('confirmar-centro-custo').value || null
-    };
-    if (!payload.id_conta) return alert('Selecione a conta que pagou.');
-
+async function carregarApurado() {
+    const dataRef = document.getElementById('filtro-data').value;
+    await montarTabelaApurado();
+    tabelaApurado.setData([]);
+    tabelaApurado.alert('Buscando o apurado no ERP...');
     try {
-        await apiFetch(`/despesa-caixa/${id}/confirmar`, { method: 'POST', body: JSON.stringify(payload) });
-        fecharModalConfirmarDespesa();
+        const linhas = await apiFetch(`/apurado?data=${dataRef}`);
+        tabelaApurado.clearAlert();
+        tabelaApurado.setData(linhas.map(l => ({
+            ...l,
+            marcado: false,
+            valor: l.valor_erp,
+            taxa: 0,
+            id_conta: l.id_conta_sugerida,
+            id_centro_custo: l.id_centro_sugerido
+        })));
+    } catch (err) {
+        tabelaApurado.clearAlert();
+        dialogoAviso('Erro ao buscar o apurado: ' + err.message, 'erro');
+    }
+    atualizarResumoApurado();
+}
+
+// Aceita a taxa em reais ("12,50") ou em percentual do valor ("3,5%").
+function interpretarTaxa(texto, valor) {
+    let s = String(texto ?? '').trim().replace(/\s|R\$/g, '');
+    if (!s) return 0;
+    const percentual = s.endsWith('%');
+    s = s.replace('%', '');
+    if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+    const numero = Number(s);
+    if (!Number.isFinite(numero) || numero < 0) return 0;
+    const taxa = percentual ? Number(valor || 0) * numero / 100 : numero;
+    return Math.round(taxa * 100) / 100;
+}
+
+function linhaApuradoLancada(l) {
+    return !!l.id_movimento;
+}
+
+function montarTabelaApurado() {
+    if (tabelaApuradoPronta) return tabelaApuradoPronta;
+    const opcoesConta = () => contasCache.map(c => ({ label: c.nome, value: c.id }));
+    const editavel = cell => !linhaApuradoLancada(cell.getRow().getData());
+
+    tabelaApurado = new Tabulator('#tabela-apurado', {
+        data: [],
+        layout: 'fitColumns',
+        height: '100%',
+        index: 'chave',
+        groupBy: 'loja',
+        groupHeader: (loja, qtd, linhas) => {
+            const total = linhas.reduce((acc, l) => acc + Number(l.valor_erp || 0), 0);
+            return `${escapeHtml(loja)} <span class="text-gray-500 font-normal ml-2">ERP: ${formatarMoeda(total)}</span>`;
+        },
+        placeholder: 'Nenhum recebimento no ERP neste dia.',
+        rowFormatter: row => {
+            if (linhaApuradoLancada(row.getData())) row.getElement().style.background = '#f0fdf4';
+        },
+        columns: [
+            {
+                title: '', field: 'marcado', width: 40, hozAlign: 'center', headerSort: false,
+                titleFormatter: () => '<input type="checkbox" id="apurado-marcar-todos" title="Marcar todas as linhas a lançar">',
+                formatter: cell => linhaApuradoLancada(cell.getRow().getData())
+                    ? '<i class="text-emerald-600 font-bold">✓</i>'
+                    : `<input type="checkbox" ${cell.getValue() ? 'checked' : ''}>`,
+                cellClick: (e, cell) => {
+                    if (linhaApuradoLancada(cell.getRow().getData())) return;
+                    cell.getRow().update({ marcado: !cell.getValue() });
+                    atualizarResumoApurado();
+                },
+                headerClick: () => {
+                    const linhas = tabelaApurado.getRows().filter(l => !linhaApuradoLancada(l.getData()));
+                    const marcar = !linhas.every(l => l.getData().marcado);
+                    linhas.forEach(l => l.update({ marcado: marcar }));
+                    atualizarResumoApurado();
+                }
+            },
+            { title: 'Modalidade', field: 'nome_modalidade', widthGrow: 1.4, minWidth: 150, headerSort: false },
+            { title: 'Qtd', field: 'qtd', width: 55, hozAlign: 'right', headerSort: false },
+            { title: 'Valor ERP', field: 'valor_erp', width: 110, hozAlign: 'right', headerSort: false, formatter: cell => formatarMoeda(cell.getValue()) },
+            {
+                title: 'Valor a lançar', field: 'valor', width: 120, hozAlign: 'right', headerSort: false,
+                editor: 'number', editorParams: { min: 0, step: 0.01 }, editable: editavel,
+                formatter: cell => {
+                    const l = cell.getRow().getData();
+                    if (linhaApuradoLancada(l)) return formatarMoeda(l.valor_lancado);
+                    const difere = Math.abs(Number(cell.getValue() || 0) - Number(l.valor_erp || 0)) >= 0.01;
+                    return `<span class="font-bold ${difere ? 'text-amber-700' : ''}" ${difere ? 'title="Diferente do ERP"' : ''}>${formatarMoeda(cell.getValue())}</span>`;
+                }
+            },
+            {
+                title: 'Taxa', field: 'taxa', width: 110, hozAlign: 'right', headerSort: false,
+                editor: 'input', editable: cell => editavel(cell) && cell.getRow().getData().aceita_taxa,
+                mutatorEdit: (valor, dados) => interpretarTaxa(valor, dados.valor),
+                formatter: cell => {
+                    const l = cell.getRow().getData();
+                    if (linhaApuradoLancada(l)) return l.taxa_lancada ? formatarMoeda(l.taxa_lancada) : '-';
+                    if (!l.aceita_taxa) return '<span class="text-gray-300">—</span>';
+                    const taxa = Number(cell.getValue() || 0);
+                    if (!taxa) return '<span class="text-gray-400">digitar ▾</span>';
+                    const pct = Number(l.valor) > 0 ? (taxa / Number(l.valor) * 100).toFixed(2).replace('.', ',') : '0';
+                    return `<span class="text-red-700">${formatarMoeda(taxa)}</span> <span class="text-gray-400 text-[10px]">${pct}%</span>`;
+                }
+            },
+            {
+                title: 'Líquido', field: 'liquido', width: 115, hozAlign: 'right', headerSort: false,
+                formatter: cell => {
+                    const l = cell.getRow().getData();
+                    const liquido = linhaApuradoLancada(l)
+                        ? Number(l.valor_lancado || 0) - Number(l.taxa_lancada || 0)
+                        : Number(l.valor || 0) - Number(l.taxa || 0);
+                    return `<span class="font-bold text-green-700">${formatarMoeda(liquido)}</span>`;
+                }
+            },
+            {
+                title: 'Conta', field: 'id_conta', widthGrow: 1.5, minWidth: 170, headerSort: false,
+                editor: 'list', editorParams: () => ({ values: opcoesConta() }), editable: editavel,
+                formatter: cell => {
+                    const l = cell.getRow().getData();
+                    if (linhaApuradoLancada(l)) return escapeHtml(l.conta_lancada);
+                    const conta = contasCache.find(c => c.id === cell.getValue());
+                    return conta ? escapeHtml(conta.nome) : '<span class="text-red-500 font-bold">Escolher ▾</span>';
+                }
+            },
+            {
+                title: 'Situação', field: 'id_movimento', width: 140, headerSort: false,
+                formatter: cell => linhaApuradoLancada(cell.getRow().getData())
+                    ? '<span class="text-emerald-700 font-bold">Lançado</span> <button class="text-red-600 hover:underline text-[11px] font-bold ml-1">Desfazer</button>'
+                    : '<span class="text-gray-500">A lançar</span>',
+                cellClick: (e, cell) => {
+                    const l = cell.getRow().getData();
+                    if (linhaApuradoLancada(l) && e.target.tagName === 'BUTTON') desfazerApurado(l);
+                }
+            }
+        ]
+    });
+    tabelaApurado.on('cellEdited', cell => {
+        // Valor ou taxa mudou: redesenha a linha para atualizar o % e o líquido.
+        if (cell.getField() === 'valor' || cell.getField() === 'taxa') cell.getRow().reformat();
+        atualizarResumoApurado();
+    });
+    tabelaApuradoPronta = new Promise(resolve => tabelaApurado.on('tableBuilt', resolve));
+    return tabelaApuradoPronta;
+}
+
+function linhasApuradoMarcadas() {
+    return tabelaApurado ? tabelaApurado.getData().filter(l => l.marcado && !linhaApuradoLancada(l)) : [];
+}
+
+function atualizarResumoApurado() {
+    const dados = tabelaApurado ? tabelaApurado.getData() : [];
+    const marcadas = linhasApuradoMarcadas();
+    const bruto = marcadas.reduce((acc, l) => acc + Number(l.valor || 0), 0);
+    const taxas = marcadas.reduce((acc, l) => acc + Number(l.taxa || 0), 0);
+    const lancadas = dados.filter(linhaApuradoLancada).length;
+    document.getElementById('resumo-apurado').textContent =
+        `${dados.length} linha(s) · ${lancadas} já lançada(s) · ${marcadas.length} marcada(s): ` +
+        `bruto ${formatarMoeda(bruto)} − taxas ${formatarMoeda(taxas)} = líquido ${formatarMoeda(bruto - taxas)}`;
+    const todos = document.getElementById('apurado-marcar-todos');
+    const pendentes = dados.filter(l => !linhaApuradoLancada(l));
+    if (todos) todos.checked = pendentes.length > 0 && pendentes.every(l => l.marcado);
+}
+
+function aplicarContaApurado() {
+    const idConta = Number(document.getElementById('apurado-conta-lote').value);
+    if (!idConta) return dialogoAviso('Escolha a conta.');
+    const marcadas = tabelaApurado.getRows().filter(l => l.getData().marcado && !linhaApuradoLancada(l.getData()));
+    if (!marcadas.length) return dialogoAviso('Marque as linhas que vão para essa conta.');
+    marcadas.forEach(l => l.update({ id_conta: idConta }));
+}
+
+async function lancarApurado() {
+    const marcadas = linhasApuradoMarcadas();
+    if (!marcadas.length) return dialogoAviso('Marque ao menos uma linha.');
+    const semConta = marcadas.filter(l => !l.id_conta);
+    if (semConta.length) return dialogoAviso(`Escolha a conta de ${semConta.length} linha(s) marcada(s) (coluna Conta em vermelho).`);
+    if (marcadas.some(l => !(Number(l.valor) > 0))) return dialogoAviso('Há linha marcada com valor zerado.');
+    const taxaInvalida = marcadas.find(l => Number(l.taxa || 0) >= Number(l.valor));
+    if (taxaInvalida) return dialogoAviso(`${taxaInvalida.loja} · ${taxaInvalida.nome_modalidade}: a taxa precisa ser menor que o valor.`);
+
+    const dataRef = document.getElementById('filtro-data').value;
+    const bruto = marcadas.reduce((acc, l) => acc + Number(l.valor), 0);
+    const taxas = marcadas.reduce((acc, l) => acc + Number(l.taxa || 0), 0);
+    const semTaxa = marcadas.filter(l => l.aceita_taxa && !Number(l.taxa)).length;
+    let mensagem = `${marcadas.length} linha(s) entram no dia ${formatarDataBR(dataRef)}: entradas de ${formatarMoeda(bruto)}`;
+    mensagem += taxas ? ` e saídas de taxa de ${formatarMoeda(taxas)}.` : '.';
+    if (semTaxa) mensagem += `\n${semTaxa} linha(s) de cartão/Pix estão sem taxa.`;
+    if (!await dialogoConfirmar(mensagem, { titulo: 'Lançar apurado?', textoOk: 'Lançar' })) return;
+
+    const payload = {
+        data_movimento: dataRef,
+        itens: marcadas.map(l => ({
+            cod_filial: l.cod_filial, modalidade: l.modalidade, valor: Number(l.valor), taxa: Number(l.taxa || 0),
+            id_conta: l.id_conta, id_centro_custo: l.id_centro_custo || null
+        }))
+    };
+
+    const botao = document.getElementById('btn-lancar-apurado');
+    botao.disabled = true;
+    try {
+        const resultado = await apiFetch('/apurado/lancar', { method: 'POST', body: JSON.stringify(payload) });
+        let msg = resultado.message;
+        if (resultado.ja_lancados.length) msg += `\nJá estavam lançadas e foram ignoradas: ${resultado.ja_lancados.join(', ')}.`;
+        dialogoAviso(msg, 'sucesso', 'Apurado lançado');
+        await carregarApurado();
+        await carregarDia(dataRef);
+    } catch (err) {
+        dialogoAviso('Erro ao lançar o apurado: ' + err.message, 'erro');
+    } finally {
+        botao.disabled = false;
+    }
+}
+
+async function desfazerApurado(l) {
+    const taxa = l.taxa_lancada ? ` e a taxa de ${formatarMoeda(l.taxa_lancada)}` : '';
+    const ok = await dialogoConfirmar(
+        `A entrada de ${formatarMoeda(l.valor_lancado)} (${l.loja} · ${l.nome_modalidade})${taxa} ${taxa ? 'saem' : 'sai'} da tesouraria por estorno e a linha volta a ficar a lançar.`,
+        { titulo: 'Desfazer lançamento?', textoOk: 'Desfazer', perigo: true }
+    );
+    if (!ok) return;
+    try {
+        await apiFetch(`/movimentos/${l.id_movimento}/estornar`, { method: 'POST' });
+        await carregarApurado();
         await carregarDia(document.getElementById('filtro-data').value);
     } catch (err) {
-        alert('Erro ao confirmar despesa: ' + err.message);
+        dialogoAviso('Erro ao desfazer: ' + err.message, 'erro');
+    }
+}
+
+// --- IMPORTAR DO CONTAS A PAGAR ---
+
+function formatarDataBR(iso) {
+    if (!iso) return '-';
+    const [ano, mes, dia] = iso.split('-');
+    return `${dia}/${mes}/${ano}`;
+}
+
+function abrirModalImportar(modo) {
+    const dataRef = document.getElementById('filtro-data').value;
+    document.getElementById('dia-importar').textContent = formatarDataBR(dataRef);
+    document.getElementById('busca-importar').value = '';
+
+    preencherSelectGrupos(document.getElementById('imp-grupo-despesa'));
+    handleGrupoImportarChange();
+    document.getElementById('imp-veiculo').innerHTML = document.getElementById('lanc-veiculo').innerHTML;
+    document.getElementById('imp-forma-pagamento').innerHTML =
+        Object.entries(OPCOES_SAIDA).map(([valor, texto]) => `<option value="${valor}" ${valor === 'boleto' ? 'selected' : ''}>${texto}</option>`).join('');
+    preencherSelectContas(document.getElementById('imp-conta-lote'));
+
+    abrirModal('modal-importar');
+    // A tabela só pode ser montada com o modal visível, senão o Tabulator calcula altura zero.
+    requestAnimationFrame(() => carregarTitulosImportar(modo));
+}
+
+function handleGrupoImportarChange() {
+    const nomeGrupo = document.getElementById('imp-grupo-despesa').value;
+    preencherSelectTipos(document.getElementById('imp-tipo-despesa'), nomeGrupo);
+    const grupo = classificacaoCache.find(g => g.nome === nomeGrupo);
+    const precisaVeiculo = !!(grupo && grupo.exige_veiculo);
+    document.getElementById('imp-veiculo-wrap').classList.toggle('hidden', !precisaVeiculo);
+    if (!precisaVeiculo) document.getElementById('imp-veiculo').value = '';
+}
+
+async function carregarTitulosImportar(modo) {
+    modoImportar = modo;
+    document.querySelectorAll('.aba-importar').forEach(btn => {
+        const ativa = btn.dataset.modo === modo;
+        btn.classList.toggle('bg-blue-600', ativa);
+        btn.classList.toggle('text-white', ativa);
+        btn.classList.toggle('border-blue-600', ativa);
+        btn.classList.toggle('bg-white', !ativa);
+        btn.classList.toggle('text-gray-600', !ativa);
+    });
+
+    const dataRef = document.getElementById('filtro-data').value;
+    await montarTabelaImportar();
+    tabelaImportar.setData([]);
+    tabelaImportar.alert('Buscando títulos no Contas a Pagar...');
+    try {
+        const titulos = await apiFetch(`/erp/titulos?modo=${modo}&data=${dataRef}`);
+        titulosImportar = titulos.map(t => ({
+            ...t,
+            marcado: false,
+            id_conta: t.id_conta_sugerida,
+            id_centro_custo: t.id_centro_sugerido || '',
+            // Título em aberto: o juros digitado soma ao valor do título. Pago: o ERP já traz o total com juros.
+            valor_titulo: t.pago ? null : t.valor
+        }));
+        tabelaImportar.clearAlert();
+        tabelaImportar.setData(titulosImportar);
+        aplicarBuscaImportar();
+    } catch (err) {
+        tabelaImportar.clearAlert();
+        dialogoAviso('Erro ao buscar títulos: ' + err.message, 'erro');
+    }
+    atualizarResumoImportar();
+}
+
+// O Tabulator só aceita dados depois do evento tableBuilt; a promessa é reaproveitada nas próximas aberturas.
+let tabelaImportarPronta = null;
+function montarTabelaImportar() {
+    if (tabelaImportarPronta) return tabelaImportarPronta;
+    const opcoesConta = () => contasCache.map(c => ({ label: c.nome, value: c.id }));
+    const opcoesCentro = () => [{ label: '-- Nenhum --', value: '' }, ...centrosCustoCache.map(c => ({ label: c.nome, value: c.id }))];
+
+    tabelaImportar = new Tabulator('#tabela-importar', {
+        data: [],
+        layout: 'fitColumns',
+        height: '100%',
+        index: 'ap_regist',
+        placeholder: 'Nenhum título pendente nesta aba.',
+        columns: [
+            {
+                title: '', field: 'marcado', width: 40, hozAlign: 'center', headerSort: false,
+                titleFormatter: () => '<input type="checkbox" id="imp-marcar-todos" title="Marcar todos os da lista">',
+                formatter: cell => `<input type="checkbox" ${cell.getValue() ? 'checked' : ''}>`,
+                cellClick: (e, cell) => {
+                    cell.getRow().update({ marcado: !cell.getValue() });
+                    atualizarResumoImportar();
+                },
+                headerClick: () => {
+                    const linhas = tabelaImportar.getRows('active');
+                    const marcar = !linhas.every(l => l.getData().marcado);
+                    linhas.forEach(l => l.update({ marcado: marcar }));
+                    atualizarResumoImportar();
+                }
+            },
+            { title: 'Vencimento', field: 'vencimento', width: 95, formatter: cell => formatarDataBR(cell.getValue()) },
+            { title: 'Fornecedor', field: 'fornecedor', widthGrow: 2, minWidth: 160, formatter: cell => escapeHtml(cell.getValue()) },
+            { title: 'NF', field: 'nf', width: 85, formatter: cell => escapeHtml(cell.getValue() || '-') },
+            { title: 'Filial', field: 'filial', width: 65 },
+            { title: 'Indicação', field: 'indicacao', widthGrow: 1.4, minWidth: 135, formatter: cell => escapeHtml(cell.getValue() || '-') },
+            {
+                title: 'Pago pelo ERP em', field: 'chave_pagamento', widthGrow: 1.3, minWidth: 140,
+                formatter: cell => escapeHtml(cell.getValue() || (cell.getRow().getData().pago ? '-' : 'Em aberto'))
+            },
+            {
+                title: 'Conta', field: 'id_conta', widthGrow: 1.5, minWidth: 170, editor: 'list',
+                editorParams: () => ({ values: opcoesConta() }),
+                formatter: cell => {
+                    const conta = contasCache.find(c => c.id === cell.getValue());
+                    return conta ? escapeHtml(conta.nome) : '<span class="text-red-500 font-bold">Escolher ▾</span>';
+                }
+            },
+            {
+                title: 'Centro de Custo', field: 'id_centro_custo', widthGrow: 1.3, minWidth: 130, editor: 'list',
+                editorParams: () => ({ values: opcoesCentro() }),
+                formatter: cell => {
+                    const centro = centrosCustoCache.find(c => c.id === cell.getValue());
+                    return centro ? escapeHtml(centro.nome) : '<span class="text-gray-400">-- ▾</span>';
+                }
+            },
+            {
+                title: 'Juros', field: 'juros', width: 90, hozAlign: 'right', editor: 'number',
+                editorParams: { min: 0, step: 0.01 },
+                formatter: cell => Number(cell.getValue()) > 0
+                    ? `<span class="text-amber-700 font-bold">${formatarMoeda(cell.getValue())}</span>`
+                    : '<span class="text-gray-400">- ▾</span>'
+            },
+            {
+                title: 'Total pago', field: 'valor', width: 110, hozAlign: 'right', editor: 'number',
+                editorParams: { min: 0.01, step: 0.01 },
+                formatter: cell => formatarMoeda(cell.getValue())
+            }
+        ]
+    });
+    tabelaImportar.on('cellEdited', cell => {
+        const t = cell.getRow().getData();
+        if (cell.getField() === 'juros' && t.valor_titulo != null) {
+            cell.getRow().update({ valor: Math.round((Number(t.valor_titulo) + Number(t.juros || 0)) * 100) / 100 });
+        }
+        atualizarResumoImportar();
+    });
+    tabelaImportar.on('dataFiltered', () => setTimeout(atualizarResumoImportar));
+    tabelaImportarPronta = new Promise(resolve => tabelaImportar.on('tableBuilt', resolve));
+    return tabelaImportarPronta;
+}
+
+function aplicarBuscaImportar() {
+    if (!tabelaImportar) return;
+    const termo = normalizarNome(document.getElementById('busca-importar').value);
+    if (!termo) {
+        tabelaImportar.clearFilter();
+        return;
+    }
+    tabelaImportar.setFilter(t => [t.fornecedor, t.nf, t.controle].some(v => normalizarNome(v).includes(termo)));
+}
+
+function titulosMarcados() {
+    return tabelaImportar ? tabelaImportar.getData().filter(t => t.marcado) : [];
+}
+
+function atualizarResumoImportar() {
+    const marcados = titulosMarcados();
+    const total = marcados.reduce((acc, t) => acc + Number(t.valor || 0), 0);
+    const juros = marcados.reduce((acc, t) => acc + Number(t.juros || 0), 0);
+    const linhas = tabelaImportar ? tabelaImportar.getRows('active') : [];
+    document.getElementById('resumo-importar').textContent =
+        `${linhas.length} título(s) na lista · ${marcados.length} marcado(s) · ${formatarMoeda(total)}` +
+        (juros ? ` (juros ${formatarMoeda(juros)})` : '');
+    const todos = document.getElementById('imp-marcar-todos');
+    if (todos) todos.checked = linhas.length > 0 && linhas.every(l => l.getData().marcado);
+}
+
+function aplicarContaLote() {
+    const idConta = Number(document.getElementById('imp-conta-lote').value);
+    if (!idConta) return dialogoAviso('Escolha a conta.');
+    const marcados = tabelaImportar.getRows().filter(l => l.getData().marcado);
+    if (!marcados.length) return dialogoAviso('Marque os títulos que vão para essa conta.');
+    marcados.forEach(l => l.update({ id_conta: idConta }));
+}
+
+async function importarMarcados() {
+    const marcados = titulosMarcados();
+    if (!marcados.length) return dialogoAviso('Marque ao menos um título.');
+    const semConta = marcados.filter(t => !t.id_conta);
+    if (semConta.length) {
+        return dialogoAviso(`Escolha a conta de ${semConta.length} título(s) marcado(s) (coluna Conta em vermelho).`);
+    }
+    if (marcados.some(t => !(Number(t.valor) > 0))) return dialogoAviso('Há título marcado com valor zerado.');
+    const jurosAlto = marcados.find(t => Number(t.juros) > 0 && Number(t.juros) >= Number(t.valor));
+    if (jurosAlto) return dialogoAviso(`${jurosAlto.fornecedor}: os juros precisam ser menores que o total pago.`);
+
+    const grupo = document.getElementById('imp-grupo-despesa').value;
+    if (!grupo) return dialogoAviso('Selecione o grupo de despesa.');
+
+    const dataRef = document.getElementById('filtro-data').value;
+    const total = marcados.reduce((acc, t) => acc + Number(t.valor), 0);
+    if (!await dialogoConfirmar(`${marcados.length} título(s), total ${formatarMoeda(total)}, entram como saída no dia ${formatarDataBR(dataRef)}.`, { titulo: 'Importar títulos?', textoOk: 'Importar' })) return;
+
+    const payload = {
+        data_movimento: dataRef,
+        grupo_despesa: grupo,
+        tipo_despesa: document.getElementById('imp-tipo-despesa').value || null,
+        id_veiculo: document.getElementById('imp-veiculo').value || null,
+        forma_pagamento: document.getElementById('imp-forma-pagamento').value,
+        itens: marcados.map(t => ({
+            ap_regist: t.ap_regist, id_conta: t.id_conta, id_centro_custo: t.id_centro_custo || null,
+            valor: Number(t.valor), juros: Number(t.juros || 0)
+        }))
+    };
+
+    const botao = document.getElementById('btn-confirmar-importar');
+    botao.disabled = true;
+    try {
+        const resultado = await apiFetch('/erp/importar', { method: 'POST', body: JSON.stringify(payload) });
+        let msg = resultado.message;
+        if (resultado.ja_importados.length) msg += `\n${resultado.ja_importados.length} já estavam na tesouraria e foram ignorados.`;
+        dialogoAviso(msg, 'sucesso', 'Importação concluída');
+        await carregarTitulosImportar(modoImportar);
+        await carregarDia(dataRef);
+    } catch (err) {
+        dialogoAviso('Erro ao importar: ' + err.message, 'erro');
+    } finally {
+        botao.disabled = false;
     }
 }
 
@@ -477,22 +1056,33 @@ async function salvarConfirmarDespesa() {
 
 async function abrirModalGerenciar() {
     abrirModal('modal-gerenciar');
-    await Promise.all([renderListaGerenciarContas(), renderListaGerenciarCentros()]);
+    await Promise.all([renderListaGerenciarContas(), renderListaGerenciarCentros(), renderListaGerenciarGrupos()]);
     if (typeof feather !== 'undefined') feather.replace();
 }
 
 async function renderListaGerenciarContas() {
     const container = document.getElementById('lista-gerenciar-contas');
     try {
-        const todasContas = await apiFetch('/contas?todos=1');
+        const [todasContas, vinculosErp] = await Promise.all([apiFetch('/contas?todos=1'), apiFetch('/contas-erp')]);
         container.innerHTML = todasContas.map(c => `
-            <div class="flex items-center justify-between border border-gray-200 rounded px-2 py-1.5 text-xs ${c.ativo ? '' : 'opacity-50'}">
-                <span class="font-medium text-gray-700 truncate">${escapeHtml(c.nome)}</span>
-                <div class="flex items-center gap-2 shrink-0">
-                    <button class="text-indigo-600 hover:underline" data-acao="renomear-conta" data-id="${c.id}" data-nome="${escapeHtml(c.nome)}">Renomear</button>
-                    <button class="${c.ativo ? 'text-red-600' : 'text-green-600'} hover:underline" data-acao="toggle-conta" data-id="${c.id}" data-ativo="${c.ativo}">${c.ativo ? 'Desativar' : 'Reativar'}</button>
+            <div class="border border-gray-200 rounded px-2 py-1.5 text-xs ${c.ativo ? '' : 'opacity-50'}">
+                <div class="flex items-center justify-between">
+                    <span class="font-medium text-gray-700 truncate" title="${escapeHtml(c.nome)}">${escapeHtml(c.nome)}</span>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button class="text-indigo-600 hover:underline" data-acao="renomear-conta" data-id="${c.id}" data-nome="${escapeHtml(c.nome)}">Renomear</button>
+                        <button class="${c.ativo ? 'text-red-600' : 'text-green-600'} hover:underline" data-acao="toggle-conta" data-id="${c.id}" data-ativo="${c.ativo}">${c.ativo ? 'Desativar' : 'Reativar'}</button>
+                    </div>
                 </div>
+                ${vinculosErp.filter(v => v.id_conta === c.id).map(v => `
+                    <div class="flex items-center justify-between pl-3 mt-0.5 text-gray-500" title="Pagamentos do ERP com esta conta já vêm com ela sugerida na importação">
+                        <span class="truncate">ERP: ${escapeHtml(v.chave)}</span>
+                        <button class="text-red-500 hover:underline shrink-0" data-acao="remover-vinculo-erp" data-chave="${escapeHtml(v.chave)}">Desvincular</button>
+                    </div>`).join('')}
             </div>`).join('') || '<p class="text-xs text-gray-400">Nenhuma conta cadastrada.</p>';
+
+        container.querySelectorAll('[data-acao="remover-vinculo-erp"]').forEach(btn => {
+            btn.addEventListener('click', () => removerVinculoErp(btn.dataset.chave));
+        });
 
         container.querySelectorAll('[data-acao="renomear-conta"]').forEach(btn => {
             btn.addEventListener('click', () => renomearConta(btn.dataset.id, btn.dataset.nome));
@@ -503,7 +1093,6 @@ async function renderListaGerenciarContas() {
 
         contasCache = todasContas.filter(c => c.ativo);
         preencherSelectContas(document.getElementById('lanc-conta'));
-        preencherSelectContas(document.getElementById('confirmar-conta'));
     } catch (err) {
         container.innerHTML = `<p class="text-xs text-red-500">Erro ao carregar contas: ${escapeHtml(err.message)}</p>`;
     }
@@ -531,7 +1120,6 @@ async function renderListaGerenciarCentros() {
 
         centrosCustoCache = todosCentros.filter(c => c.ativo);
         preencherSelectCentros(document.getElementById('lanc-centro-custo'));
-        preencherSelectCentros(document.getElementById('confirmar-centro-custo'));
     } catch (err) {
         container.innerHTML = `<p class="text-xs text-red-500">Erro ao carregar centros de custo: ${escapeHtml(err.message)}</p>`;
     }
@@ -540,25 +1128,25 @@ async function renderListaGerenciarCentros() {
 async function adicionarConta() {
     const nome = document.getElementById('nova-conta-nome').value.trim();
     const tipo = document.getElementById('nova-conta-tipo').value;
-    if (!nome) return alert('Informe o nome da conta.');
+    if (!nome) return dialogoAviso('Informe o nome da conta.');
 
     try {
         await apiFetch('/contas', { method: 'POST', body: JSON.stringify({ nome, tipo }) });
         document.getElementById('nova-conta-nome').value = '';
         await renderListaGerenciarContas();
     } catch (err) {
-        alert('Erro ao adicionar conta: ' + err.message);
+        dialogoAviso('Erro ao adicionar conta: ' + err.message, 'erro');
     }
 }
 
 async function renomearConta(id, nomeAtual) {
-    const novoNome = prompt('Novo nome da conta:', nomeAtual);
+    const novoNome = await dialogoTexto('Novo nome da conta', nomeAtual);
     if (!novoNome || novoNome.trim() === '' || novoNome === nomeAtual) return;
     try {
         await apiFetch(`/contas/${id}`, { method: 'PUT', body: JSON.stringify({ nome: novoNome.trim() }) });
         await renderListaGerenciarContas();
     } catch (err) {
-        alert('Erro ao renomear conta: ' + err.message);
+        dialogoAviso('Erro ao renomear conta: ' + err.message, 'erro');
     }
 }
 
@@ -567,7 +1155,17 @@ async function alternarAtivoConta(id, ativoAtual) {
         await apiFetch(`/contas/${id}`, { method: 'PUT', body: JSON.stringify({ ativo: ativoAtual ? 0 : 1 }) });
         await renderListaGerenciarContas();
     } catch (err) {
-        alert('Erro ao atualizar conta: ' + err.message);
+        dialogoAviso('Erro ao atualizar conta: ' + err.message, 'erro');
+    }
+}
+
+async function removerVinculoErp(chave) {
+    if (!await dialogoConfirmar(`"${chave}" deixa de sugerir esta conta. Na próxima importação você escolhe a conta de novo.`, { titulo: 'Desvincular conta do ERP?', textoOk: 'Desvincular', perigo: true })) return;
+    try {
+        await apiFetch(`/contas-erp?chave=${encodeURIComponent(chave)}`, { method: 'DELETE' });
+        await renderListaGerenciarContas();
+    } catch (err) {
+        dialogoAviso('Erro ao desvincular: ' + err.message, 'erro');
     }
 }
 
@@ -575,25 +1173,25 @@ async function adicionarCentroCusto() {
     const nome = document.getElementById('novo-centro-nome').value.trim();
     const tipo = document.getElementById('novo-centro-tipo').value;
     const id_filial = tipo === 'loja' ? (document.getElementById('novo-centro-filial').value || null) : null;
-    if (!nome) return alert('Informe o nome do centro de custo.');
+    if (!nome) return dialogoAviso('Informe o nome do centro de custo.');
 
     try {
         await apiFetch('/centros-custo', { method: 'POST', body: JSON.stringify({ nome, tipo, id_filial }) });
         document.getElementById('novo-centro-nome').value = '';
         await renderListaGerenciarCentros();
     } catch (err) {
-        alert('Erro ao adicionar centro de custo: ' + err.message);
+        dialogoAviso('Erro ao adicionar centro de custo: ' + err.message, 'erro');
     }
 }
 
 async function renomearCentro(id, nomeAtual) {
-    const novoNome = prompt('Novo nome do centro de custo:', nomeAtual);
+    const novoNome = await dialogoTexto('Novo nome do centro de custo', nomeAtual);
     if (!novoNome || novoNome.trim() === '' || novoNome === nomeAtual) return;
     try {
         await apiFetch(`/centros-custo/${id}`, { method: 'PUT', body: JSON.stringify({ nome: novoNome.trim() }) });
         await renderListaGerenciarCentros();
     } catch (err) {
-        alert('Erro ao renomear centro de custo: ' + err.message);
+        dialogoAviso('Erro ao renomear centro de custo: ' + err.message, 'erro');
     }
 }
 
@@ -602,11 +1200,109 @@ async function alternarAtivoCentro(id, ativoAtual) {
         await apiFetch(`/centros-custo/${id}`, { method: 'PUT', body: JSON.stringify({ ativo: ativoAtual ? 0 : 1 }) });
         await renderListaGerenciarCentros();
     } catch (err) {
-        alert('Erro ao atualizar centro de custo: ' + err.message);
+        dialogoAviso('Erro ao atualizar centro de custo: ' + err.message, 'erro');
+    }
+}
+
+async function renderListaGerenciarGrupos() {
+    const container = document.getElementById('lista-gerenciar-grupos');
+    try {
+        const todosGrupos = await apiFetch('/classificacao?todos=1');
+        container.innerHTML = todosGrupos.map(g => `
+            <div class="border border-gray-200 rounded px-2 py-1.5 text-xs ${g.ativo ? '' : 'opacity-50'}">
+                <div class="flex items-center justify-between">
+                    <span class="font-bold text-gray-700 truncate" title="${escapeHtml(g.nome)}">${escapeHtml(g.nome)}</span>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <label class="flex items-center gap-1 text-gray-600 cursor-pointer" title="Pede o veículo no lançamento">
+                            <input type="checkbox" data-acao="veiculo-grupo" data-id="${g.id}" data-valor="${g.exige_veiculo ? 1 : 0}" ${g.exige_veiculo ? 'checked' : ''}> veículo
+                        </label>
+                        <button class="text-indigo-600 hover:underline" data-acao="renomear-grupo" data-id="${g.id}" data-nome="${escapeHtml(g.nome)}">Renomear</button>
+                        <button class="${g.ativo ? 'text-red-600' : 'text-green-600'} hover:underline" data-acao="toggle-grupo" data-id="${g.id}" data-valor="${g.ativo ? 1 : 0}">${g.ativo ? 'Desativar' : 'Reativar'}</button>
+                    </div>
+                </div>
+                <div class="mt-1 pl-3 space-y-0.5">
+                    ${g.tipos.map(t => `
+                        <div class="flex items-center justify-between ${t.ativo ? '' : 'opacity-50'}">
+                            <span class="text-gray-600 truncate">• ${escapeHtml(t.nome)}</span>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <button class="text-indigo-600 hover:underline" data-acao="renomear-tipo" data-id="${t.id}" data-nome="${escapeHtml(t.nome)}">Renomear</button>
+                                <button class="${t.ativo ? 'text-red-600' : 'text-green-600'} hover:underline" data-acao="toggle-tipo" data-id="${t.id}" data-valor="${t.ativo ? 1 : 0}">${t.ativo ? 'Desativar' : 'Reativar'}</button>
+                            </div>
+                        </div>`).join('') || '<p class="text-gray-400 italic">Sem tipos cadastrados</p>'}
+                </div>
+            </div>`).join('') || '<p class="text-xs text-gray-400">Nenhum grupo cadastrado.</p>';
+
+        const acoes = {
+            'renomear-grupo': btn => renomearItem('grupos', btn.dataset.id, btn.dataset.nome, 'Novo nome do grupo'),
+            'veiculo-grupo': btn => atualizarItem('grupos', btn.dataset.id, { exige_veiculo: btn.dataset.valor === '1' ? 0 : 1 }),
+            'toggle-grupo': btn => atualizarItem('grupos', btn.dataset.id, { ativo: btn.dataset.valor === '1' ? 0 : 1 }),
+            'renomear-tipo': btn => renomearItem('tipos', btn.dataset.id, btn.dataset.nome, 'Novo nome do tipo'),
+            'toggle-tipo': btn => atualizarItem('tipos', btn.dataset.id, { ativo: btn.dataset.valor === '1' ? 0 : 1 })
+        };
+        container.querySelectorAll('[data-acao]').forEach(btn => {
+            btn.addEventListener('click', () => acoes[btn.dataset.acao](btn));
+        });
+
+        // Só grupos ativos recebem tipos novos e aparecem nos lançamentos.
+        const ativos = todosGrupos.filter(g => g.ativo);
+        document.getElementById('novo-tipo-grupo').innerHTML = '<option value="">-- Grupo do novo tipo --</option>' +
+            ativos.map(g => `<option value="${g.id}">${escapeHtml(g.nome)}</option>`).join('');
+        classificacaoCache = ativos.map(g => ({ ...g, tipos: g.tipos.filter(t => t.ativo) }));
+        preencherSelectGrupos(document.getElementById('lanc-grupo-despesa'));
+        } catch (err) {
+        container.innerHTML = `<p class="text-xs text-red-500">Erro ao carregar grupos: ${escapeHtml(err.message)}</p>`;
+    }
+}
+
+async function adicionarGrupo() {
+    const nome = document.getElementById('novo-grupo-nome').value.trim();
+    const exige_veiculo = document.getElementById('novo-grupo-veiculo').checked;
+    if (!nome) return dialogoAviso('Informe o nome do grupo.');
+    try {
+        await apiFetch('/grupos', { method: 'POST', body: JSON.stringify({ nome, exige_veiculo }) });
+        document.getElementById('novo-grupo-nome').value = '';
+        document.getElementById('novo-grupo-veiculo').checked = false;
+        await renderListaGerenciarGrupos();
+    } catch (err) {
+        dialogoAviso('Erro ao adicionar grupo: ' + err.message, 'erro');
+    }
+}
+
+async function adicionarTipo() {
+    const id_grupo = document.getElementById('novo-tipo-grupo').value;
+    const nome = document.getElementById('novo-tipo-nome').value.trim();
+    if (!id_grupo || !nome) return dialogoAviso('Escolha o grupo e informe o nome do tipo.');
+    try {
+        await apiFetch('/tipos', { method: 'POST', body: JSON.stringify({ id_grupo: Number(id_grupo), nome }) });
+        document.getElementById('novo-tipo-nome').value = '';
+        await renderListaGerenciarGrupos();
+        document.getElementById('novo-tipo-grupo').value = id_grupo;
+    } catch (err) {
+        dialogoAviso('Erro ao adicionar tipo: ' + err.message, 'erro');
+    }
+}
+
+// recurso: 'grupos' ou 'tipos'.
+async function renomearItem(recurso, id, nomeAtual, pergunta) {
+    const novoNome = await dialogoTexto(pergunta, nomeAtual);
+    if (!novoNome || novoNome.trim() === '' || novoNome === nomeAtual) return;
+    await atualizarItem(recurso, id, { nome: novoNome.trim() });
+}
+
+async function atualizarItem(recurso, id, dados) {
+    try {
+        await apiFetch(`/${recurso}/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
+        await renderListaGerenciarGrupos();
+    } catch (err) {
+        dialogoAviso('Erro ao atualizar: ' + err.message, 'erro');
     }
 }
 
 // --- EXPORTAÇÃO ---
+
+function textoClassificacao(m) {
+    return [m.grupo_despesa, m.tipo_despesa].filter(Boolean).join(' / ') || '-';
+}
 
 function formatarMoeda(valor) {
     return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -628,83 +1324,254 @@ function movimentoEfetivo(m) {
     return m.status === 'ativo' && !m.id_movimento_estornado;
 }
 
-function montarResumoPorConta() {
-    return contasCache
-        .map(conta => {
-            const movsConta = movimentosDoDia.filter(m => m.id_conta === conta.id && movimentoEfetivo(m));
-            const saldo = movsConta.reduce((acc, m) => acc + (m.tipo === 'entrada' ? Number(m.valor) : -Number(m.valor)), 0);
-            return { conta: conta.nome, saldo, temMovimento: movsConta.length > 0 };
-        })
-        .filter(r => r.temMovimento);
+// Transferência (dinheiro mudando de lugar) e fundo (controle do caixa da loja) não entram nos totais do dia.
+function entraNoResultado(m) {
+    return movimentoEfetivo(m) && (m.natureza || 'normal') === 'normal';
 }
 
+// Totais do dia usados no PDF e no WhatsApp (estornos não entram).
+function resumoDoDia() {
+    const efetivos = movimentosDoDia.filter(entraNoResultado);
+    const entradas = efetivos.filter(m => m.tipo === 'entrada');
+    const saidas = efetivos.filter(m => m.tipo === 'saida');
+
+    const porConta = contasCache.map(conta => {
+        const doConta = efetivos.filter(m => m.id_conta === conta.id);
+        const e = somar(doConta.filter(m => m.tipo === 'entrada'));
+        const s = somar(doConta.filter(m => m.tipo === 'saida'));
+        return { nome: conta.nome, entradas: e, saidas: s, liquido: e - s, qtd: doConta.length };
+    }).filter(c => c.qtd > 0);
+
+    const agruparSaidas = chave => {
+        const mapa = new Map();
+        saidas.forEach(m => {
+            const nome = chave(m) || 'Sem classificação';
+            mapa.set(nome, (mapa.get(nome) || 0) + Number(m.valor));
+        });
+        return [...mapa.entries()].map(([nome, valor]) => ({ nome, valor })).sort((a, b) => b.valor - a.valor);
+    };
+
+    const comJuros = saidas.filter(m => Number(m.valor_juros) > 0);
+    return {
+        efetivos, entradas, saidas, comJuros,
+        totalJuros: comJuros.reduce((acc, m) => acc + Number(m.valor_juros), 0),
+        totalEntradas: somar(entradas),
+        totalSaidas: somar(saidas),
+        liquido: somar(entradas) - somar(saidas),
+        porConta,
+        porCentro: agruparSaidas(m => m.nome_centro_custo),
+        porGrupo: agruparSaidas(m => m.grupo_despesa)
+    };
+}
+
+function dataPorExtenso(iso) {
+    const [ano, mes, dia] = iso.split('-').map(Number);
+    const texto = new Date(ano, mes - 1, dia).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+    return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+// A4 paisagem (297 x 210 mm): cabeçalho, 4 indicadores, 3 resumos lado a lado e o detalhe.
 function gerarPDF() {
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const dataRef = document.getElementById('filtro-data').value;
-    const [ano, mes, dia] = dataRef.split('-');
+    const r = resumoDoDia();
+    const largura = doc.internal.pageSize.getWidth();
+    const altura = doc.internal.pageSize.getHeight();
+    const margem = 12;
+    const util = largura - margem * 2;
+    const COR = { indigo: [49, 46, 129], verde: [21, 128, 61], vermelho: [185, 28, 28], cinza: [71, 85, 105], claro: [241, 245, 249] };
 
-    doc.setFontSize(14);
-    doc.text(`Boletim de Tesouraria — ${dia}/${mes}/${ano}`, 14, 15);
+    // Cabeçalho
+    doc.setFillColor(...COR.indigo);
+    doc.rect(0, 0, largura, 22, 'F');
+    doc.setTextColor(255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text('BOLETIM DE TESOURARIA', margem, 10);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(dataPorExtenso(dataRef), margem, 16.5);
+    const agora = new Date();
+    doc.setFontSize(8);
+    doc.text(`Gerado em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`, largura - margem, 10, { align: 'right' });
+    doc.text(`por ${getUserName()}`, largura - margem, 15, { align: 'right' });
 
-    const resumo = montarResumoPorConta();
-    doc.autoTable({
-        head: [['Conta', 'Total do Dia']],
-        body: resumo.map(r => [r.conta, formatarMoeda(r.saldo)]),
-        startY: 22,
+    const percentual = (valor, total) => total ? `${(valor / total * 100).toFixed(1).replace('.', ',')}%` : '-';
+
+    // Indicadores
+    const indicadores = [
+        { rotulo: 'TOTAL DE ENTRADAS', valor: formatarMoeda(r.totalEntradas), detalhe: `${r.entradas.length} lançamento(s)`, cor: COR.verde },
+        { rotulo: 'TOTAL DE SAÍDAS', valor: formatarMoeda(r.totalSaidas), detalhe: `${r.saidas.length} lançamento(s)`, cor: COR.vermelho },
+        { rotulo: 'LÍQUIDO DO DIA', valor: formatarMoeda(r.liquido), detalhe: 'entradas - saídas', cor: r.liquido < 0 ? COR.vermelho : COR.indigo },
+        { rotulo: 'JUROS E MULTAS PAGOS', valor: formatarMoeda(r.totalJuros), detalhe: r.comJuros.length ? `${r.comJuros.length} pagamento(s) com juros · ${percentual(r.totalJuros, r.totalSaidas)} das saídas` : 'nenhum pagamento com juros', cor: r.totalJuros ? [180, 83, 9] : COR.cinza }
+    ];
+    const espaco = 5;
+    const larguraKpi = (util - espaco * 3) / 4;
+    indicadores.forEach((k, i) => {
+        const x = margem + i * (larguraKpi + espaco);
+        doc.setFillColor(...COR.claro);
+        doc.rect(x, 27, larguraKpi, 18, 'F');
+        doc.setFillColor(...k.cor);
+        doc.rect(x, 27, 1.5, 18, 'F');
+        doc.setTextColor(100);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.text(k.rotulo, x + 5, 32);
+        doc.setTextColor(...k.cor);
+        doc.setFontSize(14);
+        doc.text(k.valor, x + 5, 39);
+        doc.setTextColor(130);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.text(k.detalhe, x + 5, 43);
+    });
+
+    // Três resumos lado a lado: "Por conta" tem 3 colunas de valor e fica com 40% da largura.
+    const larguraConta = (util - espaco * 2) * 0.4;
+    const larguraResumo = (util - espaco * 2) * 0.3;
+    const inicioResumos = 51;
+    const estiloResumo = {
         theme: 'grid',
-        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-        styles: { fontSize: 9, cellPadding: 2 }
+        startY: inicioResumos,
+        tableWidth: larguraResumo,
+        styles: { fontSize: 7.5, cellPadding: 1.4, lineColor: [226, 232, 240], lineWidth: 0.1 },
+        headStyles: { fillColor: COR.cinza, textColor: 255, fontStyle: 'bold' },
+        footStyles: { fillColor: [226, 232, 240], textColor: 30, fontStyle: 'bold' }
+    };
+    let fimResumos = inicioResumos;
+
+    doc.autoTable({
+        ...estiloResumo,
+        tableWidth: larguraConta,
+        margin: { left: margem },
+        head: [['Por conta', 'Entradas', 'Saídas', 'Líquido']],
+        body: r.porConta.length ? r.porConta.map(c => [c.nome, formatarMoeda(c.entradas), formatarMoeda(c.saidas), formatarMoeda(c.liquido)]) : [['Sem movimento', '', '', '']],
+        foot: [['Total', formatarMoeda(r.totalEntradas), formatarMoeda(r.totalSaidas), formatarMoeda(r.liquido)]],
+        columnStyles: { 1: { halign: 'right', cellWidth: 22 }, 2: { halign: 'right', cellWidth: 22 }, 3: { halign: 'right', cellWidth: 22 } }
+    });
+    fimResumos = Math.max(fimResumos, doc.lastAutoTable.finalY);
+
+    [[r.porCentro, 'Saídas por centro de custo'], [r.porGrupo, 'Saídas por grupo de despesa']].forEach(([linhas, titulo], i) => {
+        doc.autoTable({
+            ...estiloResumo,
+            margin: { left: margem + larguraConta + espaco + i * (larguraResumo + espaco) },
+            head: [[titulo, 'Valor', '%']],
+            body: linhas.length ? linhas.map(l => [l.nome, formatarMoeda(l.valor), percentual(l.valor, r.totalSaidas)]) : [['Sem saídas', '', '']],
+            foot: [['Total', formatarMoeda(r.totalSaidas), r.totalSaidas ? '100%' : '-']],
+            columnStyles: { 1: { halign: 'right', cellWidth: 22 }, 2: { halign: 'right', cellWidth: 13 } }
+        });
+        fimResumos = Math.max(fimResumos, doc.lastAutoTable.finalY);
     });
 
-    const finalY = doc.autoTable.previous.finalY;
-    const ativos = movimentosDoDia.filter(movimentoEfetivo);
+    // Detalhe
+    doc.setTextColor(...COR.indigo);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('MOVIMENTOS DO DIA', margem, fimResumos + 8);
+
+    const ordenados = [...r.entradas, ...r.saidas];
     doc.autoTable({
-        head: [['Conta', 'Centro de Custo', 'Tipo Despesa', 'Tipo', 'Descrição', 'Valor']],
-        body: ativos.map(m => [
-            m.nome_conta, m.nome_centro_custo || '-', m.tipo_despesa || '-', m.tipo === 'entrada' ? 'Entrada' : 'Saída',
-            m.descricao, formatarMoeda(m.valor)
-        ]),
-        startY: finalY + 10,
+        startY: fimResumos + 10,
+        margin: { left: margem, right: margem, top: 16, bottom: 14 },
         theme: 'striped',
-        headStyles: { fillColor: [71, 85, 105], textColor: 255 },
-        styles: { fontSize: 8, cellPadding: 2 },
-        columnStyles: { 5: { halign: 'right' } }
+        head: [['Tipo', 'Conta', 'Centro de custo', 'Grupo / Tipo', 'Descrição', 'Favorecido', 'NF', 'Forma / Origem', 'Lançado por', 'Entrada', 'Juros', 'Saída']],
+        body: ordenados.map(m => [
+            m.tipo === 'entrada' ? 'Entrada' : 'Saída',
+            m.nome_conta || '-',
+            m.nome_centro_custo || '-',
+            textoClassificacao(m),
+            m.descricao || '-',
+            m.favorecido || '-',
+            m.numero_nf || '-',
+            FORMAS_PAGAMENTO_LABEL[m.forma_pagamento] || m.forma_pagamento || '-',
+            ORIGEM_LABEL[m.origem] || m.origem,
+            m.tipo === 'entrada' ? formatarMoeda(m.valor) : '',
+            Number(m.valor_juros) > 0 ? formatarMoeda(m.valor_juros) : '',
+            m.tipo === 'saida' ? formatarMoeda(m.valor) : ''
+        ]),
+        foot: [['', '', '', '', '', '', '', '', 'Totais', formatarMoeda(r.totalEntradas), r.totalJuros ? formatarMoeda(r.totalJuros) : '', formatarMoeda(r.totalSaidas)]],
+        styles: { fontSize: 7, cellPadding: 1.3, overflow: 'linebreak', valign: 'middle' },
+        headStyles: { fillColor: COR.indigo, textColor: 255, fontStyle: 'bold' },
+        footStyles: { fillColor: [226, 232, 240], textColor: 30, fontStyle: 'bold' },
+        columnStyles: {
+            0: { cellWidth: 14 }, 1: { cellWidth: 26 }, 2: { cellWidth: 24 }, 3: { cellWidth: 28 },
+            4: { cellWidth: 'auto' }, 5: { cellWidth: 26 }, 6: { cellWidth: 15 }, 7: { cellWidth: 22 }, 8: { cellWidth: 20 },
+            9: { cellWidth: 22, halign: 'right', textColor: COR.verde }, 10: { cellWidth: 18, halign: 'right', textColor: [180, 83, 9] },
+            11: { cellWidth: 22, halign: 'right', textColor: COR.vermelho }
+        },
+        didDrawPage: dados => {
+            // Páginas seguintes: cabeçalho curto para não perder a referência do dia.
+            if (dados.pageNumber > 1) {
+                doc.setTextColor(...COR.indigo);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9);
+                doc.text(`Boletim de Tesouraria — ${formatarDataBR(dataRef)} (continuação)`, margem, 10);
+            }
+        }
     });
+
+    // Rodapé com numeração em todas as páginas
+    const totalPaginas = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= totalPaginas; p++) {
+        doc.setPage(p);
+        doc.setDrawColor(203, 213, 225);
+        doc.line(margem, altura - 9, largura - margem, altura - 9);
+        doc.setTextColor(120);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.text('Luca Gerencial · Tesouraria · estornos não aparecem neste relatório · os juros já estão somados na coluna Saída', margem, altura - 5);
+        doc.text(`Página ${p} de ${totalPaginas}`, largura - margem, altura - 5, { align: 'right' });
+    }
 
     return doc;
 }
 
 function exportarPDF() {
-    if (!movimentosDoDia.length) return alert('Nenhum movimento para exportar neste dia.');
+    if (!movimentosDoDia.some(movimentoEfetivo)) return dialogoAviso('Nenhum movimento válido para o relatório neste dia.');
     const doc = gerarPDF();
+    doc.save(`Tesouraria_${document.getElementById('filtro-data').value}.pdf`);
+}
+
+function textoWhatsApp() {
     const dataRef = document.getElementById('filtro-data').value;
-    doc.save(`Tesouraria_${dataRef}.pdf`);
+    const r = resumoDoDia();
+    let texto = `*Boletim de Tesouraria — ${formatarDataBR(dataRef)}*\n\n`;
+    texto += `Entradas: ${formatarMoeda(r.totalEntradas)}\n`;
+    texto += `Saídas: ${formatarMoeda(r.totalSaidas)}\n`;
+    if (r.totalJuros) texto += `  (das quais juros e multas: ${formatarMoeda(r.totalJuros)})\n`;
+    texto += `*Líquido do dia: ${formatarMoeda(r.liquido)}*\n`;
+    if (r.porConta.length) {
+        texto += `\n*Por conta*\n`;
+        r.porConta.forEach(c => { texto += `• ${c.nome}: ${formatarMoeda(c.liquido)} (↓ ${formatarMoeda(c.entradas)} / ↑ ${formatarMoeda(c.saidas)})\n`; });
+    }
+    if (r.porCentro.length) {
+        texto += `\n*Saídas por centro de custo*\n`;
+        r.porCentro.forEach(c => { texto += `• ${c.nome}: ${formatarMoeda(c.valor)}\n`; });
+    }
+    if (r.porGrupo.length) {
+        texto += `\n*Saídas por grupo*\n`;
+        r.porGrupo.forEach(g => { texto += `• ${g.nome}: ${formatarMoeda(g.valor)}\n`; });
+    }
+    return texto;
 }
 
 async function compartilharWhatsApp() {
     const dataRef = document.getElementById('filtro-data').value;
-    const [ano, mes, dia] = dataRef.split('-');
-    const resumo = montarResumoPorConta();
-    const totalGeral = resumo.reduce((acc, r) => acc + r.saldo, 0);
-
-    let texto = `*Boletim de Tesouraria — ${dia}/${mes}/${ano}*\n\n`;
-    resumo.forEach(r => { texto += `${r.conta}: ${formatarMoeda(r.saldo)}\n`; });
-    texto += `\n*Total do dia: ${formatarMoeda(totalGeral)}*`;
+    const texto = textoWhatsApp();
 
     // No celular, tenta compartilhar o PDF junto do texto. No desktop nem sempre é suportado
     // para arquivos, então cai para abrir o WhatsApp só com o texto (o PDF é baixado à parte).
-    if (movimentosDoDia.length && navigator.canShare) {
+    if (movimentosDoDia.some(movimentoEfetivo) && navigator.canShare) {
         try {
-            const doc = gerarPDF();
-            const blob = doc.output('blob');
+            const blob = gerarPDF().output('blob');
             const file = new File([blob], `Tesouraria_${dataRef}.pdf`, { type: 'application/pdf' });
             if (navigator.canShare({ files: [file] })) {
                 await navigator.share({ text: texto, files: [file], title: 'Boletim de Tesouraria' });
                 return;
             }
         } catch (err) {
-            console.warn('Compartilhamento com arquivo não disponível, usando fallback de texto.', err);
+            console.warn('Compartilhamento com arquivo não disponível, usando o texto.', err);
         }
     }
 

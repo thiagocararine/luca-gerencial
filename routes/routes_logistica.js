@@ -1452,11 +1452,35 @@ router.get('/relatorios/despesaVeiculo', authenticateToken, async (req, res) => 
             WHERE em.id_veiculo = ? AND em.data_movimento >= ? AND em.data_movimento <= ?
               AND em.status = 'Ativo' AND em.tipo_movimento = 'Saída'`;
 
+        // Query 4: abastecimentos pagos com o dinheiro do caixa das lojas (módulo de despesas).
+        const fuelingLojaSql = `
+            SELECT
+                d.dsp_datadesp as data_evento, 'Abastecimento' as tipo,
+                CONCAT(IF(d.litros > 0, CONCAT(d.litros, 'L - '), ''), d.dsp_descricao) as descricao,
+                CONCAT('Posto (caixa ', d.dsp_filial, ')') as fornecedor_nome,
+                d.dsp_valordsp as custo, NULL as numero_nf
+            FROM despesa_caixa d
+            WHERE d.id_veiculo = ? AND d.dsp_datadesp >= ? AND d.dsp_datadesp <= ?
+              AND d.dsp_status = 1 AND d.dsp_natureza = 'despesa'`;
+
         const [manutencoes] = await connection.execute(maintenanceSql, [veiculoId, dataInicio, dataFim]);
         const [abastecimentos] = await connection.execute(fuelingSql, [veiculoId, dataInicio, dataFim]);
+        const [abastecimentosLoja] = await connection.execute(fuelingLojaSql, [veiculoId, dataInicio, dataFim]);
+
+        // Query 5: pagamentos da tesouraria lançados para o veículo (combustível, manutenção...).
+        const [pagosTesouraria] = await connection.execute(`
+            SELECT
+                m.data_movimento as data_evento, COALESCE(m.grupo_despesa, 'Tesouraria') as tipo,
+                CONCAT(IF(m.litros > 0, CONCAT(m.litros, 'L - '), ''), m.descricao) as descricao,
+                COALESCE(m.favorecido, 'Tesouraria') as fornecedor_nome,
+                m.valor as custo, m.numero_nf
+            FROM tesouraria_movimentos m
+            WHERE m.id_veiculo = ? AND m.data_movimento >= ? AND m.data_movimento <= ?
+              AND m.status = 'ativo' AND m.tipo = 'saida' AND m.id_movimento_estornado IS NULL`,
+            [veiculoId, dataInicio, dataFim]);
 
         // Juntar e ordenar os resultados por data
-        const expenses = [...manutencoes, ...abastecimentos];
+        const expenses = [...manutencoes, ...abastecimentos, ...abastecimentosLoja, ...pagosTesouraria];
         expenses.sort((a, b) => new Date(a.data_evento) - new Date(b.data_evento));
 
         res.json({
@@ -2024,25 +2048,73 @@ router.get('/relatorios/abastecimento', authenticateToken, async (req, res) => {
         
         const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
+        // Abastecimentos pagos com o dinheiro do caixa das lojas (módulo de despesas, combustível
+        // com veículo). A filial é a do veículo; litros e KM só quando a loja informou.
+        const condicoesLoja = ["d.dsp_status = 1", "d.dsp_natureza = 'despesa'", "d.id_veiculo IS NOT NULL"];
+        const paramsLoja = [];
+        if (filial) { condicoesLoja.push("v.id_filial = ?"); paramsLoja.push(filial); }
+        if (dataInicio) { condicoesLoja.push("d.dsp_datadesp >= ?"); paramsLoja.push(dataInicio); }
+        if (dataFim) { condicoesLoja.push("d.dsp_datadesp <= ?"); paramsLoja.push(dataFim); }
+
+        // Combustível pago pela tesouraria (financeiro) com veículo.
+        const condicoesTes = ["m.status = 'ativo'", "m.tipo = 'saida'", "m.id_movimento_estornado IS NULL", "m.id_veiculo IS NOT NULL", "m.grupo_despesa = 'Combustível'"];
+        const paramsTes = [];
+        if (filial) { condicoesTes.push("v.id_filial = ?"); paramsTes.push(filial); }
+        if (dataInicio) { condicoesTes.push("m.data_movimento >= ?"); paramsTes.push(dataInicio); }
+        if (dataFim) { condicoesTes.push("m.data_movimento <= ?"); paramsTes.push(dataFim); }
+
         const sql = `
-            SELECT 
-                em.data_movimento,
-                em.quantidade,
-                em.odometro_no_momento,
-                em.valor_unitario,
-                IFNULL(em.custo_total, (em.quantidade * ie.ultimo_preco_unitario)) as custo_total,
-                v.placa, 
-                v.modelo, 
-                p.NOME_PARAMETRO as nome_filial
-            FROM estoque_movimentos em
-            LEFT JOIN veiculos v ON em.id_veiculo = v.id
-            LEFT JOIN parametro p ON em.id_filial = p.ID
-            JOIN itens_estoque ie ON em.id_item = ie.id
-            ${whereClause}
-            ORDER BY p.NOME_PARAMETRO, em.data_movimento ASC
+            SELECT * FROM (
+                SELECT
+                    em.data_movimento,
+                    em.quantidade,
+                    em.odometro_no_momento,
+                    em.valor_unitario,
+                    IFNULL(em.custo_total, (em.quantidade * ie.ultimo_preco_unitario)) as custo_total,
+                    v.placa,
+                    v.modelo,
+                    p.NOME_PARAMETRO as nome_filial,
+                    'Posto interno' as origem
+                FROM estoque_movimentos em
+                LEFT JOIN veiculos v ON em.id_veiculo = v.id
+                LEFT JOIN parametro p ON em.id_filial = p.ID
+                JOIN itens_estoque ie ON em.id_item = ie.id
+                ${whereClause}
+                UNION ALL
+                SELECT
+                    d.dsp_datadesp,
+                    d.litros,
+                    d.odometro,
+                    CASE WHEN d.litros > 0 THEN d.dsp_valordsp / d.litros END,
+                    d.dsp_valordsp,
+                    v.placa,
+                    v.modelo,
+                    p.NOME_PARAMETRO,
+                    'Caixa da loja'
+                FROM despesa_caixa d
+                JOIN veiculos v ON v.id = d.id_veiculo
+                LEFT JOIN parametro p ON p.ID = v.id_filial
+                WHERE ${condicoesLoja.join(' AND ')}
+                UNION ALL
+                SELECT
+                    m.data_movimento,
+                    m.litros,
+                    m.odometro,
+                    CASE WHEN m.litros > 0 THEN m.valor / m.litros END,
+                    m.valor,
+                    v.placa,
+                    v.modelo,
+                    p.NOME_PARAMETRO,
+                    'Tesouraria'
+                FROM tesouraria_movimentos m
+                JOIN veiculos v ON v.id = m.id_veiculo
+                LEFT JOIN parametro p ON p.ID = v.id_filial
+                WHERE ${condicoesTes.join(' AND ')}
+            ) abastecimentos
+            ORDER BY nome_filial, data_movimento ASC
             LIMIT ?`;
-        
-        const [data] = await connection.execute(sql, [...params, pageLimit]);
+
+        const [data] = await connection.query(sql, [...params, ...paramsLoja, ...paramsTes, pageLimit]);
         res.json(data);
 
     } catch (error) {

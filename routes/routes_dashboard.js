@@ -22,7 +22,8 @@ async function getFinancialSummary(connection, req) {
     if (grupo) { conditions.push("dsp_grupo = ?"); params.push(grupo); }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const whereClauseAtivas = whereClause.replace('WHERE', 'WHERE dsp_status = 1 AND') || 'WHERE dsp_status = 1';
+    // Retirada do financeiro é dinheiro mudando de lugar, não gasto da loja: fica fora dos totais.
+    const whereClauseAtivas = whereClause.replace('WHERE', "WHERE dsp_status = 1 AND dsp_natureza = 'despesa' AND") || "WHERE dsp_status = 1 AND dsp_natureza = 'despesa'";
     const whereClauseCanceladas = whereClause.replace('WHERE', 'WHERE dsp_status = 2 AND') || 'WHERE dsp_status = 2';
 
     const [totalResult] = await connection.execute(`SELECT SUM(dsp_valordsp) as total FROM despesa_caixa ${whereClauseAtivas}`, params);
