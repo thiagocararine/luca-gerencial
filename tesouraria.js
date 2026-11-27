@@ -1329,6 +1329,43 @@ function entraNoResultado(m) {
     return movimentoEfetivo(m) && (m.natureza || 'normal') === 'normal';
 }
 
+// Lojas do apurado: o código vem no origem_ref dos lançamentos do ERP ("AAAA-MM-DD|COD|modalidade[|taxa|consumo]").
+const LOJAS_BOLETIM = [
+    { cod: 'LCMAT', nome: 'Nova Campinas' },
+    { cod: 'TNASC', nome: 'Parada Angélica' },
+    { cod: 'LUCAM', nome: 'Santa Cruz' },
+    { cod: 'VMNAF', nome: 'Piabetá' }
+];
+const COLUNAS_MODALIDADE_BOLETIM = { dinheiro: 'dinheiro', pix: 'pix', cartao_credito: 'credito', cartao_debito: 'debito' };
+
+// Quanto cada loja trouxe no dia: entradas por modalidade, taxas, despesas da loja e a contribuição.
+// O que não vem do apurado (aportes, depósitos, outros recursos) fica em "outrosRecursos".
+function resumoPorLoja(efetivos) {
+    const lojas = new Map(LOJAS_BOLETIM.map(l => [l.cod, {
+        ...l, dinheiro: 0, pix: 0, credito: 0, debito: 0, outros: 0, taxas: 0, despesas: 0
+    }]));
+    let outrosRecursos = 0;
+    efetivos.forEach(m => {
+        const partes = String(m.origem_ref || '').split('|');
+        const loja = (m.origem === 'erp_receber' || m.origem === 'despesa_caixa') ? lojas.get(partes[1]) : null;
+        const valor = Number(m.valor);
+        if (!loja) {
+            if (m.tipo === 'entrada') outrosRecursos += valor;
+            return;
+        }
+        if (m.tipo === 'entrada') loja[COLUNAS_MODALIDADE_BOLETIM[partes[2]] || 'outros'] += valor;
+        else if (m.origem === 'despesa_caixa') loja.despesas += valor;
+        else loja.taxas += valor;
+    });
+    const linhas = [...lojas.values()].map(l => {
+        const total = l.dinheiro + l.pix + l.credito + l.debito + l.outros;
+        return { ...l, total, contribuicao: total - l.taxas - l.despesas };
+    }).filter(l => l.total || l.taxas || l.despesas);
+    const somaContribuicao = linhas.reduce((acc, l) => acc + l.contribuicao, 0);
+    linhas.forEach(l => { l.pct = somaContribuicao ? l.contribuicao / somaContribuicao * 100 : 0; });
+    return { linhas, outrosRecursos, somaContribuicao };
+}
+
 // Totais do dia usados no PDF e no WhatsApp (estornos não entram).
 function resumoDoDia() {
     const efetivos = movimentosDoDia.filter(entraNoResultado);
@@ -1354,6 +1391,7 @@ function resumoDoDia() {
     const comJuros = saidas.filter(m => Number(m.valor_juros) > 0);
     return {
         efetivos, entradas, saidas, comJuros,
+        porLoja: resumoPorLoja(efetivos),
         totalJuros: comJuros.reduce((acc, m) => acc + Number(m.valor_juros), 0),
         totalEntradas: somar(entradas),
         totalSaidas: somar(saidas),
@@ -1427,39 +1465,68 @@ function gerarPDF() {
         doc.text(k.detalhe, x + 5, 43);
     });
 
-    // Três resumos lado a lado: "Por conta" tem 3 colunas de valor e fica com 40% da largura.
-    const larguraConta = (util - espaco * 2) * 0.4;
-    const larguraResumo = (util - espaco * 2) * 0.3;
-    const inicioResumos = 51;
     const estiloResumo = {
         theme: 'grid',
-        startY: inicioResumos,
-        tableWidth: larguraResumo,
         styles: { fontSize: 7.5, cellPadding: 1.4, lineColor: [226, 232, 240], lineWidth: 0.1 },
         headStyles: { fillColor: COR.cinza, textColor: 255, fontStyle: 'bold' },
         footStyles: { fillColor: [226, 232, 240], textColor: 30, fontStyle: 'bold' }
     };
-    let fimResumos = inicioResumos;
 
+    // Entradas por loja: quanto cada loja trouxe no dia, por modalidade, e o que sobra depois das
+    // taxas e das despesas da própria loja (contribuição). Largura inteira, logo abaixo dos indicadores.
+    const pl = r.porLoja;
+    const moedaOuTraco = v => v ? formatarMoeda(v) : '-';
+    const negativoOuTraco = v => v ? formatarMoeda(-v) : '-';
+    const somaLojas = campo => pl.linhas.reduce((acc, l) => acc + l[campo], 0);
+    const corpoLojas = pl.linhas.map(l => [
+        l.nome, moedaOuTraco(l.dinheiro), moedaOuTraco(l.pix), moedaOuTraco(l.credito), moedaOuTraco(l.debito), moedaOuTraco(l.outros),
+        formatarMoeda(l.total), negativoOuTraco(l.taxas), negativoOuTraco(l.despesas), formatarMoeda(l.contribuicao),
+        `${l.pct.toFixed(1).replace('.', ',')}%`
+    ]);
+    if (pl.outrosRecursos) {
+        corpoLojas.push([{ content: 'Outros recursos (aportes, depósitos, lançamentos manuais)', colSpan: 6, styles: { fontStyle: 'italic', textColor: 90 } },
+            formatarMoeda(pl.outrosRecursos), '', '', formatarMoeda(pl.outrosRecursos), '']);
+    }
     doc.autoTable({
         ...estiloResumo,
-        tableWidth: larguraConta,
-        margin: { left: margem },
-        head: [['Por conta', 'Entradas', 'Saídas', 'Líquido']],
-        body: r.porConta.length ? r.porConta.map(c => [c.nome, formatarMoeda(c.entradas), formatarMoeda(c.saidas), formatarMoeda(c.liquido)]) : [['Sem movimento', '', '', '']],
-        foot: [['Total', formatarMoeda(r.totalEntradas), formatarMoeda(r.totalSaidas), formatarMoeda(r.liquido)]],
-        columnStyles: { 1: { halign: 'right', cellWidth: 22 }, 2: { halign: 'right', cellWidth: 22 }, 3: { halign: 'right', cellWidth: 22 } }
+        startY: 51,
+        margin: { left: margem, right: margem },
+        head: [['Entradas por loja', 'Dinheiro', 'Pix / Depósito', 'Crédito', 'Débito', 'Outros', 'Total', '(−) Taxas', '(−) Desp. da loja', 'Contribuição', '%']],
+        body: corpoLojas.length ? corpoLojas : [[{ content: 'Apurado das lojas ainda não lançado neste dia', colSpan: 11, styles: { textColor: 120 } }]],
+        foot: [['Total', moedaOuTraco(somaLojas('dinheiro')), moedaOuTraco(somaLojas('pix')), moedaOuTraco(somaLojas('credito')),
+            moedaOuTraco(somaLojas('debito')), moedaOuTraco(somaLojas('outros')), formatarMoeda(somaLojas('total') + pl.outrosRecursos),
+            negativoOuTraco(somaLojas('taxas')), negativoOuTraco(somaLojas('despesas')),
+            formatarMoeda(pl.somaContribuicao + pl.outrosRecursos), pl.linhas.length ? '100%' : '']],
+        columnStyles: {
+            0: { cellWidth: 'auto', fontStyle: 'bold' },
+            1: { halign: 'right', cellWidth: 22 }, 2: { halign: 'right', cellWidth: 22 }, 3: { halign: 'right', cellWidth: 22 },
+            4: { halign: 'right', cellWidth: 22 }, 5: { halign: 'right', cellWidth: 20 }, 6: { halign: 'right', cellWidth: 24, fontStyle: 'bold' },
+            7: { halign: 'right', cellWidth: 20, textColor: COR.vermelho }, 8: { halign: 'right', cellWidth: 24, textColor: COR.vermelho },
+            9: { halign: 'right', cellWidth: 25, fontStyle: 'bold', textColor: COR.verde }, 10: { halign: 'right', cellWidth: 13 }
+        }
     });
-    fimResumos = Math.max(fimResumos, doc.lastAutoTable.finalY);
+    let fimResumos = doc.lastAutoTable.finalY;
 
-    [[r.porCentro, 'Saídas por centro de custo'], [r.porGrupo, 'Saídas por grupo de despesa']].forEach(([linhas, titulo], i) => {
+    // Saídas lado a lado (e "Por conta" só quando há mais de uma conta no dia).
+    const resumosSaidas = [
+        { linhas: r.porCentro.map(l => [l.nome, formatarMoeda(l.valor), percentual(l.valor, r.totalSaidas)]), head: ['Saídas por centro de custo', 'Valor', '%'], foot: ['Total', formatarMoeda(r.totalSaidas), r.totalSaidas ? '100%' : '-'] },
+        { linhas: r.porGrupo.map(l => [l.nome, formatarMoeda(l.valor), percentual(l.valor, r.totalSaidas)]), head: ['Saídas por grupo de despesa', 'Valor', '%'], foot: ['Total', formatarMoeda(r.totalSaidas), r.totalSaidas ? '100%' : '-'] }
+    ];
+    if (r.porConta.length > 1) {
+        resumosSaidas.push({ linhas: r.porConta.map(c => [c.nome, formatarMoeda(c.entradas), formatarMoeda(c.saidas)]), head: ['Por conta', 'Entradas', 'Saídas'], foot: ['Total', formatarMoeda(r.totalEntradas), formatarMoeda(r.totalSaidas)] });
+    }
+    const larguraResumo = (util - espaco * (resumosSaidas.length - 1)) / resumosSaidas.length;
+    const inicioSaidas = fimResumos + 5;
+    resumosSaidas.forEach((t, i) => {
         doc.autoTable({
             ...estiloResumo,
-            margin: { left: margem + larguraConta + espaco + i * (larguraResumo + espaco) },
-            head: [[titulo, 'Valor', '%']],
-            body: linhas.length ? linhas.map(l => [l.nome, formatarMoeda(l.valor), percentual(l.valor, r.totalSaidas)]) : [['Sem saídas', '', '']],
-            foot: [['Total', formatarMoeda(r.totalSaidas), r.totalSaidas ? '100%' : '-']],
-            columnStyles: { 1: { halign: 'right', cellWidth: 22 }, 2: { halign: 'right', cellWidth: 13 } }
+            startY: inicioSaidas,
+            tableWidth: larguraResumo,
+            margin: { left: margem + i * (larguraResumo + espaco) },
+            head: [t.head],
+            body: t.linhas.length ? t.linhas : [['Sem saídas', '', '']],
+            foot: [t.foot],
+            columnStyles: { 1: { halign: 'right', cellWidth: 24 }, 2: { halign: 'right', cellWidth: t.head[2] === '%' ? 13 : 24 } }
         });
         fimResumos = Math.max(fimResumos, doc.lastAutoTable.finalY);
     });
@@ -1541,7 +1608,14 @@ function textoWhatsApp() {
     texto += `Saídas: ${formatarMoeda(r.totalSaidas)}\n`;
     if (r.totalJuros) texto += `  (das quais juros e multas: ${formatarMoeda(r.totalJuros)})\n`;
     texto += `*Líquido do dia: ${formatarMoeda(r.liquido)}*\n`;
-    if (r.porConta.length) {
+    if (r.porLoja.linhas.length) {
+        texto += `\n*Contribuição por loja* (entradas − taxas − despesas da loja)\n`;
+        r.porLoja.linhas.forEach(l => {
+            texto += `• ${l.nome}: ${formatarMoeda(l.contribuicao)} (${l.pct.toFixed(1).replace('.', ',')}%) · entradas ${formatarMoeda(l.total)}\n`;
+        });
+        if (r.porLoja.outrosRecursos) texto += `• Outros recursos: ${formatarMoeda(r.porLoja.outrosRecursos)}\n`;
+    }
+    if (r.porConta.length > 1) {
         texto += `\n*Por conta*\n`;
         r.porConta.forEach(c => { texto += `• ${c.nome}: ${formatarMoeda(c.liquido)} (↓ ${formatarMoeda(c.entradas)} / ↑ ${formatarMoeda(c.saidas)})\n`; });
     }
